@@ -2,11 +2,14 @@
 set -euo pipefail
 
 # openmux npm/bun bin wrapper
-# Downloads binary to ~/.openmux/bin/ on first run if missing
+# Downloads binary to XDG-compliant directories on first run if missing
 
 REPO="monotykamary/openmux"
-OPENMUX_HOME="${OPENMUX_HOME:-$HOME/.openmux}"
-BIN_DIR="$OPENMUX_HOME/bin"
+
+# XDG Base Directory compliance
+# https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html
+XDG_DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
+BIN_DIR="${XDG_DATA_HOME}/openmux"
 
 # Find package.json to get version
 find_package_json() {
