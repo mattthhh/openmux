@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.121](https://github.com/monotykamary/openmux/compare/v0.2.120...v0.2.121) (2026-02-02)
+
+
+### Features
+
+* **install:** use XDG-compliant directories ([912d9dc](https://github.com/monotykamary/openmux/commit/912d9dc34a8c6e2eb16d041a0de55fb245810710)), closes [#7](https://github.com/monotykamary/openmux/issues/7)
+
 ### [0.2.120](https://github.com/monotykamary/openmux/compare/v0.2.119...v0.2.120) (2026-01-30)
 
 
