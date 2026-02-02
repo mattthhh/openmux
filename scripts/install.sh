@@ -5,8 +5,14 @@ set -euo pipefail
 # Usage: curl -fsSL https://raw.githubusercontent.com/monotykamary/openmux/main/scripts/install.sh | bash
 
 REPO="monotykamary/openmux"
-OPENMUX_HOME="${OPENMUX_HOME:-$HOME/.openmux}"
-BIN_DIR="$OPENMUX_HOME/bin"
+
+# XDG Base Directory compliance
+# https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html
+XDG_BIN_HOME="${XDG_BIN_HOME:-$HOME/.local/bin}"
+XDG_DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
+
+INSTALL_DIR="$XDG_BIN_HOME"
+LIB_INSTALL_DIR="${XDG_DATA_HOME}/openmux"
 
 # Global temp directory for cleanup trap (must be declared before trap with set -u)
 TMP_DIR=""
@@ -82,7 +88,8 @@ download_and_extract() {
 
     TMP_DIR=$(mktemp -d)
 
-    mkdir -p "$BIN_DIR"
+    mkdir -p "$INSTALL_DIR"
+    mkdir -p "$LIB_INSTALL_DIR"
 
     # Download with spinner
     if command -v curl &> /dev/null; then
@@ -100,23 +107,36 @@ download_and_extract() {
     wait $!
     printf "  ${GREEN}✓${NC} Extracted\n"
 
-    # Move files to ~/.openmux/bin/
-    mv "$TMP_DIR/openmux" "$BIN_DIR/"
-    mv "$TMP_DIR/openmux-bin" "$BIN_DIR/"
-    mv "$TMP_DIR/libzig_pty.$LIB_EXT" "$BIN_DIR/"
-    mv "$TMP_DIR/libzig_git.$LIB_EXT" "$BIN_DIR/"
-    mv "$TMP_DIR/libghostty-vt.$LIB_EXT" "$BIN_DIR/" || true
-    mv "$TMP_DIR/bunfig.toml" "$BIN_DIR/" || true
-    chmod +x "$BIN_DIR/openmux-bin" "$BIN_DIR/openmux"
+    # Move libraries and binary to XDG data directory
+    mv "$TMP_DIR/openmux-bin" "$LIB_INSTALL_DIR/"
+    mv "$TMP_DIR/libzig_pty.$LIB_EXT" "$LIB_INSTALL_DIR/"
+    mv "$TMP_DIR/libzig_git.$LIB_EXT" "$LIB_INSTALL_DIR/"
+    mv "$TMP_DIR/libghostty-vt.$LIB_EXT" "$LIB_INSTALL_DIR/" || true
+    mv "$TMP_DIR/bunfig.toml" "$LIB_INSTALL_DIR/" || true
+    chmod +x "$LIB_INSTALL_DIR/openmux-bin"
+
+    # Create wrapper script in XDG bin directory
+    cat > "$INSTALL_DIR/openmux" << WRAPPER
+#!/usr/bin/env bash
+export ZIG_PTY_LIB="\${ZIG_PTY_LIB:-$LIB_INSTALL_DIR/libzig_pty.$LIB_EXT}"
+export ZIG_GIT_LIB="\${ZIG_GIT_LIB:-$LIB_INSTALL_DIR/libzig_git.$LIB_EXT}"
+export GHOSTTY_VT_LIB="\${GHOSTTY_VT_LIB:-$LIB_INSTALL_DIR/libghostty-vt.$LIB_EXT}"
+export OPENMUX_VERSION="\${OPENMUX_VERSION:-$VERSION}"
+export OPENMUX_ORIGINAL_CWD="\${OPENMUX_ORIGINAL_CWD:-\$(pwd)}"
+cd "$LIB_INSTALL_DIR"
+exec "./openmux-bin" "\$@"
+WRAPPER
+    chmod +x "$INSTALL_DIR/openmux"
 
     # Write version file
-    echo "${VERSION#v}" > "$BIN_DIR/.version"
+    echo "${VERSION#v}" > "$LIB_INSTALL_DIR/.version"
 
-    printf "  ${GREEN}✓${NC} Installed to $BIN_DIR\n"
+    printf "  ${GREEN}✓${NC} Installed binary to $INSTALL_DIR/openmux\n"
+    printf "  ${GREEN}✓${NC} Installed libraries to $LIB_INSTALL_DIR/\n"
 }
 
 check_path() {
-    if [[ ":$PATH:" != *":$BIN_DIR:"* ]]; then
+    if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
         printf "\n"
         printf "  ${YELLOW}!${NC} Add to your PATH:\n"
         printf "\n"
@@ -126,18 +146,18 @@ check_path() {
 
         case "$shell_name" in
             bash)
-                printf "    echo 'export PATH=\"$BIN_DIR:\$PATH\"' >> ~/.bashrc\n"
+                printf "    echo 'export PATH=\"$INSTALL_DIR:\$PATH\"' >> ~/.bashrc\n"
                 printf "    source ~/.bashrc\n"
                 ;;
             zsh)
-                printf "    echo 'export PATH=\"$BIN_DIR:\$PATH\"' >> ~/.zshrc\n"
+                printf "    echo 'export PATH=\"$INSTALL_DIR:\$PATH\"' >> ~/.zshrc\n"
                 printf "    source ~/.zshrc\n"
                 ;;
             fish)
-                printf "    fish_add_path $BIN_DIR\n"
+                printf "    fish_add_path $INSTALL_DIR\n"
                 ;;
             *)
-                printf "    export PATH=\"$BIN_DIR:\$PATH\"\n"
+                printf "    export PATH=\"$INSTALL_DIR:\$PATH\"\n"
                 ;;
         esac
     fi
