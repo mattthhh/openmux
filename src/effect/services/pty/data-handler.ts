@@ -6,6 +6,7 @@ import type { SyncModeParser } from "../../../terminal/sync-mode-parser"
 import type { InternalPtySession } from "./types"
 import { deferMacrotask } from "../../../core/scheduling"
 import { tracePtyChunk, tracePtyEvent } from "../../../terminal/pty-trace"
+import { copyToClipboard } from "../../../effect/bridge"
 
 interface DataHandlerOptions {
   session: InternalPtySession
@@ -44,6 +45,63 @@ function hasScrollbackEraseSequence(text: string, regex: RegExp): boolean {
     if (parts.includes("3")) return true
   }
   return false
+}
+
+/**
+ * Detect and process OSC 52 clipboard write responses from emulator.
+ * These are responses with format: "\x1B]52;CLIPBOARD;c:<base64data>\x07"
+ * Returns an array of PTY responses (non-clipboard responses) and processes clipboard data separately.
+ */
+function processClipboardResponses(
+  responses: string[],
+  ptyId: string
+): string[] {
+  const ptyResponses: string[] = []
+  const CLIPBOARD_PREFIX = "\x1B]52;CLIPBOARD;c:"
+  const BEL = "\x07"
+
+  for (const response of responses) {
+    // Debug: Log all responses to see what's coming through
+    tracePtyEvent("clipboard-response-raw", {
+      ptyId,
+      responsePreview: response.slice(0, 50),
+      responseLength: response.length,
+      isClipboard: response.startsWith(CLIPBOARD_PREFIX),
+    })
+    
+    if (response.startsWith(CLIPBOARD_PREFIX) && response.endsWith(BEL)) {
+      // Extract base64 data
+      const base64Data = response.slice(CLIPBOARD_PREFIX.length, -BEL.length)
+      if (base64Data.length > 0) {
+        // Decode base64 and copy to clipboard
+        try {
+          const decoded = Buffer.from(base64Data, "base64").toString("utf-8")
+          if (decoded.length > 0) {
+            copyToClipboard(decoded).catch((err: unknown) => {
+              tracePtyEvent("clipboard-copy-error", {
+                ptyId,
+                error: err instanceof Error ? err.message : String(err),
+              })
+            })
+            tracePtyEvent("clipboard-copy", {
+              ptyId,
+              charCount: decoded.length,
+            })
+          }
+        } catch (err: unknown) {
+          tracePtyEvent("clipboard-decode-error", {
+            ptyId,
+            error: err instanceof Error ? err.message : String(err),
+          })
+        }
+      }
+    } else {
+      // Not a clipboard response, pass through to PTY
+      ptyResponses.push(response)
+    }
+  }
+
+  return ptyResponses
 }
 
 /**
@@ -214,7 +272,10 @@ export function createDataHandler(options: DataHandlerOptions) {
     if (wrote && !session.emulator.isDisposed) {
       const responses = session.emulator.drainResponses?.()
       if (responses && responses.length > 0) {
-        for (const response of responses) {
+        // Process clipboard responses separately (copy to system clipboard)
+        // and filter them out from PTY responses
+        const ptyResponses = processClipboardResponses(responses, session.id)
+        for (const response of ptyResponses) {
           tracePtyChunk("emulator-response", response, { ptyId: session.id })
           session.pty.write(response)
         }

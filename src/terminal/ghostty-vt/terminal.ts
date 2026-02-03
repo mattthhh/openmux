@@ -217,7 +217,8 @@ export class GhosttyVtTerminal {
 
   readResponse(): string | null {
     if (!this.hasResponse()) return null;
-    const buffer = Buffer.alloc(256);
+    // Use larger buffer to handle OSC 52 clipboard data (base64 can be ~4/3 of text size)
+    const buffer = Buffer.alloc(4096);
     const count = ghostty.symbols.ghostty_terminal_read_response(this.handle, buffer, buffer.byteLength);
     if (count <= 0) return null;
     return buffer.subarray(0, count).toString("utf8");

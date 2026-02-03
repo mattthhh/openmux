@@ -154,10 +154,7 @@ pub const ResponseHandler = struct {
             .kitty_color_report => try self.kittyColorOperation(value),
 
             // Actions that require no response and have no terminal effect
-            .dcs_hook,
-            .dcs_put,
-            .dcs_unhook,
-            .apc_start => self.apc.start(),
+            .dcs_hook, .dcs_put, .dcs_unhook, .apc_start => self.apc.start(),
             .apc_put => self.apc.feed(self.alloc, value),
             .apc_end => try self.apcEnd(),
             .bell,
@@ -171,10 +168,10 @@ pub const ResponseHandler = struct {
             .report_pwd,
             .show_desktop_notification,
             .progress_report,
-            .clipboard_contents,
             .title_push,
             .title_pop,
             => {},
+            .clipboard_contents => try self.handleClipboardContents(value.kind, value.data),
         }
     }
 
@@ -404,9 +401,9 @@ pub const ResponseHandler = struct {
         switch (req) {
             .primary => {
                 // DA1 - Primary Device Attributes
-                // Report as VT220 with color support (simplified for WASM)
-                // 62 = Level 2 conformance, 22 = Color text
-                try self.response_buffer.appendSlice(self.alloc, "\x1B[?62;22c");
+                // Report as VT220 with color and clipboard support
+                // 62 = Level 2 conformance, 22 = Color text, 52 = Clipboard access
+                try self.response_buffer.appendSlice(self.alloc, "\x1B[?62;22;52c");
             },
             .secondary => {
                 // DA2 - Secondary Device Attributes
@@ -472,6 +469,28 @@ pub const ResponseHandler = struct {
         _ = self;
         _ = value;
         // Kitty color operations are not supported in WASM context
+    }
+
+    /// Handle clipboard contents (OSC 52) from applications.
+    /// Writes to response buffer with custom prefix for TypeScript to handle.
+    /// Format: "\x1B]52;CLIPBOARD;<kind>:<base64data>\x07"
+    fn handleClipboardContents(self: *ResponseHandler, kind: u8, data: []const u8) !void {
+        // Only handle clipboard ('c') selection type
+        // Other types: 'p' (primary), 'q' (secondary), 's' (select), '0'-'7' (cut buffers)
+        if (kind != 'c') return;
+
+        // Skip empty data or query ("?")
+        if (data.len == 0 or std.mem.eql(u8, data, "?")) return;
+
+        // Write prefix: ESC ] 52 ; CLIPBOARD ; c :
+        // Using a unique format that TypeScript can detect
+        try self.response_buffer.appendSlice(self.alloc, "\x1B]52;CLIPBOARD;c:");
+
+        // Append the base64 data
+        try self.response_buffer.appendSlice(self.alloc, data);
+
+        // Append terminator (BEL = \x07)
+        try self.response_buffer.append(self.alloc, 0x07);
     }
 };
 
