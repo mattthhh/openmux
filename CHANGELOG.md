@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.123](https://github.com/monotykamary/openmux/compare/v0.2.122...v0.2.123) (2026-02-03)
+
+
+### Features
+
+* **clipboard:** add OSC 52 clipboard passthrough for terminal apps ([aaf811c](https://github.com/monotykamary/openmux/commit/aaf811c446279c74eacdbaa23d586945d13143af))
+
+
+### Bug Fixes
+
+* **ghostty:** update semanticPrompt API calls for ghostty compatibility ([22b635d](https://github.com/monotykamary/openmux/commit/22b635df54c487e1346ad969343b20388ca1f5ea))
+
 ### [0.2.122](https://github.com/monotykamary/openmux/compare/v0.2.121...v0.2.122) (2026-02-02)
 
 
