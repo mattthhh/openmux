@@ -18,4 +18,6 @@ export const effectBridgeMocks = {
   getSessionCommand: vi.fn(),
   isPtyCreated: vi.fn(),
   markPtyCreated: vi.fn(),
+  copyToClipboard: vi.fn(),
+  readFromClipboard: vi.fn(),
 };

@@ -148,7 +148,7 @@ pub const ResponseHandler = struct {
             .full_reset => self.terminal.fullReset(),
             .start_hyperlink => try self.terminal.screens.active.startHyperlink(value.uri, value.id),
             .end_hyperlink => self.terminal.screens.active.endHyperlink(),
-            .semantic_prompt => self.semanticPrompt(value),
+            .semantic_prompt => try self.semanticPrompt(value),
             .mouse_shape => self.terminal.mouse_shape = value,
             .color_operation => try self.colorOperation(value.op, &value.requests),
             .kitty_color_report => try self.kittyColorOperation(value),
@@ -178,7 +178,7 @@ pub const ResponseHandler = struct {
     fn semanticPrompt(
         self: *ResponseHandler,
         cmd: Action.SemanticPrompt,
-    ) void {
+    ) !void {
         switch (cmd.action) {
             .fresh_line_new_prompt => {
                 const kind = cmd.readOption(.prompt_kind) orelse .initial;
@@ -195,9 +195,9 @@ pub const ResponseHandler = struct {
                 }
             },
 
-            .end_prompt_start_input => self.terminal.markSemanticPrompt(.input),
-            .end_input_start_output => self.terminal.markSemanticPrompt(.command),
-            .end_command => self.terminal.screens.active.cursor.page_row.semantic_prompt = .input,
+            .end_prompt_start_input => try self.terminal.semanticPrompt(.init(.end_prompt_start_input)),
+            .end_input_start_output => try self.terminal.semanticPrompt(.init(.end_input_start_output)),
+            .end_command => self.terminal.screens.active.cursorSetSemanticContent(.output),
 
             // Not handled previously; keep ignoring for now.
             .end_prompt_start_input_terminate_eol,
