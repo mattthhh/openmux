@@ -276,7 +276,9 @@ function StackedPanesRenderer(props: StackedPanesRendererProps) {
 
   // Calculate visible tabs based on scroll offset
   const visibleTabs = createMemo(() => {
-    // Explicitly access activeStackIndex FIRST to ensure it's tracked as a dependency
+    // SolidJS dependency tracking: read activeStackIndex before any conditional logic
+    // to ensure the memo re-runs when the active tab changes. Accessing props inside
+    // map() or after early returns can break reactivity.
     const currentActiveIndex = props.activeStackIndex;
     // Access titleVersion to create reactive dependency on title changes
     titleCtx.titleVersion();

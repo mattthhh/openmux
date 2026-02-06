@@ -87,17 +87,16 @@ export function handleNavigate(state: LayoutState, direction: Direction): Layout
         };
         if (workspace.zoomed) {
           updated = recalculateLayout(updated, state.viewport, state.config);
-          return {
-            ...state,
-            workspaces: updateWorkspace(state, updated),
-            layoutVersion: state.layoutVersion + 1,
-            layoutGeometryVersion: state.layoutGeometryVersion + 1,
-          };
         }
-        return { ...state, workspaces: updateWorkspace(state, updated) };
+        return {
+          ...state,
+          workspaces: updateWorkspace(state, updated),
+          layoutVersion: state.layoutVersion + 1,
+          ...(workspace.zoomed && { layoutGeometryVersion: state.layoutGeometryVersion + 1 }),
+        };
       }
     }
-    
+
     // east (l) from main -> navigate to first stack entry
     if (direction === 'east' && stackIndex < 0 && workspace.mainPane && stackCount > 0) {
       // Check if focused is in main
@@ -113,18 +112,17 @@ export function handleNavigate(state: LayoutState, direction: Direction): Layout
           };
           if (workspace.zoomed) {
             updated = recalculateLayout(updated, state.viewport, state.config);
-            return {
-              ...state,
-              workspaces: updateWorkspace(state, updated),
-              layoutVersion: state.layoutVersion + 1,
-              layoutGeometryVersion: state.layoutGeometryVersion + 1,
-            };
           }
-          return { ...state, workspaces: updateWorkspace(state, updated) };
+          return {
+            ...state,
+            workspaces: updateWorkspace(state, updated),
+            layoutVersion: state.layoutVersion + 1,
+            ...(workspace.zoomed && { layoutGeometryVersion: state.layoutGeometryVersion + 1 }),
+          };
         }
       }
     }
-    
+
     // Normal stack tab cycling
     if (stackIndex >= 0 && stackCount > 0) {
       const delta = direction === 'west' ? -1 : 1;

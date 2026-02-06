@@ -181,7 +181,7 @@ export function handleMovePane(state: LayoutState, direction: Direction): Layout
     // h/l navigate between stack tabs:
     // - west (h) = move left to previous tab (lower index) or swap with main if at index 0
     // - east (l) = move right to next tab (higher index)
-    // j/k fall through to geometric swap for within-tree navigation
+    // north/south (j/k) are not valid for stack entries (all tabs are full-height)
 
     if (direction === 'west') {
       if (stackIndex === 0 && workspace.mainPane) {

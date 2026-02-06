@@ -228,6 +228,8 @@ export function swapTwoPanesById(
 export function clearNodeRectangles(node: LayoutNode | null): LayoutNode | null {
   if (!node) return null;
   if (!isSplitNode(node)) {
+    // Leaf node: only create new object if rectangle exists
+    if (!node.rectangle) return node;
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { rectangle, ...rest } = node;
     return rest as PaneData;
