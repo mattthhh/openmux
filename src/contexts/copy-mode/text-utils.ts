@@ -16,9 +16,6 @@ export type RunResult = SpanResult & {
   kind: 'word' | 'punct';
 };
 
-const clamp = (value: number, min: number, max: number): number =>
-  Math.max(min, Math.min(value, max));
-
 export const getLineEndX = (line: TerminalCell[] | null): number => {
   if (!line || line.length === 0) return 0;
   for (let x = line.length - 1; x >= 0; x -= 1) {
