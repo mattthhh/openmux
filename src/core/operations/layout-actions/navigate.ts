@@ -73,44 +73,93 @@ export function handleNavigate(state: LayoutState, direction: Direction): Layout
 
   const isStackedMode = workspace.layoutMode === 'stacked';
   const stackCount = workspace.stackPanes.length;
-  if (
-    isStackedMode &&
-    (direction === 'west' || direction === 'east') &&
-    stackIndex >= 0 &&
-    stackCount > 0
-  ) {
-    const delta = direction === 'west' ? -1 : 1;
-    const nextIndex =
-      stackCount > 1
-        ? (workspace.activeStackIndex + delta + stackCount) % stackCount
-        : 0;
-    const targetEntry = workspace.stackPanes[nextIndex];
-    const targetPane = targetEntry ? getFirstPane(targetEntry) : null;
-
-    if (!targetPane) return state;
-
-    const stackIndexChanged = nextIndex !== workspace.activeStackIndex;
-    if (!stackIndexChanged && targetPane.id === focusedId) {
-      return state;
+  
+  // Handle stacked mode navigation with main/stack transitions
+  if (isStackedMode && (direction === 'west' || direction === 'east')) {
+    // west (h) from first stack entry -> navigate to main
+    if (direction === 'west' && stackIndex === 0 && workspace.mainPane) {
+      const mainPane = getFirstPane(workspace.mainPane);
+      if (mainPane && mainPane.id !== focusedId) {
+        let updated: Workspace = {
+          ...workspace,
+          focusedPaneId: mainPane.id,
+          activeStackIndex: 0,
+        };
+        if (workspace.zoomed) {
+          updated = recalculateLayout(updated, state.viewport, state.config);
+          return {
+            ...state,
+            workspaces: updateWorkspace(state, updated),
+            layoutVersion: state.layoutVersion + 1,
+            layoutGeometryVersion: state.layoutGeometryVersion + 1,
+          };
+        }
+        return { ...state, workspaces: updateWorkspace(state, updated) };
+      }
     }
+    
+    // east (l) from main -> navigate to first stack entry
+    if (direction === 'east' && stackIndex < 0 && workspace.mainPane && stackCount > 0) {
+      // Check if focused is in main
+      const mainContainsFocused = workspace.mainPane && containsPane(workspace.mainPane, focusedId);
+      if (mainContainsFocused) {
+        const targetEntry = workspace.stackPanes[0];
+        const targetPane = targetEntry ? getFirstPane(targetEntry) : null;
+        if (targetPane && targetPane.id !== focusedId) {
+          let updated: Workspace = {
+            ...workspace,
+            focusedPaneId: targetPane.id,
+            activeStackIndex: 0,
+          };
+          if (workspace.zoomed) {
+            updated = recalculateLayout(updated, state.viewport, state.config);
+            return {
+              ...state,
+              workspaces: updateWorkspace(state, updated),
+              layoutVersion: state.layoutVersion + 1,
+              layoutGeometryVersion: state.layoutGeometryVersion + 1,
+            };
+          }
+          return { ...state, workspaces: updateWorkspace(state, updated) };
+        }
+      }
+    }
+    
+    // Normal stack tab cycling
+    if (stackIndex >= 0 && stackCount > 0) {
+      const delta = direction === 'west' ? -1 : 1;
+      const nextIndex =
+        stackCount > 1
+          ? (workspace.activeStackIndex + delta + stackCount) % stackCount
+          : 0;
+      const targetEntry = workspace.stackPanes[nextIndex];
+      const targetPane = targetEntry ? getFirstPane(targetEntry) : null;
 
-    let updated: Workspace = {
-      ...workspace,
-      focusedPaneId: targetPane.id,
-      activeStackIndex: nextIndex,
-    };
+      if (!targetPane) return state;
 
-    if (workspace.zoomed || stackIndexChanged) {
-      updated = recalculateLayout(updated, state.viewport, state.config);
-      return {
-        ...state,
-        workspaces: updateWorkspace(state, updated),
-        layoutVersion: state.layoutVersion + 1,
-        layoutGeometryVersion: state.layoutGeometryVersion + 1,
+      const stackIndexChanged = nextIndex !== workspace.activeStackIndex;
+      if (!stackIndexChanged && targetPane.id === focusedId) {
+        return state;
+      }
+
+      let updated: Workspace = {
+        ...workspace,
+        focusedPaneId: targetPane.id,
+        activeStackIndex: nextIndex,
       };
-    }
 
-    return { ...state, workspaces: updateWorkspace(state, updated) };
+      if (workspace.zoomed || stackIndexChanged) {
+        updated = recalculateLayout(updated, state.viewport, state.config);
+        return {
+          ...state,
+          workspaces: updateWorkspace(state, updated),
+          layoutVersion: state.layoutVersion + 1,
+          layoutGeometryVersion: state.layoutGeometryVersion + 1,
+        };
+      }
+
+      return { ...state, workspaces: updateWorkspace(state, updated) };
+    }
   }
 
   let bestPane = currentPane;

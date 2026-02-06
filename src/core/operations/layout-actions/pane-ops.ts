@@ -275,19 +275,8 @@ export function handleMovePane(state: LayoutState, direction: Direction): Layout
       // Simple pane - check if it's the main pane itself
       isRootLevelPane = mainPane.id === focusedId;
     } else {
-      // Split pane - check if focusedId IS first or second (immediate children)
-      // Use containsPane but only on immediate children, not deeper
-      const focusedIsFirst = mainPane.first.id === focusedId || 
-        (isSplitNode(mainPane.first) && containsPane(mainPane.first, focusedId));
-      const focusedIsSecond = mainPane.second.id === focusedId || 
-        (isSplitNode(mainPane.second) && containsPane(mainPane.second, focusedId));
-      
-      // If focused is in first, check it's not deeper than first's immediate children
-      if (focusedIsFirst) {
-        isRootLevelPane = mainPane.first.id === focusedId;
-      } else if (focusedIsSecond) {
-        isRootLevelPane = mainPane.second.id === focusedId;
-      }
+      // Split pane - check if focusedId is exactly first or second (immediate children only)
+      isRootLevelPane = mainPane.first.id === focusedId || mainPane.second.id === focusedId;
     }
     
     if (isRootLevelPane) {
