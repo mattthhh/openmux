@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.125](https://github.com/monotykamary/openmux/compare/v0.2.124...v0.2.125) (2026-02-06)
+
+
+### Features
+
+* **layout:** simplify stacked mode movement and add focus tracking ([46220b4](https://github.com/monotykamary/openmux/commit/46220b43707318c03a57f50424d47fef929504d7))
+
+
+### Bug Fixes
+
+* **copy-mode:** remove unused clamp function ([dc4f938](https://github.com/monotykamary/openmux/commit/dc4f9389d23e1eb0a0dc85fd5760d0d52486690e))
+* **layout:** ensure layoutVersion bump on tab navigation and clarify comments ([c968263](https://github.com/monotykamary/openmux/commit/c9682633ce4eee44fa30f7a128793413689cbe66))
+
 ### [0.2.124](https://github.com/monotykamary/openmux/compare/v0.2.123...v0.2.124) (2026-02-06)
 
 
