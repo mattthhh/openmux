@@ -47,6 +47,8 @@ export interface Workspace {
   focusedPaneId: NodeId | null;
   /** For stacked mode: which stack pane is visible */
   activeStackIndex: number;
+  /** For stacked mode: last focused pane in each stack entry for focus restoration */
+  lastFocusedPaneIds: (NodeId | null)[];
   layoutMode: LayoutMode;
   /** Whether the focused pane is zoomed (fullscreen) */
   zoomed: boolean;
@@ -396,6 +398,7 @@ export interface SerializedWorkspace {
   stackPanes: SerializedLayoutNode[];
   focusedPaneId: string | null;
   activeStackIndex: number;
+  lastFocusedPaneIds: (string | null)[];
   layoutMode: LayoutMode;
   zoomed: boolean;
 }

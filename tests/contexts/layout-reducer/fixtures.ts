@@ -34,6 +34,7 @@ export function createWorkspaceWithPanes(
     stackPanes,
     focusedPaneId: mainPane?.id ?? null,
     activeStackIndex: 0,
+    lastFocusedPaneIds: [],
     layoutMode: 'vertical',
     zoomed: false,
     ...options,

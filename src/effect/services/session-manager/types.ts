@@ -42,6 +42,7 @@ export interface WorkspaceState {
   focusedPaneId?: string
   layoutMode: "vertical" | "horizontal" | "stacked"
   activeStackIndex: number
+  lastFocusedPaneIds?: Array<string | null>
   zoomed: boolean
   label?: string
 }

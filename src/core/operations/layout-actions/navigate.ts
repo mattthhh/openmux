@@ -6,7 +6,7 @@ import type { Direction, LayoutNode, Rectangle, Workspace } from '../../types';
 import type { LayoutState } from './types';
 import { getActiveWorkspace, getCandidateScore, recalculateLayout, updateWorkspace } from './helpers';
 import { getAllWorkspacePanes } from '../master-stack-layout';
-import { collectPanes, containsPane, findSiblingInDirection, getFirstPane } from '../../layout-tree';
+import { collectPanes, containsPane, findPane, findSiblingInDirection, getFirstPane } from '../../layout-tree';
 
 function pickBestPaneInNode(
   node: LayoutNode,
@@ -75,15 +75,21 @@ export function handleNavigate(state: LayoutState, direction: Direction): Layout
   const stackCount = workspace.stackPanes.length;
   
   // Handle stacked mode navigation with main/stack transitions
+  // Uses lastFocusedPaneIds to restore focus when returning to a tab
   if (isStackedMode && (direction === 'west' || direction === 'east')) {
     // west (h) from first stack entry -> navigate to main
     if (direction === 'west' && stackIndex === 0 && workspace.mainPane) {
+      // Save current focus in stack entry 0 before leaving
+      const newLastFocused = [...workspace.lastFocusedPaneIds];
+      newLastFocused[0] = focusedId;
+
       const mainPane = getFirstPane(workspace.mainPane);
       if (mainPane && mainPane.id !== focusedId) {
         let updated: Workspace = {
           ...workspace,
           focusedPaneId: mainPane.id,
           activeStackIndex: 0,
+          lastFocusedPaneIds: newLastFocused,
         };
         if (workspace.zoomed) {
           updated = recalculateLayout(updated, state.viewport, state.config);
@@ -103,7 +109,12 @@ export function handleNavigate(state: LayoutState, direction: Direction): Layout
       const mainContainsFocused = workspace.mainPane && containsPane(workspace.mainPane, focusedId);
       if (mainContainsFocused) {
         const targetEntry = workspace.stackPanes[0];
-        const targetPane = targetEntry ? getFirstPane(targetEntry) : null;
+        // Restore last focused pane in stack entry 0, or fall back to first pane
+        const lastFocusedInTarget = workspace.lastFocusedPaneIds[0];
+        const targetPane = lastFocusedInTarget
+          ? (findPane(targetEntry, lastFocusedInTarget) ?? getFirstPane(targetEntry))
+          : getFirstPane(targetEntry);
+
         if (targetPane && targetPane.id !== focusedId) {
           let updated: Workspace = {
             ...workspace,
@@ -123,7 +134,7 @@ export function handleNavigate(state: LayoutState, direction: Direction): Layout
       }
     }
 
-    // Normal stack tab cycling
+    // Normal stack tab cycling - save current focus, restore target focus
     if (stackIndex >= 0 && stackCount > 0) {
       const delta = direction === 'west' ? -1 : 1;
       const nextIndex =
@@ -131,7 +142,16 @@ export function handleNavigate(state: LayoutState, direction: Direction): Layout
           ? (workspace.activeStackIndex + delta + stackCount) % stackCount
           : 0;
       const targetEntry = workspace.stackPanes[nextIndex];
-      const targetPane = targetEntry ? getFirstPane(targetEntry) : null;
+
+      // Save current focus before switching
+      const newLastFocused = [...workspace.lastFocusedPaneIds];
+      newLastFocused[stackIndex] = focusedId;
+
+      // Restore last focused pane in target entry, or fall back to first pane
+      const lastFocusedInTarget = newLastFocused[nextIndex];
+      const targetPane = lastFocusedInTarget
+        ? (findPane(targetEntry, lastFocusedInTarget) ?? getFirstPane(targetEntry))
+        : getFirstPane(targetEntry);
 
       if (!targetPane) return state;
 
@@ -144,6 +164,7 @@ export function handleNavigate(state: LayoutState, direction: Direction): Layout
         ...workspace,
         focusedPaneId: targetPane.id,
         activeStackIndex: nextIndex,
+        lastFocusedPaneIds: newLastFocused,
       };
 
       if (workspace.zoomed || stackIndexChanged) {

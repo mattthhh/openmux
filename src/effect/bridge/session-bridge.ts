@@ -278,6 +278,7 @@ function deserializeWorkspace(serialized: SerializedWorkspace): Workspace {
     stackPanes: serialized.stackPanes.map(deserializeLayoutNode),
     focusedPaneId: serialized.focusedPaneId,
     activeStackIndex: serialized.activeStackIndex,
+    lastFocusedPaneIds: [...(serialized.lastFocusedPaneIds ?? [])],
     layoutMode: serialized.layoutMode,
     zoomed: serialized.zoomed,
   }

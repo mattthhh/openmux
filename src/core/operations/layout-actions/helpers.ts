@@ -151,6 +151,7 @@ export function createWorkspace(id: WorkspaceId, layoutMode: LayoutMode): Worksp
     stackPanes: [],
     focusedPaneId: null,
     activeStackIndex: 0,
+    lastFocusedPaneIds: [],
     layoutMode,
     zoomed: false,
   };

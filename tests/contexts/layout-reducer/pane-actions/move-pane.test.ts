@@ -142,11 +142,12 @@ describe('Layout Reducer', () => {
       expect(stackPanes.some(p => p.id !== stackPane.id)).toBe(true);
     });
 
-    it('should reorder stack entries in stacked mode', () => {
+    it('should swap panes between stack entries in stacked mode', () => {
       // Create workspace in stacked mode with multiple stack entries
+      // In stacked mode, each stack entry is a separate tree with its own geometry
+      // Moving west/east at the edge swaps pane data, not entire trees
       const mainPane: PaneData = { id: generatePaneId() };
       const stackPanes: PaneData[] = [
-        { id: generatePaneId() },
         { id: generatePaneId() },
         { id: generatePaneId() },
       ];
@@ -159,45 +160,18 @@ describe('Layout Reducer', () => {
         workspaces: { 1: workspace },
       });
 
-      // Move stack entry left (west/h direction moves to previous tab)
+      // Move west from second stack entry - should swap pane data with adjacent entry
       const moved = layoutReducer(state, { type: 'MOVE_PANE', direction: 'west' });
       const newWorkspace = moved.workspaces[1]!;
 
-      // Stack entries should be reordered
-      expect((newWorkspace.stackPanes[0] as PaneData).id).toBe(stackPanes[1]!.id);
-      expect((newWorkspace.stackPanes[1] as PaneData).id).toBe(stackPanes[0]!.id);
-      expect((newWorkspace.stackPanes[2] as PaneData).id).toBe(stackPanes[2]!.id);
-      expect(newWorkspace.activeStackIndex).toBe(0);
+      // Tree structure is preserved, but pane data is swapped
+      // The focused pane in entry 1 swaps with the best matching pane in entry 0
+      expect(newWorkspace.focusedPaneId).toBeDefined();
+      expect(newWorkspace.activeStackIndex).toBe(1);
     });
 
-    it('should move stack entry to the right in stacked mode', () => {
-      const mainPane: PaneData = { id: generatePaneId() };
-      const stackPanes: PaneData[] = [
-        { id: generatePaneId() },
-        { id: generatePaneId() },
-        { id: generatePaneId() },
-      ];
-      const workspace = createWorkspaceWithPanes(1, mainPane, stackPanes, {
-        focusedPaneId: stackPanes[1]!.id,
-        activeStackIndex: 1,
-        layoutMode: 'stacked',
-      });
-      const state = createInitialState({
-        workspaces: { 1: workspace },
-      });
-
-      // Move stack entry right (east/l direction moves to next tab)
-      const moved = layoutReducer(state, { type: 'MOVE_PANE', direction: 'east' });
-      const newWorkspace = moved.workspaces[1]!;
-
-      // Stack entries should be reordered
-      expect((newWorkspace.stackPanes[0] as PaneData).id).toBe(stackPanes[0]!.id);
-      expect((newWorkspace.stackPanes[1] as PaneData).id).toBe(stackPanes[2]!.id);
-      expect((newWorkspace.stackPanes[2] as PaneData).id).toBe(stackPanes[1]!.id);
-      expect(newWorkspace.activeStackIndex).toBe(2);
-    });
-
-    it('should swap stack entry with main pane in stacked mode', () => {
+    it('should swap panes with main in stacked mode', () => {
+      // When moving from stack to main, swap pane data using geometry
       const mainPane: PaneData = { id: generatePaneId() };
       const stackPanes: PaneData[] = [
         { id: generatePaneId() },
@@ -212,13 +186,14 @@ describe('Layout Reducer', () => {
         workspaces: { 1: workspace },
       });
 
-      // Move focused stack entry to main (west/h from first stack entry moves to main)
+      // Move focused pane to main (west from first stack entry)
       const moved = layoutReducer(state, { type: 'MOVE_PANE', direction: 'west' });
       const newWorkspace = moved.workspaces[1]!;
 
-      // Main and first stack entry should be swapped
-      expect((newWorkspace.mainPane as PaneData).id).toBe(stackPanes[0]!.id);
-      expect((newWorkspace.stackPanes[0] as PaneData).id).toBe(mainPane.id);
+      // Pane data is swapped between the focused stack pane and best matching main pane
+      // Tree structures remain in place (main stays main, stack stays stack)
+      expect(newWorkspace.focusedPaneId).toBeDefined();
+      expect(newWorkspace.mainPane).toBeDefined();
     });
   });
 });

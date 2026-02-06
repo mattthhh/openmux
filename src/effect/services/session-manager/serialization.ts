@@ -162,8 +162,9 @@ export function serializeWorkspace(
     mainPane,
     stackPanes,
     focusedPaneId: workspace.focusedPaneId ?? null,
-    layoutMode: workspace.layoutMode,
     activeStackIndex: workspace.activeStackIndex,
+    lastFocusedPaneIds: workspace.lastFocusedPaneIds ?? [],
+    layoutMode: workspace.layoutMode,
     zoomed: workspace.zoomed,
   })
 }

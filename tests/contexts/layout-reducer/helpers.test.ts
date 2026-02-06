@@ -26,6 +26,7 @@ describe('Layout Reducer', () => {
           stackPanes: [],
           focusedPaneId: null,
           activeStackIndex: 0,
+          lastFocusedPaneIds: [],
           layoutMode: 'vertical',
           zoomed: false,
         });

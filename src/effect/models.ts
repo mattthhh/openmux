@@ -81,6 +81,7 @@ export class SerializedWorkspace extends Schema.Class<SerializedWorkspace>("Seri
   stackPanes: Schema.Array(SerializedLayoutNodeSchema),
   focusedPaneId: Schema.NullOr(Schema.String),
   activeStackIndex: Schema.Int,
+  lastFocusedPaneIds: Schema.optionalWith(Schema.Array(Schema.NullOr(Schema.String)), { default: () => [] }),
   layoutMode: LayoutMode,
   zoomed: Schema.Boolean,
 }) {}
