@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.124](https://github.com/monotykamary/openmux/compare/v0.2.123...v0.2.124) (2026-02-06)
+
+
+### Bug Fixes
+
+* **pane:** correct root-level detection and add main/stack navigation ([a8fbcec](https://github.com/monotykamary/openmux/commit/a8fbcec07a4352eede4b9bc4975a1cb26e98dd43))
+* **pane:** fix connector positioning and tree swapping in stacked mode ([41204df](https://github.com/monotykamary/openmux/commit/41204dffde5f3075c2f24d047be147c7faa32b58))
+
 ### [0.2.123](https://github.com/monotykamary/openmux/compare/v0.2.122...v0.2.123) (2026-02-03)
 
 
