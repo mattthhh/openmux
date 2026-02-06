@@ -276,13 +276,15 @@ function StackedPanesRenderer(props: StackedPanesRendererProps) {
 
   // Calculate visible tabs based on scroll offset
   const visibleTabs = createMemo(() => {
+    // Explicitly access activeStackIndex FIRST to ensure it's tracked as a dependency
+    const currentActiveIndex = props.activeStackIndex;
     // Access titleVersion to create reactive dependency on title changes
     titleCtx.titleVersion();
     const visibleWidth = rect().width - 1; // Account for tab bar offset from pane edge
 
     // Build tab info with positions
     const tabItems = props.stackPanes.map((pane, index) => {
-      const isActive = index === props.activeStackIndex;
+      const isActive = index === currentActiveIndex;
       const labelPane = props.focusedPaneId ? findPane(pane, props.focusedPaneId) : null;
       const fallbackPane = labelPane ?? getFirstPane(pane);
       const paneId = fallbackPane?.id ?? `stack-${index}`;
@@ -300,7 +302,7 @@ function StackedPanesRenderer(props: StackedPanesRendererProps) {
     });
 
     // Calculate scroll offset to keep active tab visible
-    const activeTab = tabsWithPos[props.activeStackIndex];
+    const activeTab = tabsWithPos[currentActiveIndex];
     let scrollOffset = 0;
     if (activeTab) {
       if (activeTab.end > visibleWidth) {

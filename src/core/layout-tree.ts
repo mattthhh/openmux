@@ -220,3 +220,43 @@ export function swapTwoPanesById(
   if (updatedFirst === node.first && updatedSecond === node.second) return node;
   return { ...node, first: updatedFirst, second: updatedSecond };
 }
+
+/**
+ * Clear all rectangles from a layout node (and its children)
+ * Useful when swapping nodes to ensure fresh rectangle calculation
+ */
+export function clearNodeRectangles(node: LayoutNode | null): LayoutNode | null {
+  if (!node) return null;
+  if (!isSplitNode(node)) {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { rectangle, ...rest } = node;
+    return rest as PaneData;
+  }
+  const clearedFirst = clearNodeRectangles(node.first);
+  const clearedSecond = clearNodeRectangles(node.second);
+  if (clearedFirst === node.first && clearedSecond === node.second && !node.rectangle) {
+    return node;
+  }
+  return {
+    ...node,
+    rectangle: undefined,
+    first: clearedFirst ?? node.first,
+    second: clearedSecond ?? node.second,
+  };
+}
+
+/**
+ * Deep clone a layout node (and its children)
+ * Used when swapping entire trees to ensure complete independence
+ */
+export function cloneLayoutNode(node: LayoutNode | null): LayoutNode | null {
+  if (!node) return null;
+  if (!isSplitNode(node)) {
+    return { ...node };
+  }
+  return {
+    ...node,
+    first: cloneLayoutNode(node.first)!,
+    second: cloneLayoutNode(node.second)!,
+  };
+}

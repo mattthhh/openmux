@@ -75,11 +75,11 @@ export function handleNavigate(state: LayoutState, direction: Direction): Layout
   const stackCount = workspace.stackPanes.length;
   if (
     isStackedMode &&
-    (direction === 'north' || direction === 'south') &&
+    (direction === 'west' || direction === 'east') &&
     stackIndex >= 0 &&
     stackCount > 0
   ) {
-    const delta = direction === 'north' ? -1 : 1;
+    const delta = direction === 'west' ? -1 : 1;
     const nextIndex =
       stackCount > 1
         ? (workspace.activeStackIndex + delta + stackCount) % stackCount
@@ -105,6 +105,7 @@ export function handleNavigate(state: LayoutState, direction: Direction): Layout
       return {
         ...state,
         workspaces: updateWorkspace(state, updated),
+        layoutVersion: state.layoutVersion + 1,
         layoutGeometryVersion: state.layoutGeometryVersion + 1,
       };
     }
@@ -142,6 +143,7 @@ export function handleNavigate(state: LayoutState, direction: Direction): Layout
     return {
       ...state,
       workspaces: updateWorkspace(state, updated),
+      layoutVersion: state.layoutVersion + 1,
       layoutGeometryVersion: state.layoutGeometryVersion + 1,
     };
   }

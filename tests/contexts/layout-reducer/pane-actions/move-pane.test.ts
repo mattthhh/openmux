@@ -141,5 +141,84 @@ describe('Layout Reducer', () => {
       expect(allPanes.some(p => p.id === stackPane.id)).toBe(true);
       expect(stackPanes.some(p => p.id !== stackPane.id)).toBe(true);
     });
+
+    it('should reorder stack entries in stacked mode', () => {
+      // Create workspace in stacked mode with multiple stack entries
+      const mainPane: PaneData = { id: generatePaneId() };
+      const stackPanes: PaneData[] = [
+        { id: generatePaneId() },
+        { id: generatePaneId() },
+        { id: generatePaneId() },
+      ];
+      const workspace = createWorkspaceWithPanes(1, mainPane, stackPanes, {
+        focusedPaneId: stackPanes[1]!.id,
+        activeStackIndex: 1,
+        layoutMode: 'stacked',
+      });
+      const state = createInitialState({
+        workspaces: { 1: workspace },
+      });
+
+      // Move stack entry left (west/h direction moves to previous tab)
+      const moved = layoutReducer(state, { type: 'MOVE_PANE', direction: 'west' });
+      const newWorkspace = moved.workspaces[1]!;
+
+      // Stack entries should be reordered
+      expect((newWorkspace.stackPanes[0] as PaneData).id).toBe(stackPanes[1]!.id);
+      expect((newWorkspace.stackPanes[1] as PaneData).id).toBe(stackPanes[0]!.id);
+      expect((newWorkspace.stackPanes[2] as PaneData).id).toBe(stackPanes[2]!.id);
+      expect(newWorkspace.activeStackIndex).toBe(0);
+    });
+
+    it('should move stack entry to the right in stacked mode', () => {
+      const mainPane: PaneData = { id: generatePaneId() };
+      const stackPanes: PaneData[] = [
+        { id: generatePaneId() },
+        { id: generatePaneId() },
+        { id: generatePaneId() },
+      ];
+      const workspace = createWorkspaceWithPanes(1, mainPane, stackPanes, {
+        focusedPaneId: stackPanes[1]!.id,
+        activeStackIndex: 1,
+        layoutMode: 'stacked',
+      });
+      const state = createInitialState({
+        workspaces: { 1: workspace },
+      });
+
+      // Move stack entry right (east/l direction moves to next tab)
+      const moved = layoutReducer(state, { type: 'MOVE_PANE', direction: 'east' });
+      const newWorkspace = moved.workspaces[1]!;
+
+      // Stack entries should be reordered
+      expect((newWorkspace.stackPanes[0] as PaneData).id).toBe(stackPanes[0]!.id);
+      expect((newWorkspace.stackPanes[1] as PaneData).id).toBe(stackPanes[2]!.id);
+      expect((newWorkspace.stackPanes[2] as PaneData).id).toBe(stackPanes[1]!.id);
+      expect(newWorkspace.activeStackIndex).toBe(2);
+    });
+
+    it('should swap stack entry with main pane in stacked mode', () => {
+      const mainPane: PaneData = { id: generatePaneId() };
+      const stackPanes: PaneData[] = [
+        { id: generatePaneId() },
+        { id: generatePaneId() },
+      ];
+      const workspace = createWorkspaceWithPanes(1, mainPane, stackPanes, {
+        focusedPaneId: stackPanes[0]!.id,
+        activeStackIndex: 0,
+        layoutMode: 'stacked',
+      });
+      const state = createInitialState({
+        workspaces: { 1: workspace },
+      });
+
+      // Move focused stack entry to main (west/h from first stack entry moves to main)
+      const moved = layoutReducer(state, { type: 'MOVE_PANE', direction: 'west' });
+      const newWorkspace = moved.workspaces[1]!;
+
+      // Main and first stack entry should be swapped
+      expect((newWorkspace.mainPane as PaneData).id).toBe(stackPanes[0]!.id);
+      expect((newWorkspace.stackPanes[0] as PaneData).id).toBe(mainPane.id);
+    });
   });
 });

@@ -190,7 +190,7 @@ describe('Layout Reducer', () => {
     });
 
     describe('stacked layout', () => {
-      it('should cycle stack panes with north/south', () => {
+      it('should cycle stack panes with west/east (h/l)', () => {
         const mainPane: PaneData = { id: 'pane-1' };
         const stackPanes: PaneData[] = [
           { id: 'pane-2' },
@@ -206,12 +206,14 @@ describe('Layout Reducer', () => {
           workspaces: { 1: workspace },
         });
 
-        let newState = layoutReducer(state, { type: 'NAVIGATE', direction: 'north' });
+        // west (h) moves to previous tab (cycles)
+        let newState = layoutReducer(state, { type: 'NAVIGATE', direction: 'west' });
         expect(newState.workspaces[1]!.focusedPaneId).toBe('pane-4');
         expect(newState.workspaces[1]!.activeStackIndex).toBe(2);
         expect(newState.layoutGeometryVersion).toBe(1);
 
-        newState = layoutReducer(newState, { type: 'NAVIGATE', direction: 'south' });
+        // east (l) moves to next tab (cycles)
+        newState = layoutReducer(newState, { type: 'NAVIGATE', direction: 'east' });
         expect(newState.workspaces[1]!.focusedPaneId).toBe('pane-2');
         expect(newState.workspaces[1]!.activeStackIndex).toBe(0);
         expect(newState.layoutGeometryVersion).toBe(2);
