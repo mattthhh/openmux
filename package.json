@@ -82,7 +82,7 @@
     "@iarna/toml": "^3.0.0",
     "@opentui/core": "^0.1.77",
     "@opentui/solid": "^0.1.77",
-    "effect": "^3.19.15",
+    "effect": "^3.19.16",
     "solid-js": "^1.9.11"
   }
 }
