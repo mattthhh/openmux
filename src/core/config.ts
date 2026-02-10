@@ -33,6 +33,9 @@ export interface LayoutConfig {
 
   /** Auto-save interval in milliseconds (0 to disable) */
   autoSaveInterval: number;
+
+  /** Auto-create a pane when switching to an empty workspace */
+  autoCreatePaneOnEmptyWorkspace: boolean;
 }
 
 /** Get the session storage path (platform-aware) */
@@ -53,6 +56,7 @@ export const DEFAULT_CONFIG: LayoutConfig = {
   defaultShell: process.env.SHELL ?? '/bin/bash',
   sessionStoragePath: getSessionStoragePath(),
   autoSaveInterval: 30000, // 30 seconds
+  autoCreatePaneOnEmptyWorkspace: true, // Enabled by default
 };
 
 export const DEFAULT_THEME: Theme = {

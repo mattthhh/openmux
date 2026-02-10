@@ -5,7 +5,7 @@
 
 import type { Rectangle, WorkspaceId } from '../../types';
 import type { LayoutState, Workspaces } from './types';
-import { createWorkspace, updateWorkspace, recalculateLayout, syncPaneIdCounter, syncSplitIdCounter } from './helpers';
+import { createWorkspace, updateWorkspace, recalculateLayout, syncPaneIdCounter, syncSplitIdCounter, generatePaneId } from './helpers';
 
 /**
  * Handle SET_VIEWPORT action
@@ -33,10 +33,27 @@ export function handleSetViewport(state: LayoutState, viewport: Rectangle): Layo
 /**
  * Handle SWITCH_WORKSPACE action
  * Switches to existing workspace or creates new one
+ * If autoCreatePaneOnEmptyWorkspace is enabled, creates a pane in empty workspaces
  */
 export function handleSwitchWorkspace(state: LayoutState, workspaceId: WorkspaceId): LayoutState {
   if (state.workspaces[workspaceId] === undefined) {
-    const newWorkspace = createWorkspace(workspaceId, state.config.defaultLayoutMode);
+    let newWorkspace = createWorkspace(workspaceId, state.config.defaultLayoutMode);
+
+    // Auto-create a pane if the config is enabled
+    if (state.config.autoCreatePaneOnEmptyWorkspace) {
+      const newPaneId = generatePaneId();
+      newWorkspace = {
+        ...newWorkspace,
+        mainPane: {
+          id: newPaneId,
+          ptyId: undefined,
+          title: 'shell',
+        },
+        focusedPaneId: newPaneId,
+      };
+      newWorkspace = recalculateLayout(newWorkspace, state.viewport, state.config);
+    }
+
     return {
       ...state,
       workspaces: updateWorkspace(state, newWorkspace),
@@ -45,6 +62,31 @@ export function handleSwitchWorkspace(state: LayoutState, workspaceId: Workspace
       layoutGeometryVersion: state.layoutGeometryVersion + 1,
     };
   }
+
+  // Check if existing workspace is empty and auto-create pane if enabled
+  const existingWorkspace = state.workspaces[workspaceId];
+  if (state.config.autoCreatePaneOnEmptyWorkspace && existingWorkspace && !existingWorkspace.mainPane) {
+    const newPaneId = generatePaneId();
+    const updatedWorkspace = {
+      ...existingWorkspace,
+      mainPane: {
+        id: newPaneId,
+        ptyId: undefined,
+        title: 'shell',
+      },
+      focusedPaneId: newPaneId,
+    };
+    const recalculatedWorkspace = recalculateLayout(updatedWorkspace, state.viewport, state.config);
+
+    return {
+      ...state,
+      workspaces: updateWorkspace(state, recalculatedWorkspace),
+      activeWorkspaceId: workspaceId,
+      layoutVersion: state.layoutVersion + 1,
+      layoutGeometryVersion: state.layoutGeometryVersion + 1,
+    };
+  }
+
   return {
     ...state,
     activeWorkspaceId: workspaceId,
