@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect } from "bun:test";
-import type { PaneData, Workspace } from '../../../src/core/types';
+import type { PaneData, Rectangle, Workspace } from '../../../src/core/types';
 import { layoutReducer, createWorkspace } from '../../../src/core/operations/layout-actions';
 import { createInitialState, createWorkspaceWithPanes, setupLayoutReducerTest } from './fixtures';
 
@@ -71,7 +71,9 @@ describe('Layout Reducer', () => {
 
       expect(newState.activeWorkspaceId).toBe(5);
       expect(newState.workspaces[5]).toBeDefined();
-      expect(newState.workspaces[5]!.mainPane).toBeNull();
+      // With autoCreatePaneOnEmptyWorkspace enabled (default), a new pane is automatically created
+      expect(newState.workspaces[5]!.mainPane).not.toBeNull();
+      expect(newState.workspaces[5]!.focusedPaneId).toBeDefined();
     });
 
     it('should increment layout version', () => {
@@ -130,6 +132,7 @@ describe('Layout Reducer', () => {
         stackPanes: [{ id: 'pane-101' }],
         focusedPaneId: 'pane-100',
         activeStackIndex: 0,
+        lastFocusedPaneIds: [],
         layoutMode: 'horizontal',
         zoomed: false,
       };
@@ -153,6 +156,7 @@ describe('Layout Reducer', () => {
         stackPanes: [],
         focusedPaneId: 'pane-1',
         activeStackIndex: 0,
+        lastFocusedPaneIds: [],
         layoutMode: 'vertical',
         zoomed: false,
       };
