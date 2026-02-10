@@ -21,6 +21,8 @@ export interface LayoutSettings {
 
 export interface SessionSettings {
   autoSaveIntervalMs: number;
+  /** Auto-create a pane when switching to an empty workspace or creating a new session */
+  autoCreatePaneOnEmptyWorkspace: boolean;
 }
 
 export type KeyboardVimMode = 'off' | 'overlays';
@@ -51,6 +53,7 @@ export const DEFAULT_USER_CONFIG: UserConfig = {
   theme: DEFAULT_THEME,
   session: {
     autoSaveIntervalMs: DEFAULT_CONFIG.autoSaveInterval,
+    autoCreatePaneOnEmptyWorkspace: DEFAULT_CONFIG.autoCreatePaneOnEmptyWorkspace,
   },
   keyboard: {
     vimMode: 'off',
@@ -213,6 +216,7 @@ function mergeUserConfig(base: UserConfig, overrides?: Partial<UserConfig>): Use
     },
     session: {
       autoSaveIntervalMs: overrides.session?.autoSaveIntervalMs ?? base.session.autoSaveIntervalMs,
+      autoCreatePaneOnEmptyWorkspace: overrides.session?.autoCreatePaneOnEmptyWorkspace ?? base.session.autoCreatePaneOnEmptyWorkspace,
     },
     keyboard: {
       vimMode: overrides.keyboard?.vimMode ?? base.keyboard.vimMode,

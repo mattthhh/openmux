@@ -87,6 +87,7 @@ binarySelected = "#cbd5f5"
 
 [session]
 autoSaveIntervalMs = 30_000
+autoCreatePaneOnEmptyWorkspace = true
 
 [keyboard]
 vimMode = "off"
