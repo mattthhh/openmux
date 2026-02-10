@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.127](https://github.com/monotykamary/openmux/compare/v0.2.126...v0.2.127) (2026-02-10)
+
+
+### Features
+
+* **config:** auto-create pane when switching to empty workspace ([71068c8](https://github.com/monotykamary/openmux/commit/71068c85c58327f8d989ca25e56a6f95b001c9ac)), closes [#8](https://github.com/monotykamary/openmux/issues/8)
+* **keyboard:** add prefix-only mode toggle ([9e22b10](https://github.com/monotykamary/openmux/commit/9e22b10766f50de67148b70a8f0ba15cbfb52dcb))
+* **session:** auto-create pane for new empty sessions ([1c742d1](https://github.com/monotykamary/openmux/commit/1c742d148536eeb610f5a7875a418463bd829da1)), closes [#8](https://github.com/monotykamary/openmux/issues/8)
+
+
+### Bug Fixes
+
+* **session:** close picker when creating new session ([81d5e8c](https://github.com/monotykamary/openmux/commit/81d5e8cb9de3ca359a1052e57283f40d8093bd39)), closes [#8](https://github.com/monotykamary/openmux/issues/8)
+
+
+### Documentation
+
+* **config:** add autoCreatePaneOnEmptyWorkspace to user config ([64a3ddb](https://github.com/monotykamary/openmux/commit/64a3ddb0fce08a6572fe65fe49e1dc40d69a290f)), closes [#8](https://github.com/monotykamary/openmux/issues/8)
+
 ### [0.2.126](https://github.com/monotykamary/openmux/compare/v0.2.125...v0.2.126) (2026-02-07)
 
 ### [0.2.125](https://github.com/monotykamary/openmux/compare/v0.2.124...v0.2.125) (2026-02-06)
