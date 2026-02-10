@@ -76,6 +76,9 @@ export function createSessionOperations(params: SessionOperationsParams) {
     // Load empty workspaces for new session
     await onSessionLoad({}, 1, new Map(), new Map(), metadata.id, { allowPrune: false });
 
+    // Close the session picker after creating a new session
+    dispatch({ type: 'CLOSE_SESSION_PICKER' });
+
     return metadata;
   };
 
