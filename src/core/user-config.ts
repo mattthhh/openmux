@@ -30,6 +30,8 @@ export type KeyboardVimMode = 'off' | 'overlays';
 export interface KeyboardSettings {
   vimMode: KeyboardVimMode;
   vimSequenceTimeoutMs: number;
+  /** When true, non-prefix shortcuts (Alt+key) are disabled; only prefix mode commands work */
+  prefixOnly: boolean;
 }
 
 export interface UserConfig {
@@ -58,6 +60,7 @@ export const DEFAULT_USER_CONFIG: UserConfig = {
   keyboard: {
     vimMode: 'off',
     vimSequenceTimeoutMs: 1000,
+    prefixOnly: false,
   },
   keybindings: DEFAULT_KEYBINDINGS,
 };
@@ -221,6 +224,7 @@ function mergeUserConfig(base: UserConfig, overrides?: Partial<UserConfig>): Use
     keyboard: {
       vimMode: overrides.keyboard?.vimMode ?? base.keyboard.vimMode,
       vimSequenceTimeoutMs: vimSequenceTimeoutMs ?? base.keyboard.vimSequenceTimeoutMs,
+      prefixOnly: overrides.keyboard?.prefixOnly ?? base.keyboard.prefixOnly,
     },
     keybindings: mergeKeybindings(base.keybindings, overrides.keybindings),
   };
@@ -290,6 +294,16 @@ export function setKeyboardVimMode(mode: KeyboardVimMode): void {
   loadUserConfigSync({ createIfMissing: true });
   const contents = fs.readFileSync(configPath, 'utf8');
   const next = updateTomlKeyInSection(contents, 'keyboard', 'vimMode', `"${mode}"`);
+  if (next !== contents) {
+    fs.writeFileSync(configPath, next, 'utf8');
+  }
+}
+
+export function setKeyboardPrefixOnly(enabled: boolean): void {
+  const configPath = getConfigPath();
+  loadUserConfigSync({ createIfMissing: true });
+  const contents = fs.readFileSync(configPath, 'utf8');
+  const next = updateTomlKeyInSection(contents, 'keyboard', 'prefixOnly', String(enabled));
   if (next !== contents) {
     fs.writeFileSync(configPath, next, 'utf8');
   }

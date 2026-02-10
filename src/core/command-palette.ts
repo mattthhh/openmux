@@ -183,6 +183,13 @@ const BASE_COMMANDS: CommandPaletteCommand[] = [
     keywords: ['vim', 'keyboard', 'overlays'],
   },
   {
+    id: 'keyboard.prefix-only.toggle',
+    title: 'Toggle prefix-only mode',
+    description: 'Enable or disable non-prefix shortcuts (Alt+keys)',
+    action: 'keyboard.prefix-only.toggle',
+    keywords: ['prefix', 'keybindings', 'alt', 'shortcuts', 'keyboard'],
+  },
+  {
     id: 'theme.refresh',
     title: 'Refresh host theme',
     description: 'Re-query host terminal colors',

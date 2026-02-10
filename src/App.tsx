@@ -20,7 +20,7 @@ import { useTitle } from './contexts/TitleContext';
 import { PaneContainer } from './components';
 import { getFocusedPane, getFocusedPtyId } from './core/workspace-utils';
 import { type CommandPaletteCommand } from './core/command-palette';
-import { setKeyboardVimMode, type KeyboardVimMode } from './core/user-config';
+import { setKeyboardVimMode, type KeyboardVimMode, setKeyboardPrefixOnly } from './core/user-config';
 import { onShimDetached } from './effect/bridge';
 import {
   createPaneResizeHandlers,
@@ -216,6 +216,12 @@ function AppContent() {
     config.reloadConfig();
   };
 
+  const handleTogglePrefixOnly = () => {
+    const current = config.config().keyboard.prefixOnly;
+    setKeyboardPrefixOnly(!current);
+    config.reloadConfig();
+  };
+
   const handleRefreshHostColors = () => {
     refreshHostColors({ forceApply: true }).catch((error) => {
       console.warn('[openmux] Failed to refresh host colors:', error);
@@ -283,6 +289,7 @@ function AppContent() {
         onToggleAggregateView: openAggregateView,
         onToggleCommandPalette: toggleCommandPalette,
         onToggleVimMode: handleToggleVimMode,
+        onTogglePrefixOnly: handleTogglePrefixOnly,
         onRefreshHostColors: handleRefreshHostColors,
         onRenamePane: handlePaneRenameOpen,
         onLabelWorkspace: handleWorkspaceLabelOpen,
@@ -310,6 +317,7 @@ function AppContent() {
     onToggleAggregateView: openAggregateView,
     onToggleCommandPalette: toggleCommandPalette,
     onToggleVimMode: handleToggleVimMode,
+    onTogglePrefixOnly: handleTogglePrefixOnly,
     onRefreshHostColors: handleRefreshHostColors,
     onRenamePane: handlePaneRenameOpen,
     onLabelWorkspace: handleWorkspaceLabelOpen,

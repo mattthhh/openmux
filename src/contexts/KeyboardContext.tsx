@@ -225,6 +225,11 @@ export function useKeyboardHandler(options: KeyboardHandlerOptions = {}) {
     }
 
     if (keyboard.state.mode === 'normal') {
+      // Skip non-prefix shortcuts when prefixOnly mode is enabled
+      if (config.config().keyboard.prefixOnly) {
+        return false;
+      }
+
       const action = matchKeybinding(keybindings.normal, keyEvent);
       if (!action) return false;
 

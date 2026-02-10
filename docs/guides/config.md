@@ -92,6 +92,7 @@ autoCreatePaneOnEmptyWorkspace = true
 [keyboard]
 vimMode = "off"
 vimSequenceTimeoutMs = 1_000
+prefixOnly = false
 
 [keybindings]
 prefixKey = "ctrl+b"
@@ -160,6 +161,7 @@ prefixTimeoutMs = 2_000
   "`" = "console.toggle"
   q = "app.quit"
   d = "app.detach"
+  "shift+o" = "keyboard.prefix-only.toggle"
   escape = "mode.cancel"
 
   [keybindings.move]

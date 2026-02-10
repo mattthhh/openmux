@@ -39,4 +39,5 @@ export interface KeyboardHandlerOptions {
   onToggleCommandPalette?: () => void;
   onToggleVimMode?: () => void;
   onRefreshHostColors?: () => void;
+  onTogglePrefixOnly?: () => void;
 }

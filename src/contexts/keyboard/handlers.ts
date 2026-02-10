@@ -127,6 +127,9 @@ export function handleNormalModeAction(
     case 'keyboard.vim.toggle':
       options.onToggleVimMode?.();
       return true;
+    case 'keyboard.prefix-only.toggle':
+      options.onTogglePrefixOnly?.();
+      return true;
     case 'theme.refresh':
       options.onRefreshHostColors?.();
       return true;
@@ -269,6 +272,10 @@ export function handlePrefixModeAction(
       return true;
     case 'keyboard.vim.toggle':
       options.onToggleVimMode?.();
+      exitPrefix();
+      return true;
+    case 'keyboard.prefix-only.toggle':
+      options.onTogglePrefixOnly?.();
       exitPrefix();
       return true;
     case 'theme.refresh':
