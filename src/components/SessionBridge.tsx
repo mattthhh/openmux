@@ -11,6 +11,8 @@ import { SessionProvider } from '../contexts/SessionContext';
 import type { WorkspaceId, PaneData } from '../core/types';
 import type { Workspaces } from '../core/operations/layout-actions';
 import { collectPanes } from '../core/layout-tree';
+import { createWorkspace } from '../core/operations/layout-actions/helpers';
+import { generatePaneId } from '../core/operations/layout-actions/helpers';
 import { pruneMissingPanes } from './session-bridge-utils';
 import { deferMacrotask } from '../core/scheduling';
 import {
@@ -137,6 +139,24 @@ export function SessionBridge(props: SessionBridgeProps) {
         cwdMap.delete(paneId);
         commandMap.delete(paneId);
       }
+    }
+
+    // Auto-create a pane if workspaces are empty and config is enabled
+    const isEmpty = Object.values(workspacesToLoad).every(
+      (workspace) => !workspace || (!workspace.mainPane && workspace.stackPanes.length === 0)
+    );
+
+    if (isEmpty && layout.state.config.autoCreatePaneOnEmptyWorkspace) {
+      const newPaneId = generatePaneId();
+      const workspace = createWorkspace(1, layout.state.config.defaultLayoutMode);
+      workspace.mainPane = {
+        id: newPaneId,
+        ptyId: undefined,
+        title: 'shell',
+      };
+      workspace.focusedPaneId = newPaneId;
+      workspacesToLoad = { [1]: workspace };
+      activeWorkspaceIdToLoad = 1;
     }
 
     // If we have restored PTYs, assign them to the panes
