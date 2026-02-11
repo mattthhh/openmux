@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.128](https://github.com/monotykamary/openmux/compare/v0.2.127...v0.2.128) (2026-02-11)
+
+
+### Bug Fixes
+
+* **PaneContainer:** filter panes without valid rectangles in stacked mode ([a9e48a2](https://github.com/monotykamary/openmux/commit/a9e48a29e3e8c11deca1c54edcd0225395f73b07))
+* **tests:** update workspace-actions test for autoCreatePaneOnEmptyWorkspace behavior ([00be3a9](https://github.com/monotykamary/openmux/commit/00be3a976832f9985d47a72ed4cec7ea2130681a))
+
 ### [0.2.127](https://github.com/monotykamary/openmux/compare/v0.2.126...v0.2.127) (2026-02-10)
 
 
