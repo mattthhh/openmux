@@ -49,7 +49,9 @@ export function PaneContainer() {
     if (layoutMode() === 'stacked') {
       const active = stackPanes()[activeStackIndex()];
       if (active) collectPanes(active, panes);
-      return panes;
+      // Filter out panes without valid rectangles to prevent race condition
+      // where layout hasn't recalculated yet after activeStackIndex changes
+      return panes.filter(p => p.rectangle && p.rectangle.width > 0 && p.rectangle.height > 0);
     }
     for (const pane of stackPanes()) {
       collectPanes(pane, panes);
@@ -267,7 +269,12 @@ function StackedPanesRenderer(props: StackedPanesRendererProps) {
   const rect = () => activeEntry()?.rectangle ?? { x: 0, y: 0, width: 40, height: 12 };
   const activePanes = createMemo(() => {
     const entry = activeEntry();
-    return entry ? collectPanes(entry) : [];
+    if (!entry) return [];
+    const panes: PaneData[] = [];
+    collectPanes(entry, panes);
+    // Filter out panes without valid rectangles to prevent race condition
+    // where layout recalculation hasn't completed after activeStackIndex changes
+    return panes.filter(p => p.rectangle && p.rectangle.width > 0 && p.rectangle.height > 0);
   });
 
   const handleTabClick = (paneId: string) => {
