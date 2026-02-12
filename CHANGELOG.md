@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.129](https://github.com/monotykamary/openmux/compare/v0.2.128...v0.2.129) (2026-02-12)
+
+
+### Bug Fixes
+
+* **native:** harden zig ffi memory safety paths ([51113d6](https://github.com/monotykamary/openmux/commit/51113d6d70e30717cd2f4be9bb462193833f86e5))
+
 ### [0.2.128](https://github.com/monotykamary/openmux/compare/v0.2.127...v0.2.128) (2026-02-11)
 
 
