@@ -13,11 +13,12 @@ const KeyMods = ghostty.input.KeyMods;
 const log = std.log.scoped(.key_event);
 
 /// Wrapper around KeyEvent that tracks the allocator for C API usage.
-/// The UTF-8 text is not owned by this wrapper - the caller is responsible
-/// for ensuring the lifetime of any UTF-8 text set via set_utf8.
+/// UTF-8 text is copied into owned storage so callers don't need to keep
+/// their input buffer alive after set_utf8 returns.
 const KeyEventWrapper = struct {
     event: KeyEvent = .{},
     alloc: Allocator,
+    utf8_owned: std.ArrayList(u8) = .empty,
 };
 
 /// C: GhosttyKeyEvent
@@ -30,7 +31,10 @@ pub fn new(
     const alloc = lib_alloc.default(alloc_);
     const ptr = alloc.create(KeyEventWrapper) catch
         return .out_of_memory;
-    ptr.* = .{ .alloc = alloc };
+    ptr.* = .{
+        .alloc = alloc,
+        .utf8_owned = .empty,
+    };
     result.* = ptr;
     return .success;
 }
@@ -38,6 +42,7 @@ pub fn new(
 pub fn free(event_: Event) callconv(.c) void {
     const wrapper = event_ orelse return;
     const alloc = wrapper.alloc;
+    wrapper.utf8_owned.deinit(alloc);
     alloc.destroy(wrapper);
 }
 
@@ -106,8 +111,25 @@ pub fn get_composing(event_: Event) callconv(.c) bool {
 }
 
 pub fn set_utf8(event_: Event, utf8: ?[*]const u8, len: usize) callconv(.c) void {
-    const event: *KeyEvent = &event_.?.event;
-    event.utf8 = if (utf8) |ptr| ptr[0..len] else "";
+    const wrapper = event_ orelse return;
+
+    wrapper.utf8_owned.clearRetainingCapacity();
+
+    if (utf8) |ptr| {
+        if (len == 0) {
+            wrapper.event.utf8 = "";
+            return;
+        }
+
+        wrapper.utf8_owned.appendSlice(wrapper.alloc, ptr[0..len]) catch {
+            wrapper.event.utf8 = "";
+            return;
+        };
+        wrapper.event.utf8 = wrapper.utf8_owned.items;
+        return;
+    }
+
+    wrapper.event.utf8 = "";
 }
 
 pub fn get_utf8(event_: Event, len: ?*usize) callconv(.c) ?[*]const u8 {
@@ -270,4 +292,26 @@ test "complete key event" {
     try testing.expect(got_utf8 != null);
     try testing.expectEqual(@as(usize, 1), utf8_len);
     try testing.expectEqualStrings("A", got_utf8.?[0..utf8_len]);
+}
+
+test "set_utf8 copies caller buffer" {
+    const testing = std.testing;
+    var e: Event = undefined;
+    try testing.expectEqual(Result.success, new(
+        &lib_alloc.test_allocator,
+        &e,
+    ));
+    defer free(e);
+
+    var input = [_]u8{ 'h', 'i' };
+    set_utf8(e, input[0..].ptr, input.len);
+    input[0] = 'b';
+
+    try testing.expectEqualStrings("hi", e.?.event.utf8);
+
+    var utf8_len: usize = undefined;
+    const got_utf8 = get_utf8(e, &utf8_len);
+    try testing.expect(got_utf8 != null);
+    try testing.expectEqual(@as(usize, 2), utf8_len);
+    try testing.expectEqualStrings("hi", got_utf8.?[0..utf8_len]);
 }

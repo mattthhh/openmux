@@ -366,9 +366,9 @@ const linux = struct {
         if (builtin.os.tag != .linux) return constants.ERROR;
 
         var path_buf: [32]u8 = undefined;
-        const path = std.fmt.bufPrint(&path_buf, "/proc/{d}/cmdline", .{pid}) catch return constants.ERROR;
+        const path = std.fmt.bufPrintZ(&path_buf, "/proc/{d}/cmdline", .{pid}) catch return constants.ERROR;
 
-        const fd = c.open(@ptrCast(path.ptr), c.O_RDONLY);
+        const fd = c.open(path, c.O_RDONLY);
         if (fd < 0) return constants.ERROR;
         defer _ = c.close(fd);
 
@@ -407,9 +407,9 @@ const linux = struct {
         if (builtin.os.tag != .linux) return constants.ERROR;
 
         var path_buf: [32]u8 = undefined;
-        const path = std.fmt.bufPrint(&path_buf, "/proc/{d}/comm", .{pid}) catch return constants.ERROR;
+        const path = std.fmt.bufPrintZ(&path_buf, "/proc/{d}/comm", .{pid}) catch return constants.ERROR;
 
-        const fd = c.open(@ptrCast(path.ptr), c.O_RDONLY);
+        const fd = c.open(path, c.O_RDONLY);
         if (fd < 0) return constants.ERROR;
         defer _ = c.close(fd);
 
@@ -431,9 +431,9 @@ const linux = struct {
         if (builtin.os.tag != .linux) return constants.ERROR;
 
         var path_buf: [32]u8 = undefined;
-        const path = std.fmt.bufPrint(&path_buf, "/proc/{d}/cwd", .{pid}) catch return constants.ERROR;
+        const path = std.fmt.bufPrintZ(&path_buf, "/proc/{d}/cwd", .{pid}) catch return constants.ERROR;
 
-        const result = c.readlink(@ptrCast(path.ptr), buf, len - 1);
+        const result = c.readlink(path, buf, len - 1);
         if (result < 0) return constants.ERROR;
 
         buf[@intCast(result)] = 0;
@@ -445,9 +445,9 @@ const linux = struct {
         if (builtin.os.tag != .linux) return parent_pid;
 
         var path_buf: [64]u8 = undefined;
-        const path = std.fmt.bufPrint(&path_buf, "/proc/{d}/task/{d}/children", .{ parent_pid, parent_pid }) catch return parent_pid;
+        const path = std.fmt.bufPrintZ(&path_buf, "/proc/{d}/task/{d}/children", .{ parent_pid, parent_pid }) catch return parent_pid;
 
-        const fd = c.open(@ptrCast(path.ptr), c.O_RDONLY);
+        const fd = c.open(path, c.O_RDONLY);
         if (fd < 0) return parent_pid;
         defer _ = c.close(fd);
 

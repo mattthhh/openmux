@@ -24,12 +24,13 @@ pub fn readResponse(ptr: ?*anyopaque, out: [*]u8, buf_size: usize) callconv(.c) 
         wrapper.response_buffer.clearRetainingCapacity();
     } else {
         // Shift remaining bytes to front
+        const remaining = wrapper.response_buffer.items.len - len;
         std.mem.copyForwards(
             u8,
-            wrapper.response_buffer.items[0..],
-            wrapper.response_buffer.items[len..],
+            wrapper.response_buffer.items[0..remaining],
+            wrapper.response_buffer.items[len .. len + remaining],
         );
-        wrapper.response_buffer.shrinkRetainingCapacity(wrapper.response_buffer.items.len - len);
+        wrapper.response_buffer.shrinkRetainingCapacity(remaining);
     }
 
     return @intCast(len);
