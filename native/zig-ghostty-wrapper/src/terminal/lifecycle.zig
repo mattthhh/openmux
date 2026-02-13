@@ -141,6 +141,7 @@ pub fn newWithConfig(
         }
     }
 
+    wrapper.alloc = alloc;
     wrapper.terminal = Terminal.init(alloc, .{
         .cols = @intCast(cols),
         .rows = @intCast(rows),
@@ -154,21 +155,14 @@ pub fn newWithConfig(
     // Initialize response buffer
     wrapper.response_buffer = std.ArrayList(u8).empty;
 
-    // Initialize handler with references to terminal and response buffer
-    wrapper.handler = ResponseHandler.init(alloc, &wrapper.terminal, &wrapper.response_buffer);
-
-    // Initialize stream with the handler
-    wrapper.stream = ResponseStream.init(wrapper.handler);
-
-    wrapper.* = .{
-        .alloc = alloc,
-        .terminal = wrapper.terminal,
-        .handler = wrapper.handler,
-        .stream = wrapper.stream,
-        .render_state = RenderState.empty,
-        .response_buffer = wrapper.response_buffer,
-        .scrollback_limit_lines = scrollback_limit_lines,
-    };
+    // Initialize stream with a handler that references wrapper-owned state.
+    // ResponseStream takes ownership of this handler and deinitializes it in stream.deinit().
+    wrapper.stream = ResponseStream.init(
+        ResponseHandler.init(alloc, &wrapper.terminal, &wrapper.response_buffer),
+    );
+    wrapper.render_state = RenderState.empty;
+    wrapper.last_screen_is_alternate = false;
+    wrapper.scrollback_limit_lines = scrollback_limit_lines;
 
     // NOTE: linefeed mode must be FALSE to match native terminal behavior
     // When true, LF does automatic CR which breaks apps like nvim
@@ -185,6 +179,7 @@ pub fn newWithConfig(
 pub fn free(ptr: ?*anyopaque) callconv(.c) void {
     const wrapper: *TerminalWrapper = @ptrCast(@alignCast(ptr orelse return));
     const alloc = wrapper.alloc;
+    // stream.deinit() calls handler.deinit() internally.
     wrapper.stream.deinit();
     wrapper.response_buffer.deinit(alloc);
     wrapper.render_state.deinit(alloc);
