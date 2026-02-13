@@ -101,6 +101,9 @@ const KeyEventWrapper = struct {
     event: KeyEvent = .{},
     alloc: Allocator,
     utf8_owned: std.ArrayList(u8) = .empty,
+    /// Stable readback storage for get_utf8 pointers.
+    /// This avoids returning pointers into utf8_owned, which can reallocate on set_utf8.
+    utf8_readback: std.ArrayList(u8) = .empty,
 };
 
 /// C: GhosttyKeyEvent
@@ -116,6 +119,7 @@ pub fn new(
     ptr.* = .{
         .alloc = alloc,
         .utf8_owned = .empty,
+        .utf8_readback = .empty,
     };
     result.* = ptr;
     return .success;
@@ -124,6 +128,7 @@ pub fn new(
 pub fn free(event_: Event) callconv(.c) void {
     const wrapper = event_ orelse return;
     const alloc = wrapper.alloc;
+    wrapper.utf8_readback.deinit(alloc);
     wrapper.utf8_owned.deinit(alloc);
     alloc.destroy(wrapper);
 }
@@ -214,10 +219,23 @@ pub fn set_utf8(event_: Event, utf8: ?[*]const u8, len: usize) callconv(.c) void
     wrapper.event.utf8 = "";
 }
 
+/// Returns UTF-8 bytes for the key event.
+/// The returned pointer remains valid until the next get_utf8 call for this
+/// event wrapper, or until ghostty_key_event_free is called.
 pub fn get_utf8(event_: Event, len: ?*usize) callconv(.c) ?[*]const u8 {
-    const event: *KeyEvent = &event_.?.event;
-    if (len) |l| l.* = event.utf8.len;
-    return if (event.utf8.len == 0) null else event.utf8.ptr;
+    const wrapper = event_ orelse return null;
+    const utf8 = wrapper.event.utf8;
+    if (len) |l| l.* = utf8.len;
+    if (utf8.len == 0) return null;
+
+    // Copy into a dedicated readback buffer so pointer lifetimes are not tied
+    // to set_utf8 reallocations.
+    wrapper.utf8_readback.clearRetainingCapacity();
+    wrapper.utf8_readback.appendSlice(wrapper.alloc, utf8) catch {
+        if (len) |l| l.* = 0;
+        return null;
+    };
+    return wrapper.utf8_readback.items.ptr;
 }
 
 pub fn set_unshifted_codepoint(event_: Event, codepoint: u32) callconv(.c) void {
@@ -398,7 +416,7 @@ test "set_utf8 copies caller buffer" {
     try testing.expectEqualStrings("hi", got_utf8.?[0..utf8_len]);
 }
 
-test "get_utf8 pointer becomes stale after updating utf8" {
+test "get_utf8 pointer stays valid across set_utf8 updates" {
     const testing = std.testing;
     var poison = PoisonAllocator{ .inner = std.testing.allocator };
 
@@ -420,10 +438,13 @@ test "get_utf8 pointer becomes stale after updating utf8" {
     @memset(&replacement, 'x');
     set_utf8(e, replacement[0..].ptr, replacement.len);
 
-    try testing.expect(poison.last_freed_ptr != null);
-    try testing.expectEqual(first_ptr, poison.last_freed_ptr.?);
+    if (poison.last_freed_ptr) |freed_ptr| {
+        try testing.expect(freed_ptr != first_ptr);
+    }
+    try testing.expectEqualStrings("a", first_ptr[0..first_len]);
+
     var replacement_len: usize = undefined;
     const replacement_ptr = get_utf8(e, &replacement_len).?;
-    try testing.expect(replacement_ptr != first_ptr);
-    try testing.expect(poison.free_count >= 1);
+    try testing.expectEqual(@as(usize, replacement.len), replacement_len);
+    try testing.expectEqual(@as(u8, 'x'), replacement_ptr[0]);
 }

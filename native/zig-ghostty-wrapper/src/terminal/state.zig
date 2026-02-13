@@ -13,7 +13,6 @@ pub const ResponseStream = response_handler.ResponseStream;
 pub const TerminalWrapper = struct {
     alloc: Allocator,
     terminal: Terminal,
-    handler: ResponseHandler,
     stream: ResponseStream,
     render_state: RenderState,
     /// Response buffer for DSR and other query responses
