@@ -12,6 +12,88 @@ const KeyMods = ghostty.input.KeyMods;
 
 const log = std.log.scoped(.key_event);
 
+const PoisonAllocator = struct {
+    inner: std.mem.Allocator,
+    last_freed_ptr: ?[*]const u8 = null,
+    last_freed_len: usize = 0,
+    free_count: usize = 0,
+
+    const vtable: lib_alloc.VTable = .{
+        .alloc = allocFn,
+        .resize = resizeFn,
+        .remap = remapFn,
+        .free = freeFn,
+    };
+
+    fn toC(self: *PoisonAllocator) lib_alloc.Allocator {
+        return .{
+            .ctx = self,
+            .vtable = &vtable,
+        };
+    }
+
+    fn fromAlignment(alignment: u8) std.mem.Alignment {
+        return @enumFromInt(alignment);
+    }
+
+    fn allocFn(
+        ctx: *anyopaque,
+        len: usize,
+        alignment: u8,
+        ra: usize,
+    ) callconv(.c) ?[*]u8 {
+        const self: *PoisonAllocator = @ptrCast(@alignCast(ctx));
+        return self.inner.rawAlloc(len, fromAlignment(alignment), ra);
+    }
+
+    fn resizeFn(
+        ctx: *anyopaque,
+        memory: [*]u8,
+        memory_len: usize,
+        alignment: u8,
+        new_len: usize,
+        ra: usize,
+    ) callconv(.c) bool {
+        const self: *PoisonAllocator = @ptrCast(@alignCast(ctx));
+        return self.inner.rawResize(memory[0..memory_len], fromAlignment(alignment), new_len, ra);
+    }
+
+    fn remapFn(
+        ctx: *anyopaque,
+        memory: [*]u8,
+        memory_len: usize,
+        alignment: u8,
+        new_len: usize,
+        ra: usize,
+    ) callconv(.c) ?[*]u8 {
+        _ = memory;
+        _ = memory_len;
+        _ = alignment;
+        _ = new_len;
+        _ = ra;
+        _ = ctx;
+        return null;
+    }
+
+    fn freeFn(
+        ctx: *anyopaque,
+        memory: [*]u8,
+        memory_len: usize,
+        alignment: u8,
+        ra: usize,
+    ) callconv(.c) void {
+        const self: *PoisonAllocator = @ptrCast(@alignCast(ctx));
+        const bytes = memory[0..memory_len];
+        if (bytes.len > 0) {
+            self.last_freed_ptr = bytes.ptr;
+            self.last_freed_len = bytes.len;
+            self.free_count += 1;
+            @memset(bytes, 0xA5);
+        }
+        self.inner.rawFree(bytes, fromAlignment(alignment), ra);
+    }
+};
+
 /// Wrapper around KeyEvent that tracks the allocator for C API usage.
 /// UTF-8 text is copied into owned storage so callers don't need to keep
 /// their input buffer alive after set_utf8 returns.
@@ -314,4 +396,34 @@ test "set_utf8 copies caller buffer" {
     try testing.expect(got_utf8 != null);
     try testing.expectEqual(@as(usize, 2), utf8_len);
     try testing.expectEqualStrings("hi", got_utf8.?[0..utf8_len]);
+}
+
+test "get_utf8 pointer becomes stale after updating utf8" {
+    const testing = std.testing;
+    var poison = PoisonAllocator{ .inner = std.testing.allocator };
+
+    var e: Event = undefined;
+    try testing.expectEqual(Result.success, new(
+        &poison.toC(),
+        &e,
+    ));
+    defer free(e);
+
+    const first = "a";
+    set_utf8(e, first.ptr, first.len);
+    var first_len: usize = undefined;
+    const first_ptr = get_utf8(e, &first_len).?;
+    try testing.expectEqual(@as(usize, 1), first_len);
+    try testing.expectEqualStrings("a", first_ptr[0..first_len]);
+
+    var replacement: [4096]u8 = .{0} ** 4096;
+    @memset(&replacement, 'x');
+    set_utf8(e, replacement[0..].ptr, replacement.len);
+
+    try testing.expect(poison.last_freed_ptr != null);
+    try testing.expectEqual(first_ptr, poison.last_freed_ptr.?);
+    var replacement_len: usize = undefined;
+    const replacement_ptr = get_utf8(e, &replacement_len).?;
+    try testing.expect(replacement_ptr != first_ptr);
+    try testing.expect(poison.free_count >= 1);
 }
