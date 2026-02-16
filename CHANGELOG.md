@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.130](https://github.com/monotykamary/openmux/compare/v0.2.129...v0.2.130) (2026-02-16)
+
+
+### Bug Fixes
+
+* **zig-ghostty-wrapper:** clarify ownership and stabilize utf8 readback ([9045447](https://github.com/monotykamary/openmux/commit/90454477a0292c1b78fa3ad36b9954678baf2a82))
+
+
+### Tests
+
+* **zig-ghostty-wrapper:** add key_event utf8 stale-pointer regression test ([4fe6c90](https://github.com/monotykamary/openmux/commit/4fe6c90955f92e471cafc64ff80afd5273ab9e76))
+
 ### [0.2.129](https://github.com/monotykamary/openmux/compare/v0.2.128...v0.2.129) (2026-02-12)
 
 
