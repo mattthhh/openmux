@@ -8,7 +8,6 @@ import type { PtyInfo, AggregateViewState } from './aggregate-view-types';
 import {
   buildPtyIndex,
   recomputeMatches,
-  applyRepoUpdate,
   isActivePty,
 } from './aggregate-view-helpers';
 import { runStream, streamFromSubscription } from '../effect/stream-utils';
@@ -104,7 +103,6 @@ export function createAggregateViewRefreshers(
       if (updates.length === 0) return;
 
       setState(produce((s) => {
-        const updatedRepos = new Set<string>();
         for (const update of updates) {
           const index = s.allPtysIndex.get(update.ptyId);
           if (index === undefined || !s.allPtys[index]) continue;
@@ -125,10 +123,6 @@ export function createAggregateViewRefreshers(
             gitDetached: update.gitDetached,
             gitRepoKey: update.gitRepoKey,
           };
-          if (update.gitRepoKey && !updatedRepos.has(update.gitRepoKey)) {
-            updatedRepos.add(update.gitRepoKey);
-            applyRepoUpdate(s.allPtys, update);
-          }
         }
 
         recomputeMatches(s);
@@ -157,9 +151,6 @@ export function createAggregateViewRefreshers(
           // Replace entire object for proper SolidJS reactivity
           s.matchedPtys[matchedIndex] = { ...s.matchedPtys[matchedIndex], gitDiffStats: update.gitDiffStats };
         }
-
-        applyRepoUpdate(s.allPtys, update, { applyDiffStats: true });
-        applyRepoUpdate(s.matchedPtys, update, { applyDiffStats: true });
       }));
     } finally {
       refreshState.selectedDiffRefreshInProgress = false;
