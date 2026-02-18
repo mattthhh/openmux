@@ -134,10 +134,10 @@ export function applyRepoUpdate(
     const pty = list[i];
     if (pty.gitRepoKey !== repoKey) continue;
     // Replace object for proper SolidJS reactivity
+    // NOTE: cwd is NOT synced - each PTY has its own unique working directory
     list[i] = {
       ...pty,
       gitRepoKey: update.gitRepoKey,
-      cwd: update.cwd,
       gitBranch: update.gitBranch,
       gitDirty: update.gitDirty,
       gitStaged: update.gitStaged,

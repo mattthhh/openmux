@@ -8,7 +8,6 @@ import type { PtyInfo, AggregateViewState } from './aggregate-view-types';
 import {
   buildPtyIndex,
   recomputeMatches,
-  syncGitFields,
   applyRepoUpdate,
   isActivePty,
 } from './aggregate-view-helpers';
@@ -150,13 +149,13 @@ export function createAggregateViewRefreshers(
       setState(produce((s) => {
         const index = s.allPtysIndex.get(update.ptyId);
         if (index !== undefined && s.allPtys[index]) {
-          syncGitFields(s.allPtys[index], update);
-          s.allPtys[index].gitDiffStats = update.gitDiffStats;
+          // Replace entire object for proper SolidJS reactivity
+          s.allPtys[index] = { ...s.allPtys[index], gitDiffStats: update.gitDiffStats };
         }
         const matchedIndex = s.matchedPtysIndex.get(update.ptyId);
         if (matchedIndex !== undefined && s.matchedPtys[matchedIndex]) {
-          syncGitFields(s.matchedPtys[matchedIndex], update);
-          s.matchedPtys[matchedIndex].gitDiffStats = update.gitDiffStats;
+          // Replace entire object for proper SolidJS reactivity
+          s.matchedPtys[matchedIndex] = { ...s.matchedPtys[matchedIndex], gitDiffStats: update.gitDiffStats };
         }
 
         applyRepoUpdate(s.allPtys, update, { applyDiffStats: true });
