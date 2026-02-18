@@ -130,11 +130,28 @@ export function applyRepoUpdate(
   const repoKey = update.gitRepoKey;
   if (!repoKey) return;
 
-  for (const pty of list) {
+  for (let i = 0; i < list.length; i++) {
+    const pty = list[i];
     if (pty.gitRepoKey !== repoKey) continue;
-    syncGitFields(pty, update);
-    if (options.applyDiffStats && update.gitDiffStats !== undefined) {
-      pty.gitDiffStats = update.gitDiffStats;
-    }
+    // Replace object for proper SolidJS reactivity
+    list[i] = {
+      ...pty,
+      gitRepoKey: update.gitRepoKey,
+      cwd: update.cwd,
+      gitBranch: update.gitBranch,
+      gitDirty: update.gitDirty,
+      gitStaged: update.gitStaged,
+      gitUnstaged: update.gitUnstaged,
+      gitUntracked: update.gitUntracked,
+      gitConflicted: update.gitConflicted,
+      gitAhead: update.gitAhead,
+      gitBehind: update.gitBehind,
+      gitStashCount: update.gitStashCount,
+      gitState: update.gitState,
+      gitDetached: update.gitDetached,
+      gitDiffStats: options.applyDiffStats && update.gitDiffStats !== undefined
+        ? update.gitDiffStats
+        : pty.gitDiffStats,
+    };
   }
 }

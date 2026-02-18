@@ -109,10 +109,23 @@ export function createAggregateViewRefreshers(
         for (const update of updates) {
           const index = s.allPtysIndex.get(update.ptyId);
           if (index === undefined || !s.allPtys[index]) continue;
-          if (s.allPtys[index].foregroundProcess !== update.foregroundProcess) {
-            s.allPtys[index].foregroundProcess = update.foregroundProcess;
-          }
-          syncGitFields(s.allPtys[index], update);
+          // Replace entire object for proper SolidJS reactivity
+          s.allPtys[index] = {
+            ...s.allPtys[index],
+            foregroundProcess: update.foregroundProcess,
+            gitBranch: update.gitBranch,
+            gitDirty: update.gitDirty,
+            gitStaged: update.gitStaged,
+            gitUnstaged: update.gitUnstaged,
+            gitUntracked: update.gitUntracked,
+            gitConflicted: update.gitConflicted,
+            gitAhead: update.gitAhead,
+            gitBehind: update.gitBehind,
+            gitStashCount: update.gitStashCount,
+            gitState: update.gitState,
+            gitDetached: update.gitDetached,
+            gitRepoKey: update.gitRepoKey,
+          };
           if (update.gitRepoKey && !updatedRepos.has(update.gitRepoKey)) {
             updatedRepos.add(update.gitRepoKey);
             applyRepoUpdate(s.allPtys, update);
