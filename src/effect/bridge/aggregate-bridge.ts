@@ -27,6 +27,7 @@ interface PtyMetadata {
   gitRepoKey: string | undefined
   foregroundProcess: string | undefined
   shell: string | undefined
+  title: string | undefined
   workspaceId: number | undefined
   paneId: string | undefined
 }
@@ -91,6 +92,7 @@ const fetchPtyMetadata = (ptyId: PtyId, options: FetchPtyMetadataOptions = {}) =
       gitRepoKey: gitInfoValue?.repoKey,
       foregroundProcess,
       shell: session.shell,
+      title: undefined, // Title is set dynamically via title change events
       workspaceId: undefined, // Will be enriched by AggregateView
       paneId: undefined,      // Will be enriched by AggregateView
     })

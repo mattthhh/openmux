@@ -162,15 +162,23 @@ export function createTitleChangeHandler(
 ) {
   return (event: { ptyId: string; title: string }) => {
     setState(produce((s) => {
-      // Update in allPtys using O(1) lookup
+      // Update in allPtys using O(1) lookup with ptyId validation
       const allIndex = s.allPtysIndex.get(event.ptyId);
       if (allIndex !== undefined && s.allPtys[allIndex]) {
-        s.allPtys[allIndex] = { ...s.allPtys[allIndex], foregroundProcess: event.title };
+        const ptyAtIndex = s.allPtys[allIndex];
+        // Validate that the PTY at this index has the correct ID
+        if (ptyAtIndex.ptyId === event.ptyId) {
+          s.allPtys[allIndex] = { ...ptyAtIndex, title: event.title };
+        }
       }
-      // Update in matchedPtys using O(1) lookup
+      // Update in matchedPtys using O(1) lookup with ptyId validation
       const matchedIndex = s.matchedPtysIndex.get(event.ptyId);
       if (matchedIndex !== undefined && s.matchedPtys[matchedIndex]) {
-        s.matchedPtys[matchedIndex] = { ...s.matchedPtys[matchedIndex], foregroundProcess: event.title };
+        const ptyAtIndex = s.matchedPtys[matchedIndex];
+        // Validate that the PTY at this index has the correct ID
+        if (ptyAtIndex.ptyId === event.ptyId) {
+          s.matchedPtys[matchedIndex] = { ...ptyAtIndex, title: event.title };
+        }
       }
     }));
   };

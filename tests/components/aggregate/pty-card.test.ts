@@ -25,6 +25,7 @@ function createPty(diffStatsGetter: () => GitDiffStats | undefined): PtyInfo {
     gitRepoKey: "repo-1",
     foregroundProcess: "bash",
     shell: "bash",
+    title: undefined,
     workspaceId: 1,
     paneId: "pane-1",
   };
