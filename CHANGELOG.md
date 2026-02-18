@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.133](https://github.com/monotykamary/openmux/compare/v0.2.132...v0.2.133) (2026-02-18)
+
+
+### Bug Fixes
+
+* **aggregate-view:** prevent title changes from overwriting foregroundProcess ([ab8dd33](https://github.com/monotykamary/openmux/commit/ab8dd332ae92494ee43e0a1b7062421bf0082536))
+
 ### [0.2.132](https://github.com/monotykamary/openmux/compare/v0.2.131...v0.2.132) (2026-02-18)
 
 ### [0.2.131](https://github.com/monotykamary/openmux/compare/v0.2.130...v0.2.131) (2026-02-18)
