@@ -354,9 +354,6 @@ export interface PTYSession {
   shell: string;
 }
 
-// ============================================================================
-// Session Types
-// ============================================================================
 
 /** Session ID - unique identifier */
 export type SessionId = string;

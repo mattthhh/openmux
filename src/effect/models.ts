@@ -4,9 +4,6 @@
 import { Schema } from "effect"
 import { PaneId, PtyId, WorkspaceId, SessionId, LayoutMode, Cols, Rows } from "./types"
 
-// =============================================================================
-// Layout Models
-// =============================================================================
 
 /** Rectangle dimensions for pane positioning */
 export class Rectangle extends Schema.Class<Rectangle>("Rectangle")({
@@ -30,9 +27,6 @@ export class PaneData extends Schema.Class<PaneData>("PaneData")({
   rectangle: Schema.optional(Rectangle),
 }) {}
 
-// =============================================================================
-// PTY Models
-// =============================================================================
 
 /** PTY session information */
 export class PtySession extends Schema.Class<PtySession>("PtySession")({
@@ -44,9 +38,6 @@ export class PtySession extends Schema.Class<PtySession>("PtySession")({
   shell: Schema.String,
 }) {}
 
-// =============================================================================
-// Session Persistence Models
-// =============================================================================
 
 /** Serialized pane data for persistence */
 export class SerializedPaneData extends Schema.Class<SerializedPaneData>("SerializedPaneData")({
@@ -116,9 +107,6 @@ export class SessionIndex extends Schema.Class<SessionIndex>("SessionIndex")({
   }
 }
 
-// =============================================================================
-// Template Models
-// =============================================================================
 
 /** Template pane definition for layout templates */
 export class TemplatePaneData extends Schema.Class<TemplatePaneData>("TemplatePaneData")({
@@ -184,9 +172,6 @@ export class TemplateSession extends Schema.Class<TemplateSession>("TemplateSess
   workspaces: Schema.Array(TemplateWorkspace),
 }) {}
 
-// =============================================================================
-// Terminal State Models
-// =============================================================================
 
 /** Terminal cell data */
 export class TerminalCell extends Schema.Class<TerminalCell>("TerminalCell")({

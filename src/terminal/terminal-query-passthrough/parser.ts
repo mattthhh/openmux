@@ -119,7 +119,6 @@ export function parseTerminalQueries(data: string): QueryParseResult {
   return { textSegments, queries };
 }
 
-// Re-export types and registry for external use
 export type { QueryParseResult, TerminalQuery } from './types';
 export { QueryParserRegistry, createDefaultRegistry, getDefaultRegistry } from './query-registry';
 export type { QueryParser, ParseResult } from './parsers/base';

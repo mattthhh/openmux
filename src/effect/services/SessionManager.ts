@@ -17,7 +17,6 @@ import {
   makeSessionId,
 } from "../types"
 
-// Import extracted modules
 import type { SessionError, WorkspaceState } from "./session-manager/types"
 import {
   createLifecycleOperations,
@@ -26,9 +25,6 @@ import {
   createQuickSaveOperations,
 } from "./session-manager"
 
-// =============================================================================
-// SessionManager Service
-// =============================================================================
 
 export class SessionManager extends Context.Tag("@openmux/SessionManager")<
   SessionManager,

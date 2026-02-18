@@ -1,8 +1,3 @@
-/**
- * Layout actions module
- * Re-exports all layout reducer functionality
- */
-
 export type { LayoutState, LayoutAction, Workspaces } from './types';
 
 export {
@@ -20,7 +15,6 @@ export {
 
 export { layoutReducer } from './reducer';
 
-// Individual action handlers (for direct use if needed)
 export { handleFocusPane } from './focus-pane';
 export { handleNavigate } from './navigate';
 export { handleNewPane } from './new-pane';

@@ -9,9 +9,6 @@
 
 import { Effect } from "effect"
 
-// =============================================================================
-// Types
-// =============================================================================
 
 /** Branded subscription ID for type safety */
 export type SubscriptionId = string & { readonly _tag: "SubscriptionId" }
@@ -24,10 +21,6 @@ export interface Subscription<T> {
   readonly callback: (value: T) => void
   readonly createdAt: number
 }
-
-// =============================================================================
-// SubscriptionRegistry
-// =============================================================================
 
 /**
  * Create a subscription registry for a specific event type.

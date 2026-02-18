@@ -7,9 +7,6 @@ import { AppConfig } from "../Config"
 import { FileSystem } from "./FileSystem"
 import { TemplateSession } from "../models"
 
-// =============================================================================
-// TemplateStorage Service
-// =============================================================================
 
 export class TemplateStorage extends Context.Tag("@openmux/TemplateStorage")<
   TemplateStorage,

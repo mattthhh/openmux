@@ -4,9 +4,6 @@
 import { Schema } from "effect"
 import { PtyId, SessionId } from "./types"
 
-// =============================================================================
-// PTY Errors
-// =============================================================================
 
 /** Failed to spawn a PTY process */
 export class PtySpawnError extends Schema.TaggedError<PtySpawnError>()(
@@ -39,9 +36,6 @@ export class PtyCwdError extends Schema.TaggedError<PtyCwdError>()(
 export const PtyError = Schema.Union(PtySpawnError, PtyNotFoundError, PtyCwdError)
 export type PtyError = typeof PtyError.Type
 
-// =============================================================================
-// Session Errors
-// =============================================================================
 
 /** Session not found */
 export class SessionNotFoundError extends Schema.TaggedError<SessionNotFoundError>()(
@@ -78,9 +72,6 @@ export const SessionError = Schema.Union(
 )
 export type SessionError = typeof SessionError.Type
 
-// =============================================================================
-// Clipboard Errors
-// =============================================================================
 
 /** Clipboard operation failed */
 export class ClipboardError extends Schema.TaggedError<ClipboardError>()(
@@ -91,9 +82,6 @@ export class ClipboardError extends Schema.TaggedError<ClipboardError>()(
   }
 ) {}
 
-// =============================================================================
-// Terminal Errors
-// =============================================================================
 
 /** Terminal emulator initialization failed */
 export class TerminalInitError extends Schema.TaggedError<TerminalInitError>()(

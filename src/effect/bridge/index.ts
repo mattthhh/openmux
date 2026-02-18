@@ -6,10 +6,8 @@
  * without changing the entire callsite at once.
  */
 
-// Clipboard operations
 export { copyToClipboard, readFromClipboard } from "./clipboard-bridge"
 
-// PTY operations
 export {
   createPtySession,
   writeToPty,
@@ -37,7 +35,6 @@ export {
   type PtyTitleChangeEvent,
 } from "./pty-bridge"
 
-// Session operations
 export {
   listSessions,
   createSession,
@@ -51,18 +48,15 @@ export {
   getSessionMetadata,
   updateAutoName,
   getSessionSummary,
-  // Legacy compatibility
   createSessionLegacy,
   listSessionsLegacy,
   getActiveSessionIdLegacy,
   renameSessionLegacy,
   deleteSessionLegacy,
-  // Session serialization
   saveCurrentSession,
   loadSessionData,
 } from "./session-bridge"
 
-// Template operations
 export {
   listTemplates,
   loadTemplate,
@@ -71,10 +65,8 @@ export {
   buildLayoutFromTemplate,
 } from "./template-bridge"
 
-// Aggregate view operations
 export { listAllPtysWithMetadata, getPtyMetadata, type ListAllPtysOptions } from "./aggregate-bridge"
 
-// Terminal color operations
 export { getHostBackgroundColor, getHostForegroundColor } from "./color-bridge"
 export {
   registerPtyPane,
@@ -85,7 +77,6 @@ export {
   waitForShimClient,
 } from "./shim-bridge"
 
-// Keyboard router operations
 export {
   type KeyEvent,
   type KeyboardEvent,
@@ -98,7 +89,6 @@ export {
   hasKeyboardHandler,
 } from "./keyboard-router-bridge"
 
-// App coordinator operations
 export {
   clearPtyTracking,
   markPtyCreated,

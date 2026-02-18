@@ -4,9 +4,6 @@
  */
 import { Schema } from "effect"
 
-// =============================================================================
-// Entity IDs
-// =============================================================================
 
 /** Unique identifier for a pane */
 export const PaneId = Schema.String.pipe(Schema.brand("PaneId"))
@@ -27,9 +24,6 @@ export type WorkspaceId = typeof WorkspaceId.Type
 export const SessionId = Schema.String.pipe(Schema.brand("SessionId"))
 export type SessionId = typeof SessionId.Type
 
-// =============================================================================
-// Terminal Dimensions
-// =============================================================================
 
 /** Terminal column count (must be positive) */
 export const Cols = Schema.Int.pipe(
@@ -45,17 +39,11 @@ export const Rows = Schema.Int.pipe(
 )
 export type Rows = typeof Rows.Type
 
-// =============================================================================
-// Layout Types
-// =============================================================================
 
 /** Layout mode for workspace pane arrangement */
 export const LayoutMode = Schema.Literal("vertical", "horizontal", "stacked")
 export type LayoutMode = typeof LayoutMode.Type
 
-// =============================================================================
-// ID Generation Helpers
-// =============================================================================
 
 /** Generate a new PaneId */
 export const makePaneId = (counter: number): PaneId =>

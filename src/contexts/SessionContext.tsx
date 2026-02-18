@@ -50,12 +50,8 @@ import { createSessionPickerActions } from './session-picker-actions';
 import { createSessionRefreshers } from './session-refresh';
 import { createSessionOperations } from './session-operations';
 
-// Re-export types for external consumers
 export type { SessionState, SessionSummary };
 
-// =============================================================================
-// Context Value Interface
-// =============================================================================
 
 export interface SessionContextValue {
   state: SessionState;
@@ -117,9 +113,6 @@ export interface SessionContextValue {
 
 const SessionContext = createContext<SessionContextValue | null>(null);
 
-// =============================================================================
-// Provider
-// =============================================================================
 
 interface SessionProviderProps extends ParentProps {
   /** Function to get CWD for a PTY ID */
@@ -448,9 +441,6 @@ export function SessionProvider(props: SessionProviderProps) {
   );
 }
 
-// =============================================================================
-// Hooks
-// =============================================================================
 
 export function useSession(): SessionContextValue {
   const context = useContext(SessionContext);

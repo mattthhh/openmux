@@ -4,9 +4,6 @@
 
 import { ESC, ST, DCS } from './constants';
 
-// =============================================================================
-// Utility Functions
-// =============================================================================
 
 /**
  * Convert string to hex encoding (2 hex digits per character)
@@ -26,9 +23,6 @@ export function hexToString(hex: string): string {
   return str;
 }
 
-// =============================================================================
-// Cursor Position Responses
-// =============================================================================
 
 /**
  * Generate a CPR (Cursor Position Report) response
@@ -46,9 +40,6 @@ export function generateDecxcprResponse(row: number, col: number): string {
   return `${ESC}[?${row + 1};${col + 1};1R`;
 }
 
-// =============================================================================
-// Device Status Responses
-// =============================================================================
 
 /**
  * Generate a Device Status OK response
@@ -58,9 +49,6 @@ export function generateStatusOkResponse(): string {
   return `${ESC}[0n`;
 }
 
-// =============================================================================
-// Device Attributes Responses
-// =============================================================================
 
 /**
  * Generate a Primary Device Attributes (DA1) response
@@ -94,9 +82,6 @@ export function generateDa3Response(): string {
   return `${DCS}!|00000000${ST}`;
 }
 
-// =============================================================================
-// Color Responses
-// =============================================================================
 
 /**
  * Generate an OSC foreground color response
@@ -143,9 +128,6 @@ export function generateOscPaletteResponse(index: number, r: number, g: number, 
   return `${ESC}]4;${index};rgb:${r16}/${g16}/${b16}${ST}`;
 }
 
-// =============================================================================
-// Mode Query Responses
-// =============================================================================
 
 /**
  * Generate a DECRPM (Report Mode) response for DEC private modes
@@ -179,9 +161,6 @@ export function generateXtgettcapResponse(capabilities: Map<string, string | nul
   return responses.join('');
 }
 
-// =============================================================================
-// Window Operation Responses
-// =============================================================================
 
 /**
  * Generate an XTWINOPS response for window size queries
@@ -201,10 +180,6 @@ export function generateXtwinopsResponse(winop: number, height: number, width: n
   return `${ESC}[${responseCode};${height};${width}t`;
 }
 
-// =============================================================================
-// Version and Keyboard Responses
-// =============================================================================
-
 /**
  * Generate an XTVERSION response
  * Format: DCS > | name(version) ST
@@ -222,10 +197,6 @@ export function generateKittyKeyboardResponse(flags: number): string {
   return `${ESC}[?${flags}u`;
 }
 
-// =============================================================================
-// DECRQSS (Request Status String) Responses
-// =============================================================================
-
 /**
  * Generate a DECRQSS valid response
  * Format: DCS 1 $ r Pt ST
@@ -242,10 +213,6 @@ export function generateDecrqssValidResponse(statusString: string): string {
 export function generateDecrqssInvalidResponse(): string {
   return `${DCS}0$r${ST}`;
 }
-
-// =============================================================================
-// OSC 52 (Clipboard) Responses
-// =============================================================================
 
 /**
  * Generate an empty OSC 52 clipboard response (for denied/empty clipboard)

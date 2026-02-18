@@ -34,10 +34,8 @@ import type {
 } from '../core/types';
 import type { SerializedDirtyUpdate } from './emulator-interface';
 
-// Constants
 export const CELL_SIZE = 16; // bytes per cell
 
-// Flag bit positions
 const FLAG_BOLD = 1 << 0;
 const FLAG_ITALIC = 1 << 1;
 const FLAG_UNDERLINE = 1 << 2;
@@ -45,10 +43,6 @@ const FLAG_STRIKETHROUGH = 1 << 3;
 const FLAG_INVERSE = 1 << 4;
 const FLAG_BLINK = 1 << 5;
 const FLAG_DIM = 1 << 6;
-
-// ============================================================================
-// Cell Packing/Unpacking
-// ============================================================================
 
 /**
  * Pack a single cell into a DataView at the given offset
@@ -58,12 +52,10 @@ function packCellAt(view: DataView, offset: number, cell: TerminalCell): void {
   const codepoint = cell.char.codePointAt(0) ?? 0x20; // Default to space
   view.setUint32(offset, codepoint, true);
 
-  // Foreground RGB
   view.setUint8(offset + 4, cell.fg.r);
   view.setUint8(offset + 5, cell.fg.g);
   view.setUint8(offset + 6, cell.fg.b);
 
-  // Background RGB
   view.setUint8(offset + 7, cell.bg.r);
   view.setUint8(offset + 8, cell.bg.g);
   view.setUint8(offset + 9, cell.bg.b);
@@ -97,14 +89,12 @@ function unpackCellAt(view: DataView, offset: number): TerminalCell {
   const codepoint = view.getUint32(offset, true);
   const char = codepoint > 0 ? String.fromCodePoint(codepoint) : ' ';
 
-  // Foreground RGB
   const fg = {
     r: view.getUint8(offset + 4),
     g: view.getUint8(offset + 5),
     b: view.getUint8(offset + 6),
   };
 
-  // Background RGB
   const bg = {
     r: view.getUint8(offset + 7),
     g: view.getUint8(offset + 8),
@@ -124,7 +114,6 @@ function unpackCellAt(view: DataView, offset: number): TerminalCell {
   // Width
   const width = view.getUint8(offset + 12) as 1 | 2;
 
-  // Hyperlink ID
   const hyperlinkId = view.getUint16(offset + 13, true);
 
   return {
@@ -204,9 +193,6 @@ export function unpackRow(buffer: ArrayBuffer): TerminalCell[] {
   return cells;
 }
 
-// ============================================================================
-// Full Terminal State Packing
-// ============================================================================
 
 /**
  * Header format for full state (28 bytes):
@@ -319,9 +305,6 @@ export function unpackTerminalState(buffer: ArrayBuffer): TerminalState {
   };
 }
 
-// ============================================================================
-// Dirty Update Packing
-// ============================================================================
 
 /**
  * Pack a DirtyTerminalUpdate into a SerializedDirtyUpdate for transport

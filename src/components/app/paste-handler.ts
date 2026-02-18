@@ -6,10 +6,8 @@
 import type { PasteEvent } from '@opentui/core';
 
 export interface PasteHandlerDeps {
-  // State accessors
   getFocusedPtyId: () => string | undefined;
 
-  // PTY operations
   writeToPTY: (ptyId: string, data: string) => void;
 }
 

@@ -3,9 +3,6 @@
  * Plain TypeScript implementation - no Effect overhead needed for this simple state
  */
 
-// =============================================================================
-// Types
-// =============================================================================
 
 import type { KeyboardEvent } from '../../core/keyboard-event'
 
@@ -44,10 +41,6 @@ const OVERLAY_PRIORITY: Record<OverlayType, number> = {
   sessionPicker: 20,
   aggregateView: 10,
 }
-
-// =============================================================================
-// KeyboardRouter singleton
-// =============================================================================
 
 // Use a plain Map for simple state
 const handlers = new Map<OverlayType, KeyHandler>()

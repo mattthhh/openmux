@@ -12,7 +12,6 @@ import {
 } from 'solid-js';
 import { createStore } from 'solid-js/store';
 
-// Types
 export type {
   GitDiffStats,
   PtyInfo,
@@ -25,7 +24,6 @@ import {
   initialState,
 } from './aggregate-view-types';
 
-// Subscriptions and refresh logic
 import {
   createSubscriptionManager,
   createRefreshState,
@@ -35,35 +33,28 @@ import {
   cleanupSubscriptions,
 } from './aggregate-view-subscriptions';
 
-// Actions
 import { createAggregateViewActions } from './aggregate-view-actions';
 
 const AggregateViewContext = createContext<AggregateViewContextValue | null>(null);
 
 interface AggregateViewProviderProps extends ParentProps {}
 
-export function AggregateViewProvider(props: AggregateViewProviderProps) {
+  export function AggregateViewProvider(props: AggregateViewProviderProps) {
   const [state, setState] = createStore<AggregateViewState>(initialState);
 
-  // Subscription and refresh state
   const subscriptions = createSubscriptionManager();
   const subscriptionsEpoch = { value: 0 };
   const refreshState = createRefreshState();
 
-  // Create refreshers
   const { refreshPtys, refreshPtysSubset, refreshSelectedDiffStats } =
     createAggregateViewRefreshers(state, setState, refreshState);
 
-  // Title change handler
   const handleTitleChange = createTitleChangeHandler(setState);
 
-  // Create actions
   const actions = createAggregateViewActions(state, setState);
 
-  // Refresh PTYs when view opens and subscribe to lifecycle/title events
   createEffect(() => {
     if (state.showAggregateView) {
-      // Initial refresh then setup subscriptions
       refreshPtys();
       setupSubscriptions(
         state,
@@ -78,7 +69,6 @@ export function AggregateViewProvider(props: AggregateViewProviderProps) {
     }
   });
 
-  // Refresh diff stats for selected PTY
   createEffect(() => {
     if (!state.showAggregateView) return;
     const selectedPtyId = state.selectedPtyId;
@@ -86,7 +76,6 @@ export function AggregateViewProvider(props: AggregateViewProviderProps) {
     refreshSelectedDiffStats(selectedPtyId);
   });
 
-  // Cleanup on unmount
   onCleanup(() => {
     cleanupSubscriptions(subscriptions, subscriptionsEpoch);
   });

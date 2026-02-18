@@ -2,9 +2,6 @@
  * Constants for terminal query passthrough
  */
 
-// =============================================================================
-// Escape Sequence Building Blocks
-// =============================================================================
 
 export const ESC = '\x1b';
 export const CSI = '\x9b';
@@ -12,16 +9,10 @@ export const BEL = '\x07';
 export const ST = `${ESC}\\`;
 export const DCS = `${ESC}P`;
 
-// =============================================================================
-// DSR Query Patterns
-// =============================================================================
 
 export const DSR_CPR_QUERY = `${ESC}[6n`;      // Cursor Position Report query
 export const DSR_STATUS_QUERY = `${ESC}[5n`;   // Device Status query
 
-// =============================================================================
-// Device Attributes Query Patterns
-// =============================================================================
 
 export const DA1_QUERY = `${ESC}[c`;           // Primary Device Attributes (short form)
 export const DA1_QUERY_FULL = `${ESC}[0c`;     // Primary Device Attributes (explicit)
@@ -30,49 +21,26 @@ export const DA2_QUERY_FULL = `${ESC}[>0c`;    // Secondary Device Attributes (e
 export const DA3_QUERY = `${ESC}[=c`;          // Tertiary Device Attributes (short form)
 export const DA3_QUERY_FULL = `${ESC}[=0c`;    // Tertiary Device Attributes (explicit)
 
-// =============================================================================
-// XTVERSION Query Patterns
-// =============================================================================
 
 export const XTVERSION_QUERY = `${ESC}[>q`;    // Terminal version query (short form)
 export const XTVERSION_QUERY_FULL = `${ESC}[>0q`; // Terminal version query (explicit)
 
-// =============================================================================
-// DECRQM (Request Mode) Patterns
-// =============================================================================
-
 export const DECRQM_PREFIX = `${ESC}[?`;
 export const DECRQM_SUFFIX = '$p';
 
-// =============================================================================
-// XTGETTCAP (Termcap Query) Patterns
-// =============================================================================
-
 export const XTGETTCAP_PREFIX = `${DCS}+q`;
 
-// =============================================================================
-// Kitty Keyboard Protocol
-// =============================================================================
 
 export const KITTY_KEYBOARD_QUERY = `${ESC}[?u`;
 
-// =============================================================================
-// XTWINOPS Window Size Query Patterns
-// =============================================================================
 
 export const XTWINOPS_14T = `${ESC}[14t`;  // Window size in pixels
 export const XTWINOPS_16T = `${ESC}[16t`;  // Cell size in pixels
 export const XTWINOPS_18T = `${ESC}[18t`;  // Text area in characters
 
-// =============================================================================
-// Extended Cursor Position Report
-// =============================================================================
 
 export const DECXCPR_QUERY = `${ESC}[?6n`;
 
-// =============================================================================
-// OSC Color Query Patterns
-// =============================================================================
 
 export const OSC_PALETTE_PREFIX = `${ESC}]4;`;
 export const OSC_FG_QUERY_BEL = `${ESC}]10;?${BEL}`;
@@ -82,21 +50,10 @@ export const OSC_BG_QUERY_ST = `${ESC}]11;?${ST}`;
 export const OSC_CURSOR_QUERY_BEL = `${ESC}]12;?${BEL}`;
 export const OSC_CURSOR_QUERY_ST = `${ESC}]12;?${ST}`;
 
-// =============================================================================
-// OSC 52 Clipboard Query Patterns
-// =============================================================================
 
 export const OSC_CLIPBOARD_PREFIX = `${ESC}]52;`;
 
-// =============================================================================
-// DECRQSS (Request Status String) Patterns
-// =============================================================================
-
 export const DECRQSS_PREFIX = `${DCS}$q`;
-
-// =============================================================================
-// Known Termcap/Terminfo Capabilities
-// =============================================================================
 
 export const KNOWN_CAPABILITIES: Record<string, string> = {
   // Terminal name
@@ -113,11 +70,7 @@ export const KNOWN_CAPABILITIES: Record<string, string> = {
   'setrgbb': '\x1b[48;2;%p1%d;%p2%d;%p3%dm',
 };
 
-// =============================================================================
-// Known DEC Private Modes
-// =============================================================================
 
-// Mode values: 0 = not recognized, 1 = set, 2 = reset, 3 = permanently set, 4 = permanently reset
 export const KNOWN_MODES: Record<number, 0 | 1 | 2 | 3 | 4> = {
   1: 2,      // DECCKM - Cursor keys mode (reset = normal)
   7: 2,      // DECAWM - Auto-wrap mode (reset = no wrap)
@@ -134,9 +87,6 @@ export const KNOWN_MODES: Record<number, 0 | 1 | 2 | 3 | 4> = {
   2048: 2,   // In-band resize notifications (reset) - sends CSI 48 on resize when enabled
 };
 
-// =============================================================================
-// Default 256-Color ANSI Palette
-// =============================================================================
 
 export const DEFAULT_PALETTE: number[] = (() => {
   const palette: number[] = [];

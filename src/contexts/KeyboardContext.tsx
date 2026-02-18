@@ -22,18 +22,11 @@ import { useConfig } from './ConfigContext';
 import { eventToCombo, matchKeybinding } from '../core/keybindings';
 import type { KeyboardEvent } from '../core/keyboard-event';
 
-// Re-export types for convenience
 export type { KeyboardContextValue, KeyboardHandlerOptions } from './keyboard/types';
 
-// =============================================================================
-// Context
-// =============================================================================
 
 const KeyboardContext = createContext<KeyboardContextValue | null>(null);
 
-// =============================================================================
-// Provider
-// =============================================================================
 
 interface KeyboardProviderProps extends ParentProps {}
 
@@ -60,7 +53,6 @@ export function KeyboardProvider(props: KeyboardProviderProps) {
     onCleanup(() => clearTimeout(timeout));
   });
 
-  // Actions
   const enterPrefixMode = () => {
     setState(produce((s) => {
       s.mode = 'prefix';
@@ -157,9 +149,6 @@ export function KeyboardProvider(props: KeyboardProviderProps) {
   );
 }
 
-// =============================================================================
-// Hook
-// =============================================================================
 
 export function useKeyboardState(): KeyboardContextValue {
   const context = useContext(KeyboardContext);
@@ -169,9 +158,6 @@ export function useKeyboardState(): KeyboardContextValue {
   return context;
 }
 
-// =============================================================================
-// Keyboard Handler Hook
-// =============================================================================
 
 /**
  * Hook for handling keyboard input across all modes

@@ -3,9 +3,6 @@
  */
 import { Config, Context, Effect, Layer } from "effect"
 
-// =============================================================================
-// Config Service
-// =============================================================================
 
 /** Application configuration */
 export interface AppConfigShape {
@@ -75,9 +72,6 @@ export class AppConfig extends Context.Tag("@openmux/AppConfig")<
   })
 }
 
-// =============================================================================
-// Theme Configuration
-// =============================================================================
 
 /** Terminal color palette */
 export interface TerminalColors {

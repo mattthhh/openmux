@@ -24,9 +24,6 @@ import {
   resetSplitIdCounter,
 } from "../../core/operations/layout-actions/helpers"
 
-// =============================================================================
-// Storage Functions
-// =============================================================================
 
 export async function listTemplates(): Promise<TemplateSession[]> {
   return runEffect(
@@ -68,9 +65,6 @@ export async function loadTemplate(id: string): Promise<TemplateSession | null> 
   }
 }
 
-// =============================================================================
-// Layout Generation
-// =============================================================================
 
 function normalizeTemplatePanes(
   panes: TemplatePaneData[],

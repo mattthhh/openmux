@@ -4,9 +4,6 @@
 import { Context, Effect, Layer, Schema } from "effect"
 import { SessionStorageError } from "../errors"
 
-// =============================================================================
-// FileSystem Service
-// =============================================================================
 
 export class FileSystem extends Context.Tag("@openmux/FileSystem")<
   FileSystem,

@@ -21,7 +21,6 @@ import { useTerminal } from './TerminalContext';
 import { runStream } from '../effect/stream-utils';
 import type { VimInputMode } from '../core/vim-sequences';
 
-// Import extracted search utilities
 import type { SearchState, SearchContextValue } from './search/types';
 import {
   isCellInMatch,
@@ -29,19 +28,12 @@ import {
   buildMatchLookup,
 } from './search/helpers';
 
-// =============================================================================
-// Context
-// =============================================================================
 
 const SearchContext = createContext<SearchContextValue | null>(null);
 
-// =============================================================================
-// Provider
-// =============================================================================
 
 interface SearchProviderProps extends ParentProps {}
 
-// Search debounce delay in ms
 const SEARCH_DEBOUNCE_MS = 150;
 
 export function SearchProvider(props: SearchProviderProps) {
@@ -280,9 +272,6 @@ export function SearchProvider(props: SearchProviderProps) {
   );
 }
 
-// =============================================================================
-// Hook
-// =============================================================================
 
 export function useSearch(): SearchContextValue {
   const context = useContext(SearchContext);

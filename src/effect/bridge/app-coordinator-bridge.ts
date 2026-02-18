@@ -4,11 +4,6 @@
  * Uses module-level state to avoid Effect runtime overhead for hot-path operations.
  */
 
-// =============================================================================
-// Module-level state for fast synchronous access
-// These bypass Effect for performance-critical operations
-// =============================================================================
-
 /** Set of pane IDs that have had PTYs created (fast sync access) */
 const createdPtys = new Set<string>()
 
@@ -19,10 +14,6 @@ const sessionCommandMap = new Map<string, string>()
 
 /** Active session ID for shim mapping */
 let activeSessionId: string | null = null
-
-// =============================================================================
-// PTY Tracking (SYNCHRONOUS for performance)
-// =============================================================================
 
 /**
  * Clear PTY creation tracking state.
@@ -47,10 +38,6 @@ export function markPtyCreated(paneId: string): void {
 export function isPtyCreated(paneId: string): boolean {
   return createdPtys.has(paneId)
 }
-
-// =============================================================================
-// Session CWD Map (SYNCHRONOUS for performance)
-// =============================================================================
 
 /**
  * Set the session CWD map for panes being restored.
@@ -77,10 +64,6 @@ export function clearSessionCwdMap(): void {
   sessionCwdMap.clear()
 }
 
-// =============================================================================
-// Session Command Map (SYNCHRONOUS for performance)
-// =============================================================================
-
 /**
  * Set the session command map for panes being restored.
  */
@@ -105,10 +88,6 @@ export function getSessionCommand(paneId: string): string | undefined {
 export function clearSessionCommandMap(): void {
   sessionCommandMap.clear()
 }
-
-// =============================================================================
-// Active Session Tracking (SYNCHRONOUS)
-// =============================================================================
 
 export function setActiveSessionIdForShim(sessionId: string | null): void {
   activeSessionId = sessionId

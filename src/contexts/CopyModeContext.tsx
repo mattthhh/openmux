@@ -44,9 +44,6 @@ export type { CopyModeContextValue, CopyCursor, CopyVisualType } from './copy-mo
 
 const CopyModeContext = createContext<CopyModeContextValue | null>(null);
 
-// =============================================================================
-// Provider
-// =============================================================================
 
 interface CopyModeProviderProps extends ParentProps {}
 

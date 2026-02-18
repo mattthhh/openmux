@@ -171,7 +171,6 @@ export function codepointToChar(codepoint: number, isInvisible: boolean = false)
   if (typeof cp !== 'number' || cp < 0x20) return ' ';
 
   if (cp <= 0x7e) {
-    // Printable ASCII
     return String.fromCharCode(cp);
   } else if (cp >= 0xa0 && cp <= 0xd7ff) {
     // Latin-1 Supplement through pre-surrogate BMP

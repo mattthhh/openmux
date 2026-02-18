@@ -5,9 +5,6 @@
 
 import type { TerminalCell, SelectionBounds } from '../types';
 
-// =============================================================================
-// Types
-// =============================================================================
 
 /**
  * A point in the terminal, with both viewport and absolute coordinates
@@ -39,9 +36,6 @@ export interface SelectionRange {
  */
 export type LineGetter = (absoluteY: number) => TerminalCell[] | null;
 
-// =============================================================================
-// Coordinate Transformations
-// =============================================================================
 
 /**
  * Calculate absolute Y from viewport Y
@@ -83,9 +77,6 @@ export function normalizeSelection(
   }
 }
 
-// =============================================================================
-// Bounds Calculation
-// =============================================================================
 
 /**
  * Calculate bounding box from normalized selection range
@@ -100,9 +91,6 @@ export function calculateBounds(range: SelectionRange): SelectionBounds {
   };
 }
 
-// =============================================================================
-// Cell Selection Checks
-// =============================================================================
 
 /**
  * Check if a cell at (x, absoluteY) is within the selection range
@@ -156,9 +144,6 @@ export function isCellInRange(
   return true;
 }
 
-// =============================================================================
-// Text Extraction
-// =============================================================================
 
 /**
  * Extract text from the selected range

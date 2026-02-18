@@ -186,10 +186,6 @@ export class GhosttyVTEmulatorCore {
     this.scrollbackCache.clear();
   }
 
-  // ==========================================================================
-  // State access
-  // ==========================================================================
-
   getScrollbackLength(): number {
     return this.terminal.getScrollbackLength();
   }
@@ -363,10 +359,6 @@ export class GhosttyVTEmulatorCore {
     };
   }
 
-  // ==========================================================================
-  // Search
-  // ==========================================================================
-
   async search(query: string, options?: { limit?: number }): Promise<SearchResult> {
     return searchTerminal(query, options, {
       getScrollbackLength: () => this.terminal.getScrollbackLength(),
@@ -375,10 +367,6 @@ export class GhosttyVTEmulatorCore {
       createEmptyRow: (cols) => createEmptyRow(cols, this.colors),
     });
   }
-
-  // ==========================================================================
-  // Internal helpers
-  // ==========================================================================
 
   private fetchScrollbackLine(offset: number): TerminalCell[] | null {
     if (this._disposed) return null;

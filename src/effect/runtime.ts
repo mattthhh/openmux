@@ -7,9 +7,6 @@ import { AppConfig, ThemeConfig } from "./Config"
 import { Clipboard, FileSystem, Pty, SessionStorage, SessionManager, TemplateStorage } from "./services"
 import { isShimProcess } from "../shim/mode"
 
-// =============================================================================
-// Layer Composition
-// =============================================================================
 
 /** Base layer with configuration */
 const ConfigLayer = Layer.merge(AppConfig.layer, ThemeConfig.layer)
@@ -77,9 +74,6 @@ export const TestAppLayer = Layer.mergeAll(
   TestSessionManagerLayer
 )
 
-// =============================================================================
-// Runtime Types
-// =============================================================================
 
 /** All services provided by the app layer */
 export type AppServices =
@@ -92,9 +86,6 @@ export type AppServices =
   | TemplateStorage
   | SessionManager
 
-// =============================================================================
-// Managed Runtime
-// =============================================================================
 
 /** Managed runtime for the application */
 export const AppRuntime = ManagedRuntime.make(AppLayer)
@@ -102,9 +93,6 @@ export const AppRuntime = ManagedRuntime.make(AppLayer)
 /** Managed runtime for testing */
 export const TestRuntime = ManagedRuntime.make(TestAppLayer)
 
-// =============================================================================
-// Helper Functions
-// =============================================================================
 
 /**
  * Run an effect with the app runtime.
@@ -146,9 +134,6 @@ export const runEffectIgnore = <A, E>(
     )
   )
 
-// =============================================================================
-// Runtime Lifecycle
-// =============================================================================
 
 /**
  * Dispose the app runtime.

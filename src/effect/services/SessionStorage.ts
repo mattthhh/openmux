@@ -18,9 +18,6 @@ import {
 } from "../models"
 import type { SessionId } from "../types"
 
-// =============================================================================
-// SessionStorage Service
-// =============================================================================
 
 export class SessionStorage extends Context.Tag("@openmux/SessionStorage")<
   SessionStorage,

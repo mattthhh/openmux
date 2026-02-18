@@ -26,7 +26,6 @@
  */
 type ClipboardPasteHandler = (ptyId: string) => void;
 
-// Singleton state
 let focusedPtyId: string | null = null;
 let clipboardPasteHandler: ClipboardPasteHandler | null = null;
 
@@ -66,4 +65,3 @@ export function triggerClipboardPaste(): boolean {
 export function getFocusedPtyId(): string | null {
   return focusedPtyId;
 }
-
