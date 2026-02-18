@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.131](https://github.com/monotykamary/openmux/compare/v0.2.130...v0.2.131) (2026-02-18)
+
+
+### Bug Fixes
+
+* **cli:** remove redundant v prefix in help header ([bdd3f25](https://github.com/monotykamary/openmux/commit/bdd3f25c37a56eba8e5ebd18d41b95d7faa3c471))
+
 ### [0.2.130](https://github.com/monotykamary/openmux/compare/v0.2.129...v0.2.130) (2026-02-16)
 
 
