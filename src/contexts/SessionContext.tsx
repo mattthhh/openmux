@@ -34,6 +34,7 @@ import {
 } from '../effect/bridge';
 import { runStream } from '../effect/stream-utils';
 import type { TemplateSession } from '../effect/models';
+import { SessionStorageError } from '../effect/errors';
 import {
   type SessionState,
   type SessionAction,
@@ -281,12 +282,20 @@ export function SessionProvider(props: SessionProviderProps) {
       if (matched) {
         activeSession = matched;
         activeId = matched.id;
-      } else {
-        const metadata = await createSessionOnDisk(requestedSession);
-        sessions = [...sessions, metadata];
-        dispatch({ type: 'SET_SESSIONS', sessions });
-        activeSession = metadata;
-        activeId = metadata.id;
+      }
+      if (!matched) {
+        const result = await createSessionOnDisk(requestedSession);
+        if (!(result instanceof SessionStorageError)) {
+          const metadata = result;
+          sessions = [...sessions, metadata];
+          dispatch({ type: 'SET_SESSIONS', sessions });
+          activeSession = metadata;
+          activeId = metadata.id;
+        }
+        if (result instanceof SessionStorageError) {
+          console.error('Failed to create session:', result.message);
+          // Continue without setting active session
+        }
       }
     }
 
@@ -299,11 +308,18 @@ export function SessionProvider(props: SessionProviderProps) {
 
     if (!activeSession) {
       // First run - create default session
-      const metadata = await createSessionOnDisk();
-      activeId = metadata.id;
-      dispatch({ type: 'SET_SESSIONS', sessions: [metadata] });
-      dispatch({ type: 'SET_ACTIVE_SESSION', id: metadata.id, session: metadata });
-      await props.onSessionLoad({}, 1, new Map(), new Map(), metadata.id, { allowPrune: false });
+      const result = await createSessionOnDisk();
+      if (!(result instanceof SessionStorageError)) {
+        const metadata = result;
+        activeId = metadata.id;
+        dispatch({ type: 'SET_SESSIONS', sessions: [metadata] });
+        dispatch({ type: 'SET_ACTIVE_SESSION', id: metadata.id, session: metadata });
+        await props.onSessionLoad({}, 1, new Map(), new Map(), metadata.id, { allowPrune: false });
+      }
+      if (result instanceof SessionStorageError) {
+        console.error('Failed to create default session:', result.message);
+        // Cannot proceed without a session, set initialized anyway
+      }
     } else if (activeId) {
       // Load existing session
       dispatch({ type: 'SET_ACTIVE_SESSION', id: activeId, session: activeSession });
@@ -323,12 +339,20 @@ export function SessionProvider(props: SessionProviderProps) {
           activeId,
           { allowPrune: false }
         );
-      } else {
+      }
+      if (!data) {
         // Session failed to load - create a fresh session instead of overwriting
-        const metadata = await createSessionOnDisk();
-        dispatch({ type: 'SET_SESSIONS', sessions: [...sessions, metadata] });
-        dispatch({ type: 'SET_ACTIVE_SESSION', id: metadata.id, session: metadata });
-        await props.onSessionLoad({}, 1, new Map(), new Map(), metadata.id, { allowPrune: false });
+        const result = await createSessionOnDisk();
+        if (!(result instanceof SessionStorageError)) {
+          const metadata = result;
+          dispatch({ type: 'SET_SESSIONS', sessions: [...sessions, metadata] });
+          dispatch({ type: 'SET_ACTIVE_SESSION', id: metadata.id, session: metadata });
+          await props.onSessionLoad({}, 1, new Map(), new Map(), metadata.id, { allowPrune: false });
+        }
+        if (result instanceof SessionStorageError) {
+          console.error('Failed to create replacement session:', result.message);
+          // Continue without changing session state
+        }
       }
 
       refreshTask = switchPromise.then(() => refreshSessions()).catch(() => {});

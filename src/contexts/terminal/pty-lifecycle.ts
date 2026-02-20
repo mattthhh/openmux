@@ -8,6 +8,7 @@ import {
   destroyPty,
   destroyAllPtys,
 } from '../../effect/bridge';
+import { PtySpawnError } from '../../effect/errors';
 import { getActiveSessionIdForShim, registerPtyPane } from '../../effect/bridge';
 import {
   subscribeToPtyWithCaches,
@@ -135,7 +136,12 @@ export function createPtyLifecycleHandlers(deps: PtyLifecycleDeps) {
     const pixelWidth = metrics ? cols * metrics.cellWidth : undefined;
     const pixelHeight = metrics ? rows * metrics.cellHeight : undefined;
     // Ghostty-vt is initialized per PTY session
-    const ptyId = await createPtySession({ cols, rows, cwd, pixelWidth, pixelHeight });
+    const result = await createPtySession({ cols, rows, cwd, pixelWidth, pixelHeight });
+    if (result instanceof Error) {
+      console.error('Failed to create PTY:', result.message);
+      return '';
+    }
+    const ptyId = result;
 
     // Track the mapping immediately
     ptyToPaneMap.set(ptyId, paneId);
@@ -196,7 +202,12 @@ export function createPtyLifecycleHandlers(deps: PtyLifecycleDeps) {
     const pixelHeight = metrics ? rows * metrics.cellHeight : undefined;
 
     // Create PTY first (async - this is the expensive part)
-    const ptyId = await createPtySession({ cols, rows, cwd, pixelWidth, pixelHeight });
+    const result = await createPtySession({ cols, rows, cwd, pixelWidth, pixelHeight });
+    if (result instanceof Error) {
+      console.error('Failed to create PTY:', result.message);
+      return '';
+    }
+    const ptyId = result;
 
     // Create pane with PTY already attached - SINGLE render!
     const paneId = newPaneWithPty(ptyId, title);

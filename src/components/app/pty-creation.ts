@@ -20,7 +20,7 @@ type LayoutAccess = {
 
 type TerminalAccess = {
   isInitialized: boolean;
-  createPTY: (paneId: string, cols: number, rows: number, cwd?: string) => Promise<string>;
+  createPTY: (paneId: string, cols: number, rows: number, cwd?: string) => Promise<string | Error>;
   writeToPTY: (ptyId: string, data: string) => void;
   getFocusedCwd: () => Promise<string | null>;
 };
@@ -158,14 +158,21 @@ export function usePtyCreation(params: {
 
             // Fire-and-forget PTY creation - don't await to avoid blocking
             params.terminal.createPTY(pane.id, cols, rows, cwd)
-              .then((ptyId) => {
+              .then((result) => {
+                if (result instanceof Error) {
+                  console.error(`PTY creation failed for ${pane.id}:`, result.message);
+                  return false;
+                }
+                const ptyId = result;
                 const command = getSessionCommandFromCoordinator(pane.id);
                 if (command) {
                   params.terminal.writeToPTY(ptyId, `${command}\n`);
                 }
+                return true;
               })
               .catch((err) => {
                 console.error(`PTY creation failed for ${pane.id}:`, err);
+                return false;
               });
 
             return true;

@@ -15,6 +15,7 @@ import { deferMacrotask } from "../../core/scheduling"
 import { isShimClient } from "../../shim/mode"
 import * as ShimClient from "../../shim/client"
 import { getPtyService } from "./services-instance"
+import { PtySpawnError } from '../errors'
 
 /** Helper to convert string to PtyId branded type */
 const asPtyId = (id: string): PtyId => id as PtyId
@@ -28,7 +29,7 @@ export async function createPtySession(
     pixelWidth?: number
     pixelHeight?: number
   }
-): Promise<string> {
+): Promise<string | PtySpawnError> {
   return createPtySessionWithService(getPtyService(), options)
 }
 
@@ -180,7 +181,7 @@ export async function createPtySessionWithService(
     pixelWidth?: number
     pixelHeight?: number
   }
-): Promise<string> {
+): Promise<string | PtySpawnError> {
   const result = await pty.create({
     cols: options.cols as Cols,
     rows: options.rows as Rows,
@@ -188,7 +189,7 @@ export async function createPtySessionWithService(
     pixelWidth: options.pixelWidth,
     pixelHeight: options.pixelHeight,
   })
-  if (result instanceof Error) throw result
+  if (result instanceof Error) return result as PtySpawnError
   return result
 }
 

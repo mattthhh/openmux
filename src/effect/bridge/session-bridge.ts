@@ -21,6 +21,10 @@ import type { Workspaces } from "../../core/operations/layout-actions"
 import type { WorkspaceState } from "../services/session-manager/types"
 import { getSessionManager } from "./services-instance"
 import { resolveActiveWorkspaceId } from "./session-bridge-utils"
+import {
+  SessionError,
+  SessionStorageError,
+} from "../errors"
 
 /** List all sessions */
 export async function listSessions(): Promise<readonly SessionMetadata[]> {
@@ -28,27 +32,27 @@ export async function listSessions(): Promise<readonly SessionMetadata[]> {
 }
 
 /** Create a new session */
-export async function createSession(name: string): Promise<string> {
+export async function createSession(name: string): Promise<string | SessionStorageError> {
   return createSessionWithService(getSessionManager(), name)
 }
 
 /** Load a session by ID */
-export async function loadSession(id: string): Promise<SerializedSession> {
+export async function loadSession(id: string): Promise<SerializedSession | SessionError> {
   return loadSessionWithService(getSessionManager(), id)
 }
 
 /** Save a session */
-export async function saveSession(session: SerializedSession): Promise<void> {
+export async function saveSession(session: SerializedSession): Promise<void | SessionStorageError> {
   return saveSessionWithService(getSessionManager(), session)
 }
 
 /** Delete a session */
-export async function deleteSession(id: string): Promise<void> {
+export async function deleteSession(id: string): Promise<void | SessionError> {
   return deleteSessionWithService(getSessionManager(), id)
 }
 
 /** Rename a session */
-export async function renameSession(id: string, newName: string): Promise<void> {
+export async function renameSession(id: string, newName: string): Promise<void | SessionError> {
   return renameSessionWithService(getSessionManager(), id, newName)
 }
 
@@ -58,12 +62,12 @@ export function getActiveSessionId(): string | null {
 }
 
 /** Set the active session ID */
-export async function setActiveSessionId(id: string | null): Promise<void> {
+export async function setActiveSessionId(id: string | null): Promise<void | SessionError> {
   return setActiveSessionIdWithService(getSessionManager(), id)
 }
 
 /** Switch to a session */
-export async function switchToSession(id: string): Promise<void> {
+export async function switchToSession(id: string): Promise<void | SessionError> {
   return switchToSessionWithService(getSessionManager(), id)
 }
 
@@ -73,7 +77,7 @@ export async function getSessionMetadata(id: string): Promise<SessionMetadata | 
 }
 
 /** Update auto-name for a session */
-export async function updateAutoName(id: string, cwd: string): Promise<void> {
+export async function updateAutoName(id: string, cwd: string): Promise<void | SessionError> {
   return updateAutoNameWithService(getSessionManager(), id, cwd)
 }
 
@@ -85,7 +89,7 @@ export async function getSessionSummary(
 }
 
 /** Create a new session (legacy compatibility) */
-export async function createSessionLegacy(name?: string): Promise<LegacySessionMetadata> {
+export async function createSessionLegacy(name?: string): Promise<LegacySessionMetadata | SessionStorageError> {
   return createSessionLegacyWithService(getSessionManager(), name)
 }
 
@@ -100,12 +104,12 @@ export function getActiveSessionIdLegacy(): string | null {
 }
 
 /** Rename session (legacy compatibility) */
-export async function renameSessionLegacy(id: string, name: string): Promise<void> {
+export async function renameSessionLegacy(id: string, name: string): Promise<void | SessionError> {
   return renameSessionLegacyWithService(getSessionManager(), id, name)
 }
 
 /** Delete session (legacy compatibility) */
-export async function deleteSessionLegacy(id: string): Promise<void> {
+export async function deleteSessionLegacy(id: string): Promise<void | SessionError> {
   return deleteSessionLegacyWithService(getSessionManager(), id)
 }
 
@@ -115,7 +119,7 @@ export async function saveCurrentSession(
   workspaces: Workspaces,
   activeWorkspaceId: WorkspaceId,
   getCwd: (ptyId: string) => Promise<string>
-): Promise<void> {
+): Promise<void | SessionStorageError> {
   return saveCurrentSessionWithService(getSessionManager(), metadata, workspaces, activeWorkspaceId, getCwd)
 }
 
@@ -139,29 +143,29 @@ export async function listSessionsWithService(manager: SessionManager): Promise<
 }
 
 /** Create session with a specific service */
-export async function createSessionWithService(manager: SessionManager, name: string): Promise<string> {
+export async function createSessionWithService(manager: SessionManager, name: string): Promise<string | SessionStorageError> {
   const result = await manager.createSession(name)
-  if (result instanceof Error) throw result
+  if (result instanceof Error) return result
   return result.id
 }
 
 /** Load session with a specific service */
-export async function loadSessionWithService(manager: SessionManager, id: string): Promise<SerializedSession> {
+export async function loadSessionWithService(manager: SessionManager, id: string): Promise<SerializedSession | SessionError> {
   const result = await manager.loadSession(id as SessionId)
-  if (result instanceof Error) throw result
+  if (result instanceof Error) return result
   return result
 }
 
 /** Save session with a specific service */
-export async function saveSessionWithService(manager: SessionManager, session: SerializedSession): Promise<void> {
+export async function saveSessionWithService(manager: SessionManager, session: SerializedSession): Promise<void | SessionStorageError> {
   const result = await manager.saveSession(session)
-  if (result instanceof Error) throw result
+  if (result instanceof Error) return result
 }
 
 /** Delete session with a specific service */
-export async function deleteSessionWithService(manager: SessionManager, id: string): Promise<void> {
+export async function deleteSessionWithService(manager: SessionManager, id: string): Promise<void | SessionError> {
   const result = await manager.deleteSession(id as SessionId)
-  if (result instanceof Error) throw result
+  if (result instanceof Error) return result
 }
 
 /** Rename session with a specific service */
@@ -169,9 +173,9 @@ export async function renameSessionWithService(
   manager: SessionManager,
   id: string,
   newName: string
-): Promise<void> {
+): Promise<void | SessionError> {
   const result = await manager.renameSession(id as SessionId, newName)
-  if (result instanceof Error) throw result
+  if (result instanceof Error) return result
 }
 
 /** Get active session ID with a specific service */
@@ -180,15 +184,15 @@ export function getActiveSessionIdWithService(manager: SessionManager): string |
 }
 
 /** Set active session ID with a specific service */
-export async function setActiveSessionIdWithService(manager: SessionManager, id: string | null): Promise<void> {
+export async function setActiveSessionIdWithService(manager: SessionManager, id: string | null): Promise<void | SessionError> {
   const result = await manager.setActiveSessionId(id ? (id as SessionId) : null)
-  if (result instanceof Error) throw result
+  if (result instanceof Error) return result
 }
 
 /** Switch to session with a specific service */
-export async function switchToSessionWithService(manager: SessionManager, id: string): Promise<void> {
+export async function switchToSessionWithService(manager: SessionManager, id: string): Promise<void | SessionError> {
   const result = await manager.switchToSession(id as SessionId)
-  if (result instanceof Error) throw result
+  if (result instanceof Error) return result
 }
 
 /** Get session metadata with a specific service */
@@ -202,9 +206,9 @@ export async function getSessionMetadataWithService(
 }
 
 /** Update auto-name with a specific service */
-export async function updateAutoNameWithService(manager: SessionManager, id: string, cwd: string): Promise<void> {
+export async function updateAutoNameWithService(manager: SessionManager, id: string, cwd: string): Promise<void | SessionError> {
   const result = await manager.updateAutoName(id as SessionId, cwd)
-  if (result instanceof Error) throw result
+  if (result instanceof Error) return result
 }
 
 /** Get session summary with a specific service */
@@ -221,9 +225,9 @@ export async function getSessionSummaryWithService(
 export async function createSessionLegacyWithService(
   manager: SessionManager,
   name?: string
-): Promise<LegacySessionMetadata> {
+): Promise<LegacySessionMetadata | SessionStorageError> {
   const result = await manager.createSession(name)
-  if (result instanceof Error) throw result
+  if (result instanceof Error) return result
   return result as unknown as LegacySessionMetadata
 }
 
@@ -240,12 +244,12 @@ export function getActiveSessionIdLegacyWithService(manager: SessionManager): st
 }
 
 /** Rename session (legacy) with a specific service */
-export async function renameSessionLegacyWithService(manager: SessionManager, id: string, name: string): Promise<void> {
+export async function renameSessionLegacyWithService(manager: SessionManager, id: string, name: string): Promise<void | SessionError> {
   return renameSessionWithService(manager, id, name)
 }
 
 /** Delete session (legacy) with a specific service */
-export async function deleteSessionLegacyWithService(manager: SessionManager, id: string): Promise<void> {
+export async function deleteSessionLegacyWithService(manager: SessionManager, id: string): Promise<void | SessionError> {
   return deleteSessionWithService(manager, id)
 }
 
@@ -313,7 +317,7 @@ export async function saveCurrentSessionWithService(
   workspaces: Workspaces,
   activeWorkspaceId: WorkspaceId,
   getCwd: (ptyId: string) => Promise<string>
-): Promise<void> {
+): Promise<void | SessionStorageError> {
   const effectMetadata: SessionMetadata = {
     id: metadata.id as SessionId,
     name: metadata.name,
@@ -339,7 +343,7 @@ export async function saveCurrentSessionWithService(
   }
 
   const result = await manager.quickSave(effectMetadata, workspaceState, activeWorkspaceId, getCwd)
-  if (result instanceof Error) throw result
+  if (result instanceof Error) return result
 }
 
 /** Load session data with a specific service */

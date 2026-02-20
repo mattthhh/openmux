@@ -24,6 +24,7 @@ import {
   resetPaneIdCounter,
   resetSplitIdCounter,
 } from "../../core/operations/layout-actions/helpers"
+import { TemplateStorageError } from "../errors"
 
 /** List all templates */
 export async function listTemplates(): Promise<TemplateSession[]> {
@@ -31,12 +32,12 @@ export async function listTemplates(): Promise<TemplateSession[]> {
 }
 
 /** Save a template */
-export async function saveTemplate(template: TemplateSession): Promise<void> {
+export async function saveTemplate(template: TemplateSession): Promise<void | TemplateStorageError> {
   return saveTemplateWithService(getTemplateStorage(), template)
 }
 
 /** Delete a template */
-export async function deleteTemplate(id: string): Promise<void> {
+export async function deleteTemplate(id: string): Promise<void | TemplateStorageError> {
   return deleteTemplateWithService(getTemplateStorage(), id)
 }
 
@@ -53,15 +54,15 @@ export async function listTemplatesWithService(storage: TemplateStorage): Promis
 }
 
 /** Save template with a specific service */
-export async function saveTemplateWithService(storage: TemplateStorage, template: TemplateSession): Promise<void> {
+export async function saveTemplateWithService(storage: TemplateStorage, template: TemplateSession): Promise<void | TemplateStorageError> {
   const result = await storage.saveTemplate(template)
-  if (result instanceof Error) throw result
+  if (result instanceof Error) return result as TemplateStorageError
 }
 
 /** Delete template with a specific service */
-export async function deleteTemplateWithService(storage: TemplateStorage, id: string): Promise<void> {
+export async function deleteTemplateWithService(storage: TemplateStorage, id: string): Promise<void | TemplateStorageError> {
   const result = await storage.deleteTemplate(id)
-  if (result instanceof Error) throw result
+  if (result instanceof Error) return result as TemplateStorageError
 }
 
 /** Load template with a specific service */
