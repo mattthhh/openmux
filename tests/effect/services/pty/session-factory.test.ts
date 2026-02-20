@@ -14,15 +14,13 @@ import { mockGhostty, resetGhosttySymbols } from "../../../mocks/ghostty-ffi"
 
 let spawnAsync: typeof import("../../../../native/zig-pty/ts/index").spawnAsync
 
-const { mockCreateGhosttyVTEmulator, mockGhosttySymbols } = vi.hoisted(() => ({
-  mockCreateGhosttyVTEmulator: vi.fn(),
-  mockGhosttySymbols: new Proxy(
-    {},
-    {
-      get: () => vi.fn(),
-    }
-  ),
-}))
+const mockCreateGhosttyVTEmulator = vi.fn()
+const mockGhosttySymbols = new Proxy(
+  {},
+  {
+    get: () => vi.fn(),
+  }
+)
 
 let createSession: typeof import("../../../../src/effect/services/pty/session-factory").createSession
 
@@ -67,11 +65,15 @@ describe("createSession", () => {
       getCwd: vi.fn(() => "/"),
       getForegroundProcessName: vi.fn(),
       pid: 123,
-    }
+      cols: 80,
+      rows: 24,
+      process: "/bin/sh",
+      resizeWithPixels: vi.fn(),
+      getForegroundPid: vi.fn(() => 123),
+      getProcessName: vi.fn(() => "sh"),
+    } as unknown as Awaited<ReturnType<typeof spawnAsync>>
 
-    vi.mocked(spawnAsync).mockResolvedValue(
-      fakePty as Awaited<ReturnType<typeof spawnAsync>>
-    )
+    ;(spawnAsync as ReturnType<typeof vi.fn>).mockResolvedValue(fakePty)
 
     const emulator = {
       setUpdateEnabled: vi.fn(),
@@ -114,7 +116,7 @@ describe("createSession", () => {
     session.exitCallbacks.add(exitCallback)
 
     expect(exitHandler).not.toBeNull()
-    exitHandler?.({ exitCode: 0 })
+    exitHandler!({ exitCode: 0 })
 
     expect(exitCallback).toHaveBeenCalledWith(0)
     expect(onExit).toHaveBeenCalledWith(id, 0)
@@ -132,11 +134,14 @@ describe("createSession", () => {
       getCwd: vi.fn(() => "/"),
       getForegroundProcessName: vi.fn(),
       pid: 123,
-    }
+      cols: 80,
+      rows: 24,
+      process: "/bin/sh",
+      getForegroundPid: vi.fn(() => 123),
+      getProcessName: vi.fn(() => "sh"),
+    } as unknown as Awaited<ReturnType<typeof spawnAsync>>
 
-    vi.mocked(spawnAsync).mockResolvedValue(
-      fakePty as Awaited<ReturnType<typeof spawnAsync>>
-    )
+    ;(spawnAsync as ReturnType<typeof vi.fn>).mockResolvedValue(fakePty)
 
     const emulator = {
       setUpdateEnabled: vi.fn(),
