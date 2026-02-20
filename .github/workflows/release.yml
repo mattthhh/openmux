@@ -96,22 +96,10 @@ jobs:
       - name: List artifacts
         run: find artifacts -type f -name "*.tar.gz"
 
-      - name: Generate SHA256 checksums
-        run: |
-          cd artifacts
-          # Find all tar.gz files and generate SHA256SUMS
-          find . -type f -name "*.tar.gz" | while read file; do
-            sha256sum "$file"
-          done > SHA256SUMS
-          # Display checksums for verification
-          cat SHA256SUMS
-
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            artifacts/**/*.tar.gz
-            artifacts/SHA256SUMS
+          files: artifacts/**/*.tar.gz
           generate_release_notes: true
           draft: false
           prerelease: ${{ contains(github.ref, '-') }}
