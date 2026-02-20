@@ -80,10 +80,6 @@ export class GhosttyVtTerminal {
     return this._rows;
   }
 
-  // ==========================================================================
-  // Lifecycle
-  // ==========================================================================
-
   write(data: string | Uint8Array): void {
     const bytes = typeof data === "string" ? this.encoder.encode(data) : data;
     if (bytes.length === 0) return;
@@ -109,10 +105,6 @@ export class GhosttyVtTerminal {
   free(): void {
     ghostty.symbols.ghostty_terminal_free(this.handle);
   }
-
-  // ==========================================================================
-  // Render state
-  // ==========================================================================
 
   update(): DirtyState {
     return ghostty.symbols.ghostty_render_state_update(this.handle) as DirtyState;
@@ -160,10 +152,6 @@ export class GhosttyVtTerminal {
     this.parseCellsIntoPool(this.viewportBuffer, count);
     return this.cellPool;
   }
-
-  // ==========================================================================
-  // Modes and state
-  // ==========================================================================
 
   isAlternateScreen(): boolean {
     return ghostty.symbols.ghostty_terminal_is_alternate_screen(this.handle);
@@ -223,10 +211,6 @@ export class GhosttyVtTerminal {
     if (count <= 0) return null;
     return buffer.subarray(0, count).toString("utf8");
   }
-
-  // ==========================================================================
-  // Kitty graphics
-  // ==========================================================================
 
   getKittyImagesDirty(): boolean {
     return ghostty.symbols.ghostty_terminal_get_kitty_images_dirty(this.handle);
@@ -319,10 +303,6 @@ export class GhosttyVtTerminal {
     }
     return placements;
   }
-
-  // ==========================================================================
-  // Internal helpers
-  // ==========================================================================
 
   private initCellPool(): void {
     const totalCells = this._cols * this._rows;

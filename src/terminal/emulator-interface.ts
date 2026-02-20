@@ -54,9 +54,6 @@ export interface ITerminalEmulator {
    */
   dispose(): void;
 
-  // ============================================================================
-  // State Access
-  // ============================================================================
 
   /**
    * Get the total number of lines in the scrollback buffer
@@ -82,9 +79,6 @@ export interface ITerminalEmulator {
    */
   getTerminalState(): TerminalState;
 
-  // ============================================================================
-  // Mode Queries
-  // ============================================================================
 
   /**
    * Get cursor position and visibility
@@ -117,10 +111,6 @@ export interface ITerminalEmulator {
    */
   getMode(mode: number): boolean;
 
-  // ============================================================================
-  // Colors
-  // ============================================================================
-
   /**
    * Get the terminal's color scheme
    */
@@ -130,10 +120,6 @@ export interface ITerminalEmulator {
    * Update the terminal's color scheme (best-effort).
    */
   setColors?(colors: TerminalColors): void;
-
-  // ============================================================================
-  // Title
-  // ============================================================================
 
   /**
    * Get the current terminal title (set via OSC sequences)
@@ -165,10 +151,6 @@ export interface ITerminalEmulator {
    */
   onModeChange(callback: (modes: TerminalModes, prevModes?: TerminalModes) => void): () => void;
 
-  // ==========================================================================
-  // Kitty graphics (optional)
-  // ==========================================================================
-
   /** Check if kitty images/placements changed since last clear. */
   getKittyImagesDirty?(): boolean;
 
@@ -192,10 +174,6 @@ export interface ITerminalEmulator {
    * Returns an array of response strings to write back to the PTY.
    */
   drainResponses?(): string[];
-
-  // ============================================================================
-  // Search
-  // ============================================================================
 
   /**
    * Search for text in terminal (scrollback + visible area)

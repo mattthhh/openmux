@@ -1,11 +1,5 @@
-/**
- * KeyboardRouter bridge functions
- * Simple re-exports from the plain KeyboardRouter module
- */
-
 import * as KeyboardRouter from "../services/KeyboardRouter"
 
-// Re-export types
 export type { KeyEvent, KeyHandler, OverlayType } from "../services/KeyboardRouter"
 export type { KeyboardEvent } from "../../core/keyboard-event"
 

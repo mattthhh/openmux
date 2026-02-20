@@ -2,6 +2,31 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.134](https://github.com/monotykamary/openmux/compare/v0.2.133...v0.2.134) (2026-02-18)
+
+
+### Bug Fixes
+
+* **aggregate-view:** prevent cwd from being synced across PTYs in same repo ([b73c014](https://github.com/monotykamary/openmux/commit/b73c014f740f26e27feac974f06f04ad6d09fa14))
+* **aggregate-view:** remove repo-wide git state syncing ([dee4b9b](https://github.com/monotykamary/openmux/commit/dee4b9b0a75cdf8774e5a4767c55864168f0ac82))
+* **aggregate-view:** replace PTY objects instead of mutating to fix rendering issues ([c03922b](https://github.com/monotykamary/openmux/commit/c03922b9aa034733fc69176379e606e4b3ead5fb))
+
+### [0.2.133](https://github.com/monotykamary/openmux/compare/v0.2.132...v0.2.133) (2026-02-18)
+
+
+### Bug Fixes
+
+* **aggregate-view:** prevent title changes from overwriting foregroundProcess ([ab8dd33](https://github.com/monotykamary/openmux/commit/ab8dd332ae92494ee43e0a1b7062421bf0082536))
+
+### [0.2.132](https://github.com/monotykamary/openmux/compare/v0.2.131...v0.2.132) (2026-02-18)
+
+### [0.2.131](https://github.com/monotykamary/openmux/compare/v0.2.130...v0.2.131) (2026-02-18)
+
+
+### Bug Fixes
+
+* **cli:** remove redundant v prefix in help header ([bdd3f25](https://github.com/monotykamary/openmux/commit/bdd3f25c37a56eba8e5ebd18d41b95d7faa3c471))
+
 ### [0.2.130](https://github.com/monotykamary/openmux/compare/v0.2.129...v0.2.130) (2026-02-16)
 
 

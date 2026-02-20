@@ -20,4 +20,9 @@ export const effectBridgeMocks = {
   markPtyCreated: vi.fn(),
   copyToClipboard: vi.fn(),
   readFromClipboard: vi.fn(),
+  // Aggregate view functions
+  listAllPtysWithMetadata: vi.fn(),
+  getPtyMetadata: vi.fn(),
+  subscribeToPtyLifecycle: vi.fn(),
+  subscribeToAllTitleChanges: vi.fn(),
 };

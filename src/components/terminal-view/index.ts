@@ -1,8 +1,3 @@
-/**
- * Terminal View module
- * Re-exports all terminal view utilities
- */
-
 export {
   getCellColors,
   renderRow,

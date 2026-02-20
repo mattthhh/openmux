@@ -7,10 +7,8 @@ import type { PaneData } from '../../core/types';
 import { deferNextTick } from '../../core/scheduling';
 
 export interface PaneResizeDeps {
-  // State accessors
   getPanes: () => PaneData[];
 
-  // PTY operations
   resizePTY: (ptyId: string, cols: number, rows: number, pixelWidth?: number, pixelHeight?: number) => void;
   getCellMetrics?: () => { cellWidth: number; cellHeight: number } | null;
 }

@@ -11,7 +11,7 @@ export type HelpTopic =
   | 'pane.capture';
 
 function formatHeader(topic: HelpTopic, version?: string): string {
-  const base = version && version !== 'unknown' ? `openmux v${version}` : 'openmux';
+  const base = version && version !== 'unknown' ? `openmux ${version}` : 'openmux';
   if (topic === 'root') {
     return base;
   }

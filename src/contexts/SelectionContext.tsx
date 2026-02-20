@@ -125,15 +125,9 @@ interface SelectionContextValue {
   notifyCopy: (charCount: number, ptyId: string) => void;
 }
 
-// =============================================================================
-// Context
-// =============================================================================
 
 const SelectionContext = createContext<SelectionContextValue | null>(null);
 
-// =============================================================================
-// Provider
-// =============================================================================
 
 interface SelectionProviderProps extends ParentProps {}
 
@@ -329,9 +323,6 @@ export function SelectionProvider(props: SelectionProviderProps) {
   );
 }
 
-// =============================================================================
-// Hook
-// =============================================================================
 
 export function useSelection(): SelectionContextValue {
   const context = useContext(SelectionContext);

@@ -5,9 +5,6 @@
 
 import { RGBA } from '@opentui/core';
 
-// =============================================================================
-// RGBA Color Cache
-// =============================================================================
 
 /** White color constant */
 export const WHITE = RGBA.fromInts(255, 255, 255);
@@ -43,9 +40,6 @@ export function getCachedRGBA(r: number, g: number, b: number): RGBA {
   return cached;
 }
 
-// =============================================================================
-// Text Attributes
-// =============================================================================
 
 /** Bold text attribute flag */
 export const ATTR_BOLD = 1;
@@ -58,10 +52,6 @@ export const ATTR_UNDERLINE = 8;
 
 /** Strikethrough text attribute flag */
 export const ATTR_STRIKETHROUGH = 128;
-
-// =============================================================================
-// UI Colors (Scrollbar, Selection, Search)
-// =============================================================================
 
 /** Scrollbar track color (semi-transparent for content visibility) */
 export const SCROLLBAR_TRACK = RGBA.fromInts(40, 40, 40, 160);

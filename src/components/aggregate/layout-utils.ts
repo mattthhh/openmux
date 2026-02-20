@@ -6,7 +6,6 @@
 import { formatComboSet, type ResolvedKeybindingMap, type ResolvedKeybindings } from '../../core/keybindings';
 import type { VimInputMode } from '../../core/vim-sequences';
 
-// Re-export borderStyleMap from Pane for convenience
 export { borderStyleMap } from '../Pane';
 
 /**

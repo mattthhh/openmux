@@ -30,6 +30,8 @@ export interface PtyInfo {
   gitRepoKey: string | undefined;
   foregroundProcess: string | undefined;
   shell: string | undefined;
+  /** Terminal title (set via escape sequences), distinct from foregroundProcess */
+  title: string | undefined;
   /** Workspace ID where this PTY is located (if found in current session) */
   workspaceId: number | undefined;
   /** Pane ID where this PTY is located (if found in current session) */

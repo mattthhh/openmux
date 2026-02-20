@@ -1,8 +1,3 @@
-/**
- * PTY service module
- * Re-exports all PTY service functionality
- */
-
 export type { InternalPtySession } from "./types"
 export { getGitBranch } from "./helpers"
 export { getCurrentScrollState, notifySubscribers, notifyScrollSubscribers } from "./notification"

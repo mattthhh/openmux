@@ -8,8 +8,6 @@ import type { PtyInfo, AggregateViewState } from './aggregate-view-types';
 import {
   buildPtyIndex,
   recomputeMatches,
-  syncGitFields,
-  applyRepoUpdate,
   isActivePty,
 } from './aggregate-view-helpers';
 import { runStream, streamFromSubscription } from '../effect/stream-utils';
@@ -105,18 +103,26 @@ export function createAggregateViewRefreshers(
       if (updates.length === 0) return;
 
       setState(produce((s) => {
-        const updatedRepos = new Set<string>();
         for (const update of updates) {
           const index = s.allPtysIndex.get(update.ptyId);
           if (index === undefined || !s.allPtys[index]) continue;
-          if (s.allPtys[index].foregroundProcess !== update.foregroundProcess) {
-            s.allPtys[index].foregroundProcess = update.foregroundProcess;
-          }
-          syncGitFields(s.allPtys[index], update);
-          if (update.gitRepoKey && !updatedRepos.has(update.gitRepoKey)) {
-            updatedRepos.add(update.gitRepoKey);
-            applyRepoUpdate(s.allPtys, update);
-          }
+          // Replace entire object for proper SolidJS reactivity
+          s.allPtys[index] = {
+            ...s.allPtys[index],
+            foregroundProcess: update.foregroundProcess,
+            gitBranch: update.gitBranch,
+            gitDirty: update.gitDirty,
+            gitStaged: update.gitStaged,
+            gitUnstaged: update.gitUnstaged,
+            gitUntracked: update.gitUntracked,
+            gitConflicted: update.gitConflicted,
+            gitAhead: update.gitAhead,
+            gitBehind: update.gitBehind,
+            gitStashCount: update.gitStashCount,
+            gitState: update.gitState,
+            gitDetached: update.gitDetached,
+            gitRepoKey: update.gitRepoKey,
+          };
         }
 
         recomputeMatches(s);
@@ -137,17 +143,14 @@ export function createAggregateViewRefreshers(
       setState(produce((s) => {
         const index = s.allPtysIndex.get(update.ptyId);
         if (index !== undefined && s.allPtys[index]) {
-          syncGitFields(s.allPtys[index], update);
-          s.allPtys[index].gitDiffStats = update.gitDiffStats;
+          // Replace entire object for proper SolidJS reactivity
+          s.allPtys[index] = { ...s.allPtys[index], gitDiffStats: update.gitDiffStats };
         }
         const matchedIndex = s.matchedPtysIndex.get(update.ptyId);
         if (matchedIndex !== undefined && s.matchedPtys[matchedIndex]) {
-          syncGitFields(s.matchedPtys[matchedIndex], update);
-          s.matchedPtys[matchedIndex].gitDiffStats = update.gitDiffStats;
+          // Replace entire object for proper SolidJS reactivity
+          s.matchedPtys[matchedIndex] = { ...s.matchedPtys[matchedIndex], gitDiffStats: update.gitDiffStats };
         }
-
-        applyRepoUpdate(s.allPtys, update, { applyDiffStats: true });
-        applyRepoUpdate(s.matchedPtys, update, { applyDiffStats: true });
       }));
     } finally {
       refreshState.selectedDiffRefreshInProgress = false;
@@ -162,15 +165,23 @@ export function createTitleChangeHandler(
 ) {
   return (event: { ptyId: string; title: string }) => {
     setState(produce((s) => {
-      // Update in allPtys using O(1) lookup
+      // Update in allPtys using O(1) lookup with ptyId validation
       const allIndex = s.allPtysIndex.get(event.ptyId);
       if (allIndex !== undefined && s.allPtys[allIndex]) {
-        s.allPtys[allIndex] = { ...s.allPtys[allIndex], foregroundProcess: event.title };
+        const ptyAtIndex = s.allPtys[allIndex];
+        // Validate that the PTY at this index has the correct ID
+        if (ptyAtIndex.ptyId === event.ptyId) {
+          s.allPtys[allIndex] = { ...ptyAtIndex, title: event.title };
+        }
       }
-      // Update in matchedPtys using O(1) lookup
+      // Update in matchedPtys using O(1) lookup with ptyId validation
       const matchedIndex = s.matchedPtysIndex.get(event.ptyId);
       if (matchedIndex !== undefined && s.matchedPtys[matchedIndex]) {
-        s.matchedPtys[matchedIndex] = { ...s.matchedPtys[matchedIndex], foregroundProcess: event.title };
+        const ptyAtIndex = s.matchedPtys[matchedIndex];
+        // Validate that the PTY at this index has the correct ID
+        if (ptyAtIndex.ptyId === event.ptyId) {
+          s.matchedPtys[matchedIndex] = { ...ptyAtIndex, title: event.title };
+        }
       }
     }));
   };

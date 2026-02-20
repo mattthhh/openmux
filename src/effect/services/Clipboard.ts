@@ -4,9 +4,6 @@
 import { Context, Effect, Layer } from "effect"
 import { ClipboardError } from "../errors"
 
-// =============================================================================
-// Clipboard Service
-// =============================================================================
 
 export class Clipboard extends Context.Tag("@openmux/Clipboard")<
   Clipboard,

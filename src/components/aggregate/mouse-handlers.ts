@@ -9,11 +9,9 @@ import { inputHandler } from '../../terminal/input-handler';
 import { createTerminalMouseHandler, type TerminalMouseDeps } from '../shared/terminal-mouse-handler';
 
 export interface MouseHandlerDeps extends TerminalMouseDeps {
-  // State getters
   getPreviewMode: () => boolean;
   getSelectedPtyId: () => string | null;
 
-  // Layout getters
   getListPaneWidth: () => number;
   getPreviewInnerWidth: () => number;
   getPreviewInnerHeight: () => number;
@@ -33,7 +31,6 @@ export function createAggregateMouseHandlers(deps: MouseHandlerDeps) {
     scrollTerminal,
   } = deps;
 
-  // Create shared mouse handler
   const mouseHandler = createTerminalMouseHandler(deps);
 
   type ScrollDirection = 'up' | 'down' | 'left' | 'right';

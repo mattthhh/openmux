@@ -31,9 +31,6 @@ import {
   type Workspaces,
 } from '../core/operations/layout-actions';
 
-// =============================================================================
-// Context Value Interface
-// =============================================================================
 
 export interface LayoutContextValue {
   state: LayoutState;
@@ -45,7 +42,6 @@ export interface LayoutContextValue {
   layoutVersion: number;
   /** Version counter that increments when pane geometry changes */
   layoutGeometryVersion: number;
-  // Actions
   focusPane: (paneId: string) => void;
   navigate: (direction: Direction) => void;
   newPane: (title?: string) => void;
@@ -71,9 +67,6 @@ export interface LayoutContextValue {
 
 const LayoutContext = createContext<LayoutContextValue | null>(null);
 
-// =============================================================================
-// Provider
-// =============================================================================
 
 interface LayoutProviderProps extends ParentProps {
   config?: Partial<LayoutConfig>;
@@ -374,9 +367,6 @@ export function LayoutProvider(props: LayoutProviderProps) {
   );
 }
 
-// =============================================================================
-// Hook
-// =============================================================================
 
 export function useLayout(): LayoutContextValue {
   const context = useContext(LayoutContext);

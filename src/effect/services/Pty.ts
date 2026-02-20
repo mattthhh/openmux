@@ -17,7 +17,6 @@ import { PtySession } from "../models"
 import { AppConfig } from "../Config"
 import * as ShimClient from "../../shim/client"
 
-// Import extracted modules
 import type { InternalPtySession } from "./pty/types"
 import type { GitDiffStats, GitInfo } from "./pty/helpers"
 import { makeSubscriptionRegistry } from "./pty/subscription-manager"
@@ -25,9 +24,6 @@ import { createSession } from "./pty/session-factory"
 import { createOperations } from "./pty/operations"
 import { createSubscriptions } from "./pty/subscriptions"
 
-// =============================================================================
-// PTY Service
-// =============================================================================
 
 export class Pty extends Context.Tag("@openmux/Pty")<
   Pty,

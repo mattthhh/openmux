@@ -28,9 +28,6 @@ import type {
 import type { Workspaces } from "../../core/operations/layout-actions"
 import type { WorkspaceState } from "../services/session-manager/types"
 
-// =============================================================================
-// Core Session Functions
-// =============================================================================
 
 /**
  * List all sessions.
@@ -182,11 +179,6 @@ export async function getSessionSummary(
   )
 }
 
-// =============================================================================
-// Legacy Compatibility Functions
-// These maintain backwards compatibility with SessionContext imports
-// =============================================================================
-
 /**
  * Create a new session (legacy compatibility - returns full metadata).
  */
@@ -236,9 +228,6 @@ export async function deleteSessionLegacy(id: string): Promise<void> {
   return deleteSession(id)
 }
 
-// =============================================================================
-// Session Serialization Functions
-// =============================================================================
 
 function deserializeLayoutNode(serialized: SerializedLayoutNode): LayoutNode {
   if ((serialized as { type?: string }).type === "split") {

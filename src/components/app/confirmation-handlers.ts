@@ -13,27 +13,21 @@ export interface ConfirmationState {
 }
 
 export interface ConfirmationHandlerDeps {
-  // State
   confirmationState: Accessor<ConfirmationState>;
   setConfirmationState: Setter<ConfirmationState>;
   pendingKillPtyId: Accessor<string | null>;
   setPendingKillPtyId: Setter<string | null>;
 
-  // Layout actions
   closePane: () => void;
   getFocusedPtyId: () => string | undefined;
 
-  // Terminal actions
   destroyPTY: (ptyId: string, options?: { skipPaneClose?: boolean }) => void;
 
-  // Keyboard state
   enterConfirmMode: (type: ConfirmationType) => void;
   exitConfirmMode: () => void;
 
-  // Session actions
   onQuit: () => Promise<void>;
 
-  // Template actions
   onConfirmApplyTemplate?: () => Promise<void> | void;
   onCancelApplyTemplate?: () => void;
   onConfirmOverwriteTemplate?: () => Promise<void> | void;
