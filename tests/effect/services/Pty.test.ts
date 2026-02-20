@@ -164,4 +164,46 @@ describe("Pty", () => {
       expect(id.startsWith("pty-")).toBe(true)
     })
   })
+
+  describe("dispose", () => {
+    it("should be callable on test service", async () => {
+      const { createTestPtyService } = await import("../../../src/effect/services/Pty")
+      const pty = createTestPtyService()
+      
+      // Should not throw
+      expect(() => pty.dispose()).not.toThrow()
+    })
+
+    it("should return undefined", async () => {
+      const { createTestPtyService } = await import("../../../src/effect/services/Pty")
+      const pty = createTestPtyService()
+      
+      const result = pty.dispose()
+      expect(result).toBeUndefined()
+    })
+
+    it("should be idempotent", async () => {
+      const { createTestPtyService } = await import("../../../src/effect/services/Pty")
+      const pty = createTestPtyService()
+      
+      // Multiple disposes should not throw
+      expect(() => {
+        pty.dispose()
+        pty.dispose()
+        pty.dispose()
+      }).not.toThrow()
+    })
+
+    it("should not break service after dispose", async () => {
+      const { createTestPtyService } = await import("../../../src/effect/services/Pty")
+      const pty = createTestPtyService()
+      const testId = makePtyId()
+      
+      pty.dispose()
+      
+      // Service should still respond to calls
+      const result = await pty.getCwd(testId)
+      expect(result).toBe("/test/cwd")
+    })
+  })
 })

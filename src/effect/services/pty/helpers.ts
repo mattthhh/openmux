@@ -83,6 +83,7 @@ const pendingByCwd = new Map<string, Promise<RepoEntry | null>>()
 const STATUS_TTL_MS = 2000
 const CACHE_TTL_MS = 10 * 60 * 1000
 let cleanupTimer: ReturnType<typeof setInterval> | null = null
+let isDisposed = false
 
 function normalizeRepoPath(path: string | null): string | null {
   if (!path) return null
@@ -93,8 +94,9 @@ function normalizeRepoPath(path: string | null): string | null {
 }
 
 function scheduleCleanup() {
-  if (cleanupTimer) return
+  if (cleanupTimer || isDisposed) return
   cleanupTimer = setInterval(() => {
+    if (isDisposed) return
     const now = Date.now()
     for (const [key, entry] of repoCache.entries()) {
       if (now - entry.lastAccess > CACHE_TTL_MS) {
@@ -105,6 +107,30 @@ function scheduleCleanup() {
     }
   }, CACHE_TTL_MS)
   cleanupTimer.unref?.()
+}
+
+/**
+ * Dispose all git helper resources including timers, caches, and file watchers.
+ * This should be called on application shutdown to prevent memory leaks.
+ */
+export function disposeGitHelpers(): void {
+  if (isDisposed) return
+  isDisposed = true
+
+  // Clear the cleanup timer
+  if (cleanupTimer) {
+    clearInterval(cleanupTimer)
+    cleanupTimer = null
+  }
+
+  // Close all file watchers and clear caches
+  for (const [, entry] of repoCache) {
+    entry.gitWatcher?.close()
+    entry.workWatcher?.close()
+  }
+  repoCache.clear()
+  cwdToRepoKey.clear()
+  pendingByCwd.clear()
 }
 
 function markStale(entry: RepoEntry) {

@@ -6,6 +6,7 @@
  * with the old API (where services were not passed as arguments).
  */
 import type { AppServices } from "../services"
+import { disposeServices } from "../services"
 
 // Global singleton storage
 let globalServices: AppServices | null = null
@@ -90,4 +91,15 @@ export function getKeyboardRouter(): AppServices["keyboardRouter"] {
  */
 export function getConfig(): AppServices["config"] {
   return getServices().config
+}
+
+/**
+ * Dispose all services and clean up resources.
+ * Call this on application shutdown.
+ */
+export function disposeServicesSingleton(): void {
+  if (globalServices) {
+    disposeServices(globalServices)
+    globalServices = null
+  }
 }

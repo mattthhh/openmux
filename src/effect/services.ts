@@ -38,6 +38,14 @@ export interface AppServices {
 }
 
 /**
+ * Dispose all services and clean up resources.
+ * Call this on application shutdown.
+ */
+export function disposeServices(services: AppServices): void {
+  services.pty.dispose()
+}
+
+/**
  * Error type returned by initializeServices
  */
 export type ServiceInitError = ConfigError | PtySpawnError | SessionStorageError | TemplateStorageError

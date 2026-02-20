@@ -247,22 +247,67 @@ export function debounce<T>(
 
 /**
  * Create an async iterable that repeats an async function on a fixed interval.
+ * Supports cleanup via iterator.return() to prevent infinite loops.
  */
 export function repeatWithInterval<T>(
   fn: () => Promise<T> | T,
   intervalMs: number
 ): AsyncIterable<T> {
   return {
-    async *[Symbol.asyncIterator]() {
-      while (true) {
-        try {
-          const value = await fn()
-          yield value
-        } catch {
-          // Continue on error
+    [Symbol.asyncIterator](): AsyncIterator<T> {
+      let isRunning = true
+      let timeoutId: ReturnType<typeof setTimeout> | null = null
+
+      const cleanup = () => {
+        isRunning = false
+        if (timeoutId) {
+          clearTimeout(timeoutId)
+          timeoutId = null
         }
-        await new Promise((resolve) => setTimeout(resolve, intervalMs))
       }
+
+      const iterator: AsyncIterator<T> = {
+        async next(): Promise<IteratorResult<T>> {
+          if (!isRunning) {
+            return { value: undefined as T, done: true }
+          }
+
+          try {
+            const value = await fn()
+            if (!isRunning) {
+              return { value: undefined as T, done: true }
+            }
+            
+            // Set up timeout for next iteration
+            await new Promise<void>((resolve) => {
+              timeoutId = setTimeout(() => {
+                timeoutId = null
+                resolve()
+              }, intervalMs)
+            })
+            
+            return { value, done: false }
+          } catch {
+            // Continue on error - set up timeout and return next value
+            if (isRunning) {
+              await new Promise<void>((resolve) => {
+                timeoutId = setTimeout(() => {
+                  timeoutId = null
+                  resolve()
+                }, intervalMs)
+              })
+            }
+            return iterator.next()
+          }
+        },
+
+        async return(): Promise<IteratorResult<T>> {
+          cleanup()
+          return { value: undefined as T, done: true }
+        },
+      }
+
+      return iterator
     },
   }
 }

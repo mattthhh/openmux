@@ -22,6 +22,7 @@ import * as ShimClient from "../../shim/client"
 
 import type { InternalPtySession } from "./pty/types"
 import type { GitDiffStats, GitInfo } from "./pty/helpers"
+import { disposeGitHelpers } from "./pty/helpers"
 import { createSubscriptionRegistry } from "./pty/subscription-manager"
 import { createSession } from "./pty/session-factory"
 import { createOperations } from "./pty/operations"
@@ -155,6 +156,9 @@ export interface PtyService {
   subscribeToAllTitleChanges(
     callback: (event: { ptyId: PtyId; title: string }) => void
   ): (() => void)
+
+  /** Dispose the PTY service and clean up all resources */
+  dispose(): void
 }
 
 /** State container for PTY sessions */
@@ -286,6 +290,13 @@ export function createPtyService(config: PtyServiceConfig, _fs?: unknown): PtySe
     }
   }
 
+  function dispose(): void {
+    // Destroy all sessions first
+    void operations.destroyAll()
+    // Clean up git helper resources
+    disposeGitHelpers()
+  }
+
   return {
     create,
     write: operations.write,
@@ -315,6 +326,7 @@ export function createPtyService(config: PtyServiceConfig, _fs?: unknown): PtySe
     getLastCommand: operations.getLastCommand,
     subscribeToTitleChange: subscriptions.subscribeToTitleChange,
     subscribeToAllTitleChanges: subscriptions.subscribeToAllTitleChanges,
+    dispose,
   }
 }
 
@@ -491,6 +503,9 @@ export function createShimPtyService(): PtyService {
       })
       return () => {}
     },
+    dispose: () => {
+      // Shim service doesn't need cleanup - it's a proxy
+    },
   }
 }
 
@@ -545,5 +560,8 @@ export function createTestPtyService(): PtyService {
     getLastCommand: async () => undefined,
     subscribeToTitleChange: async () => () => {},
     subscribeToAllTitleChanges: () => () => {},
+    dispose: () => {
+      // Test service doesn't need cleanup
+    },
   }
 }

@@ -383,6 +383,89 @@ describe('repeatWithInterval', () => {
     expect(timestamps[1] - timestamps[0]).toBeGreaterThanOrEqual(40)
     expect(timestamps[2] - timestamps[1]).toBeGreaterThanOrEqual(40)
   })
+
+  test('cleanup prevents further execution after return', async () => {
+    let callCount = 0
+    
+    const stream = repeatWithInterval(() => {
+      callCount++
+      return callCount
+    }, 10)
+
+    const iterator = stream[Symbol.asyncIterator]()
+    
+    // Get first value
+    const first = await iterator.next()
+    expect(first.value).toBe(1)
+    expect(callCount).toBe(1)
+    
+    // Call return to cleanup
+    await iterator.return!()
+    
+    // Wait a bit to ensure no more calls happen
+    await new Promise(resolve => setTimeout(resolve, 50))
+    
+    // Should still be 1 - no more calls after cleanup
+    expect(callCount).toBe(1)
+  })
+
+  test('cleanup clears pending timeout', async () => {
+    let callCount = 0
+    
+    const stream = repeatWithInterval(() => {
+      callCount++
+      return callCount
+    }, 100) // Long interval
+
+    const iterator = stream[Symbol.asyncIterator]()
+    
+    // Get first value
+    await iterator.next()
+    expect(callCount).toBe(1)
+    
+    // Immediately cleanup before next interval
+    await iterator.return!()
+    
+    // Wait for the interval that would have fired
+    await new Promise(resolve => setTimeout(resolve, 150))
+    
+    // Should still be 1 - timeout was cleared
+    expect(callCount).toBe(1)
+  })
+
+  test('cleanup during fn execution', async () => {
+    let callCount = 0
+    
+    const stream = repeatWithInterval(async () => {
+      callCount++
+      await new Promise(resolve => setTimeout(resolve, 50))
+      return callCount
+    }, 10)
+
+    const iterator = stream[Symbol.asyncIterator]()
+    
+    // Start getting first value (but it will take time)
+    const nextPromise = iterator.next()
+    
+    // Cleanup while fn is executing
+    await iterator.return!()
+    
+    // Wait for the promise to resolve
+    const result = await nextPromise
+    
+    // Should return done: true since we cleaned up
+    expect(result.done).toBe(true)
+  })
+
+  test('multiple cleanups are safe', async () => {
+    const stream = repeatWithInterval(() => 1, 10)
+    const iterator = stream[Symbol.asyncIterator]()
+    
+    // Multiple returns should not throw
+    await expect(iterator.return!()).resolves.toBeDefined()
+    await expect(iterator.return!()).resolves.toBeDefined()
+    await expect(iterator.return!()).resolves.toBeDefined()
+  })
 })
 
 describe('filter', () => {

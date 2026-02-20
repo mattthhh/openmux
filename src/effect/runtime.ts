@@ -3,15 +3,16 @@
  * Replaces the old Effect runtime with a simple passthrough
  */
 
+import { disposeServicesSingleton } from "./bridge/services-instance"
+
 /**
  * Dispose the application runtime.
  * 
- * In the errore architecture, this is a no-op. Services should be cleaned up individually
- * or the process can simply exit.
+ * Cleans up all services and resources. Call this on application shutdown
+ * to prevent memory leaks from timers, caches, and file watchers.
  */
 export function disposeRuntime(): Promise<void> {
-  // In the errore architecture, there's no centralized runtime to dispose.
-  // Individual services manage their own cleanup.
+  disposeServicesSingleton()
   return Promise.resolve()
 }
 
