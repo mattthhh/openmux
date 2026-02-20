@@ -191,49 +191,54 @@ export function debounce<T>(
   return {
     async *[Symbol.asyncIterator]() {
       const iterator = iterable[Symbol.asyncIterator]()
-      let lastValue: T | undefined
-      let hasValue = false
-      let timeoutId: ReturnType<typeof setTimeout> | null = null
-      let isDone = false
+      let lastValue: T | undefined = undefined
+      let debounceTimer: ReturnType<typeof setTimeout> | null = null
 
-      const waitForDebounce = (): Promise<void> =>
-        new Promise((resolve) => {
-          timeoutId = setTimeout(resolve, delayMs)
-        })
+      while (true) {
+        // Set up debounce timer if we have a pending value
+        let debouncePromise: Promise<void> | null = null
+        if (lastValue !== undefined) {
+          debouncePromise = new Promise((resolve) => {
+            debounceTimer = setTimeout(() => {
+              debounceTimer = null
+              resolve()
+            }, delayMs)
+          })
+        }
 
-      // Start reading from source
-      const readNext = async (): Promise<void> => {
-        try {
-          const result = await iterator.next()
-          if (result.done) {
-            isDone = true
-            return
+        // Race between next value and debounce firing
+        const raceResult = await Promise.race([
+          iterator.next().then(result => ({ type: 'value' as const, result })),
+          debouncePromise?.then(() => ({ type: 'debounce' as const }))
+            ?? new Promise<never>(() => {}) // never resolves if no debounce
+        ])
+
+        if (raceResult.type === 'debounce') {
+          // Debounce fired, yield the pending value
+          if (lastValue !== undefined) {
+            yield lastValue
+            lastValue = undefined
           }
+        } else {
+          // Got a new value
+          const result = raceResult.result
+
+          if (result.done) {
+            // Iterator done, yield pending value if any
+            if (lastValue !== undefined) {
+              yield lastValue
+            }
+            break
+          }
+
+          // Cancel previous debounce if any
+          if (debounceTimer) {
+            clearTimeout(debounceTimer)
+            debounceTimer = null
+          }
+
+          // Store new value (will trigger debounce on next iteration)
           lastValue = result.value
-          hasValue = true
-          // Schedule debounce
-          await waitForDebounce()
-        } catch {
-          isDone = true
-        }
-      }
-
-      // Start initial read
-      void readNext()
-
-      while (!isDone || hasValue) {
-        // Wait for debounce timeout
-        if (timeoutId) {
-          await new Promise((resolve) => setTimeout(resolve, delayMs))
-        }
-
-        if (hasValue) {
-          yield lastValue!
-          hasValue = false
-          // Start reading next value
-          void readNext()
-        } else if (isDone) {
-          break
         }
       }
     },
