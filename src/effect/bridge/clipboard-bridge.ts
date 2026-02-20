@@ -1,42 +1,47 @@
 /**
- * Clipboard bridge functions
- * Wraps Effect Clipboard service for async/await usage
+ * Clipboard bridge functions (errore version)
+ * Wraps Clipboard service for async/await usage
+ * 
+ * Backward-compatible versions use the global services singleton.
  */
 
-import { Effect } from "effect"
-import { runEffect } from "../runtime"
-import { Clipboard } from "../services"
+import type { Clipboard } from "../services/Clipboard"
+import { getClipboardService } from "./services-instance"
 
 /**
- * Copy text to clipboard using Effect service.
- * Drop-in replacement for utils/clipboard.ts copyToClipboard
+ * Copy text to clipboard (backward-compatible, uses global singleton).
  */
 export async function copyToClipboard(text: string): Promise<boolean> {
+  return copyToClipboardWithService(getClipboardService(), text)
+}
+
+/**
+ * Read text from clipboard (backward-compatible, uses global singleton).
+ */
+export async function readFromClipboard(): Promise<string | null> {
+  return readFromClipboardWithService(getClipboardService())
+}
+
+/**
+ * Copy text to clipboard using a specific Clipboard service.
+ */
+export async function copyToClipboardWithService(clipboard: Clipboard, text: string): Promise<boolean> {
   try {
-    await runEffect(
-      Effect.gen(function* () {
-        const clipboard = yield* Clipboard
-        yield* clipboard.write(text)
-      })
-    )
-    return true
+    const result = await clipboard.write(text)
+    return !(result instanceof Error)
   } catch {
     return false
   }
 }
 
 /**
- * Read text from clipboard using Effect service.
- * Drop-in replacement for utils/clipboard.ts readFromClipboard
+ * Read text from clipboard using a specific Clipboard service.
  */
-export async function readFromClipboard(): Promise<string | null> {
+export async function readFromClipboardWithService(clipboard: Clipboard): Promise<string | null> {
   try {
-    return await runEffect(
-      Effect.gen(function* () {
-        const clipboard = yield* Clipboard
-        return yield* clipboard.read()
-      })
-    )
+    const result = await clipboard.read()
+    if (result instanceof Error) return null
+    return result
   } catch {
     return null
   }

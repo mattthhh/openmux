@@ -43,6 +43,15 @@ async function main() {
   }
 
   try {
+    // Initialize services first
+    const { initializeServices } = await import('./effect/services');
+    const { setServices } = await import('./effect/bridge/services-instance');
+    const services = await initializeServices();
+    if (services instanceof Error) {
+      throw new Error(`Failed to initialize services: ${services.message}`);
+    }
+    setServices(services);
+
     const { render, useRenderer } = await import('@opentui/solid');
     const { ConsolePosition } = await import('@opentui/core');
     const { App } = await import('./App');

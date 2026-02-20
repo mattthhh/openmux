@@ -30,7 +30,7 @@ export async function startShimServer(options?: ShimServerOptions): Promise<net.
     const frameReader = new FrameReader();
 
     socket.on('data', (chunk) => {
-      frameReader.feed(chunk, (header, payloads) => {
+      frameReader.feed(chunk as Buffer, (header, payloads) => {
         if (header.type === 'request') {
           handlers.handleRequest(socket, header, payloads).catch(() => {});
         }

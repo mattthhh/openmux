@@ -163,6 +163,23 @@ Each workspace has a `layoutMode` that determines pane arrangement:
 
 - Workspaces are indexed 1-9 and maintain separate layout state.
 - Sessions persist to `~/.config/openmux/sessions/` and are coordinated by `SessionContext` and `SessionBridge`.
+
+## Code Style Guidelines
+
+### Comments
+
+**Avoid decorative comment sections.** Do not use patterns like:
+
+```typescript
+// ============================================================================
+// Section Title
+// ============================================================================
+```
+
+Instead, use:
+- JSDoc comments for documentation: `/** Brief description */`
+- Simple inline comments when necessary: `// Brief explanation`
+- Group related functions with a single comment or whitespace, not decorative borders
 - Session restores reuse existing PTYs when possible, otherwise new PTYs are created from stored CWDs.
 
 <!-- effect-solutions:start -->

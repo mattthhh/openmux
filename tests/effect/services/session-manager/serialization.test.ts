@@ -1,8 +1,9 @@
 import { describe, expect, it } from "bun:test"
 
-import { SessionMetadata } from "../../../../src/effect/models"
+import type { SessionMetadata } from "../../../../src/effect/models"
 import { serializeSession } from "../../../../src/effect/services/session-manager/serialization"
 import type { WorkspaceState } from "../../../../src/effect/services/session-manager/types"
+import type { WorkspaceId, SessionId } from "../../../../src/effect/types"
 
 const createWorkspaceWithPane = (paneId: string, ptyId: string): WorkspaceState => ({
   mainPane: { id: paneId, ptyId },
@@ -22,14 +23,13 @@ const createEmptyWorkspace = (): WorkspaceState => ({
   zoomed: false,
 })
 
-const createMetadata = () =>
-  SessionMetadata.make({
-    id: "session-1",
-    name: "Test Session",
-    createdAt: 1,
-    lastSwitchedAt: 2,
-    autoNamed: false,
-  })
+const createMetadata = (): SessionMetadata => ({
+  id: "session-1" as SessionId,
+  name: "Test Session",
+  createdAt: 1,
+  lastSwitchedAt: 2,
+  autoNamed: false,
+})
 
 describe("serializeSession", () => {
   it("falls back to the first populated workspace when the active workspace is empty", () => {
@@ -40,9 +40,9 @@ describe("serializeSession", () => {
     ])
     const cwdMap = new Map<string, string>([["pty-1", "/tmp"]])
 
-    const session = serializeSession(metadata, workspaces, 1, cwdMap)
+    const session = serializeSession(metadata, workspaces, 1 as WorkspaceId, cwdMap)
 
-    expect(session.activeWorkspaceId).toBe(2)
+    expect(session.activeWorkspaceId).toBe(2 as WorkspaceId)
   })
 
   it("keeps the active workspace when it has panes", () => {
@@ -52,17 +52,17 @@ describe("serializeSession", () => {
     ])
     const cwdMap = new Map<string, string>([["pty-2", "/tmp"]])
 
-    const session = serializeSession(metadata, workspaces, 2, cwdMap)
+    const session = serializeSession(metadata, workspaces, 2 as WorkspaceId, cwdMap)
 
-    expect(session.activeWorkspaceId).toBe(2)
+    expect(session.activeWorkspaceId).toBe(2 as WorkspaceId)
   })
 
   it("keeps the active workspace when no workspaces are serialized", () => {
     const metadata = createMetadata()
     const workspaces = new Map<number, WorkspaceState>()
 
-    const session = serializeSession(metadata, workspaces, 3, new Map())
+    const session = serializeSession(metadata, workspaces, 3 as WorkspaceId, new Map())
 
-    expect(session.activeWorkspaceId).toBe(3)
+    expect(session.activeWorkspaceId).toBe(3 as WorkspaceId)
   })
 })

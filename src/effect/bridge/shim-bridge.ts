@@ -1,3 +1,10 @@
+/**
+ * Shim bridge functions (errore version)
+ * Provides proxy functions for shim client operations.
+ * 
+ * Directly calls ShimClient without Effect runtime.
+ */
+
 import { isShimClient } from '../../shim/mode';
 import * as ShimClient from '../../shim/client';
 

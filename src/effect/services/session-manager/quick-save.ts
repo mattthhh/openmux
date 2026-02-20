@@ -1,57 +1,51 @@
 /**
  * Quick save operations for SessionManager
  * Handles workspace serialization and quick save functionality
+ * Migrated from Effect to errore - uses promises and direct dependency passing
  */
 
-import { Effect } from "effect"
 import type {
   SerializedSession,
   SessionMetadata,
 } from "../../models"
 import type { WorkspaceState } from "./types"
 import { collectCwdMap, serializeSession } from "./serialization"
+import type { SessionStorageError } from "../../errors"
 
 export interface QuickSaveDeps {
-  saveSession: (session: SerializedSession) => Effect.Effect<void, any>
+  saveSession: (session: SerializedSession) => Promise<SessionStorageError | void>
 }
 
 /**
- * Create quick save operations for SessionManager
+ * Serialize workspaces to session format
  */
-export function createQuickSaveOperations(deps: QuickSaveDeps) {
-  const { saveSession } = deps
+export async function serializeWorkspaces(
+  metadata: SessionMetadata,
+  workspaces: ReadonlyMap<number, WorkspaceState>,
+  activeWorkspaceId: number,
+  getCwd: (ptyId: string) => Promise<string>
+): Promise<SerializedSession> {
+  // Collect all CWDs
+  const cwdMap = await collectCwdMap(workspaces, getCwd)
+  // Serialize
+  return serializeSession(metadata, workspaces, activeWorkspaceId, cwdMap)
+}
 
-  const serializeWorkspaces = Effect.fn(
-    "SessionManager.serializeWorkspaces"
-  )(function* (
-    metadata: SessionMetadata,
-    workspaces: ReadonlyMap<number, WorkspaceState>,
-    activeWorkspaceId: number,
-    getCwd: (ptyId: string) => Promise<string>
-  ) {
-    // Collect all CWDs using extracted helper
-    const cwdMap = yield* collectCwdMap(workspaces, getCwd)
-    // Serialize using extracted helper
-    return serializeSession(metadata, workspaces, activeWorkspaceId, cwdMap)
-  })
-
-  const quickSave = Effect.fn("SessionManager.quickSave")(function* (
-    metadata: SessionMetadata,
-    workspaces: ReadonlyMap<number, WorkspaceState>,
-    activeWorkspaceId: number,
-    getCwd: (ptyId: string) => Promise<string>
-  ) {
-    const session = yield* serializeWorkspaces(
-      metadata,
-      workspaces,
-      activeWorkspaceId,
-      getCwd
-    )
-    yield* saveSession(session)
-  })
-
-  return {
-    serializeWorkspaces,
-    quickSave,
-  }
+/**
+ * Quick save - serialize and save current state
+ */
+export async function quickSave(
+  deps: QuickSaveDeps,
+  metadata: SessionMetadata,
+  workspaces: ReadonlyMap<number, WorkspaceState>,
+  activeWorkspaceId: number,
+  getCwd: (ptyId: string) => Promise<string>
+): Promise<SessionStorageError | void> {
+  const session = await serializeWorkspaces(
+    metadata,
+    workspaces,
+    activeWorkspaceId,
+    getCwd
+  )
+  return await deps.saveSession(session)
 }

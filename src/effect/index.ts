@@ -13,6 +13,6 @@ export * from "./Config"
 
 export * from "./services"
 
-export * from "./runtime"
-
 export * from "./bridge"
+
+export * from "./resources"

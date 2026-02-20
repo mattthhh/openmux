@@ -1,12 +1,12 @@
 /**
- * PTY data handler factory - creates the data processing pipeline
+ * PTY data handler factory - creates the data processing pipeline (errore version)
  * Handles sync mode parsing and query passthrough.
  */
 import type { SyncModeParser } from "../../../terminal/sync-mode-parser"
 import type { InternalPtySession } from "./types"
 import { deferMacrotask } from "../../../core/scheduling"
 import { tracePtyChunk, tracePtyEvent } from "../../../terminal/pty-trace"
-import { copyToClipboard } from "../../../effect/bridge"
+import { copyToClipboard } from "../../bridge"
 
 interface DataHandlerOptions {
   session: InternalPtySession

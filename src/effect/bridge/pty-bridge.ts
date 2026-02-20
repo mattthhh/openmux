@@ -1,71 +1,49 @@
 /**
- * PTY bridge functions
- * Wraps Effect Pty service for async/await usage
+ * PTY bridge functions (errore version)
+ * Wraps PtyService for async/await usage
+ * 
+ * Directly uses PtyService interface without Effect runtime.
+ * Backward-compatible versions use the global services singleton.
  */
 
-import { Effect } from "effect"
-import { runEffect, runEffectIgnore } from "../runtime"
-import { Pty } from "../services"
-import { PtyId, Cols, Rows } from "../types"
+import type { PtyService } from "../services/Pty"
+import type { PtyId, Cols, Rows } from "../types"
 import type { TerminalState, TerminalScrollState, UnifiedTerminalUpdate } from "../../core/types"
 import type { ITerminalEmulator } from "../../terminal/emulator-interface"
 import type { TerminalColors } from "../../terminal/terminal-colors"
 import { deferMacrotask } from "../../core/scheduling"
 import { isShimClient } from "../../shim/mode"
 import * as ShimClient from "../../shim/client"
+import { getPtyService } from "./services-instance"
+import { PtySpawnError } from '../errors'
 
-/**
- * Create a PTY session using Effect service.
- */
-export async function createPtySession(options: {
-  cols: number
-  rows: number
-  cwd?: string
-  pixelWidth?: number
-  pixelHeight?: number
-}): Promise<string> {
-  return runEffect(
-    Effect.gen(function* () {
-      const pty = yield* Pty
-      const ptyId = yield* pty.create({
-        cols: Cols.make(options.cols),
-        rows: Rows.make(options.rows),
-        cwd: options.cwd,
-        pixelWidth: options.pixelWidth,
-        pixelHeight: options.pixelHeight,
-      })
-      return ptyId
-    })
-  )
+/** Helper to convert string to PtyId branded type */
+const asPtyId = (id: string): PtyId => id as PtyId
+
+/** Create a PTY session */
+export async function createPtySession(
+  options: {
+    cols: number
+    rows: number
+    cwd?: string
+    pixelWidth?: number
+    pixelHeight?: number
+  }
+): Promise<string | PtySpawnError> {
+  return createPtySessionWithService(getPtyService(), options)
 }
 
-/**
- * Write data to a PTY session.
- */
+/** Write data to a PTY */
 export async function writeToPty(ptyId: string, data: string): Promise<void> {
-  await runEffectIgnore(
-    Effect.gen(function* () {
-      const pty = yield* Pty
-      yield* pty.write(PtyId.make(ptyId), data)
-    })
-  )
+  return writeToPtyWithService(getPtyService(), ptyId, data)
 }
 
-/**
- * Send focus event to a PTY if enabled.
- */
+/** Send focus event to a PTY */
 export async function sendPtyFocusEvent(ptyId: string, focused: boolean): Promise<void> {
-  await runEffectIgnore(
-    Effect.gen(function* () {
-      const pty = yield* Pty
-      yield* pty.sendFocusEvent(PtyId.make(ptyId), focused)
-    })
-  )
+  return sendPtyFocusEventWithService(getPtyService(), ptyId, focused)
 }
 
-/**
- * Resize a PTY session.
- */
+/** Resize a PTY */
 export async function resizePty(
   ptyId: string,
   cols: number,
@@ -73,106 +51,235 @@ export async function resizePty(
   pixelWidth?: number,
   pixelHeight?: number
 ): Promise<void> {
-  await runEffectIgnore(
-    Effect.gen(function* () {
-      const pty = yield* Pty
-      yield* pty.resize(
-        PtyId.make(ptyId),
-        Cols.make(cols),
-        Rows.make(rows),
-        pixelWidth,
-        pixelHeight
-      )
-    })
-  )
+  return resizePtyWithService(getPtyService(), ptyId, cols, rows, pixelWidth, pixelHeight)
 }
 
-/**
- * Get the current working directory of a PTY session.
- */
+/** Get the current working directory of a PTY */
 export async function getPtyCwd(ptyId: string): Promise<string> {
+  return getPtyCwdWithService(getPtyService(), ptyId)
+}
+
+/** Get the foreground process name for a PTY */
+export async function getPtyForegroundProcess(ptyId: string): Promise<string | undefined> {
+  return getPtyForegroundProcessWithService(getPtyService(), ptyId)
+}
+
+/** Get the last shell command for a PTY */
+export async function getPtyLastCommand(ptyId: string): Promise<string | undefined> {
+  return getPtyLastCommandWithService(getPtyService(), ptyId)
+}
+
+/** Destroy a PTY */
+export function destroyPty(ptyId: string): void {
+  return destroyPtyWithService(getPtyService(), ptyId)
+}
+
+/** Destroy all PTYs */
+export function destroyAllPtys(): void {
+  return destroyAllPtysWithService(getPtyService())
+}
+
+/** Get terminal state for a PTY */
+export async function getTerminalState(
+  ptyId: string,
+  options?: { force?: boolean }
+): Promise<TerminalState | null> {
+  return getTerminalStateWithService(getPtyService(), ptyId, options)
+}
+
+/** Register exit callback for a PTY */
+export async function onPtyExit(
+  ptyId: string,
+  callback: (exitCode: number) => void
+): Promise<() => void> {
+  return onPtyExitWithService(getPtyService(), ptyId, callback)
+}
+
+/** Get scroll state for a PTY */
+export async function getScrollState(
+  ptyId: string,
+  options?: { force?: boolean }
+): Promise<TerminalScrollState | null> {
+  return getScrollStateWithService(getPtyService(), ptyId, options)
+}
+
+/** Capture text from a PTY */
+export async function capturePty(
+  ptyId: string,
+  options?: { lines?: number; format?: 'text' | 'ansi'; raw?: boolean }
+): Promise<string | null> {
+  return capturePtyWithService(getPtyService(), ptyId, options)
+}
+
+/** Set scroll offset for a PTY */
+export async function setScrollOffset(ptyId: string, offset: number): Promise<void> {
+  return setScrollOffsetWithService(getPtyService(), ptyId, offset)
+}
+
+/** Scroll terminal to bottom */
+export async function scrollToBottom(ptyId: string): Promise<void> {
+  return scrollToBottomWithService(getPtyService(), ptyId)
+}
+
+/** Subscribe to unified updates for a PTY */
+export async function subscribeUnifiedToPty(
+  ptyId: string,
+  callback: (update: UnifiedTerminalUpdate) => void
+): Promise<() => void> {
+  return subscribeUnifiedToPtyWithService(getPtyService(), ptyId, callback)
+}
+
+/** Get terminal emulator for a PTY */
+export async function getEmulator(ptyId: string): Promise<ITerminalEmulator | null> {
+  return getEmulatorWithService(getPtyService(), ptyId)
+}
+
+/** Set update enabled for a PTY */
+export async function setPtyUpdateEnabled(ptyId: string, enabled: boolean): Promise<void> {
+  return setPtyUpdateEnabledWithService(getPtyService(), ptyId, enabled)
+}
+
+/** Apply host colors */
+export async function applyHostColors(colors: TerminalColors): Promise<void> {
+  return applyHostColorsWithService(getPtyService(), colors)
+}
+
+/** PTY lifecycle event type */
+export type PtyLifecycleEvent = {
+  type: 'created' | 'destroyed'
+  ptyId: string
+}
+
+/** Subscribe to PTY lifecycle events */
+export function subscribeToPtyLifecycle(callback: (event: PtyLifecycleEvent) => void): Promise<() => void> {
+  return Promise.resolve(subscribeToPtyLifecycleWithService(getPtyService(), callback))
+}
+
+/** Title change event */
+export interface PtyTitleChangeEvent {
+  ptyId: string
+  title: string
+}
+
+/** Subscribe to all title changes */
+export function subscribeToAllTitleChanges(callback: (event: PtyTitleChangeEvent) => void): Promise<() => void> {
+  return Promise.resolve(subscribeToAllTitleChangesWithService(getPtyService(), callback))
+}
+
+/** Get PTY title */
+export async function getPtyTitle(ptyId: string): Promise<string> {
+  return getPtyTitleWithService(getPtyService(), ptyId)
+}
+
+/** Create a PTY with a specific service */
+export async function createPtySessionWithService(
+  pty: PtyService,
+  options: {
+    cols: number
+    rows: number
+    cwd?: string
+    pixelWidth?: number
+    pixelHeight?: number
+  }
+): Promise<string | PtySpawnError> {
+  const result = await pty.create({
+    cols: options.cols as Cols,
+    rows: options.rows as Rows,
+    cwd: options.cwd,
+    pixelWidth: options.pixelWidth,
+    pixelHeight: options.pixelHeight,
+  })
+  if (result instanceof Error) return result as PtySpawnError
+  return result
+}
+
+/** Write to PTY with a specific service */
+export async function writeToPtyWithService(pty: PtyService, ptyId: string, data: string): Promise<void> {
+  const result = await pty.write(asPtyId(ptyId), data)
+  if (result instanceof Error) {
+    // Fire-and-forget
+  }
+}
+
+/** Send focus event with a specific service */
+export async function sendPtyFocusEventWithService(pty: PtyService, ptyId: string, focused: boolean): Promise<void> {
+  const result = await pty.sendFocusEvent(asPtyId(ptyId), focused)
+  if (result instanceof Error) {
+    // Fire-and-forget
+  }
+}
+
+/** Resize PTY with a specific service */
+export async function resizePtyWithService(
+  pty: PtyService,
+  ptyId: string,
+  cols: number,
+  rows: number,
+  pixelWidth?: number,
+  pixelHeight?: number
+): Promise<void> {
+  const result = await pty.resize(
+    asPtyId(ptyId),
+    cols as Cols,
+    rows as Rows,
+    pixelWidth,
+    pixelHeight
+  )
+  if (result instanceof Error) {
+    // Fire-and-forget
+  }
+}
+
+/** Get CWD with a specific service */
+export async function getPtyCwdWithService(pty: PtyService, ptyId: string): Promise<string> {
   try {
-    return await runEffect(
-      Effect.gen(function* () {
-        const pty = yield* Pty
-        return yield* pty.getCwd(PtyId.make(ptyId))
-      })
-    )
+    const result = await pty.getCwd(asPtyId(ptyId))
+    if (result instanceof Error) return process.cwd()
+    return result
   } catch {
     return process.cwd()
   }
 }
 
-/**
- * Get the foreground process name for a PTY session.
- */
-export async function getPtyForegroundProcess(ptyId: string): Promise<string | undefined> {
+/** Get foreground process with a specific service */
+export async function getPtyForegroundProcessWithService(pty: PtyService, ptyId: string): Promise<string | undefined> {
   try {
-    return await runEffect(
-      Effect.gen(function* () {
-        const pty = yield* Pty
-        return yield* pty.getForegroundProcess(PtyId.make(ptyId))
-      })
-    )
+    const result = await pty.getForegroundProcess(asPtyId(ptyId))
+    if (result instanceof Error) return undefined
+    return result
   } catch {
     return undefined
   }
 }
 
-/**
- * Get the last shell command captured for a PTY session.
- */
-export async function getPtyLastCommand(ptyId: string): Promise<string | undefined> {
+/** Get last command with a specific service */
+export async function getPtyLastCommandWithService(pty: PtyService, ptyId: string): Promise<string | undefined> {
   try {
-    return await runEffect(
-      Effect.gen(function* () {
-        const pty = yield* Pty
-        return yield* pty.getLastCommand(PtyId.make(ptyId))
-      })
-    )
+    const result = await pty.getLastCommand(asPtyId(ptyId))
+    if (result instanceof Error) return undefined
+    return result
   } catch {
     return undefined
   }
 }
 
-/**
- * Destroy a PTY session.
- * This is fire-and-forget - deferred to next macrotask to avoid blocking animations.
- * Using setTimeout(0) instead of queueMicrotask because microtasks run before
- * the browser yields to rendering, so they can still cause frame drops.
- */
-export function destroyPty(ptyId: string): void {
-  // Defer to macrotask (setTimeout) for truly non-blocking behavior
-  // Microtasks still block the current frame, macrotasks run after rendering
+/** Destroy PTY with a specific service */
+export function destroyPtyWithService(pty: PtyService, ptyId: string): void {
   deferMacrotask(() => {
-    runEffectIgnore(
-      Effect.gen(function* () {
-        const pty = yield* Pty
-        yield* pty.destroy(PtyId.make(ptyId))
-      })
-    )
+    void pty.destroy(asPtyId(ptyId))
   })
 }
 
-/**
- * Destroy all PTY sessions.
- * This is fire-and-forget - deferred to next macrotask to avoid blocking animations.
- */
-export function destroyAllPtys(): void {
+/** Destroy all PTYs with a specific service */
+export function destroyAllPtysWithService(pty: PtyService): void {
   deferMacrotask(() => {
-    runEffectIgnore(
-      Effect.gen(function* () {
-        const pty = yield* Pty
-        yield* pty.destroyAll()
-      })
-    )
+    void pty.destroyAll()
   })
 }
 
-/**
- * Get terminal state for a PTY session.
- */
-export async function getTerminalState(
+/** Get terminal state with a specific service */
+export async function getTerminalStateWithService(
+  pty: PtyService,
   ptyId: string,
   options?: { force?: boolean }
 ): Promise<TerminalState | null> {
@@ -185,41 +292,32 @@ export async function getTerminalState(
   }
 
   try {
-    return await runEffect(
-      Effect.gen(function* () {
-        const pty = yield* Pty
-        return yield* pty.getTerminalState(PtyId.make(ptyId))
-      })
-    )
+    const result = await pty.getTerminalState(asPtyId(ptyId))
+    if (result instanceof Error) return null
+    return result
   } catch {
     return null
   }
 }
 
-/**
- * Register an exit callback for a PTY session.
- * Returns an unsubscribe function.
- */
-export async function onPtyExit(
+/** Register exit callback with a specific service */
+export async function onPtyExitWithService(
+  pty: PtyService,
   ptyId: string,
   callback: (exitCode: number) => void
 ): Promise<() => void> {
   try {
-    return await runEffect(
-      Effect.gen(function* () {
-        const pty = yield* Pty
-        return yield* pty.onExit(PtyId.make(ptyId), callback)
-      })
-    )
+    const result = await pty.onExit(asPtyId(ptyId), callback)
+    if (result instanceof Error) return () => {}
+    return result
   } catch {
     return () => {}
   }
 }
 
-/**
- * Get scroll state for a PTY session.
- */
-export async function getScrollState(
+/** Get scroll state with a specific service */
+export async function getScrollStateWithService(
+  pty: PtyService,
   ptyId: string,
   options?: { force?: boolean }
 ): Promise<TerminalScrollState | null> {
@@ -232,21 +330,17 @@ export async function getScrollState(
   }
 
   try {
-    return await runEffect(
-      Effect.gen(function* () {
-        const pty = yield* Pty
-        return yield* pty.getScrollState(PtyId.make(ptyId))
-      })
-    )
+    const result = await pty.getScrollState(asPtyId(ptyId))
+    if (result instanceof Error) return null
+    return result as TerminalScrollState
   } catch {
     return null
   }
 }
 
-/**
- * Capture text from a PTY session.
- */
-export async function capturePty(
+/** Capture PTY with a specific service */
+export async function capturePtyWithService(
+  _pty: PtyService,
   ptyId: string,
   options?: { lines?: number; format?: 'text' | 'ansi'; raw?: boolean }
 ): Promise<string | null> {
@@ -261,177 +355,97 @@ export async function capturePty(
   }
 }
 
-/**
- * Set scroll offset for a PTY session.
- */
-export async function setScrollOffset(ptyId: string, offset: number): Promise<void> {
-  await runEffectIgnore(
-    Effect.gen(function* () {
-      const pty = yield* Pty
-      yield* pty.setScrollOffset(PtyId.make(ptyId), offset)
-    })
-  )
+/** Set scroll offset with a specific service */
+export async function setScrollOffsetWithService(pty: PtyService, ptyId: string, offset: number): Promise<void> {
+  const result = await pty.setScrollOffset(asPtyId(ptyId), offset)
+  if (result instanceof Error) {
+    // Fire-and-forget
+  }
 }
 
-/**
- * Scroll terminal to bottom (live content).
- */
-export async function scrollToBottom(ptyId: string): Promise<void> {
-  await setScrollOffset(ptyId, 0)
+/** Scroll to bottom with a specific service */
+export async function scrollToBottomWithService(pty: PtyService, ptyId: string): Promise<void> {
+  await setScrollOffsetWithService(pty, ptyId, 0)
 }
 
-/**
- * Subscribe to unified terminal + scroll updates.
- * More efficient than separate subscriptions - eliminates race conditions
- * and reduces render cycles by delivering both state changes in one callback.
- * Returns an unsubscribe function.
- */
-export async function subscribeUnifiedToPty(
+/** Subscribe to unified updates with a specific service */
+export async function subscribeUnifiedToPtyWithService(
+  pty: PtyService,
   ptyId: string,
   callback: (update: UnifiedTerminalUpdate) => void
 ): Promise<() => void> {
   try {
-    return await runEffect(
-      Effect.gen(function* () {
-        const pty = yield* Pty
-        return yield* pty.subscribeUnified(PtyId.make(ptyId), callback)
-      })
-    )
+    const result = await pty.subscribeUnified(asPtyId(ptyId), callback)
+    if (result instanceof Error) return () => {}
+    return result
   } catch {
     return () => {}
   }
 }
 
-/**
- * Get the terminal emulator instance for direct access.
- * Primarily used for scrollback rendering in TerminalView.
- * Should be called once and cached for sync access in render loops.
- */
-export async function getEmulator(
-  ptyId: string
-): Promise<ITerminalEmulator | null> {
+/** Get emulator with a specific service */
+export async function getEmulatorWithService(pty: PtyService, ptyId: string): Promise<ITerminalEmulator | null> {
   try {
-    return await runEffect(
-      Effect.gen(function* () {
-        const pty = yield* Pty
-        return yield* pty.getEmulator(PtyId.make(ptyId))
-      })
-    )
+    const result = await pty.getEmulator(asPtyId(ptyId))
+    if (result instanceof Error) return null
+    return result
   } catch {
     return null
   }
 }
 
-/**
- * Enable or disable terminal update notifications (visibility gating).
- */
-export async function setPtyUpdateEnabled(
-  ptyId: string,
-  enabled: boolean
-): Promise<void> {
+/** Set update enabled with a specific service */
+export async function setPtyUpdateEnabledWithService(pty: PtyService, ptyId: string, enabled: boolean): Promise<void> {
   try {
-    await runEffect(
-      Effect.gen(function* () {
-        const pty = yield* Pty
-        yield* pty.setUpdateEnabled(PtyId.make(ptyId), enabled)
-      })
-    )
+    const result = await pty.setUpdateEnabled(asPtyId(ptyId), enabled)
+    if (result instanceof Error) {
+      // Ignore
+    }
   } catch {
-    // Ignore errors - best-effort toggle
+    // Ignore
   }
 }
 
-/**
- * Apply host terminal colors to the backing PTY service (best-effort).
- */
-export async function applyHostColors(colors: TerminalColors): Promise<void> {
+/** Apply host colors with a specific service */
+export async function applyHostColorsWithService(pty: PtyService, colors: TerminalColors): Promise<void> {
   if (isShimClient()) {
     try {
       await ShimClient.setHostColors(colors)
     } catch {
-      // Ignore errors - best-effort refresh
+      // Ignore
     }
     return
   }
 
-  await runEffectIgnore(
-    Effect.gen(function* () {
-      const pty = yield* Pty
-      yield* pty.setHostColors(colors)
-    })
-  )
+  await pty.setHostColors(colors)
 }
 
-/**
- * PTY lifecycle event type
- */
-export type PtyLifecycleEvent = {
-  type: 'created' | 'destroyed'
-  ptyId: string
-}
-
-/**
- * Subscribe to PTY lifecycle events (created/destroyed).
- * Returns an unsubscribe function.
- */
-export async function subscribeToPtyLifecycle(
+/** Subscribe to lifecycle with a specific service */
+export function subscribeToPtyLifecycleWithService(
+  pty: PtyService,
   callback: (event: PtyLifecycleEvent) => void
-): Promise<() => void> {
-  try {
-    return await runEffect(
-      Effect.gen(function* () {
-        const pty = yield* Pty
-        return yield* pty.subscribeToLifecycle((event) => {
-          callback({ type: event.type, ptyId: event.ptyId })
-        })
-      })
-    )
-  } catch {
-    return () => {}
-  }
+): () => void {
+  return pty.subscribeToLifecycle((event: { type: 'created' | 'destroyed'; ptyId: string }) => {
+    callback({ type: event.type, ptyId: event.ptyId })
+  })
 }
 
-/**
- * Title change event for subscriptions.
- */
-export interface PtyTitleChangeEvent {
-  ptyId: string
-  title: string
-}
-
-/**
- * Subscribe to title changes across ALL PTYs.
- * Useful for aggregate view to update PTY list when titles change.
- * Returns an unsubscribe function.
- */
-export async function subscribeToAllTitleChanges(
+/** Subscribe to title changes with a specific service */
+export function subscribeToAllTitleChangesWithService(
+  pty: PtyService,
   callback: (event: PtyTitleChangeEvent) => void
-): Promise<() => void> {
-  try {
-    return await runEffect(
-      Effect.gen(function* () {
-        const pty = yield* Pty
-        return yield* pty.subscribeToAllTitleChanges((event) => {
-          callback({ ptyId: event.ptyId, title: event.title })
-        })
-      })
-    )
-  } catch {
-    return () => {}
-  }
+): () => void {
+  return pty.subscribeToAllTitleChanges((event: { ptyId: string; title: string }) => {
+    callback({ ptyId: event.ptyId, title: event.title })
+  })
 }
 
-/**
- * Get the current title for a PTY.
- */
-export async function getPtyTitle(ptyId: string): Promise<string> {
+/** Get PTY title with a specific service */
+export async function getPtyTitleWithService(pty: PtyService, ptyId: string): Promise<string> {
   try {
-    return await runEffect(
-      Effect.gen(function* () {
-        const pty = yield* Pty
-        return yield* pty.getTitle(PtyId.make(ptyId))
-      })
-    )
+    const result = await pty.getTitle(asPtyId(ptyId))
+    if (result instanceof Error) return ""
+    return result
   } catch {
     return ""
   }

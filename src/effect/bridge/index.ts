@@ -1,13 +1,23 @@
 /**
- * Bridge module for gradual migration to Effect services.
- * Provides simple async functions backed by Effect services.
- *
- * Use these functions in existing code to migrate to Effect
- * without changing the entire callsite at once.
+ * Bridge module for errore-based services (errore version).
+ * Provides simple async functions backed by errore services.
+ * 
+ * Unlike the Effect version, these functions directly accept service instances
+ * rather than using Effect runtime for dependency injection.
+ * 
+ * Use these functions to interact with services from UI components.
  */
 
+// Re-export types that are commonly needed
+export type { AppServices, TestAppServices, ServiceInitError } from "../services"
+
+// Re-export KeyboardEvent from core
+export type { KeyboardEvent } from "../../core/keyboard-event"
+
+// Clipboard bridge
 export { copyToClipboard, readFromClipboard } from "./clipboard-bridge"
 
+// PTY bridge
 export {
   createPtySession,
   writeToPty,
@@ -35,6 +45,7 @@ export {
   type PtyTitleChangeEvent,
 } from "./pty-bridge"
 
+// Session bridge
 export {
   listSessions,
   createSession,
@@ -57,6 +68,7 @@ export {
   loadSessionData,
 } from "./session-bridge"
 
+// Template bridge
 export {
   listTemplates,
   loadTemplate,
@@ -65,9 +77,13 @@ export {
   buildLayoutFromTemplate,
 } from "./template-bridge"
 
-export { listAllPtysWithMetadata, getPtyMetadata, type ListAllPtysOptions } from "./aggregate-bridge"
+// Aggregate bridge
+export { listAllPtysWithMetadata, getPtyMetadata, type ListAllPtysOptions, type PtyMetadata } from "./aggregate-bridge"
 
+// Color bridge
 export { getHostBackgroundColor, getHostForegroundColor } from "./color-bridge"
+
+// Shim bridge
 export {
   registerPtyPane,
   getSessionPtyMapping,
@@ -77,9 +93,9 @@ export {
   waitForShimClient,
 } from "./shim-bridge"
 
+// Keyboard router bridge
 export {
   type KeyEvent,
-  type KeyboardEvent,
   type KeyHandler,
   type OverlayType,
   registerKeyboardHandler,
@@ -89,6 +105,7 @@ export {
   hasKeyboardHandler,
 } from "./keyboard-router-bridge"
 
+// App coordinator bridge
 export {
   clearPtyTracking,
   markPtyCreated,

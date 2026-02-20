@@ -1,192 +1,332 @@
 /**
- * Domain models using Schema.Class for validation and serialization.
+ * Domain models using Zod for validation and serialization.
+ * Replaces Effect Schema.Class with Zod schemas.
  */
-import { Schema } from "effect"
-import { PaneId, PtyId, WorkspaceId, SessionId, LayoutMode, Cols, Rows } from "./types"
-
+import { z } from "zod"
+import {
+  PaneIdSchema,
+  PtyIdSchema,
+  WorkspaceIdSchema,
+  SessionIdSchema,
+  ColsSchema,
+  RowsSchema,
+  LayoutModeSchema,
+  type PaneId,
+  type PtyId,
+  type WorkspaceId,
+  type SessionId,
+  type Cols,
+  type Rows,
+  type LayoutMode,
+} from "./types"
 
 /** Rectangle dimensions for pane positioning */
-export class Rectangle extends Schema.Class<Rectangle>("Rectangle")({
-  x: Schema.Int,
-  y: Schema.Int,
-  width: Schema.Int.pipe(Schema.greaterThan(0)),
-  height: Schema.Int.pipe(Schema.greaterThan(0)),
-}) {
+export const RectangleSchema = z.object({
+  x: z.number().int(),
+  y: z.number().int(),
+  width: z.number().int().positive(),
+  height: z.number().int().positive(),
+})
+
+export type Rectangle = z.infer<typeof RectangleSchema> & {
   /** Check if a point is within this rectangle */
+  contains(px: number, py: number): boolean
+}
+
+/** Create a Rectangle with the contains method */
+export const createRectangle = (data: Omit<Rectangle, "contains">): Rectangle => ({
+  ...data,
   contains(px: number, py: number): boolean {
     return px >= this.x && px < this.x + this.width &&
            py >= this.y && py < this.y + this.height
-  }
-}
+  },
+})
 
 /** Pane data with optional PTY and layout info */
-export class PaneData extends Schema.Class<PaneData>("PaneData")({
-  id: PaneId,
-  ptyId: Schema.optional(PtyId),
-  title: Schema.optional(Schema.String),
-  rectangle: Schema.optional(Rectangle),
-}) {}
+export const PaneDataSchema = z.object({
+  id: PaneIdSchema,
+  ptyId: PtyIdSchema.optional(),
+  title: z.string().optional(),
+  rectangle: RectangleSchema.optional(),
+})
 
+export type PaneData = z.infer<typeof PaneDataSchema>
 
 /** PTY session information */
-export class PtySession extends Schema.Class<PtySession>("PtySession")({
-  id: PtyId,
-  pid: Schema.Int,
-  cols: Cols,
-  rows: Rows,
-  cwd: Schema.String,
-  shell: Schema.String,
-}) {}
+export const PtySessionSchema = z.object({
+  id: PtyIdSchema,
+  pid: z.number().int(),
+  cols: ColsSchema,
+  rows: RowsSchema,
+  cwd: z.string(),
+  shell: z.string(),
+})
 
+export type PtySession = z.infer<typeof PtySessionSchema>
 
 /** Serialized pane data for persistence */
-export class SerializedPaneData extends Schema.Class<SerializedPaneData>("SerializedPaneData")({
-  id: Schema.String,
-  title: Schema.optional(Schema.String),
-  cwd: Schema.String,
-}) {}
+export const SerializedPaneDataSchema = z.object({
+  id: z.string(),
+  title: z.string().optional(),
+  cwd: z.string(),
+})
 
-/** Serializable layout node types */
-export type SerializedLayoutNode = SerializedPaneData | SerializedSplitNode
-
-/** Recursive layout node schema */
-export const SerializedLayoutNodeSchema: Schema.Schema<SerializedLayoutNode> = Schema.suspend(
-  () => Schema.Union(SerializedPaneData, SerializedSplitNode)
-)
+export type SerializedPaneData = z.infer<typeof SerializedPaneDataSchema>
 
 /** Serialized split node for persistence */
-export class SerializedSplitNode extends Schema.Class<SerializedSplitNode>("SerializedSplitNode")({
-  type: Schema.Literal("split"),
-  id: Schema.String,
-  direction: Schema.Literal("horizontal", "vertical"),
-  ratio: Schema.Number,
-  first: SerializedLayoutNodeSchema,
-  second: SerializedLayoutNodeSchema,
-}) {}
+export const SerializedSplitNodeSchema: z.ZodType<SerializedSplitNode> = z.object({
+  type: z.literal("split"),
+  id: z.string(),
+  direction: z.enum(["horizontal", "vertical"]),
+  ratio: z.number(),
+  first: z.lazy(() => SerializedLayoutNodeSchema),
+  second: z.lazy(() => SerializedLayoutNodeSchema),
+})
 
-/** Serialized workspace for persistence - matches legacy core/types.ts */
-export class SerializedWorkspace extends Schema.Class<SerializedWorkspace>("SerializedWorkspace")({
-  id: WorkspaceId,
-  label: Schema.optional(Schema.String),
-  mainPane: Schema.NullOr(SerializedLayoutNodeSchema),
-  stackPanes: Schema.Array(SerializedLayoutNodeSchema),
-  focusedPaneId: Schema.NullOr(Schema.String),
-  activeStackIndex: Schema.Int,
-  lastFocusedPaneIds: Schema.optionalWith(Schema.Array(Schema.NullOr(Schema.String)), { default: () => [] }),
-  layoutMode: LayoutMode,
-  zoomed: Schema.Boolean,
-}) {}
+export type SerializedSplitNode = {
+  type: "split"
+  id: string
+  direction: "horizontal" | "vertical"
+  ratio: number
+  first: SerializedLayoutNode
+  second: SerializedLayoutNode
+}
 
-/** Session metadata for listing - matches legacy core/types.ts */
-export class SessionMetadata extends Schema.Class<SessionMetadata>("SessionMetadata")({
-  id: SessionId,
-  name: Schema.String,
-  createdAt: Schema.Number,
-  lastSwitchedAt: Schema.Number,
-  autoNamed: Schema.Boolean,
-}) {}
+/** Serializable layout node types */
+export const SerializedLayoutNodeSchema: z.ZodType<SerializedLayoutNode> = z.union([
+  SerializedPaneDataSchema,
+  SerializedSplitNodeSchema,
+])
 
-/** Full serialized session for persistence - matches legacy core/types.ts */
-export class SerializedSession extends Schema.Class<SerializedSession>("SerializedSession")({
-  metadata: SessionMetadata,
-  workspaces: Schema.Array(SerializedWorkspace),
-  activeWorkspaceId: WorkspaceId,
-}) {}
+export type SerializedLayoutNode = SerializedPaneData | SerializedSplitNode
+
+/** Serialized workspace for persistence */
+export const SerializedWorkspaceSchema = z.object({
+  id: WorkspaceIdSchema,
+  label: z.string().optional(),
+  mainPane: SerializedLayoutNodeSchema.nullable(),
+  stackPanes: z.array(SerializedLayoutNodeSchema),
+  focusedPaneId: z.string().nullable(),
+  activeStackIndex: z.number().int(),
+  lastFocusedPaneIds: z.array(z.string().nullable()).default([]),
+  layoutMode: LayoutModeSchema,
+  zoomed: z.boolean(),
+})
+
+export type SerializedWorkspace = z.infer<typeof SerializedWorkspaceSchema>
+
+/** Session metadata for listing */
+export const SessionMetadataSchema = z.object({
+  id: SessionIdSchema,
+  name: z.string(),
+  createdAt: z.number(),
+  lastSwitchedAt: z.number(),
+  autoNamed: z.boolean(),
+})
+
+export type SessionMetadata = z.infer<typeof SessionMetadataSchema>
+
+/** Full serialized session for persistence */
+export const SerializedSessionSchema = z.object({
+  metadata: SessionMetadataSchema,
+  workspaces: z.array(SerializedWorkspaceSchema),
+  activeWorkspaceId: WorkspaceIdSchema,
+})
+
+export type SerializedSession = z.infer<typeof SerializedSessionSchema>
 
 /** Session index for tracking all sessions */
-export class SessionIndex extends Schema.Class<SessionIndex>("SessionIndex")({
-  sessions: Schema.Array(SessionMetadata),
-  activeSessionId: Schema.NullOr(SessionId),
-}) {
-  /** Create an empty session index */
-  static empty(): SessionIndex {
-    return SessionIndex.make({
-      sessions: [],
-      activeSessionId: null,
-    })
+export const SessionIndexSchema = z.object({
+  sessions: z.array(SessionMetadataSchema),
+  activeSessionId: SessionIdSchema.nullable(),
+})
+
+export type SessionIndex = z.infer<typeof SessionIndexSchema>
+
+/** Create an empty session index */
+export const createEmptySessionIndex = (): SessionIndex => ({
+  sessions: [],
+  activeSessionId: null,
+})
+
+/** Template pane definition for layout templates */
+export const TemplatePaneDataSchema = z.object({
+  role: z.enum(["main", "stack"]),
+  cwd: z.string().optional(),
+  command: z.string().optional(),
+})
+
+export type TemplatePaneData = z.infer<typeof TemplatePaneDataSchema>
+
+/** Template layout pane definition for split layouts */
+export const TemplateLayoutPaneSchema = z.object({
+  type: z.literal("pane"),
+  cwd: z.string().optional(),
+  command: z.string().optional(),
+})
+
+export type TemplateLayoutPane = z.infer<typeof TemplateLayoutPaneSchema>
+
+/** Template layout split definition */
+export const TemplateLayoutSplitSchema: z.ZodType<TemplateLayoutSplit> = z.object({
+  type: z.literal("split"),
+  direction: z.enum(["horizontal", "vertical"]),
+  ratio: z.number(),
+  first: z.lazy(() => TemplateLayoutNodeSchema),
+  second: z.lazy(() => TemplateLayoutNodeSchema),
+})
+
+export type TemplateLayoutSplit = {
+  type: "split"
+  direction: "horizontal" | "vertical"
+  ratio: number
+  first: TemplateLayoutNode
+  second: TemplateLayoutNode
+}
+
+/** Template layout node */
+export const TemplateLayoutNodeSchema: z.ZodType<TemplateLayoutNode> = z.union([
+  TemplateLayoutPaneSchema,
+  TemplateLayoutSplitSchema,
+])
+
+export type TemplateLayoutNode = TemplateLayoutPane | TemplateLayoutSplit
+
+/** Template workspace layout definition */
+export const TemplateWorkspaceLayoutSchema = z.object({
+  main: TemplateLayoutNodeSchema.nullable(),
+  stack: z.array(TemplateLayoutNodeSchema),
+})
+
+export type TemplateWorkspaceLayout = z.infer<typeof TemplateWorkspaceLayoutSchema>
+
+/** Template workspace definition */
+export const TemplateWorkspaceSchema = z.object({
+  id: WorkspaceIdSchema,
+  layoutMode: LayoutModeSchema,
+  panes: z.array(TemplatePaneDataSchema).optional(),
+  layout: TemplateWorkspaceLayoutSchema.optional(),
+})
+
+export type TemplateWorkspace = z.infer<typeof TemplateWorkspaceSchema>
+
+/** Template defaults for workspace/pane counts */
+export const TemplateDefaultsSchema = z.object({
+  workspaceCount: z.number().int().min(1).max(9),
+  paneCount: z.number().int().positive(),
+  layoutMode: LayoutModeSchema,
+  cwd: z.string().optional(),
+})
+
+export type TemplateDefaults = z.infer<typeof TemplateDefaultsSchema>
+
+/** Full template session definition */
+export const TemplateSessionSchema = z.object({
+  version: z.literal(1),
+  id: z.string(),
+  name: z.string(),
+  createdAt: z.number(),
+  updatedAt: z.number(),
+  defaults: TemplateDefaultsSchema,
+  workspaces: z.array(TemplateWorkspaceSchema),
+})
+
+export type TemplateSession = z.infer<typeof TemplateSessionSchema>
+
+/** Factory function for TemplateLayoutSplit */
+export function createTemplateLayoutSplit(
+  data: Omit<TemplateLayoutSplit, "type">
+): TemplateLayoutSplit {
+  return {
+    type: "split",
+    ...data,
   }
 }
 
+/** Factory function for TemplateLayoutPane */
+export function createTemplateLayoutPane(
+  data: Omit<TemplateLayoutPane, "type">
+): TemplateLayoutPane {
+  return {
+    type: "pane",
+    ...data,
+  }
+}
 
-/** Template pane definition for layout templates */
-export class TemplatePaneData extends Schema.Class<TemplatePaneData>("TemplatePaneData")({
-  role: Schema.Literal("main", "stack"),
-  cwd: Schema.optional(Schema.String),
-  command: Schema.optional(Schema.String),
-}) {}
+/** Factory function for TemplateWorkspace */
+export function createTemplateWorkspace(
+  data: Omit<TemplateWorkspace, "id"> & { id?: WorkspaceId }
+): TemplateWorkspace {
+  return {
+    id: data.id ?? (1 as WorkspaceId),
+    layoutMode: data.layoutMode,
+    panes: data.panes,
+    layout: data.layout,
+  }
+}
 
-/** Template layout pane definition for split layouts */
-export class TemplateLayoutPane extends Schema.Class<TemplateLayoutPane>("TemplateLayoutPane")({
-  type: Schema.Literal("pane"),
-  cwd: Schema.optional(Schema.String),
-  command: Schema.optional(Schema.String),
-}) {}
+/** Factory function for TemplateDefaults */
+export function createTemplateDefaults(data: Partial<TemplateDefaults>): TemplateDefaults {
+  return {
+    workspaceCount: data.workspaceCount ?? 1,
+    paneCount: data.paneCount ?? 1,
+    layoutMode: data.layoutMode ?? "vertical",
+    cwd: data.cwd,
+  }
+}
 
-/** Template layout node */
-export type TemplateLayoutNode = TemplateLayoutPane | TemplateLayoutSplit
+/** Factory function for TemplateSession */
+export function createTemplateSession(
+  data: Omit<TemplateSession, "version"> & { version?: 1 }
+): TemplateSession {
+  return {
+    version: data.version ?? 1,
+    id: data.id,
+    name: data.name,
+    createdAt: data.createdAt,
+    updatedAt: data.updatedAt,
+    defaults: data.defaults,
+    workspaces: data.workspaces,
+  }
+}
 
-/** Recursive template layout node schema */
-export const TemplateLayoutNodeSchema: Schema.Schema<TemplateLayoutNode> = Schema.suspend(
-  () => Schema.Union(TemplateLayoutPane, TemplateLayoutSplit)
-)
+/** Factory function for TemplatePaneData */
+export function createTemplatePaneData(data: Partial<TemplatePaneData>): TemplatePaneData {
+  return {
+    role: data.role ?? "stack",
+    cwd: data.cwd,
+    command: data.command,
+  }
+}
 
-/** Template layout split definition */
-export class TemplateLayoutSplit extends Schema.Class<TemplateLayoutSplit>("TemplateLayoutSplit")({
-  type: Schema.Literal("split"),
-  direction: Schema.Literal("horizontal", "vertical"),
-  ratio: Schema.Number,
-  first: TemplateLayoutNodeSchema,
-  second: TemplateLayoutNodeSchema,
-}) {}
-
-/** Template workspace layout definition */
-export class TemplateWorkspaceLayout extends Schema.Class<TemplateWorkspaceLayout>("TemplateWorkspaceLayout")({
-  main: Schema.NullOr(TemplateLayoutNodeSchema),
-  stack: Schema.Array(TemplateLayoutNodeSchema),
-}) {}
-
-/** Template workspace definition */
-export class TemplateWorkspace extends Schema.Class<TemplateWorkspace>("TemplateWorkspace")({
-  id: WorkspaceId,
-  layoutMode: LayoutMode,
-  panes: Schema.optional(Schema.Array(TemplatePaneData)),
-  layout: Schema.optional(TemplateWorkspaceLayout),
-}) {}
-
-/** Template defaults for workspace/pane counts */
-export class TemplateDefaults extends Schema.Class<TemplateDefaults>("TemplateDefaults")({
-  workspaceCount: Schema.Int.pipe(Schema.between(1, 9)),
-  paneCount: Schema.Int.pipe(Schema.greaterThan(0)),
-  layoutMode: LayoutMode,
-  cwd: Schema.optional(Schema.String),
-}) {}
-
-/** Full template session definition */
-export class TemplateSession extends Schema.Class<TemplateSession>("TemplateSession")({
-  version: Schema.Literal(1),
-  id: Schema.String,
-  name: Schema.String,
-  createdAt: Schema.Number,
-  updatedAt: Schema.Number,
-  defaults: TemplateDefaults,
-  workspaces: Schema.Array(TemplateWorkspace),
-}) {}
-
+/** Factory function for TemplateWorkspaceLayout */
+export function createTemplateWorkspaceLayout(
+  data: Partial<TemplateWorkspaceLayout>
+): TemplateWorkspaceLayout {
+  return {
+    main: data.main ?? null,
+    stack: data.stack ?? [],
+  }
+}
 
 /** Terminal cell data */
-export class TerminalCell extends Schema.Class<TerminalCell>("TerminalCell")({
-  char: Schema.String,
-  fg: Schema.Int,
-  bg: Schema.Int,
-  bold: Schema.Boolean,
-  italic: Schema.Boolean,
-  underline: Schema.Boolean,
-  strikethrough: Schema.Boolean,
-}) {}
+export const TerminalCellSchema = z.object({
+  char: z.string(),
+  fg: z.number().int(),
+  bg: z.number().int(),
+  bold: z.boolean(),
+  italic: z.boolean(),
+  underline: z.boolean(),
+  strikethrough: z.boolean(),
+})
+
+export type TerminalCell = z.infer<typeof TerminalCellSchema>
 
 /** Terminal cursor position */
-export class CursorPosition extends Schema.Class<CursorPosition>("CursorPosition")({
-  x: Schema.Int,
-  y: Schema.Int,
-  visible: Schema.Boolean,
-}) {}
+export const CursorPositionSchema = z.object({
+  x: z.number().int(),
+  y: z.number().int(),
+  visible: z.boolean(),
+})
+
+export type CursorPosition = z.infer<typeof CursorPositionSchema>

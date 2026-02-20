@@ -2,7 +2,8 @@ import type net from 'net';
 import { dirname } from 'path';
 
 import { Effect } from 'effect';
-import { PtyId } from '../effect/types';
+import { asPtyId } from '../effect/types';
+import { ResourceStack } from '../effect/resources.js';
 import type { UnifiedTerminalUpdate, TerminalScrollState, TerminalState, DirtyTerminalUpdate } from '../core/types';
 import { packDirtyUpdate } from '../terminal/cell-serialization';
 import type { ITerminalEmulator } from '../terminal/emulator-interface';
@@ -24,19 +25,13 @@ export type ShimServerOptions = {
 };
 
 const defaultWithPty: WithPty = async (fn) => {
-  const [{ runEffect }, { Pty }] = await Promise.all([
-    import('../effect/runtime'),
-    import('../effect/services'),
-  ]);
-  const effect = Effect.gen(function* () {
-    const pty = (yield* Pty) as any;
-    const result = fn(pty);
-    if (Effect.isEffect(result)) {
-      return yield* result;
-    }
-    return result;
-  }) as Effect.Effect<unknown, unknown, any>;
-  return runEffect(effect) as Promise<any>;
+  const { getPtyService, hasServices } = await import('../effect/bridge/services-instance');
+  if (!hasServices()) {
+    throw new Error('Services not initialized');
+  }
+  const pty = getPtyService();
+  const result = fn(pty);
+  return result as any;
 };
 
 export function createServerHandlers(state: ShimServerState, options?: ShimServerOptions) {
@@ -80,11 +75,11 @@ export function createServerHandlers(state: ShimServerState, options?: ShimServe
   async function subscribeToPty(ptyId: string): Promise<void> {
     if (state.ptySubscriptions.has(ptyId)) return;
 
-    const emulator = await withPty((pty) => pty.getEmulator(PtyId.make(ptyId))) as ITerminalEmulator;
+    const emulator = await withPty((pty) => pty.getEmulator(asPtyId(ptyId))) as ITerminalEmulator;
     state.ptyEmulators.set(ptyId, emulator);
 
     const unifiedUnsub = await withPty<() => void>((pty) =>
-      pty.subscribeUnified(PtyId.make(ptyId), (update: UnifiedTerminalUpdate) => {
+      pty.subscribeUnified(asPtyId(ptyId), (update: UnifiedTerminalUpdate) => {
         const packed = packDirtyUpdate(update.terminalUpdate);
         const payloads: ArrayBuffer[] = [
           packed.dirtyRowIndices.buffer.slice(0) as ArrayBuffer,
@@ -123,7 +118,7 @@ export function createServerHandlers(state: ShimServerState, options?: ShimServe
     );
 
     const exitUnsub = await withPty<() => void>((pty) =>
-      pty.onExit(PtyId.make(ptyId), (exitCode: number) => {
+      pty.onExit(asPtyId(ptyId), (exitCode: number) => {
         removeMappingForPty(ptyId);
         sendEvent({ type: 'ptyExit', ptyId, exitCode });
       })
@@ -135,14 +130,18 @@ export function createServerHandlers(state: ShimServerState, options?: ShimServe
   async function unsubscribeFromPty(ptyId: string): Promise<void> {
     const subs = state.ptySubscriptions.get(ptyId);
     if (!subs) return;
-    subs.unifiedUnsub();
-    subs.exitUnsub();
-    state.ptySubscriptions.delete(ptyId);
-    state.ptyEmulators.delete(ptyId);
-    state.kittyImages.delete(ptyId);
-    state.kittyTransmitCache.delete(ptyId);
-    state.kittyTransmitPending.delete(ptyId);
-    state.kittyTransmitInvalidated.delete(ptyId);
+
+    await using resources = new ResourceStack();
+
+    resources.registerSubscription(subs.unifiedUnsub);
+    resources.registerSubscription(subs.exitUnsub);
+
+    resources.deferSafe(() => { state.ptySubscriptions.delete(ptyId); });
+    resources.deferSafe(() => { state.ptyEmulators.delete(ptyId); });
+    resources.deferSafe(() => { state.kittyImages.delete(ptyId); });
+    resources.deferSafe(() => { state.kittyTransmitCache.delete(ptyId); });
+    resources.deferSafe(() => { state.kittyTransmitPending.delete(ptyId); });
+    resources.deferSafe(() => { state.kittyTransmitInvalidated.delete(ptyId); });
   }
 
   async function subscribeAllPtys(): Promise<string[]> {
@@ -175,8 +174,8 @@ export function createServerHandlers(state: ShimServerState, options?: ShimServe
     try {
       const result = await withPty((pty) =>
         Effect.gen(function* () {
-          const s = yield* pty.getTerminalState(PtyId.make(ptyId));
-          const scrollState = yield* pty.getScrollState(PtyId.make(ptyId));
+          const s = yield* pty.getTerminalState(asPtyId(ptyId));
+          const scrollState = yield* pty.getScrollState(asPtyId(ptyId));
           return { state: s, scrollState };
         })
       ) as { state: TerminalState; scrollState: TerminalScrollState };
@@ -226,7 +225,7 @@ export function createServerHandlers(state: ShimServerState, options?: ShimServe
       }, payloads);
 
       const emulator = state.ptyEmulators.get(ptyId) ??
-        await withPty((pty) => pty.getEmulator(PtyId.make(ptyId))) as ITerminalEmulator;
+        await withPty((pty) => pty.getEmulator(asPtyId(ptyId))) as ITerminalEmulator;
       if (emulator) {
         state.ptyEmulators.set(ptyId, emulator);
         const cache = state.kittyTransmitCache.get(ptyId);
@@ -249,16 +248,21 @@ export function createServerHandlers(state: ShimServerState, options?: ShimServe
   }
 
   async function attachClient(socket: net.Socket, clientId: string): Promise<void> {
+    await using resources = new ResourceStack();
+
     const previousClient = state.activeClient;
     const previousClientId = previousClient ? state.clientIds.get(previousClient) ?? null : null;
     if (previousClient && !previousClient.destroyed) {
       sendFrame(previousClient, { type: 'detached' });
       previousClient.end();
-      setTimeout(() => {
-        if (previousClient && !previousClient.destroyed) {
-          previousClient.destroy();
-        }
-      }, 250);
+      const prevClientRef = previousClient;
+      resources.defer(() => {
+        setTimeout(() => {
+          if (prevClientRef && !prevClientRef.destroyed) {
+            prevClientRef.destroy();
+          }
+        }, 250);
+      });
     }
 
     if (previousClientId) {
@@ -287,23 +291,26 @@ export function createServerHandlers(state: ShimServerState, options?: ShimServe
   async function detachClient(socket: net.Socket): Promise<void> {
     if (state.activeClient !== socket) return;
 
+    await using resources = new ResourceStack();
+
     state.activeClient = null;
     state.activeClientId = null;
     setKittyTransmitForwarder(null);
     setKittyUpdateForwarder(null);
     setNotificationForwarder(null);
+
     for (const ptyId of state.ptySubscriptions.keys()) {
-      await unsubscribeFromPty(ptyId);
+      resources.defer(() => unsubscribeFromPty(ptyId).catch(() => {}));
     }
-    state.ptySubscriptions.clear();
+    resources.deferSafe(() => state.ptySubscriptions.clear());
 
     if (state.lifecycleUnsub) {
-      state.lifecycleUnsub();
-      state.lifecycleUnsub = null;
+      resources.registerSubscription(state.lifecycleUnsub);
+      resources.deferSafe(() => { state.lifecycleUnsub = null; });
     }
     if (state.titleUnsub) {
-      state.titleUnsub();
-      state.titleUnsub = null;
+      resources.registerSubscription(state.titleUnsub);
+      resources.deferSafe(() => { state.titleUnsub = null; });
     }
   }
 

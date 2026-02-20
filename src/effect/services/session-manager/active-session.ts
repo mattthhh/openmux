@@ -1,93 +1,112 @@
 /**
  * Active session operations for SessionManager
  * Handles getting/setting active session and switching between sessions
+ * Migrated from Effect to errore - uses promises and direct dependency passing
  */
 
-import { Effect, Ref } from "effect"
 import type { SessionStorage } from "../SessionStorage"
-import { SessionNotFoundError } from "../../errors"
 import {
-  SerializedSession,
-  SessionMetadata,
-  SessionIndex,
-} from "../../models"
+  SessionNotFoundError,
+  SessionStorageError,
+  SessionCorruptedError,
+  type SessionError,
+} from "../../errors"
+import type { SerializedSession, SessionMetadata } from "../../models"
 import type { SessionId } from "../../types"
 
 export interface ActiveSessionDeps {
-  storage: SessionStorage["Type"]
-  activeSessionRef: Ref.Ref<SessionId | null>
+  storage: SessionStorage
+  getActiveSessionId: () => SessionId | null
+  setActiveSessionId: (id: SessionId | null) => void
 }
 
 /**
- * Create active session operations for SessionManager
+ * Get the active session ID
  */
-export function createActiveSessionOperations(deps: ActiveSessionDeps) {
-  const { storage, activeSessionRef } = deps
+export function getActiveSessionId(
+  deps: ActiveSessionDeps
+): SessionId | null {
+  return deps.getActiveSessionId()
+}
 
-  const getActiveSessionId = Effect.fn(
-    "SessionManager.getActiveSessionId"
-  )(function* () {
-    return yield* Ref.get(activeSessionRef)
+/**
+ * Set the active session ID
+ */
+export async function setActiveSessionId(
+  deps: ActiveSessionDeps,
+  id: SessionId | null
+): Promise<SessionStorageError | void> {
+  const { storage, setActiveSessionId: setLocal } = deps
+
+  setLocal(id)
+
+  // Update index
+  const currentIndex = await storage.loadIndex()
+  if (currentIndex instanceof SessionStorageError) {
+    return currentIndex
+  }
+
+  return await storage.saveIndex({
+    sessions: currentIndex.sessions,
+    activeSessionId: id,
   })
+}
 
-  const setActiveSessionId = Effect.fn(
-    "SessionManager.setActiveSessionId"
-  )(function* (id: SessionId | null) {
-    yield* Ref.set(activeSessionRef, id)
+/**
+ * Switch to a session (updates lastSwitchedAt)
+ */
+export async function switchToSession(
+  deps: ActiveSessionDeps,
+  id: SessionId
+): Promise<SessionError | void> {
+  const { storage, setActiveSessionId } = deps
 
-    // Update index
-    const currentIndex = yield* storage.loadIndex()
-    yield* storage.saveIndex(
-      SessionIndex.make({
-        sessions: currentIndex.sessions,
-        activeSessionId: id,
-      })
-    )
-  })
+  const currentIndex = await storage.loadIndex()
+  if (currentIndex instanceof SessionStorageError) {
+    return currentIndex
+  }
 
-  const switchToSession = Effect.fn("SessionManager.switchToSession")(
-    function* (id: SessionId) {
-      const currentIndex = yield* storage.loadIndex()
-      const session = currentIndex.sessions.find((s) => s.id === id)
+  const session = currentIndex.sessions.find((s) => s.id === id)
 
-      if (!session) {
-        return yield* SessionNotFoundError.make({ sessionId: id })
-      }
+  if (!session) {
+    return new SessionNotFoundError({ sessionId: id })
+  }
 
-      // Update lastSwitchedAt
-      const now = Date.now()
-      const updatedMetadata = SessionMetadata.make({
-        ...session,
-        lastSwitchedAt: now,
-      })
+  // Update lastSwitchedAt
+  const now = Date.now()
+  const updatedMetadata: SessionMetadata = {
+    ...session,
+    lastSwitchedAt: now,
+  }
 
-      const updatedSessions = currentIndex.sessions.map((s) =>
-        s.id === id ? updatedMetadata : s
-      )
-
-      yield* storage.saveIndex(
-        SessionIndex.make({
-          sessions: updatedSessions,
-          activeSessionId: id,
-        })
-      )
-
-      // Update session file too
-      const sessionData = yield* storage.loadSession(id)
-      yield* storage.saveSession(
-        SerializedSession.make({
-          ...sessionData,
-          metadata: updatedMetadata,
-        })
-      )
-
-      yield* Ref.set(activeSessionRef, id)
-    }
+  const updatedSessions = currentIndex.sessions.map((s) =>
+    s.id === id ? updatedMetadata : s
   )
 
-  return {
-    getActiveSessionId,
-    setActiveSessionId,
-    switchToSession,
+  const saveIndexResult = await storage.saveIndex({
+    sessions: updatedSessions,
+    activeSessionId: id,
+  })
+  if (saveIndexResult instanceof SessionStorageError) {
+    return saveIndexResult
   }
+
+  // Update session file too
+  const sessionData = await storage.loadSession(id)
+  if (sessionData instanceof SessionNotFoundError || sessionData instanceof SessionCorruptedError) {
+    return sessionData
+  }
+  if (sessionData instanceof SessionStorageError) {
+    return sessionData
+  }
+
+  const saveSessionResult = await storage.saveSession({
+    ...sessionData,
+    metadata: updatedMetadata,
+  })
+  if (saveSessionResult instanceof SessionStorageError) {
+    return saveSessionResult
+  }
+
+  setActiveSessionId(id)
 }

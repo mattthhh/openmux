@@ -1,19 +1,18 @@
 /**
  * Serialization helpers for SessionManager
+ * Migrated from Effect to errore - uses plain functions
  */
 
-import { Effect } from "effect"
 import type { WorkspaceLayoutNode, WorkspaceState } from "./types"
+import type { SessionMetadata } from "../../models"
 import type {
-  SessionMetadata} from "../../models";
-import {
   SerializedSession,
   SerializedWorkspace,
   SerializedPaneData,
   SerializedSplitNode,
-  type SerializedLayoutNode
+  SerializedLayoutNode,
 } from "../../models"
-import { WorkspaceId } from "../../types"
+import { makeWorkspaceId } from "../../types"
 
 function isSplitNode(node: WorkspaceLayoutNode): node is Extract<WorkspaceLayoutNode, { type: "split" }> {
   return (node as { type?: string }).type === "split"
@@ -40,25 +39,25 @@ function serializeLayoutNode(
   fallbackCwd: string
 ): SerializedLayoutNode {
   if (isSplitNode(node)) {
-    return SerializedSplitNode.make({
+    return {
       type: "split",
       id: node.id,
       direction: node.direction,
       ratio: node.ratio,
       first: serializeLayoutNode(node.first, cwdMap, fallbackCwd),
       second: serializeLayoutNode(node.second, cwdMap, fallbackCwd),
-    })
+    }
   }
 
   const pane = node as WorkspacePaneNode & { cwd?: string }
   const ptyCwd = pane.ptyId ? cwdMap.get(pane.ptyId) : undefined
   const resolvedCwd = ptyCwd ?? pane.cwd ?? fallbackCwd
 
-  return SerializedPaneData.make({
+  return {
     id: pane.id,
     title: pane.title,
     cwd: resolvedCwd,
-  })
+  }
 }
 
 /**
@@ -83,32 +82,32 @@ export function shouldUpdateAutoName(
  * Collect all CWDs from workspaces
  * Returns a map of ptyId -> cwd
  */
-export function collectCwdMap(
+export async function collectCwdMap(
   workspaces: ReadonlyMap<number, WorkspaceState>,
   getCwd: (ptyId: string) => Promise<string>
-): Effect.Effect<Map<string, string>, never> {
-  return Effect.gen(function* () {
-    const cwdMap = new Map<string, string>()
-    const fallbackCwd = process.env.OPENMUX_ORIGINAL_CWD ?? process.cwd()
+): Promise<Map<string, string>> {
+  const cwdMap = new Map<string, string>()
+  const fallbackCwd = process.env.OPENMUX_ORIGINAL_CWD ?? process.cwd()
 
-    for (const workspace of workspaces.values()) {
-      const panes: WorkspacePaneNode[] = []
-      forEachPane(workspace.mainPane, (pane) => panes.push(pane))
-      for (const node of workspace.stackPanes) {
-        forEachPane(node, (pane) => panes.push(pane))
-      }
-
-      for (const pane of panes) {
-        if (!pane.ptyId) continue
-        const cwd = yield* Effect.promise(() =>
-          getCwd(pane.ptyId!).catch(() => fallbackCwd)
-        )
-        cwdMap.set(pane.ptyId, cwd)
-      }
+  for (const workspace of workspaces.values()) {
+    const panes: WorkspacePaneNode[] = []
+    forEachPane(workspace.mainPane, (pane) => panes.push(pane))
+    for (const node of workspace.stackPanes) {
+      forEachPane(node, (pane) => panes.push(pane))
     }
 
-    return cwdMap
-  })
+    for (const pane of panes) {
+      if (!pane.ptyId) continue
+      try {
+        const cwd = await getCwd(pane.ptyId)
+        cwdMap.set(pane.ptyId, cwd)
+      } catch {
+        cwdMap.set(pane.ptyId, fallbackCwd)
+      }
+    }
+  }
+
+  return cwdMap
 }
 
 /**
@@ -156,8 +155,8 @@ export function serializeWorkspace(
     serializeLayoutNode(pane, cwdMap, fallbackCwd)
   )
 
-  return SerializedWorkspace.make({
-    id: WorkspaceId.make(id),
+  return {
+    id: makeWorkspaceId(id),
     label: workspace.label,
     mainPane,
     stackPanes,
@@ -166,7 +165,7 @@ export function serializeWorkspace(
     lastFocusedPaneIds: workspace.lastFocusedPaneIds ?? [],
     layoutMode: workspace.layoutMode,
     zoomed: workspace.zoomed,
-  })
+  }
 }
 
 /**
@@ -187,14 +186,14 @@ export function serializeSession(
     }
   }
 
-  const activeId = WorkspaceId.make(activeWorkspaceId)
+  const activeId = makeWorkspaceId(activeWorkspaceId)
   const resolvedActiveId = serializedWorkspaces.some((ws) => ws.id === activeId)
     ? activeId
     : serializedWorkspaces[0]?.id ?? activeId
 
-  return SerializedSession.make({
+  return {
     metadata,
     workspaces: serializedWorkspaces,
     activeWorkspaceId: resolvedActiveId,
-  })
+  }
 }

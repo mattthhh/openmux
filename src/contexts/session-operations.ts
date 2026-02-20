@@ -14,6 +14,8 @@ import {
   loadSessionData,
   switchToSession,
 } from '../effect/bridge';
+import { SessionStorageError, SessionNotFoundError, SessionCorruptedError } from '../effect/errors';
+import { ResourceStack } from '../effect/resources.js';
 
 export interface SessionOperationsParams {
   getState: () => SessionState;
@@ -49,7 +51,7 @@ export function createSessionOperations(params: SessionOperationsParams) {
     refreshSessions,
   } = params;
 
-  const createSession = async (name?: string): Promise<SessionMetadata> => {
+  const createSession = async (name?: string): Promise<SessionMetadata | SessionStorageError> => {
     const state = getState();
 
     // Save current session first
@@ -69,15 +71,24 @@ export function createSessionOperations(params: SessionOperationsParams) {
       await onBeforeSwitch(state.activeSessionId);
     }
 
-    const metadata = await createSessionOnDisk(name);
+    // Guaranteed cleanup: always close session picker when function exits
+    await using resources = new ResourceStack();
+    resources.defer(() => {
+      dispatch({ type: 'CLOSE_SESSION_PICKER' });
+    });
+
+    const result = await createSessionOnDisk(name);
+    if (result instanceof SessionStorageError) {
+      console.error('Failed to create session:', result.message);
+      return result;
+    }
+
+    const metadata = result;
     await refreshSessions();
     dispatch({ type: 'SET_ACTIVE_SESSION', id: metadata.id, session: metadata });
 
     // Load empty workspaces for new session
     await onSessionLoad({}, 1, new Map(), new Map(), metadata.id, { allowPrune: false });
-
-    // Close the session picker after creating a new session
-    dispatch({ type: 'CLOSE_SESSION_PICKER' });
 
     return metadata;
   };
@@ -111,9 +122,19 @@ export function createSessionOperations(params: SessionOperationsParams) {
     // Mark switching in progress to prevent "No panes" flash
     dispatch({ type: 'SET_SWITCHING', switching: true });
 
+    // Guaranteed cleanup: always close picker and reset switching state
+    await using resources = new ResourceStack();
+    resources.defer(() => {
+      dispatch({ type: 'CLOSE_SESSION_PICKER' });
+    });
+
     try {
       // Load new session
-      await switchToSession(id);
+      const switchResult = await switchToSession(id);
+      if (switchResult instanceof SessionNotFoundError || switchResult instanceof SessionCorruptedError || switchResult instanceof SessionStorageError) {
+        console.error('Failed to switch to session:', switchResult.message);
+        return;
+      }
       const data = await loadSessionData(id);
 
       if (data) {
@@ -136,7 +157,6 @@ export function createSessionOperations(params: SessionOperationsParams) {
         await onSessionLoad({}, 1, new Map(), new Map(), id, { allowPrune: false });
       }
 
-      dispatch({ type: 'CLOSE_SESSION_PICKER' });
       await refreshSessions();
     } finally {
       // Mark switching complete
@@ -148,7 +168,11 @@ export function createSessionOperations(params: SessionOperationsParams) {
     switchSessionInternal(id);
 
   const renameSession = async (id: SessionId, name: string): Promise<void> => {
-    await renameSessionOnDisk(id, name);
+    const result = await renameSessionOnDisk(id, name);
+    if (result instanceof SessionNotFoundError || result instanceof SessionCorruptedError || result instanceof SessionStorageError) {
+      console.error('Failed to rename session:', result.message);
+      return;
+    }
     await refreshSessions();
 
     const state = getState();
@@ -179,7 +203,11 @@ export function createSessionOperations(params: SessionOperationsParams) {
       // Clean up PTYs for the deleted session
       onDeleteSession(id);
 
-      await deleteSessionOnDisk(id);
+      const deleteResult = await deleteSessionOnDisk(id);
+      if (deleteResult instanceof SessionNotFoundError || deleteResult instanceof SessionCorruptedError || deleteResult instanceof SessionStorageError) {
+        console.error('Failed to delete session:', deleteResult.message);
+        return;
+      }
       await refreshSessions();
 
       // If deleting active session, switch to another
@@ -189,7 +217,12 @@ export function createSessionOperations(params: SessionOperationsParams) {
         if (nextSession) {
           await switchSessionInternal(nextSession.id, { skipSave: true, skipBeforeSwitch: true });
         } else {
-          const metadata = await createSessionOnDisk();
+          const createResult = await createSessionOnDisk();
+          if (createResult instanceof SessionStorageError) {
+            console.error('Failed to create new session:', createResult.message);
+            return;
+          }
+          const metadata = createResult;
           dispatch({ type: 'SET_ACTIVE_SESSION', id: metadata.id, session: metadata });
           await onSessionLoad({}, 1, new Map(), new Map(), metadata.id, { allowPrune: false });
           await refreshSessions();

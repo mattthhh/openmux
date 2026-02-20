@@ -1,7 +1,9 @@
 /**
- * App Coordinator bridge functions
+ * App Coordinator bridge functions (errore version)
  * Provides fast synchronous operations for PTY tracking and session CWD management.
- * Uses module-level state to avoid Effect runtime overhead for hot-path operations.
+ * Uses module-level state to avoid runtime overhead for hot-path operations.
+ * 
+ * No Effect dependencies - pure module-level state management.
  */
 
 /** Set of pane IDs that have had PTYs created (fast sync access) */

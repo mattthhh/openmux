@@ -5,6 +5,7 @@ import type { TerminalScrollState, TerminalState, Workspace, WorkspaceId } from 
 import type { LayoutState } from '../core/operations/layout-actions';
 import type { ITerminalEmulator } from '../terminal/emulator-interface';
 import type { SessionMetadata } from '../core/types';
+import { SessionStorageError } from '../effect/errors';
 import { CONTROL_PROTOCOL_VERSION, CONTROL_SOCKET_DIR, CONTROL_SOCKET_PATH, encodeFrame, FrameReader, type ControlHeader } from './protocol';
 import { parsePaneSelector, resolvePaneSelector } from './targets';
 import { captureEmulator, type CaptureFormat } from './capture';
@@ -21,7 +22,7 @@ export type ControlServerDeps = {
   fetchScrollState: (ptyId: string, options?: { force?: boolean }) => Promise<TerminalScrollState | null>;
   capturePty?: (ptyId: string, options: { lines: number; format: CaptureFormat; raw?: boolean }) => Promise<string | null>;
   isPtyActive: (ptyId: string) => boolean;
-  createSession: (name?: string) => Promise<SessionMetadata>;
+  createSession: (name?: string) => Promise<SessionMetadata | SessionStorageError>;
   getActiveSessionId: () => string | null | undefined;
 };
 
@@ -30,7 +31,7 @@ export type ControlServer = {
   socketPath: string;
 };
 
-type ControlErrorCode = 'invalid_request' | 'not_found' | 'ambiguous' | 'internal';
+type ControlErrorCode = 'invalid_request' | 'not_found' | 'ambiguous' | 'internal' | 'session_creation_failed';
 
 function parseWorkspaceId(value: unknown): WorkspaceId | undefined {
   if (typeof value !== 'number' || !Number.isFinite(value)) return undefined;
@@ -96,8 +97,12 @@ export async function startControlServer(deps: ControlServerDeps): Promise<Contr
           }
           case 'session.create': {
             const name = typeof params.name === 'string' ? params.name : undefined;
-            const metadata = await deps.createSession(name);
-            sendResponse(requestId, { session: metadata });
+            const result = await deps.createSession(name);
+            if (result instanceof SessionStorageError) {
+              sendError(requestId, result.message, 'session_creation_failed');
+              return;
+            }
+            sendResponse(requestId, { session: result });
             return;
           }
           case 'pane.split': {
@@ -275,7 +280,7 @@ export async function startControlServer(deps: ControlServerDeps): Promise<Contr
     };
 
     socket.on('data', (chunk) => {
-      reader.feed(chunk, (header) => {
+      reader.feed(chunk as Buffer, (header) => {
         if (header.type !== 'request') return;
         void handleRequest(header);
       });

@@ -1,5 +1,6 @@
 /**
  * Scrollback archiver - spills live scrollback into a disk archive.
+ * (errore version - unchanged from original)
  */
 import type { InternalPtySession } from "./types"
 import type { ITerminalEmulator } from "../../../terminal/emulator-interface"

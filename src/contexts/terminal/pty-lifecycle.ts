@@ -8,6 +8,7 @@ import {
   destroyPty,
   destroyAllPtys,
 } from '../../effect/bridge';
+import { PtySpawnError } from '../../effect/errors';
 import { getActiveSessionIdForShim, registerPtyPane } from '../../effect/bridge';
 import {
   subscribeToPtyWithCaches,
@@ -68,6 +69,30 @@ export function createPtyLifecycleHandlers(deps: PtyLifecycleDeps) {
     return ptyToPaneMap.get(ptyId) ?? fallbackPaneId ?? ptyToSessionMap.get(ptyId)?.paneId;
   };
 
+  /**
+   * Cleanup stack for synchronous resource management.
+   * Used in SolidJS onCleanup contexts where async cleanup isn't available.
+   */
+  class PtyCleanupStack {
+    private cleanups: Array<() => void> = [];
+
+    defer(cleanup: () => void): void {
+      this.cleanups.push(cleanup);
+    }
+
+    execute(): void {
+      // Execute in reverse order (LIFO)
+      for (let i = this.cleanups.length - 1; i >= 0; i--) {
+        try {
+          this.cleanups[i]();
+        } catch (error) {
+          console.warn("Cleanup failed:", error);
+        }
+      }
+      this.cleanups = [];
+    }
+  }
+
   const cleanupPty = (
     ptyId: string,
     options?: { paneId?: string; closePane?: boolean; destroy?: boolean }
@@ -81,29 +106,57 @@ export function createPtyLifecycleHandlers(deps: PtyLifecycleDeps) {
       closePaneById(targetPaneId);
     }
 
-    // Clean up PTY subscription and caches
-    const unsub = unsubscribeFns.get(ptyId);
-    if (unsub) {
-      unsub();
-      unsubscribeFns.delete(ptyId);
-    }
-    clearPtyCaches(ptyId, ptyCaches);
-    ptyToPaneMap.delete(ptyId);
+    const stack = new PtyCleanupStack();
 
-    // O(1) removal from session mappings using reverse index
+    // Resource cleanup in reverse order of creation:
+    // Creation order: 1. subscription/caches → 2. pane mapping → 3. session mappings
+    // Cleanup order:  3. session mappings → 2. pane mapping → 1. subscription/caches
+
+    // 3. Session mappings (created 3rd, cleaned up 1st)
     if (sessionInfo) {
       const mapping = sessionPtyMap.get(sessionInfo.sessionId);
       if (mapping) {
-        mapping.delete(sessionInfo.paneId);
+        stack.defer(() => {
+          mapping.delete(sessionInfo.paneId);
+        });
       }
-      ptyToSessionMap.delete(ptyId);
+      stack.defer(() => {
+        ptyToSessionMap.delete(ptyId);
+      });
     }
 
+    // 2. Pane mapping (created 2nd, cleaned up 2nd)
+    stack.defer(() => {
+      ptyToPaneMap.delete(ptyId);
+    });
+
+    // 1. Subscription and caches (created 1st, cleaned up 3rd)
+    const unsub = unsubscribeFns.get(ptyId);
+    if (unsub) {
+      stack.defer(() => {
+        unsub();
+      });
+      stack.defer(() => {
+        unsubscribeFns.delete(ptyId);
+      });
+    }
+    stack.defer(() => {
+      clearPtyCaches(ptyId, ptyCaches);
+    });
+
+    // Destroy PTY (runs after all other cleanups)
     if (shouldDestroy) {
-      destroyPty(ptyId);
+      stack.defer(() => {
+        destroyPty(ptyId);
+      });
     }
 
-    onPtyDestroyed?.(ptyId);
+    // Callback after cleanup
+    stack.defer(() => {
+      onPtyDestroyed?.(ptyId);
+    });
+
+    stack.execute();
   };
 
   /**
@@ -135,7 +188,12 @@ export function createPtyLifecycleHandlers(deps: PtyLifecycleDeps) {
     const pixelWidth = metrics ? cols * metrics.cellWidth : undefined;
     const pixelHeight = metrics ? rows * metrics.cellHeight : undefined;
     // Ghostty-vt is initialized per PTY session
-    const ptyId = await createPtySession({ cols, rows, cwd, pixelWidth, pixelHeight });
+    const result = await createPtySession({ cols, rows, cwd, pixelWidth, pixelHeight });
+    if (result instanceof Error) {
+      console.error('Failed to create PTY:', result.message);
+      return '';
+    }
+    const ptyId = result;
 
     // Track the mapping immediately
     ptyToPaneMap.set(ptyId, paneId);
@@ -196,7 +254,12 @@ export function createPtyLifecycleHandlers(deps: PtyLifecycleDeps) {
     const pixelHeight = metrics ? rows * metrics.cellHeight : undefined;
 
     // Create PTY first (async - this is the expensive part)
-    const ptyId = await createPtySession({ cols, rows, cwd, pixelWidth, pixelHeight });
+    const result = await createPtySession({ cols, rows, cwd, pixelWidth, pixelHeight });
+    if (result instanceof Error) {
+      console.error('Failed to create PTY:', result.message);
+      return '';
+    }
+    const ptyId = result;
 
     // Create pane with PTY already attached - SINGLE render!
     const paneId = newPaneWithPty(ptyId, title);
@@ -256,21 +319,45 @@ export function createPtyLifecycleHandlers(deps: PtyLifecycleDeps) {
    * Destroy all PTY sessions
    */
   const handleDestroyAllPTYs = (): void => {
-    // Unsubscribe all
-    for (const unsub of unsubscribeFns.values()) {
-      unsub();
-    }
-    unsubscribeFns.clear();
-    clearAllPtyCaches(ptyCaches);
-    for (const ptyId of ptyToPaneMap.keys()) {
-      onPtyDestroyed?.(ptyId);
-    }
-    ptyToPaneMap.clear();
-    ptyToSessionMap.clear();
-    sessionPtyMap.clear();
+    const stack = new PtyCleanupStack();
 
-    // Destroy all PTYs (fire and forget)
-    destroyAllPtys();
+    // Unsubscribe all and clear caches
+    for (const [ptyId, unsub] of unsubscribeFns.entries()) {
+      stack.defer(() => {
+        unsub();
+      });
+    }
+    stack.defer(() => {
+      unsubscribeFns.clear();
+    });
+    stack.defer(() => {
+      clearAllPtyCaches(ptyCaches);
+    });
+
+    // Trigger callbacks for all PTYs
+    for (const ptyId of ptyToPaneMap.keys()) {
+      stack.defer(() => {
+        onPtyDestroyed?.(ptyId);
+      });
+    }
+
+    // Clear maps in reverse order: session -> ptyToSession -> ptyToPane
+    stack.defer(() => {
+      sessionPtyMap.clear();
+    });
+    stack.defer(() => {
+      ptyToSessionMap.clear();
+    });
+    stack.defer(() => {
+      ptyToPaneMap.clear();
+    });
+
+    // Destroy all PTYs (runs last)
+    stack.defer(() => {
+      destroyAllPtys();
+    });
+
+    stack.execute();
   };
 
   return {

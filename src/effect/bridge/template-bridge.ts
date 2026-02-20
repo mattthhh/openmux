@@ -1,11 +1,11 @@
 /**
- * Template bridge functions
- * Wraps Effect TemplateStorage service for async/await usage
+ * Template bridge functions (errore version)
+ * Wraps TemplateStorage service for async/await usage
+ * 
+ * Backward-compatible versions use the global services singleton.
  */
 
-import { Effect } from "effect"
-import { runEffect } from "../runtime"
-import { TemplateStorage } from "../services"
+import type { TemplateStorage } from "../services/TemplateStorage"
 import type {
   TemplateSession,
   TemplateWorkspace,
@@ -16,6 +16,7 @@ import type {
 import type { Workspaces } from "../../core/operations/layout-actions"
 import type { Workspace, PaneData, WorkspaceId, LayoutNode } from "../../core/types"
 import { getFirstPane } from "../../core/layout-tree"
+import { getTemplateStorage } from "./services-instance"
 import {
   createWorkspace,
   generatePaneId,
@@ -23,48 +24,53 @@ import {
   resetPaneIdCounter,
   resetSplitIdCounter,
 } from "../../core/operations/layout-actions/helpers"
+import { TemplateStorageError } from "../errors"
 
-
+/** List all templates */
 export async function listTemplates(): Promise<TemplateSession[]> {
-  return runEffect(
-    Effect.gen(function* () {
-      const storage = yield* TemplateStorage
-      return yield* storage.listTemplates()
-    })
-  )
+  return listTemplatesWithService(getTemplateStorage())
 }
 
-export async function saveTemplate(template: TemplateSession): Promise<void> {
-  await runEffect(
-    Effect.gen(function* () {
-      const storage = yield* TemplateStorage
-      yield* storage.saveTemplate(template)
-    })
-  )
+/** Save a template */
+export async function saveTemplate(template: TemplateSession): Promise<void | TemplateStorageError> {
+  return saveTemplateWithService(getTemplateStorage(), template)
 }
 
-export async function deleteTemplate(id: string): Promise<void> {
-  await runEffect(
-    Effect.gen(function* () {
-      const storage = yield* TemplateStorage
-      yield* storage.deleteTemplate(id)
-    })
-  )
+/** Delete a template */
+export async function deleteTemplate(id: string): Promise<void | TemplateStorageError> {
+  return deleteTemplateWithService(getTemplateStorage(), id)
 }
 
+/** Load a template */
 export async function loadTemplate(id: string): Promise<TemplateSession | null> {
-  try {
-    return await runEffect(
-      Effect.gen(function* () {
-        const storage = yield* TemplateStorage
-        return yield* storage.loadTemplate(id)
-      })
-    )
-  } catch {
-    return null
-  }
+  return loadTemplateWithService(getTemplateStorage(), id)
 }
 
+/** List templates with a specific service */
+export async function listTemplatesWithService(storage: TemplateStorage): Promise<TemplateSession[]> {
+  const result = await storage.listTemplates()
+  if (result instanceof Error) return []
+  return result as unknown as TemplateSession[]
+}
+
+/** Save template with a specific service */
+export async function saveTemplateWithService(storage: TemplateStorage, template: TemplateSession): Promise<void | TemplateStorageError> {
+  const result = await storage.saveTemplate(template)
+  if (result instanceof Error) return result as TemplateStorageError
+}
+
+/** Delete template with a specific service */
+export async function deleteTemplateWithService(storage: TemplateStorage, id: string): Promise<void | TemplateStorageError> {
+  const result = await storage.deleteTemplate(id)
+  if (result instanceof Error) return result as TemplateStorageError
+}
+
+/** Load template with a specific service */
+export async function loadTemplateWithService(storage: TemplateStorage, id: string): Promise<TemplateSession | null> {
+  const result = await storage.loadTemplate(id)
+  if (result instanceof Error) return null
+  return result
+}
 
 function normalizeTemplatePanes(
   panes: TemplatePaneData[],

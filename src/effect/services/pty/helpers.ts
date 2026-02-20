@@ -1,9 +1,8 @@
 /**
- * Helper functions for PTY service
+ * Helper functions for PTY service (errore version)
  * Git-related utilities backed by libgit2.
  */
 
-import { Effect } from "effect"
 import { watch } from "fs"
 import {
   getRepoStatusAsync,
@@ -273,11 +272,11 @@ async function getRepoEntry(
 /**
  * Get git branch + dirty indicator for a directory.
  */
-export const getGitInfo = (
+export async function getGitInfo(
   cwd: string,
   options?: { force?: boolean; maxAgeMs?: number }
-): Effect.Effect<GitInfo | undefined> =>
-  Effect.tryPromise(async () => {
+): Promise<GitInfo | undefined> {
+  try {
     const entry = await getRepoEntry(cwd, options)
     if (!entry) return undefined
     return {
@@ -294,20 +293,25 @@ export const getGitInfo = (
       detached: entry.detached,
       repoKey: entry.key,
     }
-  }).pipe(Effect.catchAll(() => Effect.succeed(undefined)))
+  } catch {
+    return undefined
+  }
+}
 
 /**
  * Get git branch for a directory (compat helper).
  */
-export const getGitBranch = (cwd: string): Effect.Effect<string | undefined> =>
-  getGitInfo(cwd).pipe(Effect.map((info) => info?.branch))
+export async function getGitBranch(cwd: string): Promise<string | undefined> {
+  const info = await getGitInfo(cwd)
+  return info?.branch
+}
 
 /**
  * Get the git diff statistics for a directory.
  * Includes untracked changes and binary file count.
  */
-export const getGitDiffStats = (cwd: string): Effect.Effect<GitDiffStats | undefined> =>
-  Effect.tryPromise(async () => {
+export async function getGitDiffStats(cwd: string): Promise<GitDiffStats | undefined> {
+  try {
     const entry = await getRepoEntry(cwd)
     if (!entry) return undefined
 
@@ -325,4 +329,7 @@ export const getGitDiffStats = (cwd: string): Effect.Effect<GitDiffStats | undef
     })
 
     return entry.diffInFlight
-  }).pipe(Effect.catchAll(() => Effect.succeed(undefined)))
+  } catch {
+    return undefined
+  }
+}

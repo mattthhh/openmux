@@ -1,130 +1,159 @@
 /**
  * Session metadata operations for SessionManager
  * Handles rename, auto-name updates, and metadata queries
+ * Migrated from Effect to errore - uses promises and direct dependency passing
  */
 
-import { Effect } from "effect"
 import type { SessionStorage } from "../SessionStorage"
-import {
+import type {
   SerializedSession,
   SessionMetadata,
-  SessionIndex,
-  type SerializedLayoutNode,
+  SerializedLayoutNode,
 } from "../../models"
 import type { SessionId } from "../../types"
+import { SessionStorageError, SessionNotFoundError, SessionCorruptedError, type SessionError } from "../../errors"
 import { getAutoName } from "./serialization"
 
 export interface MetadataDeps {
-  storage: SessionStorage["Type"]
+  storage: SessionStorage
+}
+
+function countPanes(node: SerializedLayoutNode | null): number {
+  if (!node) return 0
+  if ((node as { type?: string }).type === "split") {
+    const split = node as SerializedLayoutNode & { first: SerializedLayoutNode; second: SerializedLayoutNode }
+    return countPanes(split.first) + countPanes(split.second)
+  }
+  return 1
 }
 
 /**
- * Create metadata operations for SessionManager
+ * Rename a session
  */
-export function createMetadataOperations(deps: MetadataDeps) {
+export async function renameSession(
+  deps: MetadataDeps,
+  id: SessionId,
+  newName: string
+): Promise<SessionError | void> {
   const { storage } = deps
 
-  const countPanes = (node: SerializedLayoutNode | null): number => {
-    if (!node) return 0
-    if ((node as { type?: string }).type === "split") {
-      const split = node as SerializedLayoutNode & { first: SerializedLayoutNode; second: SerializedLayoutNode }
-      return countPanes(split.first) + countPanes(split.second)
-    }
-    return 1
+  // Load session
+  const session = await storage.loadSession(id)
+  if (session instanceof SessionNotFoundError || session instanceof SessionStorageError || session instanceof SessionCorruptedError) {
+    return session
   }
 
-  const renameSession = Effect.fn("SessionManager.renameSession")(
-    function* (id: SessionId, newName: string) {
-      // Load and update session
-      const session = yield* storage.loadSession(id)
-      const updatedMetadata = SessionMetadata.make({
-        ...session.metadata,
-        name: newName,
-        autoNamed: false,
-      })
-      const updated = SerializedSession.make({
-        ...session,
-        metadata: updatedMetadata,
-      })
-
-      yield* storage.saveSession(updated)
-
-      // Update index
-      const currentIndex = yield* storage.loadIndex()
-      const updatedSessions = currentIndex.sessions.map((s) =>
-        s.id === id ? updatedMetadata : s
-      )
-
-      yield* storage.saveIndex(
-        SessionIndex.make({
-          sessions: updatedSessions,
-          activeSessionId: currentIndex.activeSessionId,
-        })
-      )
-    }
-  )
-
-  const getSessionMetadata = Effect.fn("SessionManager.getSessionMetadata")(
-    function* (id: SessionId) {
-      const index = yield* storage.loadIndex()
-      return index.sessions.find((s) => s.id === id) ?? null
-    }
-  )
-
-  const updateAutoName = Effect.fn("SessionManager.updateAutoName")(
-    function* (id: SessionId, cwd: string) {
-      const index = yield* storage.loadIndex()
-      const session = index.sessions.find((s) => s.id === id)
-
-      if (session && session.autoNamed) {
-        const newName = getAutoName(cwd)
-        if (newName !== session.name) {
-          const updated = SessionMetadata.make({ ...session, name: newName })
-          const updatedSessions = index.sessions.map((s) =>
-            s.id === id ? updated : s
-          )
-          yield* storage.saveIndex(
-            SessionIndex.make({
-              sessions: updatedSessions,
-              activeSessionId: index.activeSessionId,
-            })
-          )
-        }
-      }
-    }
-  )
-
-  const getSessionSummary = Effect.fn("SessionManager.getSessionSummary")(
-    function* (id: SessionId) {
-      const exists = yield* storage.sessionExists(id)
-      if (!exists) return null
-
-      const session = yield* storage.loadSession(id).pipe(
-        Effect.catchAll(() => Effect.succeed(null))
-      )
-      if (!session) return null
-
-      let paneCount = 0
-      let workspaceCount = 0
-
-      for (const ws of session.workspaces) {
-        if (ws.mainPane || ws.stackPanes.length > 0) {
-          workspaceCount++
-          paneCount += countPanes(ws.mainPane)
-          for (const pane of ws.stackPanes) {
-            paneCount += countPanes(pane)
-          }
-        }
-      }
-
-      return { workspaceCount, paneCount }
-    }
-  )
-
-  return {
-    renameSession,
-    getSessionMetadata,
-    updateAutoName,
-    getSessionSummary,
+  const updatedMetadata: SessionMetadata = {
+    ...session.metadata,
+    name: newName,
+    autoNamed: false,
   }
+
+  const updated: SerializedSession = {
+    ...session,
+    metadata: updatedMetadata,
+  }
+
+  const saveResult = await storage.saveSession(updated)
+  if (saveResult instanceof SessionStorageError) {
+    return saveResult
+  }
+
+  // Update index
+  const currentIndex = await storage.loadIndex()
+  if (currentIndex instanceof SessionStorageError) {
+    return currentIndex
+  }
+
+  const updatedSessions = currentIndex.sessions.map((s) =>
+    s.id === id ? updatedMetadata : s
+  )
+
+  return await storage.saveIndex({
+    sessions: updatedSessions,
+    activeSessionId: currentIndex.activeSessionId,
+  })
+}
+
+/**
+ * Get session metadata by ID
+ */
+export async function getSessionMetadata(
+  storage: SessionStorage,
+  id: SessionId
+): Promise<SessionStorageError | SessionMetadata | null> {
+  const index = await storage.loadIndex()
+  if (index instanceof SessionStorageError) {
+    return index
+  }
+
+  return index.sessions.find((s) => s.id === id) ?? null
+}
+
+/**
+ * Update auto-name for a session based on cwd
+ */
+export async function updateAutoName(
+  deps: MetadataDeps,
+  id: SessionId,
+  cwd: string
+): Promise<SessionError | void> {
+  const { storage } = deps
+
+  const index = await storage.loadIndex()
+  if (index instanceof SessionStorageError) {
+    return index
+  }
+
+  const session = index.sessions.find((s) => s.id === id)
+
+  if (session && session.autoNamed) {
+    const newName = getAutoName(cwd)
+    if (newName !== session.name) {
+      const updated: SessionMetadata = { ...session, name: newName }
+      const updatedSessions = index.sessions.map((s) =>
+        s.id === id ? updated : s
+      )
+      return await storage.saveIndex({
+        sessions: updatedSessions,
+        activeSessionId: index.activeSessionId,
+      })
+    }
+  }
+}
+
+/**
+ * Get session summary (workspace/pane counts)
+ */
+export async function getSessionSummary(
+  storage: SessionStorage,
+  id: SessionId
+): Promise<SessionError | { workspaceCount: number; paneCount: number } | null> {
+  const exists = await storage.sessionExists(id)
+  if (!exists) {
+    return null
+  }
+
+  const session = await storage.loadSession(id)
+  if (session instanceof SessionStorageError || session instanceof SessionCorruptedError) {
+    return session as SessionStorageError
+  }
+  if (session instanceof SessionStorageError || session instanceof Error) {
+    return session as SessionStorageError
+  }
+
+  let paneCount = 0
+  let workspaceCount = 0
+
+  for (const ws of session.workspaces) {
+    if (ws.mainPane || ws.stackPanes.length > 0) {
+      workspaceCount++
+      paneCount += countPanes(ws.mainPane)
+      for (const pane of ws.stackPanes) {
+        paneCount += countPanes(pane)
+      }
+    }
+  }
+
+  return { workspaceCount, paneCount }
 }

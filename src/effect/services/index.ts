@@ -1,10 +1,4 @@
 /**
- * Effect services barrel export.
+ * Services barrel export - re-exports from services.ts composition module
  */
-export * from "./Clipboard"
-export * from "./FileSystem"
-export * from "./Pty"
-export * from "./SessionStorage"
-export * from "./TemplateStorage"
-export * from "./SessionManager"
-// KeyboardRouter is a plain TypeScript module, exported via bridge instead
+export * from "../services"

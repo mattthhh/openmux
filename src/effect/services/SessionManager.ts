@@ -1,337 +1,305 @@
 /**
  * Session manager service for orchestrating session operations.
+ * Migrated from Effect to errore - uses interfaces + factory functions.
  * Compatible with legacy core/types.ts interfaces.
  */
-import { Context, Effect, Layer, Ref } from "effect"
-import { SessionStorage } from "./SessionStorage"
-import type { SessionStorageError} from "../errors";
-import { SessionNotFoundError } from "../errors"
+import type { SessionStorage } from "./SessionStorage"
+import type { PtyService } from "./Pty"
 import {
+  SessionStorageError,
+  SessionNotFoundError,
+  type SessionError,
+} from "../errors"
+import type {
   SerializedSession,
   SessionMetadata,
 } from "../models"
-import type {
-  SessionId} from "../types";
+import type { SessionId } from "../types"
+import type { WorkspaceState } from "./session-manager/types"
+
 import {
-  WorkspaceId,
-  makeSessionId,
-} from "../types"
+  createSession as lifecycleCreateSession,
+  loadSession as lifecycleLoadSession,
+  saveSession as lifecycleSaveSession,
+  deleteSession as lifecycleDeleteSession,
+  listSessions as lifecycleListSessions,
+} from "./session-manager/lifecycle"
 
-import type { SessionError, WorkspaceState } from "./session-manager/types"
 import {
-  createLifecycleOperations,
-  createMetadataOperations,
-  createActiveSessionOperations,
-  createQuickSaveOperations,
-} from "./session-manager"
+  renameSession as metadataRenameSession,
+  getSessionMetadata as metadataGetSessionMetadata,
+  updateAutoName as metadataUpdateAutoName,
+  getSessionSummary as metadataGetSessionSummary,
+} from "./session-manager/metadata"
 
+import {
+  setActiveSessionId as activeSetActiveSessionId,
+  switchToSession as activeSwitchToSession,
+} from "./session-manager/active-session"
 
-export class SessionManager extends Context.Tag("@openmux/SessionManager")<
-  SessionManager,
-  {
-    /** Create a new session */
-    readonly createSession: (name?: string) => Effect.Effect<SessionMetadata, SessionStorageError>
+import {
+  serializeWorkspaces as quickSaveSerializeWorkspaces,
+  quickSave as quickSaveQuickSave,
+} from "./session-manager/quick-save"
 
-    /** Load a session by ID */
-    readonly loadSession: (
-      id: SessionId
-    ) => Effect.Effect<SerializedSession, SessionError>
+import { makeSessionId, makeWorkspaceId } from "../types"
 
-    /** Save the current session state */
-    readonly saveSession: (
-      session: SerializedSession
-    ) => Effect.Effect<void, SessionStorageError>
+export interface SessionManager {
+  createSession(name?: string): Promise<SessionStorageError | SessionMetadata>
+  loadSession(id: SessionId): Promise<SessionError | SerializedSession>
+  saveSession(session: SerializedSession): Promise<SessionStorageError | void>
+  deleteSession(id: SessionId): Promise<SessionError | void>
+  renameSession(id: SessionId, newName: string): Promise<SessionError | void>
+  listSessions(): Promise<SessionStorageError | SessionMetadata[]>
+  getActiveSessionId(): SessionId | null
+  setActiveSessionId(id: SessionId | null): Promise<SessionStorageError | void>
+  switchToSession(id: SessionId): Promise<SessionError | void>
+  getSessionMetadata(id: SessionId): Promise<SessionStorageError | SessionMetadata | null>
+  updateAutoName(id: SessionId, cwd: string): Promise<SessionError | void>
+  getSessionSummary(id: SessionId): Promise<SessionError | { workspaceCount: number; paneCount: number } | null>
+  serializeWorkspaces(
+    metadata: SessionMetadata,
+    workspaces: ReadonlyMap<number, WorkspaceState>,
+    activeWorkspaceId: number,
+    getCwd: (ptyId: string) => Promise<string>
+  ): Promise<SerializedSession>
+  quickSave(
+    metadata: SessionMetadata,
+    workspaces: ReadonlyMap<number, WorkspaceState>,
+    activeWorkspaceId: number,
+    getCwd: (ptyId: string) => Promise<string>
+  ): Promise<SessionStorageError | void>
+}
 
-    /** Delete a session */
-    readonly deleteSession: (
-      id: SessionId
-    ) => Effect.Effect<void, SessionStorageError>
+/**
+ * Create a production SessionManager instance
+ */
+export async function createSessionManager(
+  storage: SessionStorage,
+  _pty: PtyService
+): Promise<SessionStorageError | SessionManager> {
+  // Track active session
+  let activeSessionId: SessionId | null = null
 
-    /** Rename a session */
-    readonly renameSession: (
-      id: SessionId,
-      newName: string
-    ) => Effect.Effect<void, SessionError>
-
-    /** List all sessions sorted by lastSwitchedAt (most recent first) */
-    readonly listSessions: () => Effect.Effect<
-      readonly SessionMetadata[],
-      SessionStorageError
-    >
-
-    /** Get the active session ID */
-    readonly getActiveSessionId: () => Effect.Effect<SessionId | null>
-
-    /** Set the active session ID */
-    readonly setActiveSessionId: (
-      id: SessionId | null
-    ) => Effect.Effect<void, SessionStorageError>
-
-    /** Switch to a session (updates lastSwitchedAt) */
-    readonly switchToSession: (
-      id: SessionId
-    ) => Effect.Effect<void, SessionError>
-
-    /** Get session metadata by ID */
-    readonly getSessionMetadata: (
-      id: SessionId
-    ) => Effect.Effect<SessionMetadata | null, SessionStorageError>
-
-    /** Update auto-name for a session based on cwd */
-    readonly updateAutoName: (
-      id: SessionId,
-      cwd: string
-    ) => Effect.Effect<void, SessionError>
-
-    /** Get session summary (workspace/pane counts) */
-    readonly getSessionSummary: (
-      id: SessionId
-    ) => Effect.Effect<{ workspaceCount: number; paneCount: number } | null, SessionError>
-
-    /** Serialize workspaces to session format */
-    readonly serializeWorkspaces: (
-      metadata: SessionMetadata,
-      workspaces: ReadonlyMap<number, WorkspaceState>,
-      activeWorkspaceId: number,
-      getCwd: (ptyId: string) => Promise<string>
-    ) => Effect.Effect<SerializedSession, never>
-
-    /** Quick save - serialize and save current state */
-    readonly quickSave: (
-      metadata: SessionMetadata,
-      workspaces: ReadonlyMap<number, WorkspaceState>,
-      activeWorkspaceId: number,
-      getCwd: (ptyId: string) => Promise<string>
-    ) => Effect.Effect<void, SessionStorageError>
+  const getActiveSessionId = (): SessionId | null => activeSessionId
+  const setLocalActiveSessionId = (id: SessionId | null): void => {
+    activeSessionId = id
   }
->() {
-  /** Production layer */
-  static readonly layer = Layer.effect(
-    SessionManager,
-    Effect.gen(function* () {
-      const storage = yield* SessionStorage
 
-      // Track active session
-      const activeSessionRef = yield* Ref.make<SessionId | null>(null)
+  // Initialize active session from index
+  const index = await storage.loadIndex()
+  if (index instanceof SessionStorageError) {
+    return index
+  }
 
-      // Initialize active session from index
-      const index = yield* storage.loadIndex()
-      if (index.activeSessionId) {
-        yield* Ref.set(activeSessionRef, index.activeSessionId)
+  if (index.activeSessionId) {
+    activeSessionId = index.activeSessionId
+  }
+
+  const lifecycleDeps = {
+    storage,
+    getActiveSessionId,
+    setActiveSessionId: setLocalActiveSessionId,
+  }
+
+  const metadataDeps = {
+    storage,
+  }
+
+  const activeSessionDeps = {
+    storage,
+    getActiveSessionId,
+    setActiveSessionId: setLocalActiveSessionId,
+  }
+
+  const quickSaveDeps = {
+    saveSession: async (session: SerializedSession) => {
+      return await lifecycleSaveSession(storage, session)
+    },
+  }
+
+  return {
+    createSession: (name?: string) =>
+      lifecycleCreateSession(lifecycleDeps, name),
+    loadSession: (id: SessionId) => lifecycleLoadSession(storage, id),
+    saveSession: (session: SerializedSession) =>
+      lifecycleSaveSession(storage, session),
+    deleteSession: (id: SessionId) =>
+      lifecycleDeleteSession(lifecycleDeps, id),
+    renameSession: (id: SessionId, newName: string) =>
+      metadataRenameSession(metadataDeps, id, newName),
+    listSessions: () => lifecycleListSessions(storage),
+    getActiveSessionId,
+    setActiveSessionId: (id: SessionId | null) =>
+      activeSetActiveSessionId(activeSessionDeps, id),
+    switchToSession: (id: SessionId) =>
+      activeSwitchToSession(activeSessionDeps, id),
+    getSessionMetadata: (id: SessionId) =>
+      metadataGetSessionMetadata(storage, id),
+    updateAutoName: (id: SessionId, cwd: string) =>
+      metadataUpdateAutoName(metadataDeps, id, cwd),
+    getSessionSummary: (id: SessionId) =>
+      metadataGetSessionSummary(storage, id),
+    serializeWorkspaces: (
+      metadata: SessionMetadata,
+      workspaces: ReadonlyMap<number, WorkspaceState>,
+      activeWorkspaceId: number,
+      getCwd: (ptyId: string) => Promise<string>
+    ) => quickSaveSerializeWorkspaces(metadata, workspaces, activeWorkspaceId, getCwd),
+    quickSave: (
+      metadata: SessionMetadata,
+      workspaces: ReadonlyMap<number, WorkspaceState>,
+      activeWorkspaceId: number,
+      getCwd: (ptyId: string) => Promise<string>
+    ) => quickSaveQuickSave(quickSaveDeps, metadata, workspaces, activeWorkspaceId, getCwd),
+  }
+}
+
+/**
+ * Create test SessionManager - in-memory session storage for testing
+ */
+export function createTestSessionManager(): SessionManager {
+  const sessions = new Map<SessionId, SerializedSession>()
+  let activeId: SessionId | null = null
+
+  const getActiveSessionId = (): SessionId | null => activeId
+
+  const setActiveSessionId = (_id: SessionId | null): void => {
+    // In test mode, we don't persist to disk, just update local state
+  }
+
+  return {
+    createSession: async (name?: string) => {
+      const id = makeSessionId()
+      const now = Date.now()
+
+      const metadata: SessionMetadata = {
+        id,
+        name: name ?? "test-session",
+        createdAt: now,
+        lastSwitchedAt: now,
+        autoNamed: !name,
       }
 
-      // Create operation groups using extracted factories
-      const lifecycle = createLifecycleOperations({ storage, activeSessionRef })
-      const metadata = createMetadataOperations({ storage })
-      const activeSession = createActiveSessionOperations({ storage, activeSessionRef })
-      const quickSaveOps = createQuickSaveOperations({ saveSession: lifecycle.saveSession })
+      const session: SerializedSession = {
+        metadata,
+        workspaces: [],
+        activeWorkspaceId: makeWorkspaceId(1),
+      }
 
-      return SessionManager.of({
-        createSession: lifecycle.createSession,
-        loadSession: lifecycle.loadSession,
-        saveSession: lifecycle.saveSession,
-        deleteSession: lifecycle.deleteSession,
-        listSessions: lifecycle.listSessions,
-        renameSession: metadata.renameSession,
-        getSessionMetadata: metadata.getSessionMetadata,
-        updateAutoName: metadata.updateAutoName,
-        getSessionSummary: metadata.getSessionSummary,
-        getActiveSessionId: activeSession.getActiveSessionId,
-        setActiveSessionId: activeSession.setActiveSessionId,
-        switchToSession: activeSession.switchToSession,
-        serializeWorkspaces: quickSaveOps.serializeWorkspaces,
-        quickSave: quickSaveOps.quickSave,
-      })
-    })
-  )
+      sessions.set(id, session)
+      activeId = id
 
-  /** Test layer - in-memory session storage for testing */
-  static readonly testLayer = Layer.effect(
-    SessionManager,
-    Effect.gen(function* () {
-      const sessionsRef = yield* Ref.make(new Map<SessionId, SerializedSession>())
-      const activeRef = yield* Ref.make<SessionId | null>(null)
+      return metadata
+    },
 
-      const createSession = Effect.fn("SessionManager.createSession")(
-        function* (name?: string) {
-          const id = makeSessionId()
-          const now = Date.now()
+    loadSession: async (id: SessionId) => {
+      const session = sessions.get(id)
+      if (!session) {
+        return new SessionNotFoundError({ sessionId: id })
+      }
+      return session
+    },
 
-          const metadata = SessionMetadata.make({
-            id,
-            name: name ?? "test-session",
-            createdAt: now,
-            lastSwitchedAt: now,
-            autoNamed: !name,
-          })
+    saveSession: async (session: SerializedSession) => {
+      sessions.set(session.metadata.id, session)
+    },
 
-          const session = SerializedSession.make({
-            metadata,
-            workspaces: [],
-            activeWorkspaceId: WorkspaceId.make(1),
-          })
+    deleteSession: async (id: SessionId) => {
+      if (!sessions.has(id)) {
+        return new SessionNotFoundError({ sessionId: id })
+      }
+      sessions.delete(id)
+      if (activeId === id) {
+        activeId = null
+      }
+    },
 
-          yield* Ref.update(sessionsRef, (map) => {
-            const newMap = new Map(map)
-            newMap.set(id, session)
-            return newMap
-          })
+    renameSession: async (id: SessionId, newName: string) => {
+      const session = sessions.get(id)
+      if (!session) {
+        return new SessionNotFoundError({ sessionId: id })
+      }
 
-          yield* Ref.set(activeRef, id)
-          return metadata
-        }
-      )
+      const updated: SerializedSession = {
+        ...session,
+        metadata: {
+          ...session.metadata,
+          name: newName,
+          autoNamed: false,
+        },
+      }
 
-      const loadSession = Effect.fn("SessionManager.loadSession")(function* (
-        id: SessionId
-      ) {
-        const sessions = yield* Ref.get(sessionsRef)
-        const session = sessions.get(id)
-        if (!session) {
-          return yield* SessionNotFoundError.make({ sessionId: id })
-        }
-        return session
-      })
+      sessions.set(id, updated)
+    },
 
-      const saveSession = Effect.fn("SessionManager.saveSession")(function* (
-        session: SerializedSession
-      ) {
-        yield* Ref.update(sessionsRef, (map) => {
-          const newMap = new Map(map)
-          newMap.set(session.metadata.id, session)
-          return newMap
-        })
-      })
+    listSessions: async () => {
+      return Array.from(sessions.values())
+        .map((s) => s.metadata)
+        .sort((a, b) => b.lastSwitchedAt - a.lastSwitchedAt)
+    },
 
-      const deleteSession = Effect.fn("SessionManager.deleteSession")(
-        function* (id: SessionId) {
-          yield* Ref.update(sessionsRef, (map) => {
-            const newMap = new Map(map)
-            newMap.delete(id)
-            return newMap
-          })
-        }
-      )
+    getActiveSessionId,
 
-      const renameSession = Effect.fn("SessionManager.renameSession")(
-        function* (id: SessionId, newName: string) {
-          const sessions = yield* Ref.get(sessionsRef)
-          const session = sessions.get(id)
-          if (!session) {
-            return yield* SessionNotFoundError.make({ sessionId: id })
-          }
+    setActiveSessionId: async (id: SessionId | null) => {
+      activeId = id
+    },
 
-          const updated = SerializedSession.make({
+    switchToSession: async (id: SessionId) => {
+      if (!sessions.has(id)) {
+        return new SessionNotFoundError({ sessionId: id })
+      }
+      activeId = id
+    },
+
+    getSessionMetadata: async (id: SessionId) => {
+      return sessions.get(id)?.metadata ?? null
+    },
+
+    updateAutoName: async (id: SessionId, cwd: string) => {
+      const session = sessions.get(id)
+      if (!session) {
+        return new SessionNotFoundError({ sessionId: id })
+      }
+
+      if (session.metadata.autoNamed) {
+        const parts = cwd.split("/").filter(Boolean)
+        const newName = parts[parts.length - 1] ?? "untitled"
+
+        if (newName !== session.metadata.name) {
+          const updated: SerializedSession = {
             ...session,
-            metadata: SessionMetadata.make({
+            metadata: {
               ...session.metadata,
               name: newName,
-              autoNamed: false,
-            }),
-          })
-
-          yield* Ref.update(sessionsRef, (map) => {
-            const newMap = new Map(map)
-            newMap.set(id, updated)
-            return newMap
-          })
-        }
-      )
-
-      const listSessions = Effect.fn("SessionManager.listSessions")(
-        function* () {
-          const sessions = yield* Ref.get(sessionsRef)
-          return Array.from(sessions.values())
-            .map((s) => s.metadata)
-            .sort((a, b) => b.lastSwitchedAt - a.lastSwitchedAt)
-        }
-      )
-
-      const getActiveSessionId = Effect.fn(
-        "SessionManager.getActiveSessionId"
-      )(function* () {
-        return yield* Ref.get(activeRef)
-      })
-
-      const setActiveSessionId = Effect.fn(
-        "SessionManager.setActiveSessionId"
-      )(function* (id: SessionId | null) {
-        yield* Ref.set(activeRef, id)
-      })
-
-      const switchToSession = Effect.fn("SessionManager.switchToSession")(
-        function* (id: SessionId) {
-          const sessions = yield* Ref.get(sessionsRef)
-          const session = sessions.get(id)
-          if (!session) {
-            return yield* SessionNotFoundError.make({ sessionId: id })
+            },
           }
-          yield* Ref.set(activeRef, id)
+          sessions.set(id, updated)
         }
-      )
+      }
+    },
 
-      const getSessionMetadata = Effect.fn("SessionManager.getSessionMetadata")(
-        function* (id: SessionId) {
-          const sessions = yield* Ref.get(sessionsRef)
-          const session = sessions.get(id)
-          return session?.metadata ?? null
-        }
-      )
+    getSessionSummary: async (id: SessionId) => {
+      const session = sessions.get(id)
+      if (!session) return null
+      return { workspaceCount: session.workspaces.length, paneCount: 0 }
+    },
 
-      const updateAutoName = (
-        _id: SessionId,
-        _cwd: string
-      ): Effect.Effect<void, SessionStorageError | SessionNotFoundError> =>
-        Effect.void
+    serializeWorkspaces: async (
+      metadata: SessionMetadata,
+      _workspaces: ReadonlyMap<number, WorkspaceState>,
+      _activeWorkspaceId: number,
+      _getCwd: (ptyId: string) => Promise<string>
+    ) => {
+      return {
+        metadata,
+        workspaces: [],
+        activeWorkspaceId: makeWorkspaceId(1),
+      }
+    },
 
-      const getSessionSummary = (
-        id: SessionId
-      ): Effect.Effect<{ workspaceCount: number; paneCount: number } | null, SessionStorageError | SessionNotFoundError> =>
-        Effect.gen(function* () {
-          const sessions = yield* Ref.get(sessionsRef)
-          const session = sessions.get(id)
-          if (!session) return null
-          return { workspaceCount: session.workspaces.length, paneCount: 0 }
-        })
-
-      const serializeWorkspaces = (
-        metadata: SessionMetadata,
-        _workspaces: ReadonlyMap<number, WorkspaceState>,
-        _activeWorkspaceId: number,
-        _getCwd: (ptyId: string) => Promise<string>
-      ): Effect.Effect<SerializedSession, never> =>
-        Effect.succeed(
-          SerializedSession.make({
-            metadata,
-            workspaces: [],
-            activeWorkspaceId: WorkspaceId.make(1),
-          })
-        )
-
-      const quickSave = (
-        _metadata: SessionMetadata,
-        _workspaces: ReadonlyMap<number, WorkspaceState>,
-        _activeWorkspaceId: number,
-        _getCwd: (ptyId: string) => Promise<string>
-      ): Effect.Effect<void, SessionStorageError> =>
-        Effect.void
-
-      return SessionManager.of({
-        createSession,
-        loadSession,
-        saveSession,
-        deleteSession,
-        renameSession,
-        listSessions,
-        getActiveSessionId,
-        setActiveSessionId,
-        switchToSession,
-        getSessionMetadata,
-        updateAutoName,
-        getSessionSummary,
-        serializeWorkspaces,
-        quickSave,
-      })
-    })
-  )
+    quickSave: async () => {
+      // No-op in test mode
+    },
+  }
 }

@@ -58,7 +58,7 @@ describe("KeyboardRouter", () => {
   })
 
   describe("routeKey", () => {
-    test("routes key events to registered handlers", () => {
+    test("routes key events to registered handlers", async () => {
       let receivedEvent: KeyEvent | null = null
 
       const handler = (e: KeyEvent) => {
@@ -69,30 +69,31 @@ describe("KeyboardRouter", () => {
       const unsubscribe = registerHandler("sessionPicker", handler)
 
       const event: KeyEvent = { key: "a", ctrl: true }
-      const result = routeKey(event)
+      const result = await routeKey(event)
 
       expect(result.handled).toBe(true)
       expect(result.overlay).toBe("sessionPicker")
-      expect(receivedEvent).toEqual(event)
+      expect(receivedEvent).toBeDefined()
+      expect(receivedEvent!).toEqual(event)
 
       unsubscribe()
     })
 
-    test("returns handled: false when no handlers registered", () => {
+    test("returns handled: false when no handlers registered", async () => {
       const event: KeyEvent = { key: "a" }
-      const result = routeKey(event)
+      const result = await routeKey(event)
 
       expect(result.handled).toBe(false)
       expect(result.overlay).toBe(null)
     })
 
-    test("returns handled: false when handler returns false", () => {
+    test("returns handled: false when handler returns false", async () => {
       const handler = () => false // Handler doesn't handle the event
 
       const unsubscribe = registerHandler("sessionPicker", handler)
 
       const event: KeyEvent = { key: "a" }
-      const result = routeKey(event)
+      const result = await routeKey(event)
 
       expect(result.handled).toBe(false)
       expect(result.overlay).toBe(null)
@@ -100,7 +101,7 @@ describe("KeyboardRouter", () => {
       unsubscribe()
     })
 
-    test("respects priority order - confirmationDialog before sessionPicker", () => {
+    test("respects priority order - confirmationDialog before sessionPicker", async () => {
       const calls: OverlayType[] = []
 
       const sessionHandler = () => {
@@ -116,7 +117,7 @@ describe("KeyboardRouter", () => {
       const unsub1 = registerHandler("sessionPicker", sessionHandler)
       const unsub2 = registerHandler("confirmationDialog", confirmHandler)
 
-      const result = routeKey({ key: "a" })
+      const result = await routeKey({ key: "a" })
 
       // confirmationDialog should be called first (higher priority)
       expect(calls[0]).toBe("confirmationDialog")
@@ -126,7 +127,7 @@ describe("KeyboardRouter", () => {
       unsub2()
     })
 
-    test("falls through to lower priority handlers if higher doesn't handle", () => {
+    test("falls through to lower priority handlers if higher doesn't handle", async () => {
       const calls: OverlayType[] = []
 
       const sessionHandler = () => {
@@ -141,7 +142,7 @@ describe("KeyboardRouter", () => {
       const unsub1 = registerHandler("sessionPicker", sessionHandler)
       const unsub2 = registerHandler("confirmationDialog", confirmHandler)
 
-      const result = routeKey({ key: "a" })
+      const result = await routeKey({ key: "a" })
 
       // Both should be called, but sessionPicker should handle
       expect(calls).toEqual(["confirmationDialog", "sessionPicker"])

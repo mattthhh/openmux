@@ -1,148 +1,196 @@
 /**
  * Session lifecycle operations for SessionManager
  * Handles create, load, save, and delete operations
+ * Migrated from Effect to errore - uses promises and direct dependency passing
  */
 
-import { Effect, Ref } from "effect"
 import type { SessionStorage } from "../SessionStorage"
-import {
+import type {
   SerializedSession,
   SessionMetadata,
   SessionIndex,
 } from "../../models"
-import type { SessionId} from "../../types";
-import { WorkspaceId, makeSessionId } from "../../types"
+import type { SessionId } from "../../types"
+import { makeWorkspaceId, makeSessionId } from "../../types"
+import { SessionStorageError, SessionNotFoundError, type SessionError } from "../../errors"
 import { getAutoName } from "./serialization"
 
 export interface LifecycleDeps {
-  storage: SessionStorage["Type"]
-  activeSessionRef: Ref.Ref<SessionId | null>
+  storage: SessionStorage
+  getActiveSessionId: () => SessionId | null
+  setActiveSessionId: (id: SessionId | null) => void
 }
 
 /**
- * Create lifecycle operations for SessionManager
+ * Create a new session
  */
-export function createLifecycleOperations(deps: LifecycleDeps) {
-  const { storage, activeSessionRef } = deps
+export async function createSession(
+  deps: LifecycleDeps,
+  name?: string
+): Promise<SessionStorageError | SessionMetadata> {
+  const { storage } = deps
 
-  const createSession = Effect.fn("SessionManager.createSession")(
-    function* (name?: string) {
-      const id = makeSessionId()
-      const now = Date.now()
+  const id = makeSessionId()
+  const now = Date.now()
 
-      const metadata = SessionMetadata.make({
-        id,
-        name: name ?? getAutoName(process.cwd()),
-        createdAt: now,
-        lastSwitchedAt: now,
-        autoNamed: !name,
-      })
-
-      // Create empty session
-      const session = SerializedSession.make({
-        metadata,
-        workspaces: [],
-        activeWorkspaceId: WorkspaceId.make(1),
-      })
-
-      // Save session file
-      yield* storage.saveSession(session)
-
-      // Update index
-      const currentIndex = yield* storage.loadIndex()
-      yield* storage.saveIndex(
-        SessionIndex.make({
-          sessions: [...currentIndex.sessions, metadata],
-          activeSessionId: id,
-        })
-      )
-
-      // Set as active
-      yield* Ref.set(activeSessionRef, id)
-
-      return metadata
-    }
-  )
-
-  const loadSession = Effect.fn("SessionManager.loadSession")(function* (
-    id: SessionId
-  ) {
-    return yield* storage.loadSession(id)
-  })
-
-  const saveSession = Effect.fn("SessionManager.saveSession")(function* (
-    session: SerializedSession
-  ) {
-    yield* storage.saveSession(session)
-
-    // Update index
-    const currentIndex = yield* storage.loadIndex()
-    const existingIdx = currentIndex.sessions.findIndex(
-      (s) => s.id === session.metadata.id
-    )
-
-    const sessions =
-      existingIdx >= 0
-        ? currentIndex.sessions.map((s, i) =>
-            i === existingIdx ? session.metadata : s
-          )
-        : [...currentIndex.sessions, session.metadata]
-
-    yield* storage.saveIndex(
-      SessionIndex.make({
-        sessions,
-        activeSessionId: currentIndex.activeSessionId,
-      })
-    )
-  })
-
-  const deleteSession = Effect.fn("SessionManager.deleteSession")(
-    function* (id: SessionId) {
-      // Delete session file
-      yield* storage.deleteSession(id)
-
-      // Update index
-      const currentIndex = yield* storage.loadIndex()
-      const filteredSessions = currentIndex.sessions.filter(
-        (s) => s.id !== id
-      )
-
-      // If deleting active session, switch to another
-      const newActiveId =
-        currentIndex.activeSessionId === id
-          ? filteredSessions[0]?.id ?? null
-          : currentIndex.activeSessionId
-
-      yield* storage.saveIndex(
-        SessionIndex.make({
-          sessions: filteredSessions,
-          activeSessionId: newActiveId,
-        })
-      )
-
-      // Update ref if needed
-      const currentActive = yield* Ref.get(activeSessionRef)
-      if (currentActive === id) {
-        yield* Ref.set(activeSessionRef, newActiveId)
-      }
-    }
-  )
-
-  const listSessions = Effect.fn("SessionManager.listSessions")(
-    function* () {
-      const sessions = yield* storage.listSessions()
-      // Sort by lastSwitchedAt (most recent first)
-      return [...sessions].sort(
-        (a, b) => b.lastSwitchedAt - a.lastSwitchedAt
-      )
-    }
-  )
-
-  return {
-    createSession,
-    loadSession,
-    saveSession,
-    deleteSession,
-    listSessions,
+  const metadata: SessionMetadata = {
+    id,
+    name: name ?? getAutoName(process.cwd()),
+    createdAt: now,
+    lastSwitchedAt: now,
+    autoNamed: !name,
   }
+
+  // Create empty session
+  const session: SerializedSession = {
+    metadata,
+    workspaces: [],
+    activeWorkspaceId: makeWorkspaceId(1),
+  }
+
+  // Save session file
+  const saveResult = await storage.saveSession(session)
+  if (saveResult instanceof SessionStorageError) {
+    return saveResult
+  }
+
+  // Update index
+  const currentIndex = await storage.loadIndex()
+  if (currentIndex instanceof SessionStorageError) {
+    return currentIndex
+  }
+
+  // Check if session already exists in index (some storage implementations add it automatically)
+  const existingIndex = currentIndex.sessions.findIndex((s) => s.id === id)
+  const updatedSessions =
+    existingIndex >= 0
+      ? currentIndex.sessions.map((s, i) => (i === existingIndex ? metadata : s))
+      : [...currentIndex.sessions, metadata]
+
+  const saveIndexResult = await storage.saveIndex({
+    sessions: updatedSessions,
+    activeSessionId: id,
+  })
+  if (saveIndexResult instanceof SessionStorageError) {
+    return saveIndexResult
+  }
+
+  // Set as active
+  deps.setActiveSessionId(id)
+
+  return metadata
+}
+
+/**
+ * Load a session by ID
+ */
+export async function loadSession(
+  storage: SessionStorage,
+  id: SessionId
+): Promise<SessionError | SerializedSession> {
+  return await storage.loadSession(id)
+}
+
+/**
+ * Save a session
+ */
+export async function saveSession(
+  storage: SessionStorage,
+  session: SerializedSession
+): Promise<SessionStorageError | void> {
+  const saveResult = await storage.saveSession(session)
+  if (saveResult instanceof SessionStorageError) {
+    return saveResult
+  }
+
+  // Update index
+  const currentIndex = await storage.loadIndex()
+  if (currentIndex instanceof SessionStorageError) {
+    return currentIndex
+  }
+
+  const existingIdx = currentIndex.sessions.findIndex(
+    (s) => s.id === session.metadata.id
+  )
+
+  const sessions =
+    existingIdx >= 0
+      ? currentIndex.sessions.map((s, i) =>
+          i === existingIdx ? session.metadata : s
+        )
+      : [...currentIndex.sessions, session.metadata]
+
+  return await storage.saveIndex({
+    sessions,
+    activeSessionId: currentIndex.activeSessionId,
+  })
+}
+
+/**
+ * Delete a session
+ */
+export async function deleteSession(
+  deps: LifecycleDeps,
+  id: SessionId
+): Promise<SessionError | void> {
+  const { storage, getActiveSessionId, setActiveSessionId } = deps
+
+  // Check if session exists
+  const exists = await storage.sessionExists(id)
+  if (!exists) {
+    return new SessionNotFoundError({ sessionId: id })
+  }
+
+  // Delete session file
+  const deleteResult = await storage.deleteSession(id)
+  if (deleteResult instanceof SessionStorageError) {
+    return deleteResult
+  }
+
+  // Update index
+  const currentIndex = await storage.loadIndex()
+  if (currentIndex instanceof SessionStorageError) {
+    return currentIndex
+  }
+
+  const filteredSessions = currentIndex.sessions.filter(
+    (s) => s.id !== id
+  )
+
+  // If deleting active session, switch to another
+  const newActiveId =
+    currentIndex.activeSessionId === id
+      ? filteredSessions[0]?.id ?? null
+      : currentIndex.activeSessionId
+
+  const saveIndexResult = await storage.saveIndex({
+    sessions: filteredSessions,
+    activeSessionId: newActiveId,
+  })
+  if (saveIndexResult instanceof SessionStorageError) {
+    return saveIndexResult
+  }
+
+  // Update ref if needed
+  const currentActive = getActiveSessionId()
+  if (currentActive === id) {
+    setActiveSessionId(newActiveId)
+  }
+}
+
+/**
+ * List all sessions sorted by lastSwitchedAt (most recent first)
+ */
+export async function listSessions(
+  storage: SessionStorage
+): Promise<SessionStorageError | SessionMetadata[]> {
+  const sessions = await storage.listSessions()
+  if (sessions instanceof SessionStorageError) {
+    return sessions
+  }
+
+  // Sort by lastSwitchedAt (most recent first)
+  return [...sessions].sort(
+    (a, b) => b.lastSwitchedAt - a.lastSwitchedAt
+  )
 }

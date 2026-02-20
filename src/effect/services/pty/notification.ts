@@ -1,5 +1,5 @@
 /**
- * Subscriber notification helpers for PTY service
+ * Subscriber notification helpers for PTY service (errore version)
  */
 
 import type { TerminalScrollState, UnifiedTerminalUpdate } from "../../../core/types"

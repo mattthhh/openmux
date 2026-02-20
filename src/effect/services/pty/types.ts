@@ -1,5 +1,5 @@
 /**
- * Internal types for PTY service
+ * Internal types for PTY service (errore version)
  */
 
 import type { IPty } from "../../../../native/zig-pty/ts/index"

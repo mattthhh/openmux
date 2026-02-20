@@ -1,143 +1,44 @@
 /**
- * Effect runtime for the application.
- * Provides a managed runtime with all services composed.
+ * Stub runtime module for backward compatibility
+ * Replaces the old Effect runtime with a simple passthrough
  */
-import { Effect, Layer, ManagedRuntime } from "effect"
-import { AppConfig, ThemeConfig } from "./Config"
-import { Clipboard, FileSystem, Pty, SessionStorage, SessionManager, TemplateStorage } from "./services"
-import { isShimProcess } from "../shim/mode"
-
-
-/** Base layer with configuration */
-const ConfigLayer = Layer.merge(AppConfig.layer, ThemeConfig.layer)
-
-/** I/O services layer */
-const IoLayer = Layer.mergeAll(
-  Clipboard.layer,
-  FileSystem.layer
-)
-
-/** PTY layer (depends on Config) */
-const PtyLayer = (isShimProcess() ? Pty.layer : Pty.shimLayer).pipe(
-  Layer.provide(ConfigLayer)
-)
-
-/** Session layer (depends on FileSystem and Config) */
-const SessionLayer = SessionStorage.layer.pipe(
-  Layer.provide(Layer.merge(FileSystem.layer, ConfigLayer))
-)
-
-/** Template layer (depends on FileSystem and Config) */
-const TemplateLayer = TemplateStorage.layer.pipe(
-  Layer.provide(Layer.merge(FileSystem.layer, ConfigLayer))
-)
-
-/** Session manager layer (depends on SessionStorage and Pty) */
-const SessionManagerLayer = SessionManager.layer.pipe(
-  Layer.provide(Layer.merge(SessionLayer, PtyLayer))
-)
-
-/** Full application layer */
-export const AppLayer = Layer.mergeAll(
-  ConfigLayer,
-  IoLayer,
-  PtyLayer,
-  SessionLayer,
-  TemplateLayer,
-  SessionManagerLayer
-)
-
-/** Test layer composition */
-const TestConfigLayer = Layer.merge(AppConfig.testLayer, ThemeConfig.testLayer)
-
-const TestIoLayer = Layer.mergeAll(
-  Clipboard.testLayer,
-  FileSystem.testLayer
-)
-
-const TestPtyLayer = Pty.testLayer
-
-const TestSessionLayer = SessionStorage.testLayer
-
-const TestTemplateLayer = TemplateStorage.testLayer.pipe(
-  Layer.provide(Layer.merge(FileSystem.testLayer, AppConfig.testLayer))
-)
-
-const TestSessionManagerLayer = SessionManager.testLayer
-
-export const TestAppLayer = Layer.mergeAll(
-  TestConfigLayer,
-  TestIoLayer,
-  TestPtyLayer,
-  TestSessionLayer,
-  TestTemplateLayer,
-  TestSessionManagerLayer
-)
-
-
-/** All services provided by the app layer */
-export type AppServices =
-  | AppConfig
-  | ThemeConfig
-  | Clipboard
-  | FileSystem
-  | Pty
-  | SessionStorage
-  | TemplateStorage
-  | SessionManager
-
-
-/** Managed runtime for the application */
-export const AppRuntime = ManagedRuntime.make(AppLayer)
-
-/** Managed runtime for testing */
-export const TestRuntime = ManagedRuntime.make(TestAppLayer)
-
 
 /**
- * Run an effect with the app runtime.
- * Returns a promise that resolves with the result.
+ * Dispose the application runtime.
+ * 
+ * In the errore architecture, this is a no-op. Services should be cleaned up individually
+ * or the process can simply exit.
  */
-export const runEffect = <A, E>(
-  effect: Effect.Effect<A, E, AppServices>
-): Promise<A> => AppRuntime.runPromise(effect)
+export function disposeRuntime(): Promise<void> {
+  // In the errore architecture, there's no centralized runtime to dispose.
+  // Individual services manage their own cleanup.
+  return Promise.resolve()
+}
 
 /**
- * Run an effect with the app runtime, returning Exit.
- * Useful when you need to handle errors explicitly.
+ * Check if the runtime is initialized.
+ * 
+ * In the errore architecture, this always returns true since services
+ * are initialized directly without a managed runtime.
  */
-export const runEffectExit = <A, E>(
-  effect: Effect.Effect<A, E, AppServices>
-) => AppRuntime.runPromiseExit(effect)
+export function isRuntimeInitialized(): boolean {
+  return true
+}
 
 /**
- * Run an effect synchronously (for effects that don't suspend).
- * Use sparingly - prefer async where possible.
+ * Run a function with the runtime (backward compatibility stub).
+ * 
+ * @deprecated Use services directly instead
  */
-export const runEffectSync = <A, E>(
-  effect: Effect.Effect<A, E, AppServices>
-): A => AppRuntime.runSync(effect)
+export async function runWithRuntime<T>(fn: () => Promise<T>): Promise<T> {
+  return fn()
+}
 
 /**
- * Run an effect and ignore errors (log them instead).
- * Useful for fire-and-forget operations.
+ * Run an Effect - stub that just throws as Effect is no longer used
+ * @deprecated Use errore services directly
  */
-export const runEffectIgnore = <A, E>(
-  effect: Effect.Effect<A, E, AppServices>
-): Promise<void> =>
-  AppRuntime.runPromise(
-    effect.pipe(
-      Effect.catchAll((error) =>
-        Effect.logError("Effect failed", error).pipe(Effect.asVoid)
-      ),
-      Effect.asVoid
-    )
-  )
-
-
-/**
- * Dispose the app runtime.
- * Call this when shutting down the application.
- */
-export const disposeRuntime = (): Promise<void> =>
-  AppRuntime.dispose()
+export function runEffect<T>(effect: unknown): Promise<T> {
+  console.warn("Effect runtime is deprecated, use errore services directly")
+  return Promise.reject(new Error("Effect runtime no longer available. Use errore services."))
+}
