@@ -2,6 +2,120 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [0.3.0](https://github.com/monotykamary/openmux/compare/v0.2.134...v0.3.0) (2026-02-20)
+
+
+### ⚠ BREAKING CHANGES
+
+* **resources:** All resource cleanup now uses AsyncDisposableStack via ResourceStack
+
+Changes:
+- Create ResourceStack utility class in src/effect/resources.ts with helpers for:
+  - Timer/interval registration
+  - Event listener management
+  - Subscription cleanup
+  - AbortController cleanup
+  - Safe cleanup with error logging
+
+- Update Control Client (src/control/client.ts):
+  - Use ResourceStack for connection cleanup
+  - Proper cleanup of event listeners and timers
+  - Fixed race condition in connection handling
+
+- Update PTY Lifecycle (src/contexts/terminal/pty-lifecycle.ts):
+  - Create PtyCleanupStack for synchronous SolidJS contexts
+  - LIFO cleanup order for all PTY resources
+  - Cleanup: session mappings → pane mapping → subscriptions
+
+- Update Shim Server (src/shim/server-handlers.ts):
+  - Use ResourceStack for subscription cleanup
+  - Bundle all Map deletions in cleanup stack
+  - Proper cleanup in detachClient
+
+- Update Session Operations (src/contexts/session-operations.ts):
+  - Guaranteed cleanup for session picker
+  - Cleanup runs on all exit paths (success/error)
+
+- Export ResourceStack from effect module barrel
+
+- Add comprehensive test coverage (68 new tests):
+  - Litmus tests: 16 tests for basic patterns
+  - Smoke tests: 19 tests for realistic scenarios
+  - Integration tests: 33 tests for actual file integration
+
+All 621 tests pass. TypeScript: 0 errors.
+* **error-handling:** createSession now returns error union instead of throwing. KeyboardRouter.routeKey is now async.
+* **error-handling:** Bridge functions now return Result | Error unions instead of throwing. Callers must check for errors using instanceof.
+* Remove Effect dependency and replace with errore
+
+This is a major architectural refactor that replaces the Effect ecosystem with
+errore for type-safe error handling. The changes improve maintainability,
+reduce runtime overhead, and simplify the codebase.
+
+Key Changes:
+- Replace Effect.Schema with Zod for validation
+- Replace Effect.Effect<T, E, R> with Promise<T | E> unions
+- Replace Context.Tag/Layer DI with factory functions
+- Replace Effect.gen with native async/await
+- Add errore.createTaggedError for error types
+- Create services singleton pattern for bridge compatibility
+
+Services Migrated:
+- FileSystem: Promise-based file operations
+- PTY: Native PTY management with errore errors
+- SessionStorage: Zod schema validation
+- SessionManager: Factory pattern with deps
+- Clipboard: Simple async interface
+- TemplateStorage: Consistent with SessionStorage
+- KeyboardRouter: Direct handler registration
+
+Bridge Layer:
+- Backward-compatible API maintained
+- Global services singleton for implicit deps
+- Dual API: legacy (no args) + explicit (WithService suffix)
+- All bridge functions use async/await
+
+Error Handling:
+- All errors are typed unions: Promise<Error | Success>
+- Early return pattern with instanceof checks
+- No more Effect runtime or fiber management
+
+Testing:
+- 553 tests passing
+- All test files updated for new patterns
+- TypeScript compilation: 0 errors
+
+Dependencies:
+- Remove: effect, @effect/cli, @effect/platform
+- Add: errore, zod
+
+Migration Notes:
+- Services must be initialized before use via initializeServices()
+- setServices() must be called to register global singleton
+- PTY service logic: shim process uses local, client uses shim proxy
+
+Closes #<issue-number>
+
+### Features
+
+* **cli:** add package manager detection to update command ([0676fea](https://github.com/monotykamary/openmux/commit/0676fea46c82c59fa4fc3dabd277c1914cb9cae0))
+* **cli:** add SHA256 checksum verification to openmux update command ([52d3200](https://github.com/monotykamary/openmux/commit/52d3200e02874a2f585cbb191f73aa3d8865b899))
+* **resources:** implement AsyncDisposableStack patterns across codebase ([746f91a](https://github.com/monotykamary/openmux/commit/746f91a4d813a1347c6e1516e7d588dd2753ec92))
+
+
+### Refactoring
+
+* **error-handling:** convert createSession to error union return ([844a083](https://github.com/monotykamary/openmux/commit/844a08305468f4aaf3c9a92a019639a7f6a36237))
+* **error-handling:** migrate bridge functions to Golang-style error returns ([534c22c](https://github.com/monotykamary/openmux/commit/534c22c12149c41be7b39d5df706b6c7d10bad8c))
+* migrate from Effect to errore for simpler error handling ([5157658](https://github.com/monotykamary/openmux/commit/5157658fdd3a6f7ef695dc0176dfa2e6fd303047))
+
+
+### Tests
+
+* skip native-dependent tests in CI ([3f8e1bc](https://github.com/monotykamary/openmux/commit/3f8e1bc2431aa11d6154da7e6aa6fe77e5de70d1))
+* suppress expected console.error in session operations tests ([c29a61f](https://github.com/monotykamary/openmux/commit/c29a61fbeb61512b4b5b9ca689fd4b0dc24fae4d))
+* suppress expected warnings in resource cleanup tests ([0c61b92](https://github.com/monotykamary/openmux/commit/0c61b929750949568738de12d264eb31512e5d1b))
+
 ### [0.2.134](https://github.com/monotykamary/openmux/compare/v0.2.133...v0.2.134) (2026-02-18)
 
 
