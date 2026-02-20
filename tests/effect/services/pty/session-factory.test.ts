@@ -42,10 +42,6 @@ vi.mock("../../../../src/terminal/capabilities", () => ({
 
 describe("createSession", () => {
   beforeEach(async () => {
-    // Skip in CI - native library not available
-    if (process.env.CI) {
-      return
-    }
     ;({ createSession } = await import("../../../../src/effect/services/pty/session-factory"))
     ;({ spawnAsync } = await import("../../../../native/zig-pty/ts/index"))
   })
@@ -57,11 +53,6 @@ describe("createSession", () => {
   })
 
   it("notifies onExit hook when the PTY exits", async () => {
-    // Skip in CI - native library not available
-    if (process.env.CI) {
-      expect(true).toBe(true)
-      return
-    }
     let exitHandler: ((event: { exitCode: number }) => void) | null = null
 
     const fakePty = {
@@ -130,12 +121,6 @@ describe("createSession", () => {
   })
 
   it("applies initial pixel sizing when provided", async () => {
-    // Skip in CI - native library not available
-    if (process.env.CI) {
-      expect(true).toBe(true)
-      return
-    }
-
     const resizeWithPixels = vi.fn()
     const fakePty = {
       onExit: vi.fn(() => ({ dispose: () => {} })),
