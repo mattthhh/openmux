@@ -1,8 +1,7 @@
 /**
- * PTY service for managing terminal pseudo-terminal sessions.
+ * PTY service for managing terminal pseudo-terminal sessions (errore version).
  * Wraps zig-pty with native libghostty-vt parsing.
  */
-import { Context, Effect, Layer, Ref, HashMap, Option, Runtime } from "effect"
 import path from "node:path"
 import type { TerminalState, UnifiedTerminalUpdate } from "../../core/types"
 import type { ITerminalEmulator } from "../../terminal/emulator-interface"
@@ -10,454 +9,540 @@ import { getHostColors, getDefaultColors, setHostColors as setHostColorsCache, t
 import { ScrollbackArchiveManager } from "../../terminal/scrollback-archive"
 import { SCROLLBACK_ARCHIVE_MAX_BYTES_GLOBAL } from "../../terminal/scrollback-config"
 import { getConfigDir } from "../../core/user-config"
-import type { PtySpawnError, PtyCwdError } from "../errors";
-import { PtyNotFoundError } from "../errors"
+import { PtyNotFoundError, PtySpawnError, PtyCwdError } from "../errors"
 import { PtyId, Cols, Rows, makePtyId } from "../types"
 import { PtySession } from "../models"
-import { AppConfig } from "../Config"
+
+/** Configuration for PTY service */
+export interface PtyServiceConfig {
+  defaultShell: string
+}
 import * as ShimClient from "../../shim/client"
 
 import type { InternalPtySession } from "./pty/types"
 import type { GitDiffStats, GitInfo } from "./pty/helpers"
-import { makeSubscriptionRegistry } from "./pty/subscription-manager"
+import { createSubscriptionRegistry } from "./pty/subscription-manager"
 import { createSession } from "./pty/session-factory"
 import { createOperations } from "./pty/operations"
 import { createSubscriptions } from "./pty/subscriptions"
 
+/** PTY Service interface */
+export interface PtyService {
+  /** Create a new PTY session */
+  create(options: {
+    cols: Cols
+    rows: Rows
+    cwd?: string
+    env?: Record<string, string>
+    pixelWidth?: number
+    pixelHeight?: number
+  }): Promise<PtySpawnError | PtyId>
 
-export class Pty extends Context.Tag("@openmux/Pty")<
-  Pty,
-  {
-    /** Create a new PTY session */
-    readonly create: (options: {
-      cols: Cols
-      rows: Rows
-      cwd?: string
-      env?: Record<string, string>
-      pixelWidth?: number
-      pixelHeight?: number
-    }) => Effect.Effect<PtyId, PtySpawnError>
+  /** Write data to a PTY */
+  write(id: PtyId, data: string): Promise<PtyNotFoundError | void>
 
-    /** Write data to a PTY */
-    readonly write: (id: PtyId, data: string) => Effect.Effect<void, PtyNotFoundError>
+  /** Send focus event if focus tracking is enabled */
+  sendFocusEvent(id: PtyId, focused: boolean): Promise<PtyNotFoundError | void>
 
-    /** Send focus event if focus tracking is enabled */
-    readonly sendFocusEvent: (id: PtyId, focused: boolean) => Effect.Effect<void, PtyNotFoundError>
+  /** Resize a PTY */
+  resize(
+    id: PtyId,
+    cols: Cols,
+    rows: Rows,
+    pixelWidth?: number,
+    pixelHeight?: number
+  ): Promise<PtyNotFoundError | void>
 
-    /** Resize a PTY */
-    readonly resize: (
-      id: PtyId,
-      cols: Cols,
-      rows: Rows,
-      pixelWidth?: number,
-      pixelHeight?: number
-    ) => Effect.Effect<void, PtyNotFoundError>
+  /** Get current working directory of a PTY's shell process */
+  getCwd(id: PtyId): Promise<PtyNotFoundError | PtyCwdError | string>
 
-    /** Get current working directory of a PTY's shell process */
-    readonly getCwd: (id: PtyId) => Effect.Effect<string, PtyNotFoundError | PtyCwdError>
+  /** Destroy a PTY session */
+  destroy(id: PtyId): Promise<void>
 
-    /** Destroy a PTY session */
-    readonly destroy: (id: PtyId) => Effect.Effect<void>
+  /** Get session info */
+  getSession(id: PtyId): Promise<PtyNotFoundError | PtySession>
 
-    /** Get session info */
-    readonly getSession: (id: PtyId) => Effect.Effect<PtySession, PtyNotFoundError>
+  /** Get terminal state */
+  getTerminalState(id: PtyId): Promise<PtyNotFoundError | TerminalState>
 
-    /** Get terminal state */
-    readonly getTerminalState: (id: PtyId) => Effect.Effect<TerminalState, PtyNotFoundError>
+  /** Subscribe to terminal state updates */
+  subscribe(
+    id: PtyId,
+    callback: (state: TerminalState) => void
+  ): Promise<PtyNotFoundError | (() => void)>
 
-    /** Subscribe to terminal state updates */
-    readonly subscribe: (
-      id: PtyId,
-      callback: (state: TerminalState) => void
-    ) => Effect.Effect<() => void, PtyNotFoundError>
+  /** Subscribe to scroll state changes (lightweight - no state rebuild) */
+  subscribeToScroll(
+    id: PtyId,
+    callback: () => void
+  ): Promise<PtyNotFoundError | (() => void)>
 
-    /** Subscribe to scroll state changes (lightweight - no state rebuild) */
-    readonly subscribeToScroll: (
-      id: PtyId,
-      callback: () => void
-    ) => Effect.Effect<() => void, PtyNotFoundError>
+  /**
+   * Subscribe to unified updates (terminal + scroll combined).
+   * More efficient than separate subscriptions - eliminates race conditions
+   * and reduces render cycles.
+   */
+  subscribeUnified(
+    id: PtyId,
+    callback: (update: UnifiedTerminalUpdate) => void
+  ): Promise<PtyNotFoundError | (() => void)>
 
-    /**
-     * Subscribe to unified updates (terminal + scroll combined).
-     * More efficient than separate subscriptions - eliminates race conditions
-     * and reduces render cycles.
-     */
-    readonly subscribeUnified: (
-      id: PtyId,
-      callback: (update: UnifiedTerminalUpdate) => void
-    ) => Effect.Effect<() => void, PtyNotFoundError>
+  /** Subscribe to PTY exit events */
+  onExit(
+    id: PtyId,
+    callback: (exitCode: number) => void
+  ): Promise<PtyNotFoundError | (() => void)>
 
-    /** Subscribe to PTY exit events */
-    readonly onExit: (
-      id: PtyId,
-      callback: (exitCode: number) => void
-    ) => Effect.Effect<() => void, PtyNotFoundError>
+  /** Get scroll state */
+  getScrollState(id: PtyId): Promise<
+    PtyNotFoundError | {
+      viewportOffset: number
+      scrollbackLength: number
+      isAtBottom: boolean
+      isAtScrollbackLimit?: boolean
+    }
+  >
 
-    /** Get scroll state */
-    readonly getScrollState: (id: PtyId) => Effect.Effect<
-      { viewportOffset: number; scrollbackLength: number; isAtBottom: boolean; isAtScrollbackLimit?: boolean },
-      PtyNotFoundError
-    >
+  /** Set scroll offset */
+  setScrollOffset(id: PtyId, offset: number): Promise<PtyNotFoundError | void>
 
-    /** Set scroll offset */
-    readonly setScrollOffset: (
-      id: PtyId,
-      offset: number
-    ) => Effect.Effect<void, PtyNotFoundError>
+  /** Enable or disable terminal update notifications (visibility gating) */
+  setUpdateEnabled(id: PtyId, enabled: boolean): Promise<PtyNotFoundError | void>
 
-    /** Enable or disable terminal update notifications (visibility gating) */
-    readonly setUpdateEnabled: (
-      id: PtyId,
-      enabled: boolean
-    ) => Effect.Effect<void, PtyNotFoundError>
+  /** Get emulator for direct access (e.g., scrollback lines) */
+  getEmulator(id: PtyId): Promise<PtyNotFoundError | ITerminalEmulator>
 
-    /** Get emulator for direct access (e.g., scrollback lines) */
-    readonly getEmulator: (id: PtyId) => Effect.Effect<ITerminalEmulator, PtyNotFoundError>
+  /** Apply host terminal colors to all active emulators */
+  setHostColors(colors: TerminalColors): Promise<void>
 
-    /** Apply host terminal colors to all active emulators */
-    readonly setHostColors: (colors: TerminalColors) => Effect.Effect<void>
+  /** Destroy all sessions */
+  destroyAll(): Promise<void>
 
-    /** Destroy all sessions */
-    readonly destroyAll: () => Effect.Effect<void>
+  /** List all active PTY IDs */
+  listAll(): Promise<PtyId[]>
 
-    /** List all active PTY IDs */
-    readonly listAll: () => Effect.Effect<PtyId[]>
+  /** Get foreground process name for a PTY */
+  getForegroundProcess(id: PtyId): Promise<PtyNotFoundError | string | undefined>
 
-    /** Get foreground process name for a PTY */
-    readonly getForegroundProcess: (id: PtyId) => Effect.Effect<string | undefined, PtyNotFoundError>
+  /** Get git branch for a PTY's current directory */
+  getGitBranch(id: PtyId): Promise<PtyNotFoundError | string | undefined>
 
-    /** Get git branch for a PTY's current directory */
-    readonly getGitBranch: (id: PtyId) => Effect.Effect<string | undefined, PtyNotFoundError | PtyCwdError>
+  /** Get git branch + dirty state for a PTY's current directory */
+  getGitInfo(id: PtyId): Promise<PtyNotFoundError | GitInfo | undefined>
 
-    /** Get git branch + dirty state for a PTY's current directory */
-    readonly getGitInfo: (id: PtyId) => Effect.Effect<GitInfo | undefined, PtyNotFoundError | PtyCwdError>
+  /** Get git diff stats for a PTY's current directory */
+  getGitDiffStats(id: PtyId): Promise<PtyNotFoundError | GitDiffStats | undefined>
 
-    /** Get git diff stats for a PTY's current directory */
-    readonly getGitDiffStats: (id: PtyId) => Effect.Effect<GitDiffStats | undefined, PtyNotFoundError | PtyCwdError>
+  /** Subscribe to PTY lifecycle events (created/destroyed) */
+  subscribeToLifecycle(
+    callback: (event: { type: 'created' | 'destroyed'; ptyId: PtyId }) => void
+  ): (() => void)
 
-    /** Subscribe to PTY lifecycle events (created/destroyed) */
-    readonly subscribeToLifecycle: (
-      callback: (event: { type: 'created' | 'destroyed'; ptyId: PtyId }) => void
-    ) => Effect.Effect<() => void>
+  /** Get current terminal title for a PTY */
+  getTitle(id: PtyId): Promise<PtyNotFoundError | string>
 
-    /** Get current terminal title for a PTY */
-    readonly getTitle: (id: PtyId) => Effect.Effect<string, PtyNotFoundError>
+  /** Get last shell command captured for a PTY */
+  getLastCommand(id: PtyId): Promise<PtyNotFoundError | string | undefined>
 
-    /** Get last shell command captured for a PTY */
-    readonly getLastCommand: (id: PtyId) => Effect.Effect<string | undefined, PtyNotFoundError>
+  /** Subscribe to terminal title changes for a PTY */
+  subscribeToTitleChange(
+    id: PtyId,
+    callback: (title: string) => void
+  ): Promise<PtyNotFoundError | (() => void)>
 
-    /** Subscribe to terminal title changes for a PTY */
-    readonly subscribeToTitleChange: (
-      id: PtyId,
-      callback: (title: string) => void
-    ) => Effect.Effect<() => void, PtyNotFoundError>
+  /** Subscribe to title changes across ALL PTYs (for aggregate view) */
+  subscribeToAllTitleChanges(
+    callback: (event: { ptyId: PtyId; title: string }) => void
+  ): (() => void)
+}
 
-    /** Subscribe to title changes across ALL PTYs (for aggregate view) */
-    readonly subscribeToAllTitleChanges: (
-      callback: (event: { ptyId: PtyId; title: string }) => void
-    ) => Effect.Effect<() => void>
+/** State container for PTY sessions */
+class PtyState {
+  private sessions = new Map<PtyId, InternalPtySession>()
+
+  get(id: PtyId): InternalPtySession | undefined {
+    return this.sessions.get(id)
   }
->() {
-  /** Production layer */
-  static readonly layer = Layer.effect(
-    Pty,
-    Effect.gen(function* () {
-      const config = yield* AppConfig
 
-      // Internal session storage
-      const sessionsRef = yield* Ref.make(
-        HashMap.empty<PtyId, InternalPtySession>()
-      )
+  set(id: PtyId, session: InternalPtySession): void {
+    this.sessions.set(id, session)
+  }
 
-      // Lifecycle event types
-      type LifecycleEvent = { type: 'created' | 'destroyed'; ptyId: PtyId }
-      type TitleChangeEvent = { ptyId: PtyId; title: string }
+  delete(id: PtyId): boolean {
+    return this.sessions.delete(id)
+  }
 
-      // Effect-based subscription registries with synchronous cleanup support
-      const lifecycleRegistry = yield* makeSubscriptionRegistry<LifecycleEvent>()
-      const globalTitleRegistry = yield* makeSubscriptionRegistry<TitleChangeEvent>()
-      const scrollbackArchiveManager = new ScrollbackArchiveManager(
-        SCROLLBACK_ARCHIVE_MAX_BYTES_GLOBAL
-      )
-      const scrollbackArchiveRoot = process.env.OPENMUX_SCROLLBACK_ARCHIVE_DIR ??
-        path.join(getConfigDir(), "scrollback")
+  has(id: PtyId): boolean {
+    return this.sessions.has(id)
+  }
 
-      // Helper to get a session or fail
-      const getSessionOrFail = (id: PtyId) =>
-        Effect.gen(function* () {
-          const sessions = yield* Ref.get(sessionsRef)
-          const session = HashMap.get(sessions, id)
-          if (Option.isNone(session)) {
-            return yield* PtyNotFoundError.make({ ptyId: id })
-          }
-          return session.value
-        })
+  keys(): IterableIterator<PtyId> {
+    return this.sessions.keys()
+  }
 
-      // Create operations using factory
-      const operations = createOperations({
-        sessionsRef,
-        getSessionOrFail,
-        lifecycleRegistry,
-      })
+  get size(): number {
+    return this.sessions.size
+  }
+}
 
-      const runtime = yield* Effect.runtime()
-      const runFork = Runtime.runFork(runtime)
-      const handleExit = (ptyId: PtyId, _exitCode: number) => {
-        runFork(operations.destroy(ptyId))
-      }
+/**
+ * Create production PTY service
+ */
+export function createPtyService(config: PtyServiceConfig, fs?: unknown): PtyService {
+  // Internal session storage
+  const state = new PtyState()
 
-      // Create session factory
-      const create = Effect.fn("Pty.create")(function* (options: {
-        cols: Cols
-        rows: Rows
-        cwd?: string
-        env?: Record<string, string>
-        pixelWidth?: number
-        pixelHeight?: number
-      }) {
-        const colors = getHostColors() ?? getDefaultColors()
-        const { id, session } = yield* createSession(
-          {
-            colors,
-            defaultShell: config.defaultShell,
-            scrollbackArchiveManager,
-            scrollbackArchiveRoot,
-            onLifecycleEvent: (event) => lifecycleRegistry.notify(event),
-            onTitleChange: (ptyId, title) => globalTitleRegistry.notifySync({ ptyId, title }),
-            onExit: handleExit,
-          },
-          options
-        )
+  // Lifecycle event types
+  type LifecycleEvent = { type: 'created' | 'destroyed'; ptyId: PtyId }
+  type TitleChangeEvent = { ptyId: PtyId; title: string }
 
-        // Store session
-        yield* Ref.update(sessionsRef, HashMap.set(id, session))
-
-        // Emit lifecycle event
-        yield* lifecycleRegistry.notify({ type: 'created', ptyId: id })
-
-        return id
-      })
-
-      // Create subscriptions using factory
-      const subscriptions = createSubscriptions({
-        getSessionOrFail,
-        lifecycleRegistry,
-        globalTitleRegistry,
-      })
-
-      const setHostColors = Effect.fn("Pty.setHostColors")(function* (colors: TerminalColors) {
-        setHostColorsCache(colors)
-        const sessions = yield* Ref.get(sessionsRef)
-        for (const id of HashMap.keys(sessions)) {
-          const sessionOpt = HashMap.get(sessions, id)
-          if (Option.isNone(sessionOpt)) continue
-          const session = sessionOpt.value
-          session.emulator.setColors?.(colors)
-          session.scrollbackArchive.clearCache()
-        }
-      })
-
-      return Pty.of({
-        create,
-        write: operations.write,
-        sendFocusEvent: operations.sendFocusEvent,
-        resize: operations.resize,
-        getCwd: operations.getCwd,
-        destroy: operations.destroy,
-        getSession: operations.getSession,
-        getTerminalState: operations.getTerminalState,
-        subscribe: subscriptions.subscribe,
-        subscribeToScroll: subscriptions.subscribeToScroll,
-        subscribeUnified: subscriptions.subscribeUnified,
-        onExit: subscriptions.onExit,
-        getScrollState: operations.getScrollState,
-        setScrollOffset: operations.setScrollOffset,
-        setUpdateEnabled: operations.setUpdateEnabled,
-        getEmulator: operations.getEmulator,
-        setHostColors,
-        destroyAll: operations.destroyAll,
-        listAll: operations.listAll,
-        getForegroundProcess: subscriptions.getForegroundProcess,
-        getGitBranch: subscriptions.getGitBranch,
-        getGitInfo: subscriptions.getGitInfo,
-        getGitDiffStats: subscriptions.getGitDiffStats,
-        subscribeToLifecycle: subscriptions.subscribeToLifecycle,
-        getTitle: operations.getTitle,
-        getLastCommand: operations.getLastCommand,
-        subscribeToTitleChange: subscriptions.subscribeToTitleChange,
-        subscribeToAllTitleChanges: subscriptions.subscribeToAllTitleChanges,
-      })
-    })
+  // Subscription registries with synchronous cleanup support
+  const lifecycleRegistry = createSubscriptionRegistry<LifecycleEvent>()
+  const globalTitleRegistry = createSubscriptionRegistry<TitleChangeEvent>()
+  const scrollbackArchiveManager = new ScrollbackArchiveManager(
+    SCROLLBACK_ARCHIVE_MAX_BYTES_GLOBAL
   )
+  const scrollbackArchiveRoot = process.env.OPENMUX_SCROLLBACK_ARCHIVE_DIR ??
+    path.join(getConfigDir(), "scrollback")
 
-  /** Shim layer - proxies PTY operations through the background shim process */
-  static readonly shimLayer = Layer.effect(
-    Pty,
-    Effect.gen(function* () {
-      yield* Effect.promise(() => ShimClient.waitForShim())
+  // Helper to get a session or fail
+  function getSessionOrFail(id: PtyId): InternalPtySession | PtyNotFoundError {
+    const session = state.get(id)
+    if (!session) {
+      return new PtyNotFoundError({ ptyId: id })
+    }
+    return session
+  }
 
-      return Pty.of({
-        create: (options) =>
-          Effect.promise(async () => {
-            const ptyId = await ShimClient.createPty({
-              cols: options.cols as number,
-              rows: options.rows as number,
-              cwd: options.cwd,
-              pixelWidth: options.pixelWidth as number | undefined,
-              pixelHeight: options.pixelHeight as number | undefined,
-            })
-            return PtyId.make(ptyId)
-          }),
-        write: (id, data) =>
-          Effect.promise(() => ShimClient.writePty(String(id), data)),
-        sendFocusEvent: (id, focused) =>
-          Effect.promise(() => ShimClient.sendFocusEvent(String(id), focused)),
-        resize: (id, cols, rows, pixelWidth, pixelHeight) =>
-          Effect.promise(() => ShimClient.resizePty(
-            String(id),
-            cols as number,
-            rows as number,
-            pixelWidth as number | undefined,
-            pixelHeight as number | undefined
-          )),
-        getCwd: (id) =>
-          Effect.promise(() => ShimClient.getPtyCwd(String(id))),
-        destroy: (id) =>
-          Effect.promise(() => ShimClient.destroyPty(String(id))),
-        getSession: (id) =>
-          Effect.gen(function* () {
-            const session = yield* Effect.promise(() => ShimClient.getSessionInfo(String(id)))
-            if (!session) {
-              return yield* PtyNotFoundError.make({ ptyId: id })
-            }
-            return PtySession.make({
-              id: PtyId.make(session.id),
-              pid: session.pid,
-              cols: Cols.make(session.cols),
-              rows: Rows.make(session.rows),
-              cwd: session.cwd,
-              shell: session.shell,
-            })
-          }),
-        getTerminalState: (id) =>
-          Effect.gen(function* () {
-            const state = yield* Effect.promise(() => ShimClient.getTerminalState(String(id)))
-            if (!state) {
-              return yield* PtyNotFoundError.make({ ptyId: id })
-            }
-            return state
-          }),
-        subscribe: (id, callback) =>
-          Effect.sync(() => ShimClient.subscribeState(String(id), callback)),
-        subscribeToScroll: (id, callback) =>
-          Effect.sync(() => ShimClient.subscribeScroll(String(id), callback)),
-        subscribeUnified: (id, callback) =>
-          Effect.sync(() => ShimClient.subscribeUnified(String(id), callback)),
-        onExit: (id, callback) =>
-          Effect.sync(() => ShimClient.subscribeExit(String(id), callback)),
-        getScrollState: (id) =>
-          Effect.gen(function* () {
-            const state = yield* Effect.promise(() => ShimClient.getScrollState(String(id)))
-            if (!state) {
-              return yield* PtyNotFoundError.make({ ptyId: id })
-            }
-            return state
-          }),
-        setScrollOffset: (id, offset) =>
-          Effect.promise(() => ShimClient.setScrollOffset(String(id), offset)),
-        setUpdateEnabled: (id, enabled) =>
-          Effect.promise(() => ShimClient.setUpdateEnabled(String(id), enabled)),
-        getEmulator: (id) =>
-          Effect.sync(() => ShimClient.getEmulator(String(id))),
-        setHostColors: (colors) =>
-          Effect.promise(() => ShimClient.setHostColors(colors)),
-        destroyAll: () =>
-          Effect.promise(() => ShimClient.destroyAllPtys()),
-        listAll: () =>
-          Effect.promise(async () => {
-            const ids = await ShimClient.listAllPtys()
-            return ids.map((value) => PtyId.make(value))
-          }),
-        getForegroundProcess: (id) =>
-          Effect.promise(() => ShimClient.getForegroundProcess(String(id))),
-        getGitBranch: (id) =>
-          Effect.promise(() => ShimClient.getGitBranch(String(id))),
-        getGitInfo: (id) =>
-          Effect.promise(() => ShimClient.getGitInfo(String(id))),
-        getGitDiffStats: (id) =>
-          Effect.promise(() => ShimClient.getGitDiffStats(String(id))),
-        subscribeToLifecycle: (callback) =>
-          Effect.sync(() =>
-            ShimClient.subscribeToLifecycle((event) => {
-              callback({ type: event.type, ptyId: PtyId.make(event.ptyId) })
-            })
-          ),
-        getTitle: (id) =>
-          Effect.promise(() => ShimClient.getTitle(String(id))),
-        getLastCommand: (id) =>
-          Effect.promise(() => ShimClient.getLastCommand(String(id))),
-        subscribeToTitleChange: (id, callback) =>
-          Effect.sync(() => ShimClient.subscribeToTitle(String(id), callback)),
-        subscribeToAllTitleChanges: (callback) =>
-          Effect.sync(() =>
-            ShimClient.subscribeToAllTitles((event) => {
-              callback({ ptyId: PtyId.make(event.ptyId), title: event.title })
-            })
-          ),
-      })
-    })
-  )
-
-  /** Test layer - mock PTY for testing */
-  static readonly testLayer = Layer.succeed(Pty, {
-    create: () => Effect.succeed(makePtyId()),
-    write: () => Effect.void,
-    sendFocusEvent: () => Effect.void,
-    resize: () => Effect.void,
-    getCwd: () => Effect.succeed("/test/cwd"),
-    destroy: () => Effect.void,
-    getSession: (id) =>
-      Effect.succeed(
-        PtySession.make({
-          id,
-          pid: 12345,
-          cols: Cols.make(80),
-          rows: Rows.make(24),
-          cwd: "/test/cwd",
-          shell: "/bin/bash",
-        })
-      ),
-    getTerminalState: () =>
-      Effect.succeed({
-        cells: [],
-        cursorX: 0,
-        cursorY: 0,
-        cursorVisible: true,
-      } as unknown as TerminalState),
-    subscribe: () => Effect.succeed(() => {}),
-    subscribeToScroll: () => Effect.succeed(() => {}),
-    subscribeUnified: () => Effect.succeed(() => {}),
-    onExit: () => Effect.succeed(() => {}),
-    getScrollState: () =>
-      Effect.succeed({
-        viewportOffset: 0,
-        scrollbackLength: 0,
-        isAtBottom: true,
-      }),
-    setScrollOffset: () => Effect.void,
-    setUpdateEnabled: () => Effect.void,
-    getEmulator: () => Effect.die(new Error("No emulator in test layer")),
-    setHostColors: () => Effect.void,
-    destroyAll: () => Effect.void,
-    listAll: () => Effect.succeed([]),
-    getForegroundProcess: () => Effect.succeed(undefined),
-    getGitBranch: () => Effect.succeed(undefined),
-    getGitInfo: () => Effect.succeed(undefined),
-    getGitDiffStats: () => Effect.succeed(undefined),
-    subscribeToLifecycle: () => Effect.succeed(() => {}),
-    getTitle: () => Effect.succeed(""),
-    getLastCommand: () => Effect.succeed(undefined),
-    subscribeToTitleChange: () => Effect.succeed(() => {}),
-    subscribeToAllTitleChanges: () => Effect.succeed(() => {}),
+  // Create operations using factory
+  const operations = createOperations({
+    sessions: state as unknown as Map<PtyId, InternalPtySession>,
+    lifecycleRegistry,
   })
+
+  const handleExit = (ptyId: PtyId, _exitCode: number) => {
+    void operations.destroy(ptyId)
+  }
+
+  // Create session factory
+  async function create(options: {
+    cols: Cols
+    rows: Rows
+    cwd?: string
+    env?: Record<string, string>
+    pixelWidth?: number
+    pixelHeight?: number
+  }): Promise<PtySpawnError | PtyId> {
+    const colors = getHostColors() ?? getDefaultColors()
+    const result = await createSession(
+      {
+        colors,
+        defaultShell: config.defaultShell,
+        scrollbackArchiveManager,
+        scrollbackArchiveRoot,
+        onLifecycleEvent: (event) => lifecycleRegistry.notify(event),
+        onTitleChange: (ptyId, title) => globalTitleRegistry.notifySync({ ptyId, title }),
+        onExit: handleExit,
+      },
+      options
+    )
+
+    if (result instanceof PtySpawnError) {
+      return result
+    }
+
+    const { id, session } = result
+
+    // Store session
+    state.set(id, session)
+
+    // Emit lifecycle event
+    lifecycleRegistry.notify({ type: 'created', ptyId: id })
+
+    return id
+  }
+
+  // Create subscriptions using factory
+  const subscriptions = createSubscriptions({
+    getSessionOrFail: (id: PtyId) => {
+      const result = getSessionOrFail(id)
+      if (result instanceof PtyNotFoundError) {
+        return Promise.resolve(result)
+      }
+      return Promise.resolve(result)
+    },
+    lifecycleRegistry,
+    globalTitleRegistry,
+  })
+
+  async function setHostColors(colors: TerminalColors): Promise<void> {
+    setHostColorsCache(colors)
+    for (const id of state.keys()) {
+      const session = state.get(id)
+      if (!session) continue
+      session.emulator.setColors?.(colors)
+      session.scrollbackArchive.clearCache()
+    }
+  }
+
+  return {
+    create,
+    write: operations.write,
+    sendFocusEvent: operations.sendFocusEvent,
+    resize: operations.resize,
+    getCwd: operations.getCwd,
+    destroy: operations.destroy,
+    getSession: operations.getSession,
+    getTerminalState: operations.getTerminalState,
+    subscribe: subscriptions.subscribe,
+    subscribeToScroll: subscriptions.subscribeToScroll,
+    subscribeUnified: subscriptions.subscribeUnified,
+    onExit: subscriptions.onExit,
+    getScrollState: operations.getScrollState,
+    setScrollOffset: operations.setScrollOffset,
+    setUpdateEnabled: operations.setUpdateEnabled,
+    getEmulator: operations.getEmulator,
+    setHostColors,
+    destroyAll: operations.destroyAll,
+    listAll: operations.listAll,
+    getForegroundProcess: subscriptions.getForegroundProcess,
+    getGitBranch: subscriptions.getGitBranch,
+    getGitInfo: subscriptions.getGitInfo,
+    getGitDiffStats: subscriptions.getGitDiffStats,
+    subscribeToLifecycle: subscriptions.subscribeToLifecycle,
+    getTitle: operations.getTitle,
+    getLastCommand: operations.getLastCommand,
+    subscribeToTitleChange: subscriptions.subscribeToTitleChange,
+    subscribeToAllTitleChanges: subscriptions.subscribeToAllTitleChanges,
+  }
+}
+
+/**
+ * Create shim PTY service - proxies PTY operations through the background shim process
+ */
+export function createShimPtyService(): PtyService {
+  // Ensure shim client is ready
+  let shimReady = false
+  const shimReadyPromise = ShimClient.waitForShim().then(() => {
+    shimReady = true
+  })
+
+  async function ensureShim(): Promise<void> {
+    if (!shimReady) {
+      await shimReadyPromise
+    }
+  }
+
+  return {
+    create: async (options) => {
+      await ensureShim()
+      const ptyId = await ShimClient.createPty({
+        cols: options.cols as number,
+        rows: options.rows as number,
+        cwd: options.cwd,
+        pixelWidth: options.pixelWidth as number | undefined,
+        pixelHeight: options.pixelHeight as number | undefined,
+      })
+      return ptyId as PtyId
+    },
+    write: async (id, data) => {
+      await ensureShim()
+      await ShimClient.writePty(String(id), data)
+    },
+    sendFocusEvent: async (id, focused) => {
+      await ensureShim()
+      await ShimClient.sendFocusEvent(String(id), focused)
+    },
+    resize: async (id, cols, rows, pixelWidth, pixelHeight) => {
+      await ensureShim()
+      await ShimClient.resizePty(
+        String(id),
+        cols as number,
+        rows as number,
+        pixelWidth as number | undefined,
+        pixelHeight as number | undefined
+      )
+    },
+    getCwd: async (id) => {
+      await ensureShim()
+      return await ShimClient.getPtyCwd(String(id))
+    },
+    destroy: async (id) => {
+      await ensureShim()
+      await ShimClient.destroyPty(String(id))
+    },
+    getSession: async (id) => {
+      await ensureShim()
+      const session = await ShimClient.getSessionInfo(String(id))
+      if (!session) {
+        return new PtyNotFoundError({ ptyId: id })
+      }
+      return {
+        id: session.id as PtyId,
+        pid: session.pid,
+        cols: session.cols as Cols,
+        rows: session.rows as Rows,
+        cwd: session.cwd,
+        shell: session.shell,
+      }
+    },
+    getTerminalState: async (id) => {
+      await ensureShim()
+      const state = await ShimClient.getTerminalState(String(id))
+      if (!state) {
+        return new PtyNotFoundError({ ptyId: id })
+      }
+      return state as TerminalState
+    },
+    subscribe: async (id, callback) => {
+      await ensureShim()
+      return ShimClient.subscribeState(String(id), callback)
+    },
+    subscribeToScroll: async (id, callback) => {
+      await ensureShim()
+      return ShimClient.subscribeScroll(String(id), callback)
+    },
+    subscribeUnified: async (id, callback) => {
+      await ensureShim()
+      return ShimClient.subscribeUnified(String(id), callback)
+    },
+    onExit: async (id, callback) => {
+      await ensureShim()
+      return ShimClient.subscribeExit(String(id), callback)
+    },
+    getScrollState: async (id) => {
+      await ensureShim()
+      const state = await ShimClient.getScrollState(String(id))
+      if (!state) {
+        return new PtyNotFoundError({ ptyId: id })
+      }
+      return state
+    },
+    setScrollOffset: async (id, offset) => {
+      await ensureShim()
+      await ShimClient.setScrollOffset(String(id), offset)
+    },
+    setUpdateEnabled: async (id, enabled) => {
+      await ensureShim()
+      await ShimClient.setUpdateEnabled(String(id), enabled)
+    },
+    getEmulator: async (id) => {
+      await ensureShim()
+      return ShimClient.getEmulator(String(id))
+    },
+    setHostColors: async (colors) => {
+      await ensureShim()
+      await ShimClient.setHostColors(colors)
+    },
+    destroyAll: async () => {
+      await ensureShim()
+      await ShimClient.destroyAllPtys()
+    },
+    listAll: async () => {
+      await ensureShim()
+      const ids = await ShimClient.listAllPtys()
+      return ids.map((value) => value as PtyId)
+    },
+    getForegroundProcess: async (id) => {
+      await ensureShim()
+      return await ShimClient.getForegroundProcess(String(id))
+    },
+    getGitBranch: async (id) => {
+      await ensureShim()
+      return await ShimClient.getGitBranch(String(id))
+    },
+    getGitInfo: async (id) => {
+      await ensureShim()
+      return await ShimClient.getGitInfo(String(id))
+    },
+    getGitDiffStats: async (id) => {
+      await ensureShim()
+      return await ShimClient.getGitDiffStats(String(id))
+    },
+    subscribeToLifecycle: (callback) => {
+      void ensureShim().then(() => {
+        // This is synchronous return, but ShimClient.subscribeToLifecycle returns void
+        // So we call it here for side effects
+        ShimClient.subscribeToLifecycle((event) => {
+          callback({ type: event.type, ptyId: event.ptyId as PtyId })
+        })
+      })
+      // Return a no-op cleanup for now
+      return () => {}
+    },
+    getTitle: async (id) => {
+      await ensureShim()
+      return await ShimClient.getTitle(String(id))
+    },
+    getLastCommand: async (id) => {
+      await ensureShim()
+      return await ShimClient.getLastCommand(String(id))
+    },
+    subscribeToTitleChange: async (id, callback) => {
+      await ensureShim()
+      return ShimClient.subscribeToTitle(String(id), callback)
+    },
+    subscribeToAllTitleChanges: (callback) => {
+      void ensureShim().then(() => {
+        ShimClient.subscribeToAllTitles((event) => {
+          callback({ ptyId: event.ptyId as PtyId, title: event.title })
+        })
+      })
+      return () => {}
+    },
+  }
+}
+
+/**
+ * Create test PTY service - mock PTY for testing
+ */
+export function createTestPtyService(): PtyService {
+  return {
+    create: async () => makePtyId(),
+    write: async () => undefined,
+    sendFocusEvent: async () => undefined,
+    resize: async () => undefined,
+    getCwd: async () => "/test/cwd",
+    destroy: async () => undefined,
+    getSession: async (id) => ({
+      id,
+      pid: 12345,
+      cols: 80 as Cols,
+      rows: 24 as Rows,
+      cwd: "/test/cwd",
+      shell: "/bin/bash",
+    }),
+    getTerminalState: async () => ({
+      cells: [],
+      cursorX: 0,
+      cursorY: 0,
+      cursorVisible: true,
+    } as unknown as TerminalState),
+    subscribe: async () => () => {},
+    subscribeToScroll: async () => () => {},
+    subscribeUnified: async () => () => {},
+    onExit: async () => () => {},
+    getScrollState: async () => ({
+      viewportOffset: 0,
+      scrollbackLength: 0,
+      isAtBottom: true,
+    }),
+    setScrollOffset: async () => undefined,
+    setUpdateEnabled: async () => undefined,
+    getEmulator: async () => {
+      throw new Error("No emulator in test layer")
+    },
+    setHostColors: async () => undefined,
+    destroyAll: async () => undefined,
+    listAll: async () => [],
+    getForegroundProcess: async () => undefined,
+    getGitBranch: async () => undefined,
+    getGitInfo: async () => undefined,
+    getGitDiffStats: async () => undefined,
+    subscribeToLifecycle: () => () => {},
+    getTitle: async () => "",
+    getLastCommand: async () => undefined,
+    subscribeToTitleChange: async () => () => {},
+    subscribeToAllTitleChanges: () => () => {},
+  }
 }

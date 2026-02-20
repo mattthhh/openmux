@@ -6,16 +6,23 @@ import type { Workspaces } from '../core/operations/layout-actions';
 import type { LayoutMode, WorkspaceId, LayoutNode, PaneData } from '../core/types';
 import { normalizeTemplateId } from '../core/template-utils';
 import { isSplitNode } from '../core/layout-tree';
-import { WorkspaceId as EffectWorkspaceId } from '../effect/types';
+import { makeWorkspaceId } from '../effect/types';
 import {
-  TemplateSession,
-  TemplateDefaults,
-  TemplateWorkspace,
-  TemplatePaneData,
-  TemplateLayoutPane,
-  TemplateLayoutSplit,
-  TemplateWorkspaceLayout,
+  type TemplateSession,
+  type TemplateDefaults,
+  type TemplateWorkspace,
+  type TemplatePaneData,
+  type TemplateLayoutPane,
+  type TemplateLayoutSplit,
+  type TemplateWorkspaceLayout,
   type TemplateLayoutNode,
+  createTemplateLayoutSplit,
+  createTemplateLayoutPane,
+  createTemplateWorkspace,
+  createTemplatePaneData,
+  createTemplateDefaults,
+  createTemplateSession,
+  createTemplateWorkspaceLayout,
 } from '../effect/models';
 import { buildLayoutFromTemplate } from '../effect/bridge';
 
@@ -170,8 +177,7 @@ export async function buildTemplateFromWorkspaces(params: {
     if (isSplitNode(node)) {
       const first = await buildLayoutNode(node.first, leafMetadata);
       const second = await buildLayoutNode(node.second, leafMetadata);
-      return TemplateLayoutSplit.make({
-        type: 'split',
+      return createTemplateLayoutSplit({
         direction: node.direction,
         ratio: node.ratio,
         first,
@@ -181,8 +187,7 @@ export async function buildTemplateFromWorkspaces(params: {
 
     const metadata = await resolvePaneMetadata(node);
     leafMetadata.push(metadata);
-    return TemplateLayoutPane.make({
-      type: 'pane',
+    return createTemplateLayoutPane({
       cwd: metadata.cwd,
       command: metadata.command,
     });
@@ -191,7 +196,7 @@ export async function buildTemplateFromWorkspaces(params: {
   for (const entry of workspaceEntries) {
     const workspace = entry.workspace;
     if (!workspace) continue;
-    const workspaceId = EffectWorkspaceId.make(entry.id);
+    const workspaceId = makeWorkspaceId(entry.id);
     const panes: TemplatePaneData[] = [];
     const leafMetadata: Array<{ cwd: string; command?: string }> = [];
 
@@ -205,7 +210,7 @@ export async function buildTemplateFromWorkspaces(params: {
 
     for (const [index, metadata] of leafMetadata.entries()) {
       panes.push(
-        TemplatePaneData.make({
+        createTemplatePaneData({
           role: index === 0 ? 'main' : 'stack',
           cwd: metadata.cwd,
           command: metadata.command,
@@ -221,11 +226,11 @@ export async function buildTemplateFromWorkspaces(params: {
     maxPaneCount = Math.max(maxPaneCount, leafMetadata.length);
 
     templateWorkspaces.push(
-      TemplateWorkspace.make({
+      createTemplateWorkspace({
         id: workspaceId,
         layoutMode: workspace.layoutMode,
         panes,
-        layout: TemplateWorkspaceLayout.make({
+        layout: createTemplateWorkspaceLayout({
           main: mainLayout,
           stack: stackLayout,
         }),
@@ -233,15 +238,14 @@ export async function buildTemplateFromWorkspaces(params: {
     );
   }
 
-  const defaults = TemplateDefaults.make({
+  const defaults = createTemplateDefaults({
     workspaceCount: Math.min(9, Math.max(1, workspaceEntries.length)),
     paneCount: maxPaneCount,
     layoutMode: params.defaultLayoutMode,
     cwd: cwdIsUniform && unifiedCwd ? unifiedCwd : undefined,
   });
 
-  const template = TemplateSession.make({
-    version: 1,
+  const template = createTemplateSession({
     id: templateId,
     name: params.name,
     createdAt: now,

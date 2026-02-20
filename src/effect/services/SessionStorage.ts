@@ -1,233 +1,291 @@
 /**
  * Session storage service for persisting sessions to disk.
+ * Migrated from Effect to errore - uses plain promises and Zod schemas.
  */
-import { Context, Effect, Layer } from "effect"
-import { FileSystem } from "./FileSystem"
-import { AppConfig } from "../Config"
-import type {
-  SessionStorageError} from "../errors";
+import type { FileSystem } from "./FileSystem"
+import type { AppConfig } from "../Config"
 import {
   SessionNotFoundError,
   SessionCorruptedError,
+  SessionStorageError,
+  FileSystemError,
 } from "../errors"
-import type {
-  SessionMetadata} from "../models";
 import {
   SerializedSession,
+  SerializedSessionSchema,
   SessionIndex,
+  SessionIndexSchema,
+  SessionMetadata,
 } from "../models"
 import type { SessionId } from "../types"
+import { createEmptySessionIndex } from "../models"
 
+export interface SessionStorage {
+  /** Load a session by ID */
+  loadSession(
+    id: SessionId
+  ): Promise<SessionStorageError | SessionNotFoundError | SessionCorruptedError | SerializedSession>
 
-export class SessionStorage extends Context.Tag("@openmux/SessionStorage")<
-  SessionStorage,
-  {
-    /** Load the session index */
-    readonly loadIndex: () => Effect.Effect<SessionIndex, SessionStorageError>
+  /** Save a session */
+  saveSession(session: SerializedSession): Promise<SessionStorageError | void>
 
-    /** Save the session index */
-    readonly saveIndex: (
-      index: SessionIndex
-    ) => Effect.Effect<void, SessionStorageError>
+  /** Delete a session */
+  deleteSession(id: SessionId): Promise<SessionStorageError | void>
 
-    /** Load a session by ID */
-    readonly loadSession: (
-      id: SessionId
-    ) => Effect.Effect<
-      SerializedSession,
-      SessionNotFoundError | SessionCorruptedError
-    >
+  /** List all session metadata */
+  listSessions(): Promise<SessionStorageError | SessionMetadata[]>
 
-    /** Save a session */
-    readonly saveSession: (
-      session: SerializedSession
-    ) => Effect.Effect<void, SessionStorageError>
+  /** Load the session index */
+  loadIndex(): Promise<SessionStorageError | SessionIndex>
 
-    /** Delete a session */
-    readonly deleteSession: (
-      id: SessionId
-    ) => Effect.Effect<void, SessionStorageError>
+  /** Save the session index */
+  saveIndex(index: SessionIndex): Promise<SessionStorageError | void>
 
-    /** List all session metadata */
-    readonly listSessions: () => Effect.Effect<
-      readonly SessionMetadata[],
-      SessionStorageError
-    >
+  /** Check if a session exists */
+  sessionExists(id: SessionId): Promise<boolean>
+}
 
-    /** Check if a session exists */
-    readonly sessionExists: (id: SessionId) => Effect.Effect<boolean>
+/**
+ * Create a production SessionStorage instance.
+ * Takes FileSystem and AppConfig as direct dependencies.
+ */
+export async function createSessionStorage(
+  fs: FileSystem,
+  config: AppConfig
+): Promise<SessionStorageError | SessionStorage> {
+  const storagePath = config.sessionStoragePath
+  const indexPath = `${storagePath}/index.json`
+  const sessionPath = (id: SessionId) => `${storagePath}/${id}.json`
+
+  // Ensure storage directory exists on initialization
+  const ensureDirResult = await fs.ensureDir(storagePath)
+  if (ensureDirResult instanceof FileSystemError) {
+    return new SessionStorageError({
+      operation: "initialize",
+      path: storagePath,
+      reason: ensureDirResult.reason,
+    })
   }
->() {
-  /** Production layer */
-  static readonly layer = Layer.effect(
-    SessionStorage,
-    Effect.gen(function* () {
-      const fs = yield* FileSystem
-      const config = yield* AppConfig
 
-      const storagePath = config.sessionStoragePath
-      const indexPath = `${storagePath}/index.json`
-      const sessionPath = (id: SessionId) => `${storagePath}/${id}.json`
+  const loadIndex = async (): Promise<SessionStorageError | SessionIndex> => {
+    const exists = await fs.exists(indexPath)
 
-      // Ensure storage directory exists on initialization
-      yield* fs.ensureDir(storagePath)
+    if (!exists) {
+      return createEmptySessionIndex()
+    }
 
-      const loadIndex = Effect.fn("SessionStorage.loadIndex")(function* () {
-        const exists = yield* fs.exists(indexPath)
+    const result = await fs.readJson(indexPath, SessionIndexSchema)
 
-        if (!exists) {
-          return SessionIndex.empty()
-        }
+    if (result instanceof FileSystemError) {
+      // If index is corrupted, return empty index
+      return createEmptySessionIndex()
+    }
 
-        return yield* fs.readJson(indexPath, SessionIndex).pipe(
-          Effect.catchTag("SessionStorageError", () =>
-            Effect.succeed(SessionIndex.empty())
-          )
-        )
+    return result
+  }
+
+  const saveIndex = async (
+    index: SessionIndex
+  ): Promise<SessionStorageError | void> => {
+    const result = await fs.writeJson(indexPath, SessionIndexSchema, index)
+
+    if (result instanceof FileSystemError) {
+      return new SessionStorageError({
+        operation: "saveIndex",
+        path: indexPath,
+        reason: result.reason,
       })
+    }
 
-      const saveIndex = Effect.fn("SessionStorage.saveIndex")(function* (
-        index: SessionIndex
-      ) {
-        yield* fs.writeJson(indexPath, SessionIndex, index)
+    return undefined
+  }
+
+  const loadSession = async (
+    id: SessionId
+  ): Promise<SessionStorageError | SessionNotFoundError | SessionCorruptedError | SerializedSession> => {
+    const path = sessionPath(id)
+    const exists = await fs.exists(path)
+
+    if (!exists) {
+      return new SessionNotFoundError({ sessionId: id })
+    }
+
+    const result = await fs.readJson(path, SerializedSessionSchema)
+
+    if (result instanceof FileSystemError) {
+      // Map FileSystemError to SessionCorruptedError
+      return new SessionCorruptedError({
+        sessionId: id,
+        reason: result.reason,
       })
+    }
 
-      const loadSession = Effect.fn("SessionStorage.loadSession")(function* (
-        id: SessionId
-      ) {
-        const path = sessionPath(id)
-        const exists = yield* fs.exists(path)
+    return result
+  }
 
-        if (!exists) {
-          return yield* SessionNotFoundError.make({ sessionId: id })
-        }
+  const saveSession = async (
+    session: SerializedSession
+  ): Promise<SessionStorageError | void> => {
+    const result = await fs.writeJson(
+      sessionPath(session.metadata.id),
+      SerializedSessionSchema,
+      session
+    )
 
-        return yield* fs.readJson(path, SerializedSession).pipe(
-          Effect.catchTag("SessionStorageError", (error) =>
-            SessionCorruptedError.make({ sessionId: id, cause: error })
-          )
-        )
+    if (result instanceof FileSystemError) {
+      return new SessionStorageError({
+        operation: "saveSession",
+        path: sessionPath(session.metadata.id),
+        reason: result.reason,
       })
+    }
 
-      const saveSession = Effect.fn("SessionStorage.saveSession")(function* (
-        session: SerializedSession
-      ) {
-        yield* fs.writeJson(sessionPath(session.metadata.id), SerializedSession, session)
+    return undefined
+  }
+
+  const deleteSession = async (
+    id: SessionId
+  ): Promise<SessionStorageError | void> => {
+    const result = await fs.remove(sessionPath(id))
+
+    if (result instanceof FileSystemError) {
+      return new SessionStorageError({
+        operation: "deleteSession",
+        path: sessionPath(id),
+        reason: result.reason,
       })
+    }
 
-      const deleteSession = Effect.fn("SessionStorage.deleteSession")(
-        function* (id: SessionId) {
-          yield* fs.remove(sessionPath(id))
-        }
-      )
+    return undefined
+  }
 
-      const listSessions = Effect.fn("SessionStorage.listSessions")(
-        function* () {
-          const index = yield* loadIndex()
-          return index.sessions
-        }
-      )
+  const listSessions = async (): Promise<SessionStorageError | SessionMetadata[]> => {
+    const index = await loadIndex()
 
-      const sessionExists = Effect.fn("SessionStorage.sessionExists")(
-        function* (id: SessionId) {
-          return yield* fs.exists(sessionPath(id))
-        }
-      )
+    if (index instanceof SessionStorageError) {
+      return index
+    }
 
-      return SessionStorage.of({
-        loadIndex,
-        saveIndex,
-        loadSession,
-        saveSession,
-        deleteSession,
-        listSessions,
-        sessionExists,
-      })
-    })
-  )
+    return index.sessions
+  }
 
-  /** Test layer - in-memory session storage */
-  static readonly testLayer = Layer.effect(
-    SessionStorage,
-    Effect.gen(function* () {
-      const fs = yield* FileSystem
+  const sessionExists = async (id: SessionId): Promise<boolean> => {
+    return fs.exists(sessionPath(id))
+  }
 
-      // Use in-memory FileSystem from test layer
-      const indexPath = "/tmp/openmux-test/sessions/index.json"
-      const sessionPath = (id: SessionId) =>
-        `/tmp/openmux-test/sessions/${id}.json`
+  return {
+    loadSession,
+    saveSession,
+    deleteSession,
+    listSessions,
+    loadIndex,
+    saveIndex,
+    sessionExists,
+  }
+}
 
-      const loadIndex = Effect.fn("SessionStorage.loadIndex")(function* () {
-        const exists = yield* fs.exists(indexPath)
+/**
+ * In-memory session storage for testing.
+ * Implements the same interface but stores data in memory.
+ */
+export interface InMemorySessionStorage extends SessionStorage {
+  /** Clear all stored sessions */
+  clear(): void
+  /** Get all stored session IDs */
+  getSessionIds(): SessionId[]
+}
 
-        if (!exists) {
-          return SessionIndex.empty()
-        }
+/**
+ * Create an in-memory SessionStorage for testing.
+ */
+export function createTestSessionStorage(): InMemorySessionStorage {
+  const sessions = new Map<SessionId, SerializedSession>()
+  let index: SessionIndex = createEmptySessionIndex()
 
-        return yield* fs.readJson(indexPath, SessionIndex).pipe(
-          Effect.catchTag("SessionStorageError", () =>
-            Effect.succeed(SessionIndex.empty())
-          )
-        )
-      })
+  const loadIndex = async (): Promise<SessionStorageError | SessionIndex> => {
+    return index
+  }
 
-      const saveIndex = Effect.fn("SessionStorage.saveIndex")(function* (
-        index: SessionIndex
-      ) {
-        yield* fs.writeJson(indexPath, SessionIndex, index)
-      })
+  const saveIndex = async (
+    newIndex: SessionIndex
+  ): Promise<SessionStorageError | void> => {
+    index = newIndex
+    return undefined
+  }
 
-      const loadSession = Effect.fn("SessionStorage.loadSession")(function* (
-        id: SessionId
-      ) {
-        const path = sessionPath(id)
-        const exists = yield* fs.exists(path)
+  const loadSession = async (
+    id: SessionId
+  ): Promise<SessionStorageError | SessionNotFoundError | SessionCorruptedError | SerializedSession> => {
+    const session = sessions.get(id)
 
-        if (!exists) {
-          return yield* SessionNotFoundError.make({ sessionId: id })
-        }
+    if (!session) {
+      return new SessionNotFoundError({ sessionId: id })
+    }
 
-        return yield* fs.readJson(path, SerializedSession).pipe(
-          Effect.catchTag("SessionStorageError", (error) =>
-            SessionCorruptedError.make({ sessionId: id, cause: error })
-          )
-        )
-      })
+    return session
+  }
 
-      const saveSession = Effect.fn("SessionStorage.saveSession")(function* (
-        session: SerializedSession
-      ) {
-        yield* fs.writeJson(sessionPath(session.metadata.id), SerializedSession, session)
-      })
+  const saveSession = async (
+    session: SerializedSession
+  ): Promise<SessionStorageError | void> => {
+    sessions.set(session.metadata.id, session)
 
-      const deleteSession = Effect.fn("SessionStorage.deleteSession")(
-        function* (id: SessionId) {
-          yield* fs.remove(sessionPath(id))
-        }
-      )
+    // Update index if this is a new session
+    const existingIndex = index.sessions.findIndex(
+      (s) => s.id === session.metadata.id
+    )
 
-      const listSessions = Effect.fn("SessionStorage.listSessions")(
-        function* () {
-          const index = yield* loadIndex()
-          return index.sessions
-        }
-      )
+    if (existingIndex >= 0) {
+      index.sessions[existingIndex] = session.metadata
+    } else {
+      index.sessions.push(session.metadata)
+    }
 
-      const sessionExists = Effect.fn("SessionStorage.sessionExists")(
-        function* (id: SessionId) {
-          return yield* fs.exists(sessionPath(id))
-        }
-      )
+    return undefined
+  }
 
-      return SessionStorage.of({
-        loadIndex,
-        saveIndex,
-        loadSession,
-        saveSession,
-        deleteSession,
-        listSessions,
-        sessionExists,
-      })
-    })
-  ).pipe(Layer.provide(FileSystem.testLayer))
+  const deleteSession = async (
+    id: SessionId
+  ): Promise<SessionStorageError | void> => {
+    sessions.delete(id)
+
+    // Update index
+    index.sessions = index.sessions.filter((s) => s.id !== id)
+
+    // Clear active session if it was deleted
+    if (index.activeSessionId === id) {
+      index.activeSessionId = null
+    }
+
+    return undefined
+  }
+
+  const listSessions = async (): Promise<SessionStorageError | SessionMetadata[]> => {
+    return index.sessions
+  }
+
+  const sessionExists = async (id: SessionId): Promise<boolean> => {
+    return sessions.has(id)
+  }
+
+  const clear = (): void => {
+    sessions.clear()
+    index = createEmptySessionIndex()
+  }
+
+  const getSessionIds = (): SessionId[] => {
+    return Array.from(sessions.keys())
+  }
+
+  return {
+    loadSession,
+    saveSession,
+    deleteSession,
+    listSessions,
+    loadIndex,
+    saveIndex,
+    sessionExists,
+    clear,
+    getSessionIds,
+  }
 }

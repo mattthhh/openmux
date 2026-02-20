@@ -1,129 +1,217 @@
 /**
  * TemplateStorage service for layout template persistence.
+ * Migrated from Effect to errore - uses plain promises and Zod schemas.
  */
-import { Context, Effect, Layer } from "effect"
-import type { SessionStorageError } from "../errors"
-import { AppConfig } from "../Config"
-import { FileSystem } from "./FileSystem"
-import { TemplateSession } from "../models"
+import type { FileSystem } from "./FileSystem"
+import type { AppConfig } from "../Config"
+import { TemplateStorageError, FileSystemError } from "../errors"
+import { TemplateSession, TemplateSessionSchema } from "../models"
 
+export interface TemplateStorage {
+  /** Load a template by ID */
+  loadTemplate(id: string): Promise<TemplateStorageError | TemplateSession | null>
+  /** Save a template */
+  saveTemplate(template: TemplateSession): Promise<TemplateStorageError | void>
+  /** Delete a template */
+  deleteTemplate(id: string): Promise<TemplateStorageError | void>
+  /** List all template metadata */
+  listTemplates(): Promise<TemplateStorageError | TemplateMetadata[]>
+}
 
-export class TemplateStorage extends Context.Tag("@openmux/TemplateStorage")<
-  TemplateStorage,
-  {
-    readonly listTemplates: () => Effect.Effect<TemplateSession[], SessionStorageError>
-    readonly loadTemplate: (id: string) => Effect.Effect<TemplateSession, SessionStorageError>
-    readonly saveTemplate: (template: TemplateSession) => Effect.Effect<void, SessionStorageError>
-    readonly deleteTemplate: (id: string) => Effect.Effect<void, SessionStorageError>
+/** Template metadata for listing (extracted from TemplateSession) */
+export interface TemplateMetadata {
+  id: string
+  name: string
+  createdAt: number
+  updatedAt: number
+}
+
+/**
+ * Create a production TemplateStorage instance.
+ * Takes FileSystem and AppConfig as direct dependencies.
+ */
+export async function createTemplateStorage(
+  fs: FileSystem,
+  config: AppConfig
+): Promise<TemplateStorageError | TemplateStorage> {
+  const storagePath = config.templateStoragePath
+  const templatePath = (id: string) => `${storagePath}/${id}.json`
+
+  // Ensure storage directory exists on initialization
+  const ensureDirResult = await fs.ensureDir(storagePath)
+  if (ensureDirResult instanceof FileSystemError) {
+    return new TemplateStorageError({
+      operation: "initialize",
+      path: storagePath,
+      reason: ensureDirResult.reason,
+    })
   }
->() {
-  static readonly layer = Layer.effect(
-    TemplateStorage,
-    Effect.gen(function* () {
-      const config = yield* AppConfig
-      const fs = yield* FileSystem
-      const storagePath = config.templateStoragePath
 
-      const templatePath = (id: string) => `${storagePath}/${id}.json`
+  const loadTemplate = async (
+    id: string
+  ): Promise<TemplateStorageError | TemplateSession | null> => {
+    const path = templatePath(id)
+    const exists = await fs.exists(path)
 
-      const listTemplates = Effect.fn("TemplateStorage.listTemplates")(function* () {
-        yield* fs.ensureDir(storagePath)
-        const files = yield* fs.list(storagePath)
-        const templates: TemplateSession[] = []
+    if (!exists) {
+      return null
+    }
 
-        for (const file of files) {
-          if (!file.endsWith(".json")) continue
-          const path = `${storagePath}/${file}`
-          const template = yield* fs.readJson(path, TemplateSession).pipe(
-            Effect.catchAll(() => Effect.succeed(null))
-          )
-          if (template) {
-            templates.push(template)
-          }
-        }
+    const result = await fs.readJson(path, TemplateSessionSchema)
 
-        templates.sort((a, b) => a.name.localeCompare(b.name))
-        return templates
+    if (result instanceof FileSystemError) {
+      return new TemplateStorageError({
+        operation: "loadTemplate",
+        path,
+        reason: result.reason,
       })
+    }
 
-      const loadTemplate = Effect.fn("TemplateStorage.loadTemplate")(function* (id: string) {
-        yield* fs.ensureDir(storagePath)
-        return yield* fs.readJson(templatePath(id), TemplateSession)
+    return result
+  }
+
+  const saveTemplate = async (
+    template: TemplateSession
+  ): Promise<TemplateStorageError | void> => {
+    const result = await fs.writeJson(templatePath(template.id), TemplateSessionSchema, template)
+
+    if (result instanceof FileSystemError) {
+      return new TemplateStorageError({
+        operation: "saveTemplate",
+        path: templatePath(template.id),
+        reason: result.reason,
       })
+    }
 
-      const saveTemplate = Effect.fn("TemplateStorage.saveTemplate")(function* (
-        template: TemplateSession
-      ) {
-        yield* fs.ensureDir(storagePath)
-        yield* fs.writeJson(templatePath(template.id), TemplateSession, template)
+    return undefined
+  }
+
+  const deleteTemplate = async (id: string): Promise<TemplateStorageError | void> => {
+    const result = await fs.remove(templatePath(id))
+
+    if (result instanceof FileSystemError) {
+      return new TemplateStorageError({
+        operation: "deleteTemplate",
+        path: templatePath(id),
+        reason: result.reason,
       })
+    }
 
-      const deleteTemplate = Effect.fn("TemplateStorage.deleteTemplate")(function* (id: string) {
-        yield* fs.ensureDir(storagePath)
-        yield* fs.remove(templatePath(id))
+    return undefined
+  }
+
+  const listTemplates = async (): Promise<TemplateStorageError | TemplateMetadata[]> => {
+    const listResult = await fs.list(storagePath)
+
+    if (listResult instanceof FileSystemError) {
+      return new TemplateStorageError({
+        operation: "listTemplates",
+        path: storagePath,
+        reason: listResult.reason,
       })
+    }
 
-      return TemplateStorage.of({
-        listTemplates,
-        loadTemplate,
-        saveTemplate,
-        deleteTemplate,
+    const templates: TemplateMetadata[] = []
+
+    for (const file of listResult) {
+      if (!file.endsWith(".json")) continue
+
+      const id = file.slice(0, -5) // Remove .json extension
+      const templateResult = await loadTemplate(id)
+
+      if (templateResult instanceof TemplateStorageError) continue
+      if (templateResult === null) continue
+
+      templates.push({
+        id: templateResult.id,
+        name: templateResult.name,
+        createdAt: templateResult.createdAt,
+        updatedAt: templateResult.updatedAt,
       })
-    })
-  )
+    }
 
-  static readonly testLayer = Layer.effect(
-    TemplateStorage,
-    Effect.gen(function* () {
-      const config = yield* AppConfig
-      const fs = yield* FileSystem
-      const storagePath = config.templateStoragePath
+    // Sort by name
+    templates.sort((a, b) => a.name.localeCompare(b.name))
 
-      const templatePath = (id: string) => `${storagePath}/${id}.json`
+    return templates
+  }
 
-      const listTemplates = Effect.fn("TemplateStorage.listTemplates")(function* () {
-        yield* fs.ensureDir(storagePath)
-        const files = yield* fs.list(storagePath)
-        const templates: TemplateSession[] = []
+  return {
+    loadTemplate,
+    saveTemplate,
+    deleteTemplate,
+    listTemplates,
+  }
+}
 
-        for (const file of files) {
-          if (!file.endsWith(".json")) continue
-          const path = `${storagePath}/${file}`
-          const template = yield* fs.readJson(path, TemplateSession).pipe(
-            Effect.catchAll(() => Effect.succeed(null))
-          )
-          if (template) {
-            templates.push(template)
-          }
-        }
+/**
+ * In-memory template storage for testing.
+ * Implements the same interface but stores data in memory.
+ */
+export interface InMemoryTemplateStorage extends TemplateStorage {
+  /** Clear all stored templates */
+  clear(): void
+  /** Get all stored template IDs */
+  getTemplateIds(): string[]
+}
 
-        templates.sort((a, b) => a.name.localeCompare(b.name))
-        return templates
+/**
+ * Create an in-memory TemplateStorage for testing.
+ */
+export function createTestTemplateStorage(): InMemoryTemplateStorage {
+  const templates = new Map<string, TemplateSession>()
+
+  const loadTemplate = async (
+    id: string
+  ): Promise<TemplateStorageError | TemplateSession | null> => {
+    const template = templates.get(id)
+    return template ?? null
+  }
+
+  const saveTemplate = async (
+    template: TemplateSession
+  ): Promise<TemplateStorageError | void> => {
+    templates.set(template.id, template)
+    return undefined
+  }
+
+  const deleteTemplate = async (id: string): Promise<TemplateStorageError | void> => {
+    templates.delete(id)
+    return undefined
+  }
+
+    const listTemplates = async (): Promise<TemplateStorageError | TemplateMetadata[]> => {
+      const metadata: TemplateMetadata[] = []
+
+      for (const template of Array.from(templates.values())) {
+      metadata.push({
+        id: template.id,
+        name: template.name,
+        createdAt: template.createdAt,
+        updatedAt: template.updatedAt,
       })
+    }
 
-      const loadTemplate = Effect.fn("TemplateStorage.loadTemplate")(function* (id: string) {
-        yield* fs.ensureDir(storagePath)
-        return yield* fs.readJson(templatePath(id), TemplateSession)
-      })
+    // Sort by name
+    metadata.sort((a, b) => a.name.localeCompare(b.name))
 
-      const saveTemplate = Effect.fn("TemplateStorage.saveTemplate")(function* (
-        template: TemplateSession
-      ) {
-        yield* fs.ensureDir(storagePath)
-        yield* fs.writeJson(templatePath(template.id), TemplateSession, template)
-      })
+    return metadata
+  }
 
-      const deleteTemplate = Effect.fn("TemplateStorage.deleteTemplate")(function* (id: string) {
-        yield* fs.ensureDir(storagePath)
-        yield* fs.remove(templatePath(id))
-      })
+  const clear = (): void => {
+    templates.clear()
+  }
 
-      return TemplateStorage.of({
-        listTemplates,
-        loadTemplate,
-        saveTemplate,
-        deleteTemplate,
-      })
-    })
-  )
+  const getTemplateIds = (): string[] => {
+    return Array.from(templates.keys())
+  }
+
+  return {
+    loadTemplate,
+    saveTemplate,
+    deleteTemplate,
+    listTemplates,
+    clear,
+    getTemplateIds,
+  }
 }

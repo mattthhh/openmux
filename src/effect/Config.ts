@@ -1,77 +1,8 @@
 /**
- * Application configuration service using Effect.Config.
+ * Application configuration using plain TypeScript (no Effect).
+ * Replaces Config.ts with simple async/sync factory functions.
  */
-import { Config, Context, Effect, Layer } from "effect"
-
-
-/** Application configuration */
-export interface AppConfigShape {
-  readonly windowGap: number
-  readonly minPaneWidth: number
-  readonly minPaneHeight: number
-  readonly stackRatio: number
-  readonly defaultShell: string
-  readonly sessionStoragePath: string
-  readonly templateStoragePath: string
-}
-
-export class AppConfig extends Context.Tag("@openmux/AppConfig")<
-  AppConfig,
-  AppConfigShape
->() {
-  /** Production layer - reads from environment with sensible defaults */
-  static readonly layer = Layer.effect(
-    AppConfig,
-    Effect.gen(function* () {
-      const home = yield* Config.string("HOME").pipe(
-        Config.orElse(() => Config.string("USERPROFILE")),
-        Config.orElse(() => Config.succeed("/tmp"))
-      )
-
-      const defaultShell = yield* Config.string("SHELL").pipe(
-        Config.orElse(() => Config.succeed("/bin/bash"))
-      )
-
-      const windowGap = yield* Config.integer("OPENMUX_WINDOW_GAP").pipe(
-        Config.orElse(() => Config.succeed(0))
-      )
-
-      const minPaneWidth = yield* Config.integer("OPENMUX_MIN_PANE_WIDTH").pipe(
-        Config.orElse(() => Config.succeed(20))
-      )
-
-      const minPaneHeight = yield* Config.integer("OPENMUX_MIN_PANE_HEIGHT").pipe(
-        Config.orElse(() => Config.succeed(5))
-      )
-
-      const stackRatio = yield* Config.number("OPENMUX_STACK_RATIO").pipe(
-        Config.orElse(() => Config.succeed(0.5))
-      )
-
-      return AppConfig.of({
-        windowGap,
-        minPaneWidth,
-        minPaneHeight,
-        stackRatio,
-        defaultShell,
-        sessionStoragePath: `${home}/.config/openmux/sessions`,
-        templateStoragePath: `${home}/.config/openmux/templates`,
-      })
-    })
-  )
-
-  /** Test layer - hardcoded values for testing */
-  static readonly testLayer = Layer.succeed(AppConfig, {
-    windowGap: 0,
-    minPaneWidth: 20,
-    minPaneHeight: 5,
-    stackRatio: 0.5,
-    defaultShell: "/bin/bash",
-    sessionStoragePath: "/tmp/openmux-test/sessions",
-    templateStoragePath: "/tmp/openmux-test/templates",
-  })
-}
-
+import { ConfigError } from "./errors"
 
 /** Terminal color palette */
 export interface TerminalColors {
@@ -95,6 +26,25 @@ export interface TerminalColors {
   readonly brightMagenta: string
   readonly brightCyan: string
   readonly brightWhite: string
+}
+
+/** Application configuration */
+export interface AppConfig {
+  windowGap: number
+  minPaneWidth: number
+  minPaneHeight: number
+  stackRatio: number
+  defaultShell: string
+  sessionStoragePath: string
+  templateStoragePath: string
+}
+
+/** Theme configuration */
+export interface ThemeConfig {
+  colors: TerminalColors
+  borderStyle: "single" | "double" | "rounded"
+  focusedBorderColor: string
+  unfocusedBorderColor: string
 }
 
 /** Default terminal colors */
@@ -121,26 +71,150 @@ export const DEFAULT_COLORS: TerminalColors = {
   brightWhite: "#c0caf5",
 }
 
-export class ThemeConfig extends Context.Tag("@openmux/ThemeConfig")<
-  ThemeConfig,
-  {
-    readonly colors: TerminalColors
-    readonly borderStyle: "single" | "double" | "rounded"
-    readonly focusedBorderColor: string
-    readonly unfocusedBorderColor: string
-  }
->() {
-  static readonly layer = Layer.succeed(ThemeConfig, {
-    colors: DEFAULT_COLORS,
-    borderStyle: "rounded",
-    focusedBorderColor: "#7aa2f7",
-    unfocusedBorderColor: "#414868",
-  })
+/** Default application configuration values */
+export const defaultAppConfig: AppConfig = {
+  windowGap: 0,
+  minPaneWidth: 20,
+  minPaneHeight: 5,
+  stackRatio: 0.5,
+  defaultShell: "/bin/bash",
+  sessionStoragePath: "/tmp/.config/openmux/sessions",
+  templateStoragePath: "/tmp/.config/openmux/templates",
+}
 
-  static readonly testLayer = Layer.succeed(ThemeConfig, {
-    colors: DEFAULT_COLORS,
-    borderStyle: "single",
-    focusedBorderColor: "#ffffff",
-    unfocusedBorderColor: "#888888",
-  })
+/** Test application configuration values */
+export const testAppConfig: AppConfig = {
+  windowGap: 0,
+  minPaneWidth: 20,
+  minPaneHeight: 5,
+  stackRatio: 0.5,
+  defaultShell: "/bin/bash",
+  sessionStoragePath: "/tmp/openmux-test/sessions",
+  templateStoragePath: "/tmp/openmux-test/templates",
+}
+
+/** Default theme configuration */
+export const defaultThemeConfig: ThemeConfig = {
+  colors: DEFAULT_COLORS,
+  borderStyle: "rounded",
+  focusedBorderColor: "#7aa2f7",
+  unfocusedBorderColor: "#414868",
+}
+
+/** Test theme configuration */
+export const testThemeConfig: ThemeConfig = {
+  colors: DEFAULT_COLORS,
+  borderStyle: "single",
+  focusedBorderColor: "#ffffff",
+  unfocusedBorderColor: "#888888",
+}
+
+/**
+ * Parse an integer from a string value.
+ * Returns null if parsing fails.
+ */
+function parseIntOrNull(value: string | undefined): number | null {
+  if (value === undefined || value === "") {
+    return null
+  }
+  const parsed = Number.parseInt(value, 10)
+  return Number.isNaN(parsed) ? null : parsed
+}
+
+/**
+ * Parse a float from a string value.
+ * Returns null if parsing fails.
+ */
+function parseFloatOrNull(value: string | undefined): number | null {
+  if (value === undefined || value === "") {
+    return null
+  }
+  const parsed = Number.parseFloat(value)
+  return Number.isNaN(parsed) ? null : parsed
+}
+
+/**
+ * Load application configuration from environment variables.
+ * Falls back to sensible defaults for missing values.
+ * 
+ * Environment variables:
+ * - HOME / USERPROFILE: Base directory for config paths
+ * - SHELL: Default shell to use
+ * - OPENMUX_WINDOW_GAP: Gap between panes (integer)
+ * - OPENMUX_MIN_PANE_WIDTH: Minimum pane width (integer)
+ * - OPENMUX_MIN_PANE_HEIGHT: Minimum pane height (integer)
+ * - OPENMUX_STACK_RATIO: Stack pane ratio (number 0-1)
+ * 
+ * Returns ConfigError if a critical value cannot be determined.
+ */
+export async function loadAppConfig(): Promise<ConfigError | AppConfig> {
+  // Get home directory (critical)
+  const home = process.env.HOME ?? process.env.USERPROFILE
+  if (!home) {
+    return new ConfigError({
+      reason: "Unable to determine home directory (HOME or USERPROFILE not set)",
+    })
+  }
+
+  // Get shell (has default)
+  const defaultShell = process.env.SHELL ?? "/bin/bash"
+
+  // Parse integer values with defaults
+  const windowGap = parseIntOrNull(process.env.OPENMUX_WINDOW_GAP) ?? 0
+  const minPaneWidth = parseIntOrNull(process.env.OPENMUX_MIN_PANE_WIDTH) ?? 20
+  const minPaneHeight = parseIntOrNull(process.env.OPENMUX_MIN_PANE_HEIGHT) ?? 5
+
+  // Parse float value with default
+  const stackRatio = parseFloatOrNull(process.env.OPENMUX_STACK_RATIO) ?? 0.5
+
+  return {
+    windowGap,
+    minPaneWidth,
+    minPaneHeight,
+    stackRatio,
+    defaultShell,
+    sessionStoragePath: `${home}/.config/openmux/sessions`,
+    templateStoragePath: `${home}/.config/openmux/templates`,
+  }
+}
+
+/**
+ * Load theme configuration.
+ * This is synchronous as it uses hardcoded defaults.
+ * Theme customization via environment variables could be added here.
+ */
+export function loadThemeConfig(): ThemeConfig {
+  // Currently returns defaults, but could read from env vars
+  // For example: process.env.OPENMUX_BORDER_STYLE
+  return defaultThemeConfig
+}
+
+/**
+ * Load theme configuration for testing.
+ * Returns test values suitable for test environments.
+ */
+export function loadTestThemeConfig(): ThemeConfig {
+  return testThemeConfig
+}
+
+/**
+ * Create an AppConfig from explicit values.
+ * Useful for testing or when config is loaded from other sources.
+ */
+export function createAppConfig(
+  overrides: Partial<AppConfig> & { home: string }
+): AppConfig {
+  return {
+    windowGap: overrides.windowGap ?? 0,
+    minPaneWidth: overrides.minPaneWidth ?? 20,
+    minPaneHeight: overrides.minPaneHeight ?? 5,
+    stackRatio: overrides.stackRatio ?? 0.5,
+    defaultShell: overrides.defaultShell ?? "/bin/bash",
+    sessionStoragePath:
+      overrides.sessionStoragePath ??
+      `${overrides.home}/.config/openmux/sessions`,
+    templateStoragePath:
+      overrides.templateStoragePath ??
+      `${overrides.home}/.config/openmux/templates`,
+  }
 }

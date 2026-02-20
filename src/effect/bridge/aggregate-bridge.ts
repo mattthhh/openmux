@@ -1,13 +1,15 @@
 /**
- * Aggregate view bridge functions
+ * Aggregate view bridge functions (errore version)
  * Provides PTY listing with metadata for aggregate view
+ * 
+ * Directly uses PtyService interface without Effect runtime.
+ * Backward-compatible versions use the global services singleton.
  */
 
-import { Effect, Option } from "effect"
-import { runEffect } from "../runtime"
-import { Pty } from "../services"
+import type { PtyService } from "../services/Pty"
 import type { PtyId } from "../types"
 import type { GitDiffStats, GitInfo } from "../services/pty/helpers"
+import { getPtyService, hasServices } from "./services-instance"
 
 interface PtyMetadata {
   ptyId: string
@@ -36,49 +38,53 @@ interface FetchPtyMetadataOptions {
   skipGitDiffStats?: boolean
 }
 
+/** Helper to convert string to PtyId branded type */
+const asPtyId = (id: string): PtyId => id as PtyId
+
 /**
  * Fetch metadata for a single PTY.
- * Returns Option.none() if PTY is invalid or defunct.
+ * Returns null if PTY is invalid or defunct.
  */
-const fetchPtyMetadata = (ptyId: PtyId, options: FetchPtyMetadataOptions = {}) =>
-  Effect.gen(function* () {
-    const pty = yield* Pty
-
-    // Get session - trust Pty service for validity (no isProcessAlive check)
-    const session = yield* pty.getSession(ptyId).pipe(
-      Effect.catchAll(() => Effect.succeed(null))
-    )
-
-    // Skip if session not found or pid is 0
-    if (!session || session.pid === 0) {
-      return Option.none<PtyMetadata>()
+async function fetchPtyMetadata(
+  pty: PtyService,
+  ptyId: PtyId,
+  options: FetchPtyMetadataOptions = {}
+): Promise<PtyMetadata | null> {
+  try {
+    // Get session - trust Pty service for validity
+    const session = await pty.getSession(ptyId)
+    if (session instanceof Error || session.pid === 0) {
+      return null
     }
 
-    // Fetch cwd, git info, foregroundProcess in PARALLEL
-    const [cwd, gitInfo, foregroundProcess] = yield* Effect.all([
-      pty.getCwd(ptyId).pipe(Effect.orElseSucceed(() => process.cwd())),
-      pty.getGitInfo(ptyId).pipe(Effect.orElseSucceed(() => undefined)),
-      pty.getForegroundProcess(ptyId).pipe(Effect.orElseSucceed(() => undefined)),
-    ], { concurrency: "unbounded" })
+    // Fetch cwd, git info, foregroundProcess in parallel
+    const [cwdResult, gitInfoResult, foregroundProcessResult] = await Promise.all([
+      pty.getCwd(ptyId),
+      pty.getGitInfo(ptyId).catch(() => undefined),
+      pty.getForegroundProcess(ptyId).catch(() => undefined),
+    ])
+
+    const cwd = cwdResult instanceof Error ? process.cwd() : cwdResult
+    const gitInfo = gitInfoResult instanceof Error ? undefined : gitInfoResult
+    const foregroundProcess = foregroundProcessResult instanceof Error ? undefined : foregroundProcessResult
 
     // Skip defunct processes (zombie processes)
     if (foregroundProcess?.includes('defunct')) {
-      return Option.none<PtyMetadata>()
+      return null
     }
 
     // Fetch git diff stats (only if we have a cwd and not skipped)
-    // Skip during polling to avoid expensive git operations that cause stuttering
     const gitDiffStats = options.skipGitDiffStats
       ? undefined
-      : yield* pty.getGitDiffStats(ptyId).pipe(Effect.orElseSucceed(() => undefined))
+      : await pty.getGitDiffStats(ptyId).catch(() => undefined)
 
     const gitInfoValue = gitInfo as GitInfo | undefined
 
-    return Option.some<PtyMetadata>({
+    return {
       ptyId,
       cwd,
       gitBranch: gitInfoValue?.branch,
-      gitDiffStats,
+      gitDiffStats: gitDiffStats instanceof Error ? undefined : gitDiffStats,
       gitDirty: gitInfoValue?.dirty ?? false,
       gitStaged: gitInfoValue?.staged ?? 0,
       gitUnstaged: gitInfoValue?.unstaged ?? 0,
@@ -95,8 +101,11 @@ const fetchPtyMetadata = (ptyId: PtyId, options: FetchPtyMetadataOptions = {}) =
       title: undefined, // Title is set dynamically via title change events
       workspaceId: undefined, // Will be enriched by AggregateView
       paneId: undefined,      // Will be enriched by AggregateView
-    })
-  })
+    }
+  } catch {
+    return null
+  }
+}
 
 export interface ListAllPtysOptions {
   /** Skip fetching git diff stats (useful for polling to reduce overhead) */
@@ -106,6 +115,8 @@ export interface ListAllPtysOptions {
 /**
  * Fetch metadata for a single PTY by ID.
  * Useful for staggered polling to avoid subprocess burst.
+ * 
+ * Backward-compatible version that uses global services singleton.
  *
  * @param ptyId - The PTY ID to fetch metadata for
  * @param options.skipGitDiffStats - Skip expensive git diff stats
@@ -115,46 +126,74 @@ export async function getPtyMetadata(
   ptyId: string,
   options: ListAllPtysOptions = {}
 ): Promise<PtyMetadata | null> {
-  try {
-    return await runEffect(
-      Effect.gen(function* () {
-        const result = yield* fetchPtyMetadata(ptyId as PtyId, {
-          skipGitDiffStats: options.skipGitDiffStats,
-        })
-        return Option.isSome(result) ? result.value : null
-      })
-    )
-  } catch {
+  if (!hasServices()) {
+    console.warn("Services not initialized, cannot fetch PTY metadata")
     return null
   }
+  return getPtyMetadataWithService(getPtyService(), ptyId, options)
 }
 
 /**
  * List all PTYs with their metadata.
  * Fetches metadata in parallel for better performance.
+ * 
+ * Backward-compatible version that uses global services singleton.
  *
  * @param options.skipGitDiffStats - Skip expensive git diff stats during polling
  */
-export async function listAllPtysWithMetadata(options: ListAllPtysOptions = {}): Promise<PtyMetadata[]> {
+export async function listAllPtysWithMetadata(
+  options: ListAllPtysOptions = {}
+): Promise<PtyMetadata[]> {
+  if (!hasServices()) {
+    console.warn("Services not initialized, cannot list PTYs")
+    return []
+  }
+  return listAllPtysWithMetadataWithService(getPtyService(), options)
+}
+
+/**
+ * Fetch metadata for a single PTY by ID with explicit service.
+ * Useful for staggered polling to avoid subprocess burst.
+ *
+ * @param pty - The PTY service
+ * @param ptyId - The PTY ID to fetch metadata for
+ * @param options.skipGitDiffStats - Skip expensive git diff stats
+ * @returns PTY metadata or null if PTY is invalid/defunct
+ */
+export async function getPtyMetadataWithService(
+  pty: PtyService,
+  ptyId: string,
+  options: ListAllPtysOptions = {}
+): Promise<PtyMetadata | null> {
+  return fetchPtyMetadata(pty, asPtyId(ptyId), {
+    skipGitDiffStats: options.skipGitDiffStats,
+  })
+}
+
+/**
+ * List all PTYs with their metadata with explicit service.
+ * Fetches metadata in parallel for better performance.
+ *
+ * @param pty - The PTY service
+ * @param options.skipGitDiffStats - Skip expensive git diff stats during polling
+ */
+export async function listAllPtysWithMetadataWithService(
+  pty: PtyService,
+  options: ListAllPtysOptions = {}
+): Promise<PtyMetadata[]> {
   try {
-    return await runEffect(
-      Effect.gen(function* () {
-        const pty = yield* Pty
-        const ptyIds = yield* pty.listAll()
+    const ptyIds = await pty.listAll()
 
-        // Fetch all PTY metadata in PARALLEL
-        const results = yield* Effect.all(
-          ptyIds.map((id) => fetchPtyMetadata(id, { skipGitDiffStats: options.skipGitDiffStats })),
-          { concurrency: "unbounded" }
-        )
-
-        // Filter out None values and extract Some values
-        return results
-          .filter(Option.isSome)
-          .map((opt) => opt.value)
-      })
+    // Fetch all PTY metadata in parallel
+    const results = await Promise.all(
+      ptyIds.map((id) => fetchPtyMetadata(pty, id, { skipGitDiffStats: options.skipGitDiffStats }))
     )
+
+    // Filter out null values
+    return results.filter((meta): meta is PtyMetadata => meta !== null)
   } catch {
     return []
   }
 }
+
+export type { PtyMetadata }

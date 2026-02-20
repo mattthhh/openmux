@@ -5,10 +5,10 @@ import { beforeEach, describe, expect, it, vi } from "bun:test"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
-import { Effect } from "effect"
 import type { TerminalColors } from "../../../../src/terminal/terminal-colors"
 import * as capabilitiesActual from "../../../../src/terminal/capabilities"
-import { Cols, Rows } from "../../../../src/effect/types"
+import { makeCols, makeRows } from "../../../../src/effect/types"
+import { PtySpawnError } from "../../../../src/effect/errors"
 import { ScrollbackArchiveManager } from "../../../../src/terminal/scrollback-archive"
 import { mockGhostty, resetGhosttySymbols } from "../../../mocks/ghostty-ffi"
 
@@ -92,21 +92,24 @@ describe("createSession", () => {
     )
 
     const onExit = vi.fn()
-    const { id, session } = await Effect.runPromise(
-      createSession(
-        {
-          colors: {} as TerminalColors,
-          defaultShell: "/bin/sh",
-          scrollbackArchiveManager: new ScrollbackArchiveManager(1024 * 1024),
-          scrollbackArchiveRoot,
-          onLifecycleEvent: vi.fn(() => Effect.void),
-          onTitleChange: vi.fn(),
-          onExit,
-        },
-        { cols: Cols.make(80), rows: Rows.make(24) }
-      )
+    const result = await createSession(
+      {
+        colors: {} as TerminalColors,
+        defaultShell: "/bin/sh",
+        scrollbackArchiveManager: new ScrollbackArchiveManager(1024 * 1024),
+        scrollbackArchiveRoot,
+        onLifecycleEvent: vi.fn(),
+        onTitleChange: vi.fn(),
+        onExit,
+      },
+      { cols: makeCols(80), rows: makeRows(24) }
     )
 
+    if (result instanceof PtySpawnError) {
+      throw new Error("Failed to create session: " + result.reason)
+    }
+
+    const { id, session } = result
     const exitCallback = vi.fn()
     session.exitCallbacks.add(exitCallback)
 
@@ -153,24 +156,28 @@ describe("createSession", () => {
       path.join(os.tmpdir(), "openmux-scrollback-")
     )
 
-    const { session } = await Effect.runPromise(
-      createSession(
-        {
-          colors: {} as TerminalColors,
-          defaultShell: "/bin/sh",
-          scrollbackArchiveManager: new ScrollbackArchiveManager(1024 * 1024),
-          scrollbackArchiveRoot,
-          onLifecycleEvent: vi.fn(() => Effect.void),
-          onTitleChange: vi.fn(),
-        },
-        {
-          cols: Cols.make(80),
-          rows: Rows.make(24),
-          pixelWidth: 800,
-          pixelHeight: 480,
-        }
-      )
+    const result = await createSession(
+      {
+        colors: {} as TerminalColors,
+        defaultShell: "/bin/sh",
+        scrollbackArchiveManager: new ScrollbackArchiveManager(1024 * 1024),
+        scrollbackArchiveRoot,
+        onLifecycleEvent: vi.fn(),
+        onTitleChange: vi.fn(),
+      },
+      {
+        cols: makeCols(80),
+        rows: makeRows(24),
+        pixelWidth: 800,
+        pixelHeight: 480,
+      }
     )
+
+    if (result instanceof PtySpawnError) {
+      throw new Error("Failed to create session: " + result.reason)
+    }
+
+    const { session } = result
 
     expect(resizeWithPixels).toHaveBeenCalledWith(80, 24, 800, 480)
     expect(session.pixelWidth).toBe(800)

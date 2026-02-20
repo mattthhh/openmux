@@ -1,293 +1,300 @@
 /**
- * Session bridge functions
- * Wraps Effect SessionManager service for async/await usage
+ * Session bridge functions (errore version)
+ * Wraps SessionManager service for async/await usage
+ * 
+ * Directly uses SessionManager interface without Effect runtime.
+ * Backward-compatible versions use the global services singleton.
  */
 
-import { Effect } from "effect"
-import { runEffect } from "../runtime"
-import { SessionManager } from "../services"
-import { SessionId } from "../types"
+import type { SessionManager } from "../services/SessionManager"
+import type { SessionId } from "../types"
 import type {
   SerializedSession,
   SessionMetadata,
-  SerializedSession as EffectSerializedSession,
-  SerializedWorkspace,
-  SerializedLayoutNode,
 } from "../models"
-import {
-  SessionMetadata as EffectSessionMetadata,
-} from "../models"
-import { resolveActiveWorkspaceId } from "./session-bridge-utils"
 import type {
   SessionMetadata as LegacySessionMetadata,
   Workspace,
   WorkspaceId,
-  PaneData,
-  LayoutNode,
 } from "../../core/types"
 import type { Workspaces } from "../../core/operations/layout-actions"
 import type { WorkspaceState } from "../services/session-manager/types"
+import { getSessionManager } from "./services-instance"
+import { resolveActiveWorkspaceId } from "./session-bridge-utils"
 
-
-/**
- * List all sessions.
- */
+/** List all sessions */
 export async function listSessions(): Promise<readonly SessionMetadata[]> {
-  return runEffect(
-    Effect.gen(function* () {
-      const manager = yield* SessionManager
-      return yield* manager.listSessions()
-    })
-  )
+  return listSessionsWithService(getSessionManager())
 }
 
-/**
- * Create a new session.
- */
+/** Create a new session */
 export async function createSession(name: string): Promise<string> {
-  return runEffect(
-    Effect.gen(function* () {
-      const manager = yield* SessionManager
-      const metadata = yield* manager.createSession(name)
-      return metadata.id
-    })
-  )
+  return createSessionWithService(getSessionManager(), name)
 }
 
-/**
- * Load a session by ID.
- */
+/** Load a session by ID */
 export async function loadSession(id: string): Promise<SerializedSession> {
-  return runEffect(
-    Effect.gen(function* () {
-      const manager = yield* SessionManager
-      return yield* manager.loadSession(SessionId.make(id))
-    })
-  )
+  return loadSessionWithService(getSessionManager(), id)
 }
 
-/**
- * Save a session.
- */
+/** Save a session */
 export async function saveSession(session: SerializedSession): Promise<void> {
-  await runEffect(
-    Effect.gen(function* () {
-      const manager = yield* SessionManager
-      yield* manager.saveSession(session)
-    })
-  )
+  return saveSessionWithService(getSessionManager(), session)
 }
 
-/**
- * Delete a session.
- */
+/** Delete a session */
 export async function deleteSession(id: string): Promise<void> {
-  await runEffect(
-    Effect.gen(function* () {
-      const manager = yield* SessionManager
-      yield* manager.deleteSession(SessionId.make(id))
-    })
-  )
+  return deleteSessionWithService(getSessionManager(), id)
 }
 
-/**
- * Rename a session.
- */
-export async function renameSession(
-  id: string,
-  newName: string
-): Promise<void> {
-  await runEffect(
-    Effect.gen(function* () {
-      const manager = yield* SessionManager
-      yield* manager.renameSession(SessionId.make(id), newName)
-    })
-  )
+/** Rename a session */
+export async function renameSession(id: string, newName: string): Promise<void> {
+  return renameSessionWithService(getSessionManager(), id, newName)
 }
 
-/**
- * Get the active session ID.
- */
-export async function getActiveSessionId(): Promise<string | null> {
-  return runEffect(
-    Effect.gen(function* () {
-      const manager = yield* SessionManager
-      return yield* manager.getActiveSessionId()
-    })
-  )
+/** Get the active session ID */
+export function getActiveSessionId(): string | null {
+  return getActiveSessionIdWithService(getSessionManager())
 }
 
-/**
- * Set the active session ID.
- */
+/** Set the active session ID */
 export async function setActiveSessionId(id: string | null): Promise<void> {
-  await runEffect(
-    Effect.gen(function* () {
-      const manager = yield* SessionManager
-      yield* manager.setActiveSessionId(id ? SessionId.make(id) : null)
-    })
-  )
+  return setActiveSessionIdWithService(getSessionManager(), id)
 }
 
-/**
- * Switch to a session (updates lastSwitchedAt timestamp).
- */
+/** Switch to a session */
 export async function switchToSession(id: string): Promise<void> {
-  await runEffect(
-    Effect.gen(function* () {
-      const manager = yield* SessionManager
-      yield* manager.switchToSession(SessionId.make(id))
-    })
-  )
+  return switchToSessionWithService(getSessionManager(), id)
 }
 
-/**
- * Get session metadata by ID.
- */
+/** Get session metadata by ID */
 export async function getSessionMetadata(id: string): Promise<SessionMetadata | null> {
-  return runEffect(
-    Effect.gen(function* () {
-      const manager = yield* SessionManager
-      return yield* manager.getSessionMetadata(SessionId.make(id))
-    })
-  )
+  return getSessionMetadataWithService(getSessionManager(), id)
 }
 
-/**
- * Update auto-name for a session based on cwd.
- */
+/** Update auto-name for a session */
 export async function updateAutoName(id: string, cwd: string): Promise<void> {
-  await runEffect(
-    Effect.gen(function* () {
-      const manager = yield* SessionManager
-      yield* manager.updateAutoName(SessionId.make(id), cwd)
-    })
-  )
+  return updateAutoNameWithService(getSessionManager(), id, cwd)
 }
 
-/**
- * Get session summary (workspace/pane counts).
- */
+/** Get session summary (workspace/pane counts) */
 export async function getSessionSummary(
   id: string
 ): Promise<{ workspaceCount: number; paneCount: number } | null> {
-  return runEffect(
-    Effect.gen(function* () {
-      const manager = yield* SessionManager
-      return yield* manager.getSessionSummary(SessionId.make(id))
-    })
-  )
+  return getSessionSummaryWithService(getSessionManager(), id)
 }
 
-/**
- * Create a new session (legacy compatibility - returns full metadata).
- */
+/** Create a new session (legacy compatibility) */
 export async function createSessionLegacy(name?: string): Promise<LegacySessionMetadata> {
-  return runEffect(
-    Effect.gen(function* () {
-      const manager = yield* SessionManager
-      const metadata = yield* manager.createSession(name)
-      // Effect SessionMetadata is structurally compatible with legacy
-      return metadata as unknown as LegacySessionMetadata
-    })
-  )
+  return createSessionLegacyWithService(getSessionManager(), name)
 }
 
-/**
- * List all sessions (legacy compatibility - returns mutable array).
- */
+/** List all sessions (legacy compatibility) */
 export async function listSessionsLegacy(): Promise<LegacySessionMetadata[]> {
-  return runEffect(
-    Effect.gen(function* () {
-      const manager = yield* SessionManager
-      const sessions = yield* manager.listSessions()
-      // Convert to mutable array of legacy type
-      return [...sessions] as unknown as LegacySessionMetadata[]
-    })
-  )
+  return listSessionsLegacyWithService(getSessionManager())
 }
 
-/**
- * Get active session ID (legacy compatibility).
- */
-export async function getActiveSessionIdLegacy(): Promise<string | null> {
-  return getActiveSessionId()
+/** Get active session ID (legacy compatibility) */
+export function getActiveSessionIdLegacy(): string | null {
+  return getActiveSessionIdLegacyWithService(getSessionManager())
 }
 
-/**
- * Rename session (legacy compatibility).
- */
+/** Rename session (legacy compatibility) */
 export async function renameSessionLegacy(id: string, name: string): Promise<void> {
-  return renameSession(id, name)
+  return renameSessionLegacyWithService(getSessionManager(), id, name)
 }
 
-/**
- * Delete session (legacy compatibility).
- */
+/** Delete session (legacy compatibility) */
 export async function deleteSessionLegacy(id: string): Promise<void> {
-  return deleteSession(id)
+  return deleteSessionLegacyWithService(getSessionManager(), id)
 }
 
+/** Save the current session state */
+export async function saveCurrentSession(
+  metadata: LegacySessionMetadata,
+  workspaces: Workspaces,
+  activeWorkspaceId: WorkspaceId,
+  getCwd: (ptyId: string) => Promise<string>
+): Promise<void> {
+  return saveCurrentSessionWithService(getSessionManager(), metadata, workspaces, activeWorkspaceId, getCwd)
+}
 
-function deserializeLayoutNode(serialized: SerializedLayoutNode): LayoutNode {
-  if ((serialized as { type?: string }).type === "split") {
-    const split = serialized as SerializedLayoutNode & {
-      id: string
-      direction: "horizontal" | "vertical"
-      ratio: number
-      first: SerializedLayoutNode
-      second: SerializedLayoutNode
-    }
+/** Load a session from disk */
+export async function loadSessionData(
+  sessionId: string
+): Promise<{
+  metadata: LegacySessionMetadata
+  workspaces: Workspaces
+  activeWorkspaceId: WorkspaceId
+  cwdMap: Map<string, string>
+} | null> {
+  return loadSessionDataWithService(getSessionManager(), sessionId)
+}
+
+/** List sessions with a specific service */
+export async function listSessionsWithService(manager: SessionManager): Promise<readonly SessionMetadata[]> {
+  const result = await manager.listSessions()
+  if (result instanceof Error) return []
+  return result
+}
+
+/** Create session with a specific service */
+export async function createSessionWithService(manager: SessionManager, name: string): Promise<string> {
+  const result = await manager.createSession(name)
+  if (result instanceof Error) throw result
+  return result.id
+}
+
+/** Load session with a specific service */
+export async function loadSessionWithService(manager: SessionManager, id: string): Promise<SerializedSession> {
+  const result = await manager.loadSession(id as SessionId)
+  if (result instanceof Error) throw result
+  return result
+}
+
+/** Save session with a specific service */
+export async function saveSessionWithService(manager: SessionManager, session: SerializedSession): Promise<void> {
+  const result = await manager.saveSession(session)
+  if (result instanceof Error) throw result
+}
+
+/** Delete session with a specific service */
+export async function deleteSessionWithService(manager: SessionManager, id: string): Promise<void> {
+  const result = await manager.deleteSession(id as SessionId)
+  if (result instanceof Error) throw result
+}
+
+/** Rename session with a specific service */
+export async function renameSessionWithService(
+  manager: SessionManager,
+  id: string,
+  newName: string
+): Promise<void> {
+  const result = await manager.renameSession(id as SessionId, newName)
+  if (result instanceof Error) throw result
+}
+
+/** Get active session ID with a specific service */
+export function getActiveSessionIdWithService(manager: SessionManager): string | null {
+  return manager.getActiveSessionId()
+}
+
+/** Set active session ID with a specific service */
+export async function setActiveSessionIdWithService(manager: SessionManager, id: string | null): Promise<void> {
+  const result = await manager.setActiveSessionId(id ? (id as SessionId) : null)
+  if (result instanceof Error) throw result
+}
+
+/** Switch to session with a specific service */
+export async function switchToSessionWithService(manager: SessionManager, id: string): Promise<void> {
+  const result = await manager.switchToSession(id as SessionId)
+  if (result instanceof Error) throw result
+}
+
+/** Get session metadata with a specific service */
+export async function getSessionMetadataWithService(
+  manager: SessionManager,
+  id: string
+): Promise<SessionMetadata | null> {
+  const result = await manager.getSessionMetadata(id as SessionId)
+  if (result instanceof Error) return null
+  return result
+}
+
+/** Update auto-name with a specific service */
+export async function updateAutoNameWithService(manager: SessionManager, id: string, cwd: string): Promise<void> {
+  const result = await manager.updateAutoName(id as SessionId, cwd)
+  if (result instanceof Error) throw result
+}
+
+/** Get session summary with a specific service */
+export async function getSessionSummaryWithService(
+  manager: SessionManager,
+  id: string
+): Promise<{ workspaceCount: number; paneCount: number } | null> {
+  const result = await manager.getSessionSummary(id as SessionId)
+  if (result instanceof Error) return null
+  return result
+}
+
+/** Create session (legacy) with a specific service */
+export async function createSessionLegacyWithService(
+  manager: SessionManager,
+  name?: string
+): Promise<LegacySessionMetadata> {
+  const result = await manager.createSession(name)
+  if (result instanceof Error) throw result
+  return result as unknown as LegacySessionMetadata
+}
+
+/** List sessions (legacy) with a specific service */
+export async function listSessionsLegacyWithService(manager: SessionManager): Promise<LegacySessionMetadata[]> {
+  const result = await manager.listSessions()
+  if (result instanceof Error) return []
+  return [...result] as unknown as LegacySessionMetadata[]
+}
+
+/** Get active session ID (legacy) with a specific service */
+export function getActiveSessionIdLegacyWithService(manager: SessionManager): string | null {
+  return getActiveSessionIdWithService(manager)
+}
+
+/** Rename session (legacy) with a specific service */
+export async function renameSessionLegacyWithService(manager: SessionManager, id: string, name: string): Promise<void> {
+  return renameSessionWithService(manager, id, name)
+}
+
+/** Delete session (legacy) with a specific service */
+export async function deleteSessionLegacyWithService(manager: SessionManager, id: string): Promise<void> {
+  return deleteSessionWithService(manager, id)
+}
+
+function deserializeLayoutNode(serialized: { type?: string; id: string; direction?: string; ratio?: number; first?: unknown; second?: unknown; title?: string; cwd?: string }): { type?: string; id: string; direction?: string; ratio?: number; first?: unknown; second?: unknown; title?: string; cwd?: string } {
+  if (serialized.type === "split") {
     return {
       type: "split",
-      id: split.id,
-      direction: split.direction,
-      ratio: split.ratio,
-      first: deserializeLayoutNode(split.first),
-      second: deserializeLayoutNode(split.second),
+      id: serialized.id,
+      direction: serialized.direction as "horizontal" | "vertical",
+      ratio: serialized.ratio ?? 0.5,
+      first: deserializeLayoutNode(serialized.first as { type?: string; id: string; direction?: string; ratio?: number; first?: unknown; second?: unknown; title?: string; cwd?: string }),
+      second: deserializeLayoutNode(serialized.second as { type?: string; id: string; direction?: string; ratio?: number; first?: unknown; second?: unknown; title?: string; cwd?: string }),
     }
   }
 
-  const pane = serialized as SerializedLayoutNode & { id: string; title?: string; cwd?: string }
   return {
-    id: pane.id,
-    title: pane.title,
-    cwd: pane.cwd,
-  } satisfies PaneData
+    id: serialized.id,
+    title: serialized.title,
+    cwd: serialized.cwd,
+  }
 }
 
-/**
- * Deserialize a workspace from Effect format to legacy format.
- */
-function deserializeWorkspace(serialized: SerializedWorkspace): Workspace {
+function deserializeWorkspace(serialized: { id: number; label?: string; mainPane: unknown; stackPanes: unknown[]; focusedPaneId: string | null; activeStackIndex: number; lastFocusedPaneIds?: (string | null)[]; layoutMode: string; zoomed: boolean }): Workspace {
   return {
     id: serialized.id as WorkspaceId,
     label: serialized.label ?? undefined,
-    mainPane: serialized.mainPane ? deserializeLayoutNode(serialized.mainPane) : null,
-    stackPanes: serialized.stackPanes.map(deserializeLayoutNode),
+    mainPane: serialized.mainPane ? deserializeLayoutNode(serialized.mainPane as { type?: string; id: string; direction?: string; ratio?: number; first?: unknown; second?: unknown; title?: string; cwd?: string }) : null,
+    stackPanes: (serialized.stackPanes as { type?: string; id: string; direction?: string; ratio?: number; first?: unknown; second?: unknown; title?: string; cwd?: string }[]).map(deserializeLayoutNode),
     focusedPaneId: serialized.focusedPaneId,
     activeStackIndex: serialized.activeStackIndex,
     lastFocusedPaneIds: [...(serialized.lastFocusedPaneIds ?? [])],
-    layoutMode: serialized.layoutMode,
+    layoutMode: serialized.layoutMode as "vertical" | "horizontal" | "stacked",
     zoomed: serialized.zoomed,
   }
 }
 
-/**
- * Extract cwd map from Effect serialized session.
- */
-function extractCwdMap(session: EffectSerializedSession): Map<string, string> {
+function extractCwdMap(session: SerializedSession): Map<string, string> {
   const cwdMap = new Map<string, string>()
-  const collectCwds = (node: SerializedLayoutNode | null) => {
+  const collectCwds = (node: unknown) => {
     if (!node) return
-    if ((node as { type?: string }).type === "split") {
-      const split = node as SerializedLayoutNode & { first: SerializedLayoutNode; second: SerializedLayoutNode }
-      collectCwds(split.first)
-      collectCwds(split.second)
+    const n = node as { type?: string; first?: unknown; second?: unknown; id?: string; cwd?: string }
+    if (n.type === "split") {
+      collectCwds(n.first)
+      collectCwds(n.second)
       return
     }
-    const pane = node as SerializedLayoutNode & { id: string; cwd: string }
-    cwdMap.set(pane.id, pane.cwd)
+    if (n.id && n.cwd) {
+      cwdMap.set(n.id, n.cwd)
+    }
   }
 
   for (const ws of session.workspaces) {
@@ -299,55 +306,45 @@ function extractCwdMap(session: EffectSerializedSession): Map<string, string> {
   return cwdMap
 }
 
-/**
- * Save the current session state using Effect service.
- */
-export async function saveCurrentSession(
+/** Save current session with a specific service */
+export async function saveCurrentSessionWithService(
+  manager: SessionManager,
   metadata: LegacySessionMetadata,
   workspaces: Workspaces,
   activeWorkspaceId: WorkspaceId,
   getCwd: (ptyId: string) => Promise<string>
 ): Promise<void> {
-  await runEffect(
-    Effect.gen(function* () {
-      const manager = yield* SessionManager
+  const effectMetadata: SessionMetadata = {
+    id: metadata.id as SessionId,
+    name: metadata.name,
+    createdAt: metadata.createdAt,
+    lastSwitchedAt: metadata.lastSwitchedAt,
+    autoNamed: metadata.autoNamed,
+  }
 
-      // Convert legacy metadata to Effect metadata
-      const effectMetadata = EffectSessionMetadata.make({
-        id: SessionId.make(metadata.id),
-        name: metadata.name,
-        createdAt: metadata.createdAt,
-        lastSwitchedAt: metadata.lastSwitchedAt,
-        autoNamed: metadata.autoNamed,
-      })
+  const workspaceState = new Map<number, WorkspaceState>()
 
-      // Convert Workspaces object to ReadonlyMap<number, WorkspaceState>
-      const workspaceState = new Map<number, WorkspaceState>()
-
-      for (const [idStr, ws] of Object.entries(workspaces)) {
-        if (!ws) continue
-        const id = Number(idStr)
-        workspaceState.set(id, {
-          mainPane: ws.mainPane ?? null,
-          stackPanes: ws.stackPanes,
-          focusedPaneId: ws.focusedPaneId ?? undefined,
-          layoutMode: ws.layoutMode,
-          activeStackIndex: ws.activeStackIndex,
-          zoomed: ws.zoomed,
-          label: ws.label,
-        })
-      }
-
-      yield* manager.quickSave(effectMetadata, workspaceState, activeWorkspaceId, getCwd)
+  for (const [idStr, ws] of Object.entries(workspaces)) {
+    if (!ws) continue
+    const id = Number(idStr)
+    workspaceState.set(id, {
+      mainPane: ws.mainPane ?? null,
+      stackPanes: ws.stackPanes,
+      focusedPaneId: ws.focusedPaneId ?? undefined,
+      layoutMode: ws.layoutMode,
+      activeStackIndex: ws.activeStackIndex,
+      zoomed: ws.zoomed,
+      label: ws.label,
     })
-  )
+  }
+
+  const result = await manager.quickSave(effectMetadata, workspaceState, activeWorkspaceId, getCwd)
+  if (result instanceof Error) throw result
 }
 
-/**
- * Load a session from disk using Effect service.
- * Returns the deserialized data and a CWD map for PTY creation.
- */
-export async function loadSessionData(
+/** Load session data with a specific service */
+export async function loadSessionDataWithService(
+  manager: SessionManager,
   sessionId: string
 ): Promise<{
   metadata: LegacySessionMetadata
@@ -356,40 +353,33 @@ export async function loadSessionData(
   cwdMap: Map<string, string>
 } | null> {
   try {
-    return await runEffect(
-      Effect.gen(function* () {
-        const manager = yield* SessionManager
-        const session = yield* manager.loadSession(SessionId.make(sessionId))
+    const session = await manager.loadSession(sessionId as SessionId)
+    if (session instanceof Error) return null
 
-        // Convert Effect metadata to legacy metadata
-        const metadata: LegacySessionMetadata = {
-          id: session.metadata.id,
-          name: session.metadata.name,
-          createdAt: session.metadata.createdAt,
-          lastSwitchedAt: session.metadata.lastSwitchedAt,
-          autoNamed: session.metadata.autoNamed,
-        }
+    const metadata: LegacySessionMetadata = {
+      id: session.metadata.id,
+      name: session.metadata.name,
+      createdAt: session.metadata.createdAt,
+      lastSwitchedAt: session.metadata.lastSwitchedAt,
+      autoNamed: session.metadata.autoNamed,
+    }
 
-        // Deserialize workspaces to plain object
-        const workspaces: Workspaces = {}
-        for (const ws of session.workspaces) {
-          workspaces[ws.id as WorkspaceId] = deserializeWorkspace(ws)
-        }
+    const workspaces: Workspaces = {}
+    for (const ws of session.workspaces) {
+      workspaces[ws.id as WorkspaceId] = deserializeWorkspace(ws as { id: number; label?: string; mainPane: unknown; stackPanes: unknown[]; focusedPaneId: string | null; activeStackIndex: number; lastFocusedPaneIds?: (string | null)[]; layoutMode: string; zoomed: boolean })
+    }
 
-        const storedActiveId = session.activeWorkspaceId as WorkspaceId
-        const resolvedActiveWorkspaceId = resolveActiveWorkspaceId(workspaces, storedActiveId)
+    const storedActiveId = session.activeWorkspaceId as WorkspaceId
+    const resolvedActiveWorkspaceId = resolveActiveWorkspaceId(workspaces, storedActiveId)
 
-        // Extract CWD map
-        const cwdMap = extractCwdMap(session)
+    const cwdMap = extractCwdMap(session)
 
-        return {
-          metadata,
-          workspaces,
-          activeWorkspaceId: resolvedActiveWorkspaceId,
-          cwdMap,
-        }
-      })
-    )
+    return {
+      metadata,
+      workspaces,
+      activeWorkspaceId: resolvedActiveWorkspaceId,
+      cwdMap,
+    }
   } catch {
     return null
   }

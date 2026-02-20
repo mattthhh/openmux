@@ -1,5 +1,6 @@
 /**
  * Session manager module exports
+ * Migrated from Effect to errore
  */
 
 export type { SessionError, WorkspaceState } from "./types"
@@ -13,21 +14,31 @@ export {
 } from "./serialization"
 
 export {
-  createLifecycleOperations,
+  createSession,
+  loadSession,
+  saveSession,
+  deleteSession,
+  listSessions,
   type LifecycleDeps,
 } from "./lifecycle"
 
 export {
-  createMetadataOperations,
+  renameSession,
+  getSessionMetadata,
+  updateAutoName,
+  getSessionSummary,
   type MetadataDeps,
 } from "./metadata"
 
 export {
-  createActiveSessionOperations,
+  getActiveSessionId,
+  setActiveSessionId,
+  switchToSession,
   type ActiveSessionDeps,
 } from "./active-session"
 
 export {
-  createQuickSaveOperations,
+  serializeWorkspaces,
+  quickSave,
   type QuickSaveDeps,
 } from "./quick-save"

@@ -1,184 +1,148 @@
 /**
- * Tests for Pty service types and testLayer behavior.
+ * Tests for Pty service types and behaviors.
  * Note: Full PTY integration tests require bun runtime due to zig-pty.
  */
 import { describe, expect, it } from "bun:test"
-import { Context, Effect, Layer } from "effect"
-import { Cols, Rows, makePtyId, PtyId } from "../../../src/effect/types"
-import { PtySession } from "../../../src/effect/models"
+import { makeCols, makeRows, makePtyId, type PtyId, asPtyId, type Cols, type Rows } from "../../../src/effect/types"
+import type { PtySession } from "../../../src/effect/models"
 
 // Create a mock Pty service for testing without zig-pty dependency
-class MockPty extends Context.Tag("@openmux/MockPty")<
-  MockPty,
-  {
-    readonly create: (options: {
-      cols: Cols
-      rows: Rows
-      cwd?: string
-    }) => Effect.Effect<PtyId>
-    readonly write: (id: PtyId, data: string) => Effect.Effect<void>
-    readonly resize: (id: PtyId, cols: Cols, rows: Rows) => Effect.Effect<void>
-    readonly getCwd: (id: PtyId) => Effect.Effect<string>
-    readonly destroy: (id: PtyId) => Effect.Effect<void>
-    readonly getSession: (id: PtyId) => Effect.Effect<PtySession>
-    readonly destroyAll: () => Effect.Effect<void>
+interface MockPty {
+  readonly create: (options: {
+    cols: number
+    rows: number
+    cwd?: string
+  }) => Promise<PtyId>
+  readonly write: (id: PtyId, data: string) => Promise<void>
+  readonly resize: (id: PtyId, cols: number, rows: number) => Promise<void>
+  readonly getCwd: (id: PtyId) => Promise<string>
+  readonly destroy: (id: PtyId) => Promise<void>
+  readonly getSession: (id: PtyId) => Promise<PtySession>
+  readonly destroyAll: () => Promise<void>
+}
+
+function createMockPty(): MockPty {
+  return {
+    create: async () => makePtyId(),
+    write: async () => undefined,
+    resize: async () => undefined,
+    getCwd: async () => "/test/cwd",
+    destroy: async () => undefined,
+    getSession: async (id: PtyId) => ({
+      id,
+      pid: 12345,
+      cols: makeCols(80),
+      rows: makeRows(24),
+      cwd: "/test/cwd",
+      shell: "/bin/bash",
+    }),
+    destroyAll: async () => undefined,
   }
->() {
-  static readonly testLayer = Layer.succeed(MockPty, {
-    create: () => Effect.succeed(makePtyId()),
-    write: () => Effect.void,
-    resize: () => Effect.void,
-    getCwd: () => Effect.succeed("/test/cwd"),
-    destroy: () => Effect.void,
-    getSession: (id) =>
-      Effect.succeed(
-        PtySession.make({
-          id,
-          pid: 12345,
-          cols: Cols.make(80),
-          rows: Rows.make(24),
-          cwd: "/test/cwd",
-          shell: "/bin/bash",
-        })
-      ),
-    destroyAll: () => Effect.void,
-  })
 }
 
 describe("Pty", () => {
-  describe("testLayer behavior", () => {
-    const runWithLayer = <A, E>(effect: Effect.Effect<A, E, MockPty>) =>
-      Effect.runPromise(effect.pipe(Effect.provide(MockPty.testLayer)))
-
+  describe("mock implementation", () => {
     it("creates a PTY session", async () => {
-      await runWithLayer(
-        Effect.gen(function* () {
-          const pty = yield* MockPty
+      const pty = createMockPty()
 
-          const ptyId = yield* pty.create({
-            cols: Cols.make(80),
-            rows: Rows.make(24),
-          })
+      const ptyId = await pty.create({
+        cols: 80,
+        rows: 24,
+      })
 
-          expect(ptyId).toBeDefined()
-          expect(typeof ptyId).toBe("string")
-          expect(ptyId).toContain("pty-")
-        })
-      )
+      expect(ptyId).toBeDefined()
+      expect(typeof ptyId).toBe("string")
+      expect(ptyId).toContain("pty-")
     })
 
     it("gets session info", async () => {
-      await runWithLayer(
-        Effect.gen(function* () {
-          const pty = yield* MockPty
+      const pty = createMockPty()
 
-          const ptyId = yield* pty.create({
-            cols: Cols.make(80),
-            rows: Rows.make(24),
-          })
+      const ptyId = await pty.create({
+        cols: 80,
+        rows: 24,
+      })
 
-          const session = yield* pty.getSession(ptyId)
+      const session = await pty.getSession(ptyId)
 
-          expect(session.pid).toBe(12345)
-          expect(session.cols).toBe(80)
-          expect(session.rows).toBe(24)
-          expect(session.cwd).toBe("/test/cwd")
-          expect(session.shell).toBe("/bin/bash")
-        })
-      )
+      expect(session.pid).toBe(12345)
+      expect(session.cols).toBe(80 as Cols)
+      expect(session.rows).toBe(24 as Rows)
+      expect(session.cwd).toBe("/test/cwd")
+      expect(session.shell).toBe("/bin/bash")
     })
 
     it("gets CWD", async () => {
-      await runWithLayer(
-        Effect.gen(function* () {
-          const pty = yield* MockPty
+      const pty = createMockPty()
 
-          const ptyId = yield* pty.create({
-            cols: Cols.make(80),
-            rows: Rows.make(24),
-          })
+      const ptyId = await pty.create({
+        cols: 80,
+        rows: 24,
+      })
 
-          const cwd = yield* pty.getCwd(ptyId)
+      const cwd = await pty.getCwd(ptyId)
 
-          expect(cwd).toBe("/test/cwd")
-        })
-      )
+      expect(cwd).toBe("/test/cwd")
     })
 
     it("writes to PTY without error", async () => {
-      await runWithLayer(
-        Effect.gen(function* () {
-          const pty = yield* MockPty
+      const pty = createMockPty()
 
-          const ptyId = yield* pty.create({
-            cols: Cols.make(80),
-            rows: Rows.make(24),
-          })
+      const ptyId = await pty.create({
+        cols: 80,
+        rows: 24,
+      })
 
-          yield* pty.write(ptyId, "echo hello")
-        })
-      )
+      await pty.write(ptyId, "echo hello")
     })
 
     it("resizes PTY without error", async () => {
-      await runWithLayer(
-        Effect.gen(function* () {
-          const pty = yield* MockPty
+      const pty = createMockPty()
 
-          const ptyId = yield* pty.create({
-            cols: Cols.make(80),
-            rows: Rows.make(24),
-          })
+      const ptyId = await pty.create({
+        cols: 80,
+        rows: 24,
+      })
 
-          yield* pty.resize(ptyId, Cols.make(120), Rows.make(40))
-        })
-      )
+      await pty.resize(ptyId, 120, 40)
     })
 
     it("destroys PTY session", async () => {
-      await runWithLayer(
-        Effect.gen(function* () {
-          const pty = yield* MockPty
+      const pty = createMockPty()
 
-          const ptyId = yield* pty.create({
-            cols: Cols.make(80),
-            rows: Rows.make(24),
-          })
+      const ptyId = await pty.create({
+        cols: 80,
+        rows: 24,
+      })
 
-          yield* pty.destroy(ptyId)
-        })
-      )
+      await pty.destroy(ptyId)
     })
 
     it("destroys all PTY sessions", async () => {
-      await runWithLayer(
-        Effect.gen(function* () {
-          const pty = yield* MockPty
+      const pty = createMockPty()
 
-          yield* pty.create({ cols: Cols.make(80), rows: Rows.make(24) })
-          yield* pty.create({ cols: Cols.make(100), rows: Rows.make(30) })
+      await pty.create({ cols: 80, rows: 24 })
+      await pty.create({ cols: 100, rows: 30 })
 
-          yield* pty.destroyAll()
-        })
-      )
+      await pty.destroyAll()
     })
   })
 
   describe("PtySession model", () => {
     it("creates valid PtySession", () => {
-      const session = PtySession.make({
-        id: PtyId.make("test-pty-1"),
+      const session: PtySession = {
+        id: asPtyId("test-pty-1"),
         pid: 9999,
-        cols: Cols.make(120),
-        rows: Rows.make(40),
+        cols: makeCols(120),
+        rows: makeRows(40),
         cwd: "/home/user",
         shell: "/bin/zsh",
-      })
+      }
 
-      expect(session.id).toBe("test-pty-1")
+      expect(session.id).toBe("test-pty-1" as PtyId)
       expect(session.pid).toBe(9999)
-      expect(session.cols).toBe(120)
-      expect(session.rows).toBe(40)
+      expect(session.cols).toBe(120 as Cols)
+      expect(session.rows).toBe(40 as Rows)
       expect(session.cwd).toBe("/home/user")
       expect(session.shell).toBe("/bin/zsh")
     })

@@ -275,7 +275,7 @@ export async function startControlServer(deps: ControlServerDeps): Promise<Contr
     };
 
     socket.on('data', (chunk) => {
-      reader.feed(chunk, (header) => {
+      reader.feed(chunk as Buffer, (header) => {
         if (header.type !== 'request') return;
         void handleRequest(header);
       });

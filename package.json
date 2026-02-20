@@ -68,6 +68,7 @@
     "@effect/eslint-plugin": "^0.3.2",
     "@effect/language-service": "^0.60.0",
     "@types/bun": "latest",
+    "@types/node": "^25.3.0",
     "@typescript-eslint/eslint-plugin": "^8.56.0",
     "@typescript-eslint/parser": "^8.56.0",
     "eslint": "^9.39.2",
@@ -83,6 +84,8 @@
     "@opentui/core": "^0.1.80",
     "@opentui/solid": "^0.1.80",
     "effect": "^3.19.18",
-    "solid-js": "^1.9.11"
+    "errore": "^0.12.0",
+    "solid-js": "^1.9.11",
+    "zod": "^4.3.6"
   }
 }

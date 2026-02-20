@@ -1,5 +1,6 @@
 /**
  * Types for SessionManager service
+ * Migrated from Effect to errore
  */
 
 import type {

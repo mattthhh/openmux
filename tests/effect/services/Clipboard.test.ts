@@ -1,55 +1,38 @@
 /**
  * Tests for Clipboard service.
- * Uses per-test layer provision to ensure fresh state isolation.
+ * Uses fresh test instances to ensure state isolation.
  */
 import { describe, expect, it } from "bun:test"
-import { Effect, Layer } from "effect"
-import { Clipboard } from "../../../src/effect/services/Clipboard"
+import { createTestClipboard } from "../../../src/effect/services/Clipboard"
+import type { ClipboardError } from "../../../src/effect/errors"
 
 describe("Clipboard", () => {
-  describe("testLayer", () => {
-    // Provide fresh layer for each test to ensure state isolation
-    const runWithFreshLayer = <A, E>(
-      effect: Effect.Effect<A, E, Clipboard>
-    ): Promise<A> =>
-      Effect.runPromise(effect.pipe(Effect.provide(Layer.fresh(Clipboard.testLayer))))
-
+  describe("test implementation", () => {
     it("writes and reads text", async () => {
-      await runWithFreshLayer(
-        Effect.gen(function* () {
-          const clipboard = yield* Clipboard
+      const clipboard = createTestClipboard()
 
-          yield* clipboard.write("Hello, World!")
-          const text = yield* clipboard.read()
+      const error = await clipboard.write("Hello, World!")
+      expect(error).toBeUndefined()
 
-          expect(text).toBe("Hello, World!")
-        })
-      )
+      const text = await clipboard.read()
+      expect(text).toBe("Hello, World!")
     })
 
     it("overwrites previous content", async () => {
-      await runWithFreshLayer(
-        Effect.gen(function* () {
-          const clipboard = yield* Clipboard
+      const clipboard = createTestClipboard()
 
-          yield* clipboard.write("First")
-          yield* clipboard.write("Second")
-          const text = yield* clipboard.read()
+      await clipboard.write("First")
+      await clipboard.write("Second")
+      const text = await clipboard.read()
 
-          expect(text).toBe("Second")
-        })
-      )
+      expect(text).toBe("Second")
     })
 
     it("starts empty", async () => {
-      await runWithFreshLayer(
-        Effect.gen(function* () {
-          const clipboard = yield* Clipboard
-          const text = yield* clipboard.read()
+      const clipboard = createTestClipboard()
 
-          expect(text).toBe("")
-        })
-      )
+      const text = await clipboard.read()
+      expect(text).toBe("")
     })
   })
 })

@@ -1,6 +1,6 @@
 import type net from 'net';
 
-import { PtyId, Cols, Rows } from '../effect/types';
+import { asPtyId, makeCols, makeRows } from '../effect/types';
 import type { TerminalScrollState, TerminalState } from '../core/types';
 import type { ITerminalEmulator } from '../terminal/emulator-interface';
 import { packTerminalState, packRow } from '../terminal/cell-serialization';
@@ -71,8 +71,8 @@ export function createRequestHandler(params: {
 
         case 'createPty': {
           const ptyId = await params.withPty((pty) => pty.create({
-            cols: Cols.make(requestParams.cols as number),
-            rows: Rows.make(requestParams.rows as number),
+            cols: makeCols(requestParams.cols as number),
+            rows: makeRows(requestParams.rows as number),
             cwd: requestParams.cwd as string | undefined,
             pixelWidth: requestParams.pixelWidth as number | undefined,
             pixelHeight: requestParams.pixelHeight as number | undefined,
@@ -82,13 +82,13 @@ export function createRequestHandler(params: {
         }
 
         case 'write':
-          await params.withPty((pty) => pty.write(PtyId.make(requestParams.ptyId as string), requestParams.data as string));
+          await params.withPty((pty) => pty.write(asPtyId(requestParams.ptyId as string), requestParams.data as string));
           params.sendResponse(socket, requestId);
           return;
 
         case 'sendFocusEvent':
           await params.withPty((pty) => pty.sendFocusEvent(
-            PtyId.make(requestParams.ptyId as string),
+            asPtyId(requestParams.ptyId as string),
             Boolean(requestParams.focused)
           ));
           params.sendResponse(socket, requestId);
@@ -96,9 +96,9 @@ export function createRequestHandler(params: {
 
         case 'resize':
           await params.withPty((pty) => pty.resize(
-            PtyId.make(requestParams.ptyId as string),
-            Cols.make(requestParams.cols as number),
-            Rows.make(requestParams.rows as number),
+            asPtyId(requestParams.ptyId as string),
+            makeCols(requestParams.cols as number),
+            makeRows(requestParams.rows as number),
             requestParams.pixelWidth as number | undefined,
             requestParams.pixelHeight as number | undefined
           ));
@@ -107,7 +107,7 @@ export function createRequestHandler(params: {
 
         case 'destroy':
           params.removeMappingForPty(requestParams.ptyId as string);
-          await params.withPty((pty) => pty.destroy(PtyId.make(requestParams.ptyId as string)));
+          await params.withPty((pty) => pty.destroy(asPtyId(requestParams.ptyId as string)));
           params.sendResponse(socket, requestId);
           return;
 
@@ -125,32 +125,32 @@ export function createRequestHandler(params: {
           return;
 
         case 'getCwd': {
-          const cwd = await params.withPty((pty) => pty.getCwd(PtyId.make(requestParams.ptyId as string)));
+          const cwd = await params.withPty((pty) => pty.getCwd(asPtyId(requestParams.ptyId as string)));
           params.sendResponse(socket, requestId, { cwd });
           return;
         }
 
         case 'getTerminalState': {
-          const state = await params.withPty((pty) => pty.getTerminalState(PtyId.make(requestParams.ptyId as string))) as TerminalState;
+          const state = await params.withPty((pty) => pty.getTerminalState(asPtyId(requestParams.ptyId as string))) as TerminalState;
           const payload = packTerminalState(state);
           params.sendResponse(socket, requestId, { cols: state.cols, rows: state.rows }, [payload]);
           return;
         }
 
         case 'getScrollState': {
-          const scrollState = await params.withPty((pty) => pty.getScrollState(PtyId.make(requestParams.ptyId as string))) as TerminalScrollState;
+          const scrollState = await params.withPty((pty) => pty.getScrollState(asPtyId(requestParams.ptyId as string))) as TerminalScrollState;
           params.sendResponse(socket, requestId, scrollState);
           return;
         }
 
         case 'setScrollOffset':
-          await params.withPty((pty) => pty.setScrollOffset(PtyId.make(requestParams.ptyId as string), requestParams.offset as number));
+          await params.withPty((pty) => pty.setScrollOffset(asPtyId(requestParams.ptyId as string), requestParams.offset as number));
           params.sendResponse(socket, requestId);
           return;
 
         case 'setUpdateEnabled':
           await params.withPty((pty) => pty.setUpdateEnabled(
-            PtyId.make(requestParams.ptyId as string),
+            asPtyId(requestParams.ptyId as string),
             Boolean(requestParams.enabled)
           ));
           params.sendResponse(socket, requestId);
@@ -160,7 +160,7 @@ export function createRequestHandler(params: {
           const ptyId = requestParams.ptyId as string;
           const startOffset = requestParams.startOffset as number;
           const count = requestParams.count as number;
-          const emulator = await params.withPty((pty) => pty.getEmulator(PtyId.make(ptyId))) as ITerminalEmulator;
+          const emulator = await params.withPty((pty) => pty.getEmulator(asPtyId(ptyId))) as ITerminalEmulator;
 
           const lineOffsets: number[] = [];
           const payloads: ArrayBuffer[] = [];
@@ -201,7 +201,7 @@ export function createRequestHandler(params: {
           const formatParam = requestParams.format;
           const format: CaptureFormat = formatParam === 'ansi' ? 'ansi' : 'text';
           const raw = requestParams.raw === true;
-          const emulator = await params.withPty((pty) => pty.getEmulator(PtyId.make(ptyId))) as ITerminalEmulator;
+          const emulator = await params.withPty((pty) => pty.getEmulator(asPtyId(ptyId))) as ITerminalEmulator;
           const text = captureEmulator(emulator, {
             lines,
             format,
@@ -216,7 +216,7 @@ export function createRequestHandler(params: {
           const ptyId = requestParams.ptyId as string;
           const query = requestParams.query as string;
           const limit = requestParams.limit as number | undefined;
-          const emulator = await params.withPty((pty) => pty.getEmulator(PtyId.make(ptyId))) as ITerminalEmulator;
+          const emulator = await params.withPty((pty) => pty.getEmulator(asPtyId(ptyId))) as ITerminalEmulator;
           const result = await emulator.search(query, { limit });
           params.sendResponse(socket, requestId, result);
           return;
@@ -229,7 +229,7 @@ export function createRequestHandler(params: {
         }
 
         case 'getSession': {
-          const session = await params.withPty((pty) => pty.getSession(PtyId.make(requestParams.ptyId as string))) as any;
+          const session = await params.withPty((pty) => pty.getSession(asPtyId(requestParams.ptyId as string))) as any;
           params.sendResponse(socket, requestId, { session: session ? {
             id: String(session.id),
             pid: session.pid,
@@ -242,37 +242,37 @@ export function createRequestHandler(params: {
         }
 
         case 'getForegroundProcess': {
-          const proc = await params.withPty((pty) => pty.getForegroundProcess(PtyId.make(requestParams.ptyId as string)));
+          const proc = await params.withPty((pty) => pty.getForegroundProcess(asPtyId(requestParams.ptyId as string)));
           params.sendResponse(socket, requestId, { process: proc });
           return;
         }
 
         case 'getGitBranch': {
-          const branch = await params.withPty((pty) => pty.getGitBranch(PtyId.make(requestParams.ptyId as string)));
+          const branch = await params.withPty((pty) => pty.getGitBranch(asPtyId(requestParams.ptyId as string)));
           params.sendResponse(socket, requestId, { branch });
           return;
         }
 
         case 'getGitInfo': {
-          const info = await params.withPty((pty) => pty.getGitInfo(PtyId.make(requestParams.ptyId as string)));
+          const info = await params.withPty((pty) => pty.getGitInfo(asPtyId(requestParams.ptyId as string)));
           params.sendResponse(socket, requestId, { info });
           return;
         }
 
         case 'getGitDiffStats': {
-          const diff = await params.withPty((pty) => pty.getGitDiffStats(PtyId.make(requestParams.ptyId as string)));
+          const diff = await params.withPty((pty) => pty.getGitDiffStats(asPtyId(requestParams.ptyId as string)));
           params.sendResponse(socket, requestId, { diff });
           return;
         }
 
         case 'getTitle': {
-          const title = await params.withPty((pty) => pty.getTitle(PtyId.make(requestParams.ptyId as string)));
+          const title = await params.withPty((pty) => pty.getTitle(asPtyId(requestParams.ptyId as string)));
           params.sendResponse(socket, requestId, { title });
           return;
         }
 
         case 'getLastCommand': {
-          const command = await params.withPty((pty) => pty.getLastCommand(PtyId.make(requestParams.ptyId as string)));
+          const command = await params.withPty((pty) => pty.getLastCommand(asPtyId(requestParams.ptyId as string)));
           params.sendResponse(socket, requestId, { command });
           return;
         }

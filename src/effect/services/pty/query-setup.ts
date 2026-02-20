@@ -1,5 +1,5 @@
 /**
- * Query passthrough setup for PTY sessions
+ * Query passthrough setup for PTY sessions (errore version)
  * Configures the TerminalQueryPassthrough with all necessary getters/setters
  */
 import type { IPty } from "../../../../native/zig-pty/ts/index"

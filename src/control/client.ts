@@ -27,7 +27,7 @@ export class ControlClient {
     this.reader = new FrameReader();
 
     socket.on('data', (chunk) => {
-      this.reader.feed(chunk, (header, payloads) => {
+      this.reader.feed(chunk as Buffer, (header, payloads) => {
         if (header.type !== 'response' || header.requestId === undefined) return;
         const pending = this.pending.get(header.requestId);
         if (pending) {

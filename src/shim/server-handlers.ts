@@ -2,7 +2,7 @@ import type net from 'net';
 import { dirname } from 'path';
 
 import { Effect } from 'effect';
-import { PtyId } from '../effect/types';
+import { asPtyId } from '../effect/types';
 import type { UnifiedTerminalUpdate, TerminalScrollState, TerminalState, DirtyTerminalUpdate } from '../core/types';
 import { packDirtyUpdate } from '../terminal/cell-serialization';
 import type { ITerminalEmulator } from '../terminal/emulator-interface';
@@ -24,19 +24,13 @@ export type ShimServerOptions = {
 };
 
 const defaultWithPty: WithPty = async (fn) => {
-  const [{ runEffect }, { Pty }] = await Promise.all([
-    import('../effect/runtime'),
-    import('../effect/services'),
-  ]);
-  const effect = Effect.gen(function* () {
-    const pty = (yield* Pty) as any;
-    const result = fn(pty);
-    if (Effect.isEffect(result)) {
-      return yield* result;
-    }
-    return result;
-  }) as Effect.Effect<unknown, unknown, any>;
-  return runEffect(effect) as Promise<any>;
+  const { getPtyService, hasServices } = await import('../effect/bridge/services-instance');
+  if (!hasServices()) {
+    throw new Error('Services not initialized');
+  }
+  const pty = getPtyService();
+  const result = fn(pty);
+  return result as any;
 };
 
 export function createServerHandlers(state: ShimServerState, options?: ShimServerOptions) {
@@ -80,11 +74,11 @@ export function createServerHandlers(state: ShimServerState, options?: ShimServe
   async function subscribeToPty(ptyId: string): Promise<void> {
     if (state.ptySubscriptions.has(ptyId)) return;
 
-    const emulator = await withPty((pty) => pty.getEmulator(PtyId.make(ptyId))) as ITerminalEmulator;
+    const emulator = await withPty((pty) => pty.getEmulator(asPtyId(ptyId))) as ITerminalEmulator;
     state.ptyEmulators.set(ptyId, emulator);
 
     const unifiedUnsub = await withPty<() => void>((pty) =>
-      pty.subscribeUnified(PtyId.make(ptyId), (update: UnifiedTerminalUpdate) => {
+      pty.subscribeUnified(asPtyId(ptyId), (update: UnifiedTerminalUpdate) => {
         const packed = packDirtyUpdate(update.terminalUpdate);
         const payloads: ArrayBuffer[] = [
           packed.dirtyRowIndices.buffer.slice(0) as ArrayBuffer,
@@ -123,7 +117,7 @@ export function createServerHandlers(state: ShimServerState, options?: ShimServe
     );
 
     const exitUnsub = await withPty<() => void>((pty) =>
-      pty.onExit(PtyId.make(ptyId), (exitCode: number) => {
+      pty.onExit(asPtyId(ptyId), (exitCode: number) => {
         removeMappingForPty(ptyId);
         sendEvent({ type: 'ptyExit', ptyId, exitCode });
       })
@@ -175,8 +169,8 @@ export function createServerHandlers(state: ShimServerState, options?: ShimServe
     try {
       const result = await withPty((pty) =>
         Effect.gen(function* () {
-          const s = yield* pty.getTerminalState(PtyId.make(ptyId));
-          const scrollState = yield* pty.getScrollState(PtyId.make(ptyId));
+          const s = yield* pty.getTerminalState(asPtyId(ptyId));
+          const scrollState = yield* pty.getScrollState(asPtyId(ptyId));
           return { state: s, scrollState };
         })
       ) as { state: TerminalState; scrollState: TerminalScrollState };
@@ -226,7 +220,7 @@ export function createServerHandlers(state: ShimServerState, options?: ShimServe
       }, payloads);
 
       const emulator = state.ptyEmulators.get(ptyId) ??
-        await withPty((pty) => pty.getEmulator(PtyId.make(ptyId))) as ITerminalEmulator;
+        await withPty((pty) => pty.getEmulator(asPtyId(ptyId))) as ITerminalEmulator;
       if (emulator) {
         state.ptyEmulators.set(ptyId, emulator);
         const cache = state.kittyTransmitCache.get(ptyId);

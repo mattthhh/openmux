@@ -1,6 +1,8 @@
 /**
- * Terminal color bridge functions
+ * Color bridge functions (errore version)
  * Provides access to host terminal colors
+ * 
+ * No Effect dependencies - uses direct utility functions.
  */
 
 import { getHostColors, extractRgb } from "../../terminal/terminal-colors"

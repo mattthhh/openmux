@@ -1,12 +1,10 @@
 /**
- * PTY Operations - core operations for managing PTY sessions
+ * PTY Operations - core operations for managing PTY sessions (errore version)
  */
-import { Effect, Ref, HashMap, Option } from "effect"
 import type { TerminalState } from "../../../core/types"
-import type { PtyNotFoundError } from "../../errors"
-import type { PtyId} from "../../types";
-import { Cols, Rows } from "../../types"
-import { PtySession } from "../../models"
+import { PtyNotFoundError } from "../../errors"
+import type { PtyId, Cols, Rows } from "../../types"
+import type { PtySession } from "../../models"
 import type { InternalPtySession } from "./types"
 import { notifySubscribers, notifyScrollSubscribers } from "./notification"
 import { HOT_SCROLLBACK_LIMIT } from "../../../terminal/scrollback-config"
@@ -17,16 +15,27 @@ const FOCUS_IN_SEQUENCE = "\x1b[I"
 const FOCUS_OUT_SEQUENCE = "\x1b[O"
 
 export interface OperationsDeps {
-  sessionsRef: Ref.Ref<HashMap.HashMap<PtyId, InternalPtySession>>
-  getSessionOrFail: (id: PtyId) => Effect.Effect<InternalPtySession, PtyNotFoundError>
+  sessions: Map<PtyId, InternalPtySession>
   lifecycleRegistry: SubscriptionRegistry<{ type: 'created' | 'destroyed'; ptyId: PtyId }>
 }
 
 export function createOperations(deps: OperationsDeps) {
-  const { sessionsRef, getSessionOrFail, lifecycleRegistry } = deps
+  const { sessions, lifecycleRegistry } = deps
 
-  const write = Effect.fn("Pty.write")(function* (id: PtyId, data: string) {
-    const session = yield* getSessionOrFail(id)
+  function getSessionOrFail(id: PtyId): InternalPtySession | PtyNotFoundError {
+    const session = sessions.get(id)
+    if (!session) {
+      return new PtyNotFoundError({ ptyId: id })
+    }
+    return session
+  }
+
+  async function write(id: PtyId, data: string): Promise<PtyNotFoundError | void> {
+    const sessionOrError = getSessionOrFail(id)
+    if (sessionOrError instanceof PtyNotFoundError) {
+      return sessionOrError
+    }
+    const session = sessionOrError
 
     // Auto-scroll to bottom when user types
     if (session.scrollState.viewportOffset > 0) {
@@ -36,13 +45,14 @@ export function createOperations(deps: OperationsDeps) {
     }
 
     session.pty.write(data)
-  })
+  }
 
-  const sendFocusEvent = Effect.fn("Pty.sendFocusEvent")(function* (
-    id: PtyId,
-    focused: boolean
-  ) {
-    const session = yield* getSessionOrFail(id)
+  async function sendFocusEvent(id: PtyId, focused: boolean): Promise<PtyNotFoundError | void> {
+    const sessionOrError = getSessionOrFail(id)
+    if (sessionOrError instanceof PtyNotFoundError) {
+      return sessionOrError
+    }
+    const session = sessionOrError
     session.focusState = focused
     const sequence = focused ? FOCUS_IN_SEQUENCE : FOCUS_OUT_SEQUENCE
     tracePtyEvent("pty-focus-send", {
@@ -53,16 +63,20 @@ export function createOperations(deps: OperationsDeps) {
     tracePtyChunk("pty-focus-seq", sequence, { ptyId: id })
     if (!session.focusTrackingEnabled) return
     session.pty.write(sequence)
-  })
+  }
 
-  const resize = Effect.fn("Pty.resize")(function* (
+  async function resize(
     id: PtyId,
     cols: Cols,
     rows: Rows,
     pixelWidth?: number,
     pixelHeight?: number
-  ) {
-    const session = yield* getSessionOrFail(id)
+  ): Promise<PtyNotFoundError | void> {
+    const sessionOrError = getSessionOrFail(id)
+    if (sessionOrError instanceof PtyNotFoundError) {
+      return sessionOrError
+    }
+    const session = sessionOrError
 
     const hasPixels = typeof pixelWidth === "number" && pixelWidth > 0
       && typeof pixelHeight === "number" && pixelHeight > 0
@@ -87,20 +101,26 @@ export function createOperations(deps: OperationsDeps) {
     session.emulator.setPixelSize?.(session.pixelWidth, session.pixelHeight)
 
     // Check if DECSET 2048 (in-band resize notifications) is enabled
-    yield* Effect.try(() => {
+    try {
       const inBandResizeEnabled = session.emulator.getMode(2048)
       if (inBandResizeEnabled) {
         const resizeNotification =
           `\x1b[48;${rows};${cols};${session.pixelHeight};${session.pixelWidth}t`
         session.pty.write(resizeNotification)
       }
-    }).pipe(Effect.ignore)
+    } catch {
+      // Ignore mode query errors
+    }
 
     notifySubscribers(session)
-  })
+  }
 
-  const getCwd = Effect.fn("Pty.getCwd")(function* (id: PtyId) {
-    const session = yield* getSessionOrFail(id)
+  async function getCwd(id: PtyId): Promise<PtyNotFoundError | string> {
+    const sessionOrError = getSessionOrFail(id)
+    if (sessionOrError instanceof PtyNotFoundError) {
+      return sessionOrError
+    }
+    const session = sessionOrError
 
     if (session.pty.pid === undefined) {
       return session.cwd
@@ -109,59 +129,75 @@ export function createOperations(deps: OperationsDeps) {
     // Use native zig-pty method directly (no subprocess spawning)
     const cwd = session.pty.getCwd()
     return cwd ?? session.cwd
-  })
+  }
 
-  const destroy = Effect.fn("Pty.destroy")(function* (id: PtyId) {
-    const sessions = yield* Ref.get(sessionsRef)
-    const sessionOpt = HashMap.get(sessions, id)
+  async function destroy(id: PtyId): Promise<void> {
+    const session = sessions.get(id)
+    if (!session) return
 
-    if (Option.isSome(sessionOpt)) {
-      const session = sessionOpt.value
-      if (session.closing) {
-        return
-      }
-      session.closing = true
-
-      // Clear subscribers
-      for (const callback of session.subscribers) {
-        callback(null as unknown as TerminalState)
-      }
-      session.subscribers.clear()
-
-      // Kill PTY and dispose emulator
-      session.pty.kill()
-      session.emulator.dispose()
-      session.kittyRelayDispose?.()
-      session.queryPassthrough.dispose()
-
-      // Remove from map BEFORE emitting lifecycle event
-      yield* Ref.update(sessionsRef, HashMap.remove(id))
-
-      // Emit lifecycle event AFTER removal
-      yield* lifecycleRegistry.notify({ type: 'destroyed', ptyId: id })
+    if (session.closing) {
+      return
     }
-  })
+    session.closing = true
 
-  const getSession = Effect.fn("Pty.getSession")(function* (id: PtyId) {
-    const session = yield* getSessionOrFail(id)
+    // Clear subscribers
+    for (const callback of session.subscribers) {
+      callback(null as unknown as TerminalState)
+    }
+    session.subscribers.clear()
 
-    return PtySession.make({
+    // Kill PTY and dispose emulator
+    session.pty.kill()
+    session.emulator.dispose()
+    session.kittyRelayDispose?.()
+    session.queryPassthrough.dispose()
+
+    // Remove from map BEFORE emitting lifecycle event
+    sessions.delete(id)
+
+    // Emit lifecycle event AFTER removal
+    lifecycleRegistry.notify({ type: 'destroyed', ptyId: id })
+  }
+
+  async function getSession(id: PtyId): Promise<PtyNotFoundError | PtySession> {
+    const sessionOrError = getSessionOrFail(id)
+    if (sessionOrError instanceof PtyNotFoundError) {
+      return sessionOrError
+    }
+    const session = sessionOrError
+
+    return {
       id: session.id,
       pid: session.pty.pid ?? 0,
-      cols: Cols.make(session.cols),
-      rows: Rows.make(session.rows),
+      cols: session.cols as Cols,
+      rows: session.rows as Rows,
       cwd: session.cwd,
       shell: session.shell,
-    })
-  })
+    }
+  }
 
-  const getTerminalState = Effect.fn("Pty.getTerminalState")(function* (id: PtyId) {
-    const session = yield* getSessionOrFail(id)
+  async function getTerminalState(id: PtyId): Promise<PtyNotFoundError | TerminalState> {
+    const sessionOrError = getSessionOrFail(id)
+    if (sessionOrError instanceof PtyNotFoundError) {
+      return sessionOrError
+    }
+    const session = sessionOrError
     return session.emulator.getTerminalState()
-  })
+  }
 
-  const getScrollState = Effect.fn("Pty.getScrollState")(function* (id: PtyId) {
-    const session = yield* getSessionOrFail(id)
+  async function getScrollState(id: PtyId): Promise<
+    PtyNotFoundError | {
+      viewportOffset: number
+      scrollbackLength: number
+      isAtBottom: boolean
+      isAtScrollbackLimit?: boolean
+    }
+  > {
+    const sessionOrError = getSessionOrFail(id)
+    if (sessionOrError instanceof PtyNotFoundError) {
+      return sessionOrError
+    }
+    const session = sessionOrError
     const scrollbackLength = session.emulator.getScrollbackLength()
     const isAtScrollbackLimit = session.liveEmulator.getScrollbackLength() >= HOT_SCROLLBACK_LIMIT
 
@@ -171,54 +207,65 @@ export function createOperations(deps: OperationsDeps) {
       isAtBottom: session.scrollState.viewportOffset === 0,
       isAtScrollbackLimit,
     }
-  })
+  }
 
-  const setScrollOffset = Effect.fn("Pty.setScrollOffset")(function* (
-    id: PtyId,
-    offset: number
-  ) {
-    const session = yield* getSessionOrFail(id)
+  async function setScrollOffset(id: PtyId, offset: number): Promise<PtyNotFoundError | void> {
+    const sessionOrError = getSessionOrFail(id)
+    if (sessionOrError instanceof PtyNotFoundError) {
+      return sessionOrError
+    }
+    const session = sessionOrError
     const maxOffset = session.emulator.getScrollbackLength()
     session.scrollState.viewportOffset = Math.max(0, Math.min(offset, maxOffset))
     notifyScrollSubscribers(session)
-  })
+  }
 
-  const setUpdateEnabled = Effect.fn("Pty.setUpdateEnabled")(function* (
-    id: PtyId,
-    enabled: boolean
-  ) {
-    const session = yield* getSessionOrFail(id)
-    session.emulator.setUpdateEnabled?.(enabled)
-  })
-
-  const getEmulator = Effect.fn("Pty.getEmulator")(function* (id: PtyId) {
-    const session = yield* getSessionOrFail(id)
-    return session.emulator
-  })
-
-  const destroyAll = Effect.fn("Pty.destroyAll")(function* () {
-    const sessions = yield* Ref.get(sessionsRef)
-    const ids = Array.from(HashMap.keys(sessions))
-
-    for (const id of ids) {
-      yield* destroy(id)
+  async function setUpdateEnabled(id: PtyId, enabled: boolean): Promise<PtyNotFoundError | void> {
+    const sessionOrError = getSessionOrFail(id)
+    if (sessionOrError instanceof PtyNotFoundError) {
+      return sessionOrError
     }
-  })
+    const session = sessionOrError
+    session.emulator.setUpdateEnabled?.(enabled)
+  }
 
-  const listAll = Effect.fn("Pty.listAll")(function* () {
-    const sessions = yield* Ref.get(sessionsRef)
-    return Array.from(HashMap.keys(sessions))
-  })
+  async function getEmulator(id: PtyId): Promise<PtyNotFoundError | import("../../../terminal/emulator-interface").ITerminalEmulator> {
+    const sessionOrError = getSessionOrFail(id)
+    if (sessionOrError instanceof PtyNotFoundError) {
+      return sessionOrError
+    }
+    const session = sessionOrError
+    return session.emulator
+  }
 
-  const getTitle = Effect.fn("Pty.getTitle")(function* (id: PtyId) {
-    const session = yield* getSessionOrFail(id)
+  async function destroyAll(): Promise<void> {
+    const ids = Array.from(sessions.keys())
+    for (const id of ids) {
+      await destroy(id)
+    }
+  }
+
+  async function listAll(): Promise<PtyId[]> {
+    return Array.from(sessions.keys())
+  }
+
+  async function getTitle(id: PtyId): Promise<PtyNotFoundError | string> {
+    const sessionOrError = getSessionOrFail(id)
+    if (sessionOrError instanceof PtyNotFoundError) {
+      return sessionOrError
+    }
+    const session = sessionOrError
     return session.emulator.getTitle()
-  })
+  }
 
-  const getLastCommand = Effect.fn("Pty.getLastCommand")(function* (id: PtyId) {
-    const session = yield* getSessionOrFail(id)
+  async function getLastCommand(id: PtyId): Promise<PtyNotFoundError | string | undefined> {
+    const sessionOrError = getSessionOrFail(id)
+    if (sessionOrError instanceof PtyNotFoundError) {
+      return sessionOrError
+    }
+    const session = sessionOrError
     return session.lastCommand ?? undefined
-  })
+  }
 
   return {
     write,
@@ -236,5 +283,6 @@ export function createOperations(deps: OperationsDeps) {
     listAll,
     getTitle,
     getLastCommand,
+    getSessionOrFail,
   }
 }

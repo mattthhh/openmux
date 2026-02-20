@@ -1,24 +1,17 @@
 /**
  * KeyboardRouter - Simple keyboard handler registration for overlays
- * Plain TypeScript implementation - no Effect overhead needed for this simple state
+ * Migrated to factory pattern with proper interface
  */
 
+import type { KeyboardEvent } from "../../core/keyboard-event"
 
-import type { KeyboardEvent } from '../../core/keyboard-event'
-
-/**
- * Keyboard event shape passed to handlers
- */
+/** Keyboard event shape passed to handlers */
 export type KeyEvent = KeyboardEvent
 
-/**
- * Handler function type - returns true if event was handled
- */
+/** Handler function type - returns true if event was handled */
 export type KeyHandler = (e: KeyEvent) => boolean
 
-/**
- * Overlay types that can register keyboard handlers
- */
+/** Overlay types that can register keyboard handlers */
 export type OverlayType =
   | "confirmationDialog"
   | "commandPalette"
@@ -28,10 +21,7 @@ export type OverlayType =
   | "sessionPicker"
   | "aggregateView"
 
-/**
- * Priority determines which handler gets called first
- * Higher priority = earlier in chain
- */
+/** Priority determines which handler gets called first (higher = earlier) */
 const OVERLAY_PRIORITY: Record<OverlayType, number> = {
   confirmationDialog: 30, // Highest - modal dialogs take precedence
   commandPalette: 25,
@@ -42,64 +32,144 @@ const OVERLAY_PRIORITY: Record<OverlayType, number> = {
   aggregateView: 10,
 }
 
-// Use a plain Map for simple state
-const handlers = new Map<OverlayType, KeyHandler>()
-
-/**
- * Register a keyboard handler for an overlay.
- * Returns an unsubscribe function.
- */
-export function registerHandler(overlay: OverlayType, handler: KeyHandler): () => void {
-  handlers.set(overlay, handler)
-  return () => {
-    handlers.delete(overlay)
-  }
+export interface KeyboardRouter {
+  /** Register a keyboard handler for a key */
+  register(key: string, handler: () => void): void
+  /** Unregister a keyboard handler */
+  unregister(key: string): void
+  /** Route a keyboard input to registered handlers. Returns true if handled. */
+  route(input: string): boolean
+  /** Register a handler for an overlay (returns unsubscribe function) */
+  registerHandler(overlay: OverlayType, handler: KeyHandler): (() => void)
+  /** Route a keyboard event to registered overlay handlers */
+  routeKey(event: KeyEvent): { handled: boolean; overlay: OverlayType | null }
+  /** Get the currently active overlay (highest priority with a handler) */
+  getActiveOverlay(): OverlayType | null
+  /** Check if a specific overlay has a registered handler */
+  hasHandler(overlay: OverlayType): boolean
+  /** Clear all handlers */
+  clearAllHandlers(): void
 }
 
-/**
- * Route a keyboard event to registered handlers.
- * Returns the overlay that handled the event, or null if not handled.
- */
-export function routeKey(event: KeyEvent): { handled: boolean; overlay: OverlayType | null } {
-  // Sort overlays by priority (highest first)
-  const sortedOverlays = (Array.from(handlers.keys()) as OverlayType[]).sort(
-    (a, b) => OVERLAY_PRIORITY[b] - OVERLAY_PRIORITY[a]
-  )
+/** Create a KeyboardRouter instance */
+export function createKeyboardRouter(): KeyboardRouter {
+  // Simple key -> handler map for basic routing
+  const keyHandlers = new Map<string, () => void>()
+  // Overlay handlers map
+  const overlayHandlers = new Map<OverlayType, KeyHandler>()
 
-  // Try each handler in priority order
-  for (const overlay of sortedOverlays) {
-    const handler = handlers.get(overlay)
+  const register = (key: string, handler: () => void): void => {
+    keyHandlers.set(key, handler)
+  }
+
+  const unregister = (key: string): void => {
+    keyHandlers.delete(key)
+  }
+
+  const route = (input: string): boolean => {
+    const handler = keyHandlers.get(input)
     if (handler) {
-      const handled = handler(event)
-      if (handled) {
-        return { handled: true, overlay }
-      }
+      handler()
+      return true
+    }
+    return false
+  }
+
+  const registerHandler = (overlay: OverlayType, handler: KeyHandler): (() => void) => {
+    overlayHandlers.set(overlay, handler)
+    return () => {
+      overlayHandlers.delete(overlay)
     }
   }
 
-  return { handled: false, overlay: null }
+  const routeKey = (event: KeyEvent): { handled: boolean; overlay: OverlayType | null } => {
+    // Sort overlays by priority (highest first)
+    const sortedOverlays = (Array.from(overlayHandlers.keys()) as OverlayType[]).sort(
+      (a, b) => OVERLAY_PRIORITY[b] - OVERLAY_PRIORITY[a]
+    )
+
+    // Try each handler in priority order
+    for (const overlay of sortedOverlays) {
+      const handler = overlayHandlers.get(overlay)
+      if (handler) {
+        const handled = handler(event)
+        if (handled) {
+          return { handled: true, overlay }
+        }
+      }
+    }
+
+    return { handled: false, overlay: null }
+  }
+
+  const getActiveOverlay = (): OverlayType | null => {
+    const sortedOverlays = (Array.from(overlayHandlers.keys()) as OverlayType[]).sort(
+      (a, b) => OVERLAY_PRIORITY[b] - OVERLAY_PRIORITY[a]
+    )
+    return sortedOverlays[0] ?? null
+  }
+
+  const hasHandler = (overlay: OverlayType): boolean => {
+    return overlayHandlers.has(overlay)
+  }
+
+  const clearAllHandlers = (): void => {
+    keyHandlers.clear()
+    overlayHandlers.clear()
+  }
+
+  return {
+    register,
+    unregister,
+    route,
+    registerHandler,
+    routeKey,
+    getActiveOverlay,
+    hasHandler,
+    clearAllHandlers,
+  }
 }
 
-/**
- * Get the currently active overlay (highest priority with a handler).
- */
+/** Global router instance for backward compatibility */
+let globalRouter: KeyboardRouter | null = null
+
+/** Get or create the global KeyboardRouter instance */
+export function getGlobalKeyboardRouter(): KeyboardRouter {
+  if (!globalRouter) {
+    globalRouter = createKeyboardRouter()
+  }
+  return globalRouter
+}
+
+/** Reset the global router (for testing) */
+export function resetGlobalKeyboardRouter(): void {
+  globalRouter = null
+}
+
+// Re-export the standalone functions for backward compatibility
+// These use the global router instance
+
+/** Register a keyboard handler for an overlay. Returns an unsubscribe function. */
+export function registerHandler(overlay: OverlayType, handler: KeyHandler): () => void {
+  return getGlobalKeyboardRouter().registerHandler(overlay, handler)
+}
+
+/** Route a keyboard event to registered handlers. */
+export function routeKey(event: KeyEvent): { handled: boolean; overlay: OverlayType | null } {
+  return getGlobalKeyboardRouter().routeKey(event)
+}
+
+/** Get the currently active overlay (highest priority with a handler). */
 export function getActiveOverlay(): OverlayType | null {
-  const sortedOverlays = (Array.from(handlers.keys()) as OverlayType[]).sort(
-    (a, b) => OVERLAY_PRIORITY[b] - OVERLAY_PRIORITY[a]
-  )
-  return sortedOverlays[0] ?? null
+  return getGlobalKeyboardRouter().getActiveOverlay()
 }
 
-/**
- * Check if a specific overlay has a registered handler.
- */
+/** Check if a specific overlay has a registered handler. */
 export function hasHandler(overlay: OverlayType): boolean {
-  return handlers.has(overlay)
+  return getGlobalKeyboardRouter().hasHandler(overlay)
 }
 
-/**
- * Clear all handlers (useful for testing)
- */
+/** Clear all handlers (useful for testing) */
 export function clearAllHandlers(): void {
-  handlers.clear()
+  return getGlobalKeyboardRouter().clearAllHandlers()
 }
