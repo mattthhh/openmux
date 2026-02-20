@@ -353,6 +353,9 @@ describe("Session Operations Integration", () => {
     switchToSession = bridgeModule.switchToSession
 
     vi.clearAllMocks()
+    
+    // Suppress expected error messages from session operations
+    vi.spyOn(console, "error").mockImplementation(() => {})
   })
 
   const createMetadata = (id: string, name = id): SessionMetadata => ({
