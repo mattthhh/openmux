@@ -3,12 +3,11 @@
  */
 
 import { createContext, createMemo, createSignal, onCleanup, onMount, useContext, type ParentProps, type Accessor } from 'solid-js';
-import { Effect, Stream, Duration } from 'effect';
 import fs from 'node:fs';
 import path from 'node:path';
 import { getConfigPath, loadUserConfigSync, type UserConfig } from '../core/user-config';
 import { resolveKeybindings, type ResolvedKeybindings } from '../core/keybindings';
-import { runStream } from '../effect/stream-utils';
+import { runStream, streamFromSubscription, debounce, tap, filter } from '../effect/stream-utils';
 
 interface ConfigContextValue {
   config: Accessor<UserConfig>;
@@ -36,21 +35,26 @@ export function ConfigProvider(props: ParentProps) {
     const configDir = path.dirname(configPath);
     const configFile = path.basename(configPath);
 
-    const watchStream = Stream.async<Buffer | string | null>((emit) => {
-      let watcher: fs.FSWatcher | null = null;
-      try {
-        watcher = fs.watch(configDir, { persistent: false }, (_eventType, filename) => {
-          void emit.single(filename ?? null);
-        });
-      } catch (error) {
-        console.warn('[openmux] Config watch failed:', error);
-        return;
-      }
-      return Effect.sync(() => watcher?.close());
-    }).pipe(
-      Stream.filter((filename) => !filename || filename.toString() === configFile),
-      Stream.debounce(Duration.millis(50)),
-      Stream.tap(() => Effect.sync(() => reloadConfig()))
+    const watchStream = tap(
+      debounce(
+        filter(
+          streamFromSubscription<string | null>(({ emit }) => {
+            let watcher: fs.FSWatcher | null = null;
+            try {
+              watcher = fs.watch(configDir, { persistent: false }, (_eventType, filename) => {
+                void emit(filename ?? null);
+              });
+            } catch (error) {
+              console.warn('[openmux] Config watch failed:', error);
+              return () => {};
+            }
+            return () => watcher?.close();
+          }),
+          (filename) => !filename || filename.toString() === configFile
+        ),
+        50
+      ),
+      () => reloadConfig()
     );
 
     const stop = runStream(watchStream, { label: 'config-watch' });

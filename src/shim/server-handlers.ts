@@ -1,7 +1,6 @@
 import type net from 'net';
 import { dirname } from 'path';
 
-import { Effect } from 'effect';
 import { asPtyId } from '../effect/types';
 import { ResourceStack } from '../effect/resources.js';
 import type { UnifiedTerminalUpdate, TerminalScrollState, TerminalState, DirtyTerminalUpdate } from '../core/types';
@@ -16,7 +15,7 @@ import { createRequestHandler } from './server-requests';
 import { sendFrame, sendResponse, sendError } from './server/frames';
 import { createKittyHandlers } from './server/kitty';
 
-export type WithPty = <A>(fn: (pty: any) => Effect.Effect<A, unknown, any> | A) => Promise<A>;
+export type WithPty = <A>(fn: (pty: any) => Promise<A> | A) => Promise<A>;
 
 export type ShimServerOptions = {
   socketPath?: string;
@@ -172,13 +171,11 @@ export function createServerHandlers(state: ShimServerState, options?: ShimServe
   async function sendSnapshot(ptyId: string): Promise<void> {
     if (!state.activeClient) return;
     try {
-      const result = await withPty((pty) =>
-        Effect.gen(function* () {
-          const s = yield* pty.getTerminalState(asPtyId(ptyId));
-          const scrollState = yield* pty.getScrollState(asPtyId(ptyId));
-          return { state: s, scrollState };
-        })
-      ) as { state: TerminalState; scrollState: TerminalScrollState };
+      const result = await withPty(async (pty) => {
+        const s = await pty.getTerminalState(asPtyId(ptyId));
+        const scrollState = await pty.getScrollState(asPtyId(ptyId));
+        return { state: s, scrollState };
+      }) as { state: TerminalState; scrollState: TerminalScrollState };
 
       const update: DirtyTerminalUpdate = {
         dirtyRows: new Map(),

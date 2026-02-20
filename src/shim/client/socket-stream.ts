@@ -1,30 +1,94 @@
 import type net from 'net';
-import { Effect, Stream } from 'effect';
 import type { Buffer } from 'buffer';
 
 import type { ShimHeader } from '../protocol';
 import type { FrameReader } from '../protocol';
+import { runStream } from '../../effect/stream-utils';
 
 type FrameHandler = (header: ShimHeader, payloads: Buffer[]) => void;
 
+/**
+ * Creates a handler for socket data events.
+ * Returns a cleanup function to remove the listener.
+ */
+export function createSocketDataHandler(
+  client: net.Socket,
+  frameReader: FrameReader,
+  handleFrame: FrameHandler
+): () => void {
+  const handleData = (chunk: Buffer) => {
+    frameReader.feed(chunk, handleFrame);
+  };
+  client.on('data', handleData);
+  
+  return () => {
+    client.off('data', handleData);
+  };
+}
+
+/**
+ * Sets up socket data handling using an async iterable approach.
+ * This feeds chunks to the frameReader as they arrive.
+ * Returns a cleanup function to stop the stream.
+ */
 export function createSocketDataStream(
   client: net.Socket,
   frameReader: FrameReader,
   handleFrame: FrameHandler
-): Stream.Stream<Buffer> {
-  return Stream.async<Buffer>((emit) => {
-    const handleData = (chunk: Buffer) => {
-      void emit.single(chunk);
-    };
-    client.on('data', handleData);
-    return Effect.sync(() => {
-      client.off('data', handleData);
-    });
-  }).pipe(
-    Stream.tap((chunk) =>
-      Effect.sync(() => {
-        frameReader.feed(chunk, handleFrame);
-      })
-    )
-  );
+): () => void {
+  const stream = {
+    async *[Symbol.asyncIterator](): AsyncIterator<Buffer> {
+      const buffer: Buffer[] = [];
+      let resolveNext: ((value: IteratorResult<Buffer>) => void) | null = null;
+      let isDone = false;
+
+      const handleData = (chunk: Buffer) => {
+        if (isDone) return;
+        if (resolveNext) {
+          resolveNext({ value: chunk, done: false });
+          resolveNext = null;
+        } else {
+          buffer.push(chunk);
+        }
+      };
+
+      const handleClose = () => {
+        isDone = true;
+        if (resolveNext) {
+          resolveNext({ value: undefined as unknown as Buffer, done: true });
+          resolveNext = null;
+        }
+      };
+
+      client.on('data', handleData);
+      client.on('close', handleClose);
+      client.on('end', handleClose);
+
+      try {
+        while (!isDone) {
+          let value: Buffer;
+          
+          if (buffer.length > 0) {
+            value = buffer.shift()!;
+          } else {
+            const result = await new Promise<IteratorResult<Buffer>>((resolve) => {
+              resolveNext = resolve;
+            });
+            if (result.done) break;
+            value = result.value;
+          }
+          
+          // Feed to frame reader
+          frameReader.feed(value, handleFrame);
+          yield value;
+        }
+      } finally {
+        client.off('data', handleData);
+        client.off('close', handleClose);
+        client.off('end', handleClose);
+      }
+    },
+  };
+
+  return runStream(stream, { label: 'shim-client-data' });
 }

@@ -14,7 +14,6 @@ import {
   type Accessor,
 } from 'solid-js';
 import { createStore, produce } from 'solid-js/store';
-import { Effect, Schedule, Stream, Duration } from 'effect';
 import type { SessionMetadata, WorkspaceId } from '../core/types';
 import type { Workspaces } from '../core/operations/layout-actions';
 import { useConfig } from './ConfigContext';
@@ -32,7 +31,7 @@ import {
   saveTemplate as saveTemplateDefinition,
   deleteTemplate,
 } from '../effect/bridge';
-import { runStream } from '../effect/stream-utils';
+import { runStream, repeatWithInterval, tap } from '../effect/stream-utils';
 import type { TemplateSession } from '../effect/models';
 import { SessionStorageError } from '../effect/errors';
 import {
@@ -369,22 +368,19 @@ export function SessionProvider(props: SessionProviderProps) {
     const intervalMs = config.config().session.autoSaveIntervalMs;
     if (!state.activeSession || intervalMs === 0) return;
 
-    const autosaveStream = Stream.repeatEffectWithSchedule(
-      Effect.tryPromise(async () => {
-        const workspaces = props.getWorkspaces();
-        const activeWorkspaceId = props.getActiveWorkspaceId();
+    const autosaveStream = repeatWithInterval(async () => {
+      const workspaces = props.getWorkspaces();
+      const activeWorkspaceId = props.getActiveWorkspaceId();
 
-        if (state.activeSession && shouldPersistSession(workspaces)) {
-          await saveCurrentSession(
-            state.activeSession,
-            workspaces,
-            activeWorkspaceId,
-            props.getCwd
-          );
-        }
-      }),
-      Schedule.fixed(Duration.millis(intervalMs))
-    );
+      if (state.activeSession && shouldPersistSession(workspaces)) {
+        await saveCurrentSession(
+          state.activeSession,
+          workspaces,
+          activeWorkspaceId,
+          props.getCwd
+        );
+      }
+    }, intervalMs);
 
     const stop = runStream(autosaveStream, { label: 'session-autosave' });
     onCleanup(() => stop());

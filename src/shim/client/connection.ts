@@ -5,7 +5,6 @@ import type { Buffer } from 'buffer';
 
 import { getHostColors } from '../../terminal/terminal-colors';
 import { encodeFrame, FrameReader, SHIM_SOCKET_DIR, SHIM_SOCKET_PATH, type ShimHeader } from '../protocol';
-import { runStream } from '../../effect/stream-utils';
 import { createFrameHandler, type FrameHandlerDeps } from './frame-handler';
 import { createSocketDataStream } from './socket-stream';
 
@@ -77,10 +76,7 @@ async function connectSocket(): Promise<void> {
         markDetached();
       });
       socketDataStop?.();
-      socketDataStop = runStream(
-        createSocketDataStream(client, reader, handleFrame),
-        { label: 'shim-client-data' }
-      );
+      socketDataStop = createSocketDataStream(client, reader, handleFrame);
       resolve();
     };
     client.once('error', handleError);

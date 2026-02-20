@@ -3,19 +3,19 @@
  */
 
 import { produce, type SetStoreFunction } from 'solid-js/store';
-import { Effect, Schedule, Stream, Duration } from 'effect';
 import type { PtyInfo, AggregateViewState } from './aggregate-view-types';
 import {
   buildPtyIndex,
   recomputeMatches,
   isActivePty,
 } from './aggregate-view-helpers';
-import { runStream, streamFromSubscription } from '../effect/stream-utils';
+import { runStream, streamFromSubscription, debounce, tap, repeatWithInterval } from '../effect/stream-utils';
 import {
   listAllPtysWithMetadata,
   getPtyMetadata,
   subscribeToPtyLifecycle,
   subscribeToAllTitleChanges,
+  type PtyTitleChangeEvent,
 } from '../effect/bridge';
 
 export interface SubscriptionManager {
@@ -198,9 +198,12 @@ export async function setupSubscriptions(
   const epoch = ++subscriptionsEpoch.value;
 
   // Subscribe to PTY lifecycle events for auto-refresh (created/destroyed)
-  const lifecycleStream = streamFromSubscription(subscribeToPtyLifecycle).pipe(
-    Stream.debounce(Duration.millis(100)),
-    Stream.tap(() => Effect.tryPromise(() => refreshPtys()))
+  const lifecycleStream = tap(
+    debounce(
+      streamFromSubscription(({ emit }) => subscribeToPtyLifecycle(emit)),
+      100
+    ),
+    () => void refreshPtys()
   );
   const lifecycleUnsub = runStream(lifecycleStream, { label: 'aggregate-view-lifecycle' });
   if (epoch !== subscriptionsEpoch.value || !state.showAggregateView) {
@@ -210,8 +213,9 @@ export async function setupSubscriptions(
   subscriptions.lifecycle = lifecycleUnsub;
 
   // Subscribe to title changes - use incremental update instead of full refresh
-  const titleStream = streamFromSubscription(subscribeToAllTitleChanges).pipe(
-    Stream.tap((event) => Effect.sync(() => handleTitleChange(event)))
+  const titleStream = tap(
+    streamFromSubscription<PtyTitleChangeEvent>(({ emit }) => subscribeToAllTitleChanges(emit)),
+    (event) => handleTitleChange(event)
   );
   const titleUnsub = runStream(titleStream, { label: 'aggregate-view-title' });
   if (epoch !== subscriptionsEpoch.value || !state.showAggregateView) {
@@ -227,29 +231,23 @@ export async function setupSubscriptions(
   const activePollMs = 2000;
   const inactivePollMs = 10000;
 
-  const activePollStream = Stream.repeatEffectWithSchedule(
-    Effect.tryPromise(async () => {
-      if (!state.showAggregateView || state.allPtys.length === 0) return;
-      const activeIds = new Set(state.allPtys.filter(isActivePty).map((pty) => pty.ptyId));
-      if (state.selectedPtyId) activeIds.add(state.selectedPtyId);
-      await refreshPtysSubset(Array.from(activeIds));
-    }),
-    Schedule.fixed(Duration.millis(activePollMs))
-  );
+  const activePollStream = repeatWithInterval(async () => {
+    if (!state.showAggregateView || state.allPtys.length === 0) return;
+    const activeIds = new Set(state.allPtys.filter(isActivePty).map((pty) => pty.ptyId));
+    if (state.selectedPtyId) activeIds.add(state.selectedPtyId);
+    await refreshPtysSubset(Array.from(activeIds));
+  }, activePollMs);
   subscriptions.pollingActive = runStream(activePollStream, { label: 'aggregate-view-poll-active' });
 
-  const inactivePollStream = Stream.repeatEffectWithSchedule(
-    Effect.tryPromise(async () => {
-      if (!state.showAggregateView || state.allPtys.length === 0) return;
-      const activeIds = new Set(state.allPtys.filter(isActivePty).map((pty) => pty.ptyId));
-      if (state.selectedPtyId) activeIds.add(state.selectedPtyId);
-      const inactiveIds = state.allPtys
-        .filter((pty) => !activeIds.has(pty.ptyId))
-        .map((pty) => pty.ptyId);
-      await refreshPtysSubset(inactiveIds);
-    }),
-    Schedule.fixed(Duration.millis(inactivePollMs))
-  );
+  const inactivePollStream = repeatWithInterval(async () => {
+    if (!state.showAggregateView || state.allPtys.length === 0) return;
+    const activeIds = new Set(state.allPtys.filter(isActivePty).map((pty) => pty.ptyId));
+    if (state.selectedPtyId) activeIds.add(state.selectedPtyId);
+    const inactiveIds = state.allPtys
+      .filter((pty) => !activeIds.has(pty.ptyId))
+      .map((pty) => pty.ptyId);
+    await refreshPtysSubset(inactiveIds);
+  }, inactivePollMs);
   subscriptions.pollingInactive = runStream(inactivePollStream, { label: 'aggregate-view-poll-inactive' });
 }
 

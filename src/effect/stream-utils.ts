@@ -1,46 +1,343 @@
 /**
- * Stream helpers for bridging Effect streams into non-Effect code.
+ * Stream helpers for bridging async iterables into UI components.
+ * Replaces Effect Stream with native TypeScript async iterables.
  */
-
-import { Effect, Fiber, Stream } from "effect"
 
 export interface RunStreamOptions {
   label?: string
   onError?: (cause: unknown) => void
 }
 
-export const runStream = <A, E>(
-  stream: Stream.Stream<A, E, never>,
+/**
+ * Run an async iterable and return a cleanup function.
+ * Handles errors via options.onError or logs to console.
+ */
+export function runStream<T>(
+  iterable: AsyncIterable<T>,
   options: RunStreamOptions = {}
-): (() => void) => {
-  const effect = Stream.runDrain(stream)
-  const guarded = Effect.catchAllCause(effect, (cause) =>
-    Effect.sync(() => {
-      if (options.onError) {
-        options.onError(cause)
-        return
+): () => void {
+  let isRunning = true
+  let iterator: AsyncIterator<T> | null = null
+
+  const run = async () => {
+    try {
+      iterator = iterable[Symbol.asyncIterator]()
+      while (isRunning) {
+        const result = await iterator.next()
+        if (result.done) break
       }
-      const label = options.label ? ` (${options.label})` : ''
-      console.warn(`[openmux] stream error${label}:`, cause)
-    })
-  )
-  const fiber = Effect.runFork(guarded)
+    } catch (error) {
+      if (options.onError) {
+        options.onError(error)
+      } else {
+        const label = options.label ? ` (${options.label})` : ''
+        console.warn(`[openmux] stream error${label}:`, error)
+      }
+    } finally {
+      // Ensure iterator is cleaned up
+      if (iterator && typeof iterator.return === 'function') {
+        try {
+          await iterator.return()
+        } catch {
+          // Ignore cleanup errors
+        }
+      }
+    }
+  }
+
+  // Start the stream
+  void run()
+
+  // Return cleanup function
   return () => {
-    Effect.runFork(Fiber.interrupt(fiber))
+    isRunning = false
+    if (iterator && typeof iterator.return === 'function') {
+      void iterator.return()
+    }
   }
 }
 
-export const streamFromSubscription = <A>(
-  subscribe: (emit: (value: A) => void) => Promise<() => void> | (() => void)
-): Stream.Stream<A> =>
-  Stream.async((emit) => {
-    const cleanupPromise = Promise.resolve(
-      subscribe((value) => {
-        void emit.single(value)
+export interface SubscriptionCallbacks<T> {
+  /** Emit a value to the stream */
+  emit: (value: T) => void
+  /** Signal that the stream is complete */
+  complete: () => void
+}
+
+/**
+ * Create an async iterable from a subscription function.
+ * The subscription function receives emit and complete callbacks, returns cleanup.
+ * If complete() is called, the stream ends naturally. If cleanup is called, it's aborted.
+ */
+export function streamFromSubscription<T>(
+  subscribe: (callbacks: SubscriptionCallbacks<T>) => Promise<() => void> | (() => void)
+): AsyncIterable<T> {
+  return {
+    [Symbol.asyncIterator](): AsyncIterator<T> {
+      const buffer: T[] = []
+      let resolveNext: ((value: IteratorResult<T>) => void) | null = null
+      let cleanup: (() => void) | null = null
+      let isDone = false
+
+      const emit = (value: T) => {
+        if (isDone) return
+        if (resolveNext) {
+          resolveNext({ value, done: false })
+          resolveNext = null
+        } else {
+          buffer.push(value)
+        }
+      }
+
+      const complete = () => {
+        if (isDone) return
+        isDone = true
+        if (resolveNext) {
+          resolveNext({ value: undefined as T, done: true })
+          resolveNext = null
+        }
+      }
+
+      // Initialize subscription
+      const initPromise = Promise.resolve(subscribe({ emit, complete })).then((cleanupFn) => {
+        cleanup = cleanupFn
       })
-    )
-    return Effect.promise(async () => {
-      const cleanup = await cleanupPromise
-      cleanup?.()
-    })
+
+      return {
+        async next(): Promise<IteratorResult<T>> {
+          await initPromise
+
+          if (buffer.length > 0) {
+            return { value: buffer.shift()!, done: false }
+          }
+
+          if (isDone) {
+            return { value: undefined as T, done: true }
+          }
+
+          return new Promise((resolve) => {
+            resolveNext = (result) => {
+              resolveNext = null
+              resolve(result)
+            }
+          })
+        },
+
+        async return(): Promise<IteratorResult<T>> {
+          isDone = true
+          
+          // Resolve any pending next() call with done
+          if (resolveNext) {
+            resolveNext({ value: undefined as T, done: true })
+            resolveNext = null
+          }
+          
+          // Always call cleanup to release resources
+          // This handles both early termination and natural completion
+          if (cleanup) {
+            cleanup()
+            cleanup = null
+          }
+          return { value: undefined as T, done: true }
+        },
+      }
+    },
+  }
+}
+
+/**
+ * Apply a tap (side effect) to each value in an async iterable.
+ */
+export function tap<T>(
+  iterable: AsyncIterable<T>,
+  fn: (value: T) => void | Promise<void>
+): AsyncIterable<T> {
+  return {
+    async *[Symbol.asyncIterator]() {
+      for await (const value of iterable) {
+        await fn(value)
+        yield value
+      }
+    },
+  }
+}
+
+/**
+ * Filter values in an async iterable.
+ */
+export function filter<T>(
+  iterable: AsyncIterable<T>,
+  predicate: (value: T) => boolean
+): AsyncIterable<T> {
+  return {
+    async *[Symbol.asyncIterator]() {
+      for await (const value of iterable) {
+        if (predicate(value)) {
+          yield value
+        }
+      }
+    },
+  }
+}
+
+/**
+ * Debounce an async iterable by a delay in milliseconds.
+ * Only emits the last value after the delay has passed without new values.
+ */
+export function debounce<T>(
+  iterable: AsyncIterable<T>,
+  delayMs: number
+): AsyncIterable<T> {
+  return {
+    async *[Symbol.asyncIterator]() {
+      const iterator = iterable[Symbol.asyncIterator]()
+      let lastValue: T | undefined
+      let hasValue = false
+      let timeoutId: ReturnType<typeof setTimeout> | null = null
+      let isDone = false
+
+      const waitForDebounce = (): Promise<void> =>
+        new Promise((resolve) => {
+          timeoutId = setTimeout(resolve, delayMs)
+        })
+
+      // Start reading from source
+      const readNext = async (): Promise<void> => {
+        try {
+          const result = await iterator.next()
+          if (result.done) {
+            isDone = true
+            return
+          }
+          lastValue = result.value
+          hasValue = true
+          // Schedule debounce
+          await waitForDebounce()
+        } catch {
+          isDone = true
+        }
+      }
+
+      // Start initial read
+      void readNext()
+
+      while (!isDone || hasValue) {
+        // Wait for debounce timeout
+        if (timeoutId) {
+          await new Promise((resolve) => setTimeout(resolve, delayMs))
+        }
+
+        if (hasValue) {
+          yield lastValue!
+          hasValue = false
+          // Start reading next value
+          void readNext()
+        } else if (isDone) {
+          break
+        }
+      }
+    },
+  }
+}
+
+/**
+ * Create an async iterable that repeats an async function on a fixed interval.
+ */
+export function repeatWithInterval<T>(
+  fn: () => Promise<T> | T,
+  intervalMs: number
+): AsyncIterable<T> {
+  return {
+    async *[Symbol.asyncIterator]() {
+      while (true) {
+        try {
+          const value = await fn()
+          yield value
+        } catch {
+          // Continue on error
+        }
+        await new Promise((resolve) => setTimeout(resolve, intervalMs))
+      }
+    },
+  }
+}
+
+/**
+ * Create an async iterable from a file system watcher.
+ */
+export function watchFileChanges(
+  watchFn: (callback: (filename: string | null) => void) => (() => void)
+): AsyncIterable<string | null> {
+  return streamFromSubscription(async ({ emit }) => {
+    return watchFn(emit)
   })
+}
+
+/**
+ * Take only the first N values from an async iterable.
+ */
+export function take<T>(
+  iterable: AsyncIterable<T>,
+  count: number
+): AsyncIterable<T> {
+  return {
+    [Symbol.asyncIterator](): AsyncIterator<T> {
+      const iterator = iterable[Symbol.asyncIterator]()
+      let taken = 0
+
+      return {
+        async next(): Promise<IteratorResult<T>> {
+          if (taken >= count) {
+            // Close the underlying iterator when we're done
+            if (iterator.return) {
+              await iterator.return()
+            }
+            return { value: undefined as T, done: true }
+          }
+
+          const result = await iterator.next()
+          if (result.done) {
+            return { value: undefined as T, done: true }
+          }
+
+          taken++
+          return { value: result.value, done: false }
+        },
+
+        async return(): Promise<IteratorResult<T>> {
+          if (iterator.return) {
+            await iterator.return()
+          }
+          return { value: undefined as T, done: true }
+        },
+      }
+    },
+  }
+}
+
+/**
+ * Map values in an async iterable.
+ */
+export function map<T, U>(
+  iterable: AsyncIterable<T>,
+  fn: (value: T) => U | Promise<U>
+): AsyncIterable<U> {
+  return {
+    async *[Symbol.asyncIterator]() {
+      for await (const value of iterable) {
+        yield await fn(value)
+      }
+    },
+  }
+}
+
+/**
+ * Collect all values from an async iterable into an array.
+ */
+export async function collect<T>(iterable: AsyncIterable<T>): Promise<T[]> {
+  const results: T[] = []
+  for await (const value of iterable) {
+    results.push(value)
+  }
+  return results
+}

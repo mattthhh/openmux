@@ -15,10 +15,9 @@ import {
   onCleanup,
   type ParentProps,
 } from 'solid-js';
-import { Effect, Stream, Duration } from 'effect';
 import { getEmulator, getTerminalState, getScrollState } from '../effect/bridge';
 import { useTerminal } from './TerminalContext';
-import { runStream } from '../effect/stream-utils';
+import { runStream, streamFromSubscription, debounce, tap } from '../effect/stream-utils';
 import type { VimInputMode } from '../core/vim-sequences';
 
 import type { SearchState, SearchContextValue } from './search/types';
@@ -64,45 +63,46 @@ export function SearchProvider(props: SearchProviderProps) {
       : new Map();
   };
 
-  const searchStream = Stream.async<string>((emit) => {
-    queryEmitter = (query) => {
-      void emit.single(query);
-    };
-    return Effect.sync(() => {
-      queryEmitter = null;
-    });
-  }).pipe(
-    Stream.debounce(Duration.millis(SEARCH_DEBOUNCE_MS)),
-    Stream.tap((query) =>
-      Effect.tryPromise(async () => {
-        const currentState = searchState();
-        if (!currentState || !currentState.emulator || !currentState.terminalState) return;
-        if (currentState.query !== query) return;
+  const searchStream = tap(
+    debounce(
+      streamFromSubscription<string>(({ emit }) => {
+        queryEmitter = (query) => {
+          void emit(query);
+        };
+        return () => {
+          queryEmitter = null;
+        };
+      }),
+      SEARCH_DEBOUNCE_MS
+    ),
+    async (query) => {
+      const currentState = searchState();
+      if (!currentState || !currentState.emulator || !currentState.terminalState) return;
+      if (currentState.query !== query) return;
 
-        const { matches, hasMore } = await currentState.emulator.search(query);
-        const latestState = searchState();
-        if (!latestState || !latestState.terminalState || latestState.query !== query) return;
+      const { matches, hasMore } = await currentState.emulator.search(query);
+      const latestState = searchState();
+      if (!latestState || !latestState.terminalState || latestState.query !== query) return;
 
-        const initialIndex = matches.length > 0 ? matches.length - 1 : -1;
-        updateSearchState({
-          ...latestState,
-          query,
-          matches,
-          hasMore,
-          currentMatchIndex: initialIndex,
-        });
+      const initialIndex = matches.length > 0 ? matches.length - 1 : -1;
+      updateSearchState({
+        ...latestState,
+        query,
+        matches,
+        hasMore,
+        currentMatchIndex: initialIndex,
+      });
 
-        if (matches.length > 0) {
-          const match = matches[initialIndex];
-          const offset = calculateScrollOffset(
-            match.lineIndex,
-            latestState.scrollbackLength,
-            latestState.terminalState.rows
-          );
-          setScrollOffset(latestState.ptyId, offset);
-        }
-      })
-    )
+      if (matches.length > 0) {
+        const match = matches[initialIndex];
+        const offset = calculateScrollOffset(
+          match.lineIndex,
+          latestState.scrollbackLength,
+          latestState.terminalState.rows
+        );
+        setScrollOffset(latestState.ptyId, offset);
+      }
+    }
   );
 
   // Cleanup on unmount
