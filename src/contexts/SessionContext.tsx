@@ -31,7 +31,7 @@ import {
   saveTemplate as saveTemplateDefinition,
   deleteTemplate,
 } from '../effect/bridge';
-import { runStream, repeatWithInterval, tap } from '../effect/stream-utils';
+import { runStream, repeatWithInterval } from '../effect/stream-utils';
 import type { TemplateSession } from '../effect/models';
 import { SessionStorageError, SessionCorruptedError, SessionNotFoundError } from '../effect/errors';
 import {

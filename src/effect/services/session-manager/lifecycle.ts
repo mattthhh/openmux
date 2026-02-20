@@ -8,7 +8,6 @@ import type { SessionStorage } from "../SessionStorage"
 import type {
   SerializedSession,
   SessionMetadata,
-  SessionIndex,
 } from "../../models"
 import type { SessionId } from "../../types"
 import { makeWorkspaceId, makeSessionId } from "../../types"

@@ -15,8 +15,7 @@ import { deferMacrotask } from "../../core/scheduling"
 import { isShimClient } from "../../shim/mode"
 import * as ShimClient from "../../shim/client"
 import { getPtyService } from "./services-instance"
-import { PtySpawnError, PtyCwdError, PtyNotFoundError } from '../errors'
-import { tryAsync } from "errore"
+import type { PtySpawnError } from '../errors'
 
 /** Helper to convert string to PtyId branded type */
 const asPtyId = (id: string): PtyId => id as PtyId

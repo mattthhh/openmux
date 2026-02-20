@@ -24,7 +24,7 @@ import {
   resetPaneIdCounter,
   resetSplitIdCounter,
 } from "../../core/operations/layout-actions/helpers"
-import { TemplateStorageError } from "../errors"
+import type { TemplateStorageError } from "../errors"
 
 /** List all templates */
 export async function listTemplates(): Promise<TemplateSession[]> {

@@ -63,13 +63,14 @@ export function createSocketDataStream(
       client.on('close', handleClose);
       client.on('end', handleClose);
 
-      await using cleanup = {
+      await using _cleanup = {
         [Symbol.asyncDispose]: async () => {
           client.off('data', handleData);
           client.off('close', handleClose);
           client.off('end', handleClose);
         },
       };
+      void _cleanup;
 
       while (!isDone) {
         let value: Buffer;

@@ -5,7 +5,6 @@
 
 import { destroyPty } from '../../effect/bridge';
 import { subscribeToPtyWithCaches, clearAllPtyCaches, type PtyCaches } from '../../hooks/usePtySubscription';
-import { tryAsync } from 'errore';
 
 export interface SessionHandlerDeps {
   /** Map of ptyId -> paneId for current session */

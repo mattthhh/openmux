@@ -11,7 +11,7 @@ import {
   SessionCorruptedError,
   type SessionError,
 } from "../../errors"
-import type { SerializedSession, SessionMetadata } from "../../models"
+import type { SessionMetadata } from "../../models"
 import type { SessionId } from "../../types"
 
 export interface ActiveSessionDeps {

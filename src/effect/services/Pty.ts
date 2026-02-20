@@ -9,9 +9,10 @@ import { getHostColors, getDefaultColors, setHostColors as setHostColorsCache, t
 import { ScrollbackArchiveManager } from "../../terminal/scrollback-archive"
 import { SCROLLBACK_ARCHIVE_MAX_BYTES_GLOBAL } from "../../terminal/scrollback-config"
 import { getConfigDir } from "../../core/user-config"
-import { PtyNotFoundError, PtySpawnError, PtyCwdError } from "../errors"
-import { PtyId, Cols, Rows, makePtyId } from "../types"
-import { PtySession } from "../models"
+import { PtyNotFoundError, PtySpawnError, type PtyCwdError } from "../errors"
+import type { PtyId, Cols, Rows } from "../types"
+import type { PtySession } from "../models"
+import { makePtyId } from "../types"
 
 /** Configuration for PTY service */
 export interface PtyServiceConfig {
@@ -188,7 +189,7 @@ class PtyState {
 /**
  * Create production PTY service
  */
-export function createPtyService(config: PtyServiceConfig, fs?: unknown): PtyService {
+export function createPtyService(config: PtyServiceConfig, _fs?: unknown): PtyService {
   // Internal session storage
   const state = new PtyState()
 

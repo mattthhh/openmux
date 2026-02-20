@@ -141,7 +141,8 @@ export function createSessionOperations(params: SessionOperationsParams) {
     resources.defer(() => {
       dispatch({ type: 'CLOSE_SESSION_PICKER' });
     });
-    await using _switchingGuard = new SwitchingGuard(dispatch, true);
+    await using _switchGuard = new SwitchingGuard(dispatch, true);
+    void _switchGuard;
 
     // Load new session
     const switchResult = await switchToSession(id);
@@ -205,7 +206,8 @@ export function createSessionOperations(params: SessionOperationsParams) {
       dispatch({ type: 'SET_SWITCHING', switching: true });
     }
 
-    await using _switchingGuard = new SwitchingGuard(dispatch, isActive);
+    await using _switchGuardDelete = new SwitchingGuard(dispatch, isActive);
+    void _switchGuardDelete;
 
     // If deleting the active session, suspend before cleanup to capture PTYs.
     if (isActive && state.activeSessionId) {

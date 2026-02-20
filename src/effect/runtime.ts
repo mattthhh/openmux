@@ -38,7 +38,7 @@ export async function runWithRuntime<T>(fn: () => Promise<T>): Promise<T> {
  * Run an Effect - stub that just throws as Effect is no longer used
  * @deprecated Use errore services directly
  */
-export function runEffect<T>(effect: unknown): Promise<T> {
+export function runEffect<T>(_effect: unknown): Promise<T> {
   console.warn("Effect runtime is deprecated, use errore services directly")
   return Promise.reject(new Error("Effect runtime no longer available. Use errore services."))
 }

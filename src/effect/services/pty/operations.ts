@@ -2,6 +2,7 @@
  * PTY Operations - core operations for managing PTY sessions (errore version)
  */
 import type { TerminalState } from "../../../core/types"
+import type { ITerminalEmulator } from "../../../terminal/emulator-interface"
 import { PtyNotFoundError } from "../../errors"
 import type { PtyId, Cols, Rows } from "../../types"
 import type { PtySession } from "../../models"
@@ -229,7 +230,7 @@ export function createOperations(deps: OperationsDeps) {
     session.emulator.setUpdateEnabled?.(enabled)
   }
 
-  async function getEmulator(id: PtyId): Promise<PtyNotFoundError | import("../../../terminal/emulator-interface").ITerminalEmulator> {
+  async function getEmulator(id: PtyId): Promise<PtyNotFoundError | ITerminalEmulator> {
     const sessionOrError = getSessionOrFail(id)
     if (sessionOrError instanceof PtyNotFoundError) {
       return sessionOrError

@@ -9,12 +9,8 @@ import { isSplitNode } from '../core/layout-tree';
 import { makeWorkspaceId } from '../effect/types';
 import {
   type TemplateSession,
-  type TemplateDefaults,
   type TemplateWorkspace,
   type TemplatePaneData,
-  type TemplateLayoutPane,
-  type TemplateLayoutSplit,
-  type TemplateWorkspaceLayout,
   type TemplateLayoutNode,
   createTemplateLayoutSplit,
   createTemplateLayoutPane,

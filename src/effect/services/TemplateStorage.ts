@@ -5,7 +5,7 @@
 import type { FileSystem } from "./FileSystem"
 import type { AppConfig } from "../Config"
 import { TemplateStorageError, FileSystemError } from "../errors"
-import { TemplateSession, TemplateSessionSchema } from "../models"
+import { TemplateSessionSchema, type TemplateSession } from "../models"
 
 export interface TemplateStorage {
   /** Load a template by ID */

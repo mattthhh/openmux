@@ -11,11 +11,11 @@ import {
   FileSystemError,
 } from "../errors"
 import {
-  SerializedSession,
   SerializedSessionSchema,
-  SessionIndex,
   SessionIndexSchema,
-  SessionMetadata,
+  type SerializedSession,
+  type SessionIndex,
+  type SessionMetadata,
 } from "../models"
 import type { SessionId } from "../types"
 import { createEmptySessionIndex } from "../models"

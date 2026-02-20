@@ -69,7 +69,8 @@ export function createAggregateViewRefreshers(
 ) {
   const refreshPtys = async () => {
     if (refreshState.refreshInProgress) return;
-    await using _guard = new RefreshGuard(refreshState, 'refreshInProgress');
+    await using _guardRefresh = new RefreshGuard(refreshState, 'refreshInProgress');
+    void _guardRefresh;
 
     setState('isLoading', true);
     const ptys = await listAllPtysWithMetadata({ skipGitDiffStats: true });
@@ -102,7 +103,8 @@ export function createAggregateViewRefreshers(
 
   const refreshPtysSubset = async (ptyIds: string[]) => {
     if (refreshState.subsetRefreshInProgress || ptyIds.length === 0) return;
-    await using _guard = new RefreshGuard(refreshState, 'subsetRefreshInProgress');
+    await using _guardSubset = new RefreshGuard(refreshState, 'subsetRefreshInProgress');
+    void _guardSubset;
 
     const results = await Promise.all(
       ptyIds.map((id) => getPtyMetadata(id, { skipGitDiffStats: true }))
@@ -140,7 +142,8 @@ export function createAggregateViewRefreshers(
 
   const refreshSelectedDiffStats = async (ptyId: string) => {
     if (refreshState.selectedDiffRefreshInProgress) return;
-    await using _guard = new RefreshGuard(refreshState, 'selectedDiffRefreshInProgress');
+    await using _guardDiff = new RefreshGuard(refreshState, 'selectedDiffRefreshInProgress');
+    void _guardDiff;
 
     const update = await getPtyMetadata(ptyId, { skipGitDiffStats: false });
     if (!update) return;

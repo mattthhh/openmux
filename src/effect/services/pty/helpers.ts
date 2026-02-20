@@ -13,11 +13,12 @@ import {
 } from "../../../../native/zig-git/ts/index"
 import { createTaggedError } from "errore"
 
-/** Git watcher setup error */
+/** Git watcher setup error - kept for future use
 class GitWatcherError extends createTaggedError({
   name: "GitWatcherError",
   message: "Git watcher setup failed for $gitDir: $reason",
 }) {}
+*/
 
 /** Git info fetch error */
 class GitInfoError extends createTaggedError({

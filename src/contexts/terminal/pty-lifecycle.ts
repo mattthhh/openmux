@@ -354,7 +354,7 @@ export function createPtyLifecycleHandlers(deps: PtyLifecycleDeps) {
     const stack = new PtyCleanupStack();
 
     // Unsubscribe all and clear caches
-    for (const [ptyId, unsub] of unsubscribeFns.entries()) {
+    for (const [, unsub] of unsubscribeFns.entries()) {
       stack.defer(() => {
         unsub();
       });

@@ -21,9 +21,11 @@ import type { Workspaces } from "../../core/operations/layout-actions"
 import type { WorkspaceState } from "../services/session-manager/types"
 import { getSessionManager } from "./services-instance"
 import { resolveActiveWorkspaceId } from "./session-bridge-utils"
-import {
+import type {
   SessionError,
   SessionStorageError,
+} from "../errors"
+import {
   SessionCorruptedError,
   SessionNotFoundError,
 } from "../errors"

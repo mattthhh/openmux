@@ -4,7 +4,6 @@
  * when rendering terminal content.
  */
 
-import { tryAsync } from "errore";
 import { ValidationError } from "../../effect/errors";
 
 /**

@@ -11,13 +11,7 @@ import {
   ColsSchema,
   RowsSchema,
   LayoutModeSchema,
-  type PaneId,
-  type PtyId,
   type WorkspaceId,
-  type SessionId,
-  type Cols,
-  type Rows,
-  type LayoutMode,
 } from "./types"
 
 /** Rectangle dimensions for pane positioning */

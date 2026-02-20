@@ -5,6 +5,7 @@ import type { TerminalState, UnifiedTerminalUpdate } from "../../../core/types"
 import type { PtyNotFoundError } from "../../errors"
 import type { PtyId } from "../../types"
 import type { InternalPtySession } from "./types"
+import type { GitInfo, GitDiffStats } from "./helpers"
 import { getCurrentScrollState } from "./notification"
 import { getGitInfo, getGitDiffStats } from "./helpers"
 import type { SubscriptionRegistry } from "./subscription-manager"
@@ -129,7 +130,7 @@ export function createSubscriptions(deps: SubscriptionsDeps) {
     return info?.branch
   }
 
-  async function getGitInfoFn(id: PtyId): Promise<PtyNotFoundError | import("./helpers").GitInfo | undefined> {
+  async function getGitInfoFn(id: PtyId): Promise<PtyNotFoundError | GitInfo | undefined> {
     const sessionOrError = await getSessionOrFail(id)
     if (sessionOrError instanceof Error) {
       return sessionOrError as PtyNotFoundError
@@ -140,7 +141,7 @@ export function createSubscriptions(deps: SubscriptionsDeps) {
     return await getGitInfo(cwd)
   }
 
-  async function getGitDiffStatsFn(id: PtyId): Promise<PtyNotFoundError | import("./helpers").GitDiffStats | undefined> {
+  async function getGitDiffStatsFn(id: PtyId): Promise<PtyNotFoundError | GitDiffStats | undefined> {
     const sessionOrError = await getSessionOrFail(id)
     if (sessionOrError instanceof Error) {
       return sessionOrError as PtyNotFoundError

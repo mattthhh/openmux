@@ -164,10 +164,6 @@ export function createTestSessionManager(): SessionManager {
 
   const getActiveSessionId = (): SessionId | null => activeId
 
-  const setActiveSessionId = (_id: SessionId | null): void => {
-    // In test mode, we don't persist to disk, just update local state
-  }
-
   return {
     createSession: async (name?: string) => {
       const id = makeSessionId()

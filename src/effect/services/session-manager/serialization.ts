@@ -9,8 +9,6 @@ import type { SessionMetadata } from "../../models"
 import type {
   SerializedSession,
   SerializedWorkspace,
-  SerializedPaneData,
-  SerializedSplitNode,
   SerializedLayoutNode,
 } from "../../models"
 import { PtyCwdError } from "../../errors"
