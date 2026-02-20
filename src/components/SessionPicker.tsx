@@ -13,6 +13,7 @@ import type { KeyboardEvent } from '../effect/bridge';
 import { createVimSequenceHandler, type VimInputMode } from '../core/vim-sequences';
 import { useOverlayColors } from './overlay-colors';
 import { truncateHint } from './overlay-hints';
+import { SessionStorageError } from '../effect/errors';
 
 interface SessionPickerProps {
   width: number;
@@ -85,7 +86,7 @@ export function SessionPicker(props: SessionPickerProps) {
     setSelectedIndex,
   } = session;
 
-  const handleAction = (action: string | null): boolean => {
+  const handleAction = async (action: string | null): Promise<boolean> => {
     switch (action) {
       case 'session.picker.close':
         closePicker();
@@ -111,9 +112,14 @@ export function SessionPicker(props: SessionPickerProps) {
       case 'session.picker.filter.delete':
         setSearchQuery(state.searchQuery.slice(0, -1));
         return true;
-      case 'session.picker.create':
-        createSession();
+      case 'session.picker.create': {
+        const result = await createSession();
+        if (result instanceof SessionStorageError) {
+          console.error('Failed to create session:', result.message);
+          // Session picker stays open on error so user can retry
+        }
         return true;
+      }
       case 'session.picker.rename': {
         const selected = session.filteredSessions[state.selectedIndex];
         if (selected) {
@@ -165,7 +171,7 @@ export function SessionPicker(props: SessionPickerProps) {
     event.key === 'escape' && !event.ctrl && !event.alt && !event.meta && !event.shift;
 
   // Handle keyboard input when picker is open
-  const handleKeyDown = (event: KeyboardEvent) => {
+  const handleKeyDown = async (event: KeyboardEvent) => {
     const { key } = event;
     const bindings = config.keybindings().sessionPicker;
     const keyEvent = {
@@ -196,7 +202,7 @@ export function SessionPicker(props: SessionPickerProps) {
     }
 
     if (!vimEnabled()) {
-      if (handleAction(action)) return true;
+      if (await handleAction(action)) return true;
       return handleListInput(event);
     }
 
@@ -206,7 +212,7 @@ export function SessionPicker(props: SessionPickerProps) {
         vimHandler.reset();
         return true;
       }
-      if (handleAction(action)) return true;
+      if (await handleAction(action)) return true;
       return handleListInput(event);
     }
 
@@ -219,13 +225,13 @@ export function SessionPicker(props: SessionPickerProps) {
     const combo = eventToCombo(keyEvent);
     const result = vimHandler.handleCombo(combo);
     if (result.pending) return true;
-    if (handleAction(result.action)) return true;
+    if (await handleAction(result.action)) return true;
 
     const isBackspace = key === 'backspace';
     const shouldMatchBindings = !isBackspace && (event.ctrl || event.alt || event.meta || key.length > 1);
     if (shouldMatchBindings && !isBareEscape(event)) {
       const fallbackAction = matchKeybinding(bindings.list, keyEvent);
-      if (handleAction(fallbackAction)) return true;
+      if (await handleAction(fallbackAction)) return true;
     }
 
     return true;

@@ -58,7 +58,7 @@ export function setupKeyboardRouting(params: {
   } = params;
 
   useKeyboard(
-    (event: OpenTuiKeyEvent) => {
+    async (event: OpenTuiKeyEvent) => {
       const normalizedEvent = normalizeKeyEvent(event);
       // Route to overlays via KeyboardRouter (handles confirmation, session picker, aggregate view)
       // Use event.sequence for printable chars (handles shift for uppercase/symbols)
@@ -67,7 +67,7 @@ export function setupKeyboardRouting(params: {
       const isPrintableChar = normalizedEvent.sequence?.length === 1 && charCode >= 32 && charCode < 127;
       const keyToPass = isPrintableChar ? normalizedEvent.sequence! : normalizedEvent.key;
 
-      const routeResult = routeKeyboardEventSync({
+      const routeResult = await routeKeyboardEventSync({
         key: keyToPass,
         ctrl: normalizedEvent.ctrl,
         alt: normalizedEvent.alt,

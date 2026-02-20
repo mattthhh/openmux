@@ -59,7 +59,7 @@ export interface SessionContextValue {
   /** Filter sessions by search query */
   filteredSessions: SessionMetadata[];
   /** Create a new session */
-  createSession: (name?: string) => Promise<SessionMetadata>;
+  createSession: (name?: string) => Promise<SessionMetadata | SessionStorageError>;
   /** Switch to a session */
   switchSession: (id: string) => Promise<void>;
   /** Rename a session */

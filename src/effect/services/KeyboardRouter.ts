@@ -8,8 +8,8 @@ import type { KeyboardEvent } from "../../core/keyboard-event"
 /** Keyboard event shape passed to handlers */
 export type KeyEvent = KeyboardEvent
 
-/** Handler function type - returns true if event was handled */
-export type KeyHandler = (e: KeyEvent) => boolean
+/** Handler function type - returns true if event was handled (can be async) */
+export type KeyHandler = (e: KeyEvent) => boolean | Promise<boolean>
 
 /** Overlay types that can register keyboard handlers */
 export type OverlayType =
@@ -42,7 +42,7 @@ export interface KeyboardRouter {
   /** Register a handler for an overlay (returns unsubscribe function) */
   registerHandler(overlay: OverlayType, handler: KeyHandler): (() => void)
   /** Route a keyboard event to registered overlay handlers */
-  routeKey(event: KeyEvent): { handled: boolean; overlay: OverlayType | null }
+  routeKey(event: KeyEvent): Promise<{ handled: boolean; overlay: OverlayType | null }>
   /** Get the currently active overlay (highest priority with a handler) */
   getActiveOverlay(): OverlayType | null
   /** Check if a specific overlay has a registered handler */
@@ -82,7 +82,7 @@ export function createKeyboardRouter(): KeyboardRouter {
     }
   }
 
-  const routeKey = (event: KeyEvent): { handled: boolean; overlay: OverlayType | null } => {
+  const routeKey = async (event: KeyEvent): Promise<{ handled: boolean; overlay: OverlayType | null }> => {
     // Sort overlays by priority (highest first)
     const sortedOverlays = (Array.from(overlayHandlers.keys()) as OverlayType[]).sort(
       (a, b) => OVERLAY_PRIORITY[b] - OVERLAY_PRIORITY[a]
@@ -92,7 +92,7 @@ export function createKeyboardRouter(): KeyboardRouter {
     for (const overlay of sortedOverlays) {
       const handler = overlayHandlers.get(overlay)
       if (handler) {
-        const handled = handler(event)
+        const handled = await handler(event)
         if (handled) {
           return { handled: true, overlay }
         }
@@ -155,7 +155,7 @@ export function registerHandler(overlay: OverlayType, handler: KeyHandler): () =
 }
 
 /** Route a keyboard event to registered handlers. */
-export function routeKey(event: KeyEvent): { handled: boolean; overlay: OverlayType | null } {
+export async function routeKey(event: KeyEvent): Promise<{ handled: boolean; overlay: OverlayType | null }> {
   return getGlobalKeyboardRouter().routeKey(event)
 }
 

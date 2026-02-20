@@ -50,7 +50,7 @@ export function createSessionOperations(params: SessionOperationsParams) {
     refreshSessions,
   } = params;
 
-  const createSession = async (name?: string): Promise<SessionMetadata> => {
+  const createSession = async (name?: string): Promise<SessionMetadata | SessionStorageError> => {
     const state = getState();
 
     // Save current session first
@@ -74,7 +74,7 @@ export function createSessionOperations(params: SessionOperationsParams) {
     if (result instanceof SessionStorageError) {
       console.error('Failed to create session:', result.message);
       dispatch({ type: 'CLOSE_SESSION_PICKER' });
-      throw result;
+      return result;
     }
     const metadata = result;
     await refreshSessions();

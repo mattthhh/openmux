@@ -14,7 +14,7 @@ import {
 type OverlayKeyboardHandlerOptions = {
   overlay: OverlayType;
   isActive: () => boolean;
-  handler: (event: KeyboardEvent) => boolean;
+  handler: (event: KeyboardEvent) => boolean | Promise<boolean>;
   ignoreRelease?: boolean;
 };
 
@@ -23,10 +23,10 @@ export function useOverlayKeyboardHandler(options: OverlayKeyboardHandlerOptions
   const ignoreRelease = options.ignoreRelease ?? true;
 
   createEffect(() => {
-    const wrapped: KeyHandler = (event) => {
+    const wrapped: KeyHandler = async (event) => {
       if (!isActive()) return false;
       if (ignoreRelease && event.eventType === 'release') return true;
-      return handler(event);
+      return await handler(event);
     };
 
     const unsubscribe = registerKeyboardHandler(overlay, wrapped);

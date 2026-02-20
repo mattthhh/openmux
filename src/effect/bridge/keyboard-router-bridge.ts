@@ -46,13 +46,13 @@ export function registerKeyboardHandlerWithService(
  * 
  * Backward-compatible version that uses global services singleton.
  */
-export function routeKeyboardEvent(
+export async function routeKeyboardEvent(
   event: KeyEvent
-): { handled: boolean; overlay: OverlayType | null } {
+): Promise<{ handled: boolean; overlay: OverlayType | null }> {
   if (!hasServices()) {
     return { handled: false, overlay: null }
   }
-  return getKeyboardRouter().routeKey(event)
+  return await getKeyboardRouter().routeKey(event)
 }
 
 /**
@@ -61,23 +61,23 @@ export function routeKeyboardEvent(
  * 
  * Backward-compatible version that uses global services singleton.
  */
-export function routeKeyboardEventSync(
+export async function routeKeyboardEventSync(
   event: KeyEvent
-): { handled: boolean; overlay: OverlayType | null } {
+): Promise<{ handled: boolean; overlay: OverlayType | null }> {
   if (!hasServices()) {
     return { handled: false, overlay: null }
   }
-  return getKeyboardRouter().routeKey(event)
+  return await getKeyboardRouter().routeKey(event)
 }
 
 /**
  * Route a keyboard event with explicit service.
  */
-export function routeKeyboardEventSyncWithService(
+export async function routeKeyboardEventSyncWithService(
   router: KeyboardRouter,
   event: KeyEvent
-): { handled: boolean; overlay: OverlayType | null } {
-  return router.routeKey(event)
+): Promise<{ handled: boolean; overlay: OverlayType | null }> {
+  return await router.routeKey(event)
 }
 
 /**
