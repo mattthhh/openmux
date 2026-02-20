@@ -13,6 +13,31 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.15.2
+
+      - name: Get libgit2 revision
+        id: libgit2
+        run: echo "rev=$(git -C vendor/libgit2 rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache libgit2 build
+        uses: actions/cache@v4
+        with:
+          path: native/zig-git/zig-out/libgit2
+          key: libgit2-${{ runner.os }}-${{ runner.arch }}-${{ steps.libgit2.outputs.rev }}-${{ hashFiles('native/zig-git/build.zig') }}
+
+      - name: Setup CMake
+        run: |
+          if command -v cmake >/dev/null 2>&1; then
+            cmake --version
+            exit 0
+          fi
+          sudo apt-get update && sudo apt-get install -y cmake
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -21,6 +46,12 @@ jobs:
 
       - name: Install dependencies
         run: bun install
+
+      - name: Build native libraries
+        run: |
+          cd native/zig-pty && zig build -Doptimize=ReleaseFast
+          cd ../zig-git && zig build -Doptimize=ReleaseFast
+          cd ../zig-ghostty-wrapper && zig build -Doptimize=ReleaseFast
 
       - name: Type check
         run: bun run typecheck
