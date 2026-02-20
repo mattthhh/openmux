@@ -1,5 +1,7 @@
 import { appendFileSync, mkdirSync } from "fs";
 import { dirname } from "path";
+import { tryAsync } from "errore";
+import { PtyTraceError } from "../effect/errors";
 
 type TraceMeta = Record<string, unknown>;
 
@@ -7,13 +9,21 @@ const tracePath = process.env.OPENMUX_PTY_TRACE ?? "";
 const maxChars = Number.parseInt(process.env.OPENMUX_PTY_TRACE_MAX_CHARS ?? "0", 10);
 const enabled = tracePath.length > 0;
 
-if (enabled) {
-  try {
-    mkdirSync(dirname(tracePath), { recursive: true });
-  } catch {
-    // Ignore path errors; tracing stays disabled if writes fail.
+async function ensureTraceDir(): Promise<void> {
+  if (!enabled) return;
+  const result = await tryAsync<void, PtyTraceError>({
+    try: () => {
+      mkdirSync(dirname(tracePath), { recursive: true });
+      return Promise.resolve();
+    },
+    catch: (e) => new PtyTraceError({ operation: 'mkdir', reason: String(e) }),
+  });
+  if (result instanceof PtyTraceError) {
+    return;
   }
 }
+
+void ensureTraceDir();
 
 function escapeForLog(data: string): string {
   let out = "";
@@ -36,19 +46,25 @@ function escapeForLog(data: string): string {
   return out;
 }
 
-function writeLine(entry: Record<string, unknown>): void {
+async function writeLine(entry: Record<string, unknown>): Promise<void> {
   if (!enabled) return;
-  try {
-    appendFileSync(
-      tracePath,
-      `${JSON.stringify(entry, (_key, value) => {
-        if (typeof value === "bigint") return `${value.toString()}n`;
-        if (value instanceof Error) return value.message;
-        return value;
-      })}\n`
-    );
-  } catch {
-    // Ignore trace write failures.
+  const result = await tryAsync<void, PtyTraceError>({
+    try: () => {
+      appendFileSync(
+        tracePath,
+        `${JSON.stringify(entry, (_key, value) => {
+          if (typeof value === "bigint") return `${value.toString()}n`;
+          if (value instanceof Error) return value.message;
+          return value;
+        })}
+`
+      );
+      return Promise.resolve();
+    },
+    catch: (e) => new PtyTraceError({ operation: 'write', reason: String(e) }),
+  });
+  if (result instanceof PtyTraceError) {
+    return;
   }
 }
 
@@ -60,7 +76,7 @@ export function tracePtyChunk(type: string, data: string, meta: TraceMeta = {}):
     const over = escaped.length - maxChars;
     escaped = `${escaped.slice(0, maxChars)}...[truncated ${over} chars]`;
   }
-  writeLine({
+  void writeLine({
     ts: new Date().toISOString(),
     type,
     len: data.length,
@@ -71,7 +87,7 @@ export function tracePtyChunk(type: string, data: string, meta: TraceMeta = {}):
 
 export function tracePtyEvent(type: string, meta: TraceMeta = {}): void {
   if (!enabled) return;
-  writeLine({
+  void writeLine({
     ts: new Date().toISOString(),
     type,
     ...meta,

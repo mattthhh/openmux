@@ -5,6 +5,7 @@
 
 import { destroyPty } from '../../effect/bridge';
 import { subscribeToPtyWithCaches, clearAllPtyCaches, type PtyCaches } from '../../hooks/usePtySubscription';
+import { tryAsync } from 'errore';
 
 export interface SessionHandlerDeps {
   /** Map of ptyId -> paneId for current session */
@@ -70,25 +71,26 @@ export function createSessionHandlers(deps: SessionHandlerDeps) {
 
     // Resubscribe to each PTY
     for (const [paneId, ptyId] of savedMapping) {
+      let unsub: (() => void) | null = null;
       try {
-        // Subscribe to PTY with unified caches
-        const unsub = await subscribeToPtyWithCaches(
+        unsub = await subscribeToPtyWithCaches(
           ptyId,
           paneId,
           ptyCaches,
           handlePtyExit,
           { cacheScrollState: shouldCacheScrollState }
         );
-
-        // Store unsubscribe function
-        unsubscribeFns.set(ptyId, unsub);
-
-        // Restore pty→pane mapping
-        ptyToPaneMap.set(ptyId, paneId);
       } catch {
         // PTY may have exited while suspended - remove from mapping
         savedMapping.delete(paneId);
+        continue;
       }
+
+      // Store unsubscribe function
+      unsubscribeFns.set(ptyId, unsub);
+
+      // Restore pty→pane mapping
+      ptyToPaneMap.set(ptyId, paneId);
     }
 
     return savedMapping;

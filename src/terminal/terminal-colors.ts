@@ -8,7 +8,9 @@
  * fall back to environment detection to avoid interfering with stdin.
  */
 
+import { tryAsync } from "errore";
 import { writeHostSequence } from './host-output';
+import { TerminalColorError } from '../effect/errors';
 
 /**
  * Terminal color information
@@ -49,6 +51,12 @@ function parseOscColor(payload: string): number | null {
   return null;
 }
 
+type OscColorsResult = { 
+  foreground?: number; 
+  background?: number; 
+  paletteOverrides?: Map<number, number>;
+};
+
 /**
  * Try to query colors from the host terminal using OSC 10/11.
  * This should be called before the TUI takes over stdin.
@@ -56,14 +64,14 @@ function parseOscColor(payload: string): number | null {
 async function queryOscColors(
   timeoutMs: number,
   options?: { requirePalette?: boolean; requireFgBg?: boolean }
-): Promise<{ foreground?: number; background?: number; paletteOverrides?: Map<number, number> } | null> {
+): Promise<TerminalColorError | OscColorsResult | null> {
   // Only attempt when we have a controllable TTY with raw mode.
   const stdin = process.stdin as (NodeJS.ReadStream & { setRawMode?: (mode: boolean) => void; isRaw?: boolean });
   if (!stdin.isTTY || typeof stdin.setRawMode !== 'function') {
     return null;
   }
 
-  return await new Promise<{ foreground?: number; background?: number; paletteOverrides?: Map<number, number> } | null>((resolve) => {
+  return await new Promise<TerminalColorError | OscColorsResult | null>((resolve) => {
     let buffer = '';
     let resolved = false;
     let fg: number | undefined;
@@ -82,14 +90,16 @@ async function queryOscColors(
         clearTimeout(timer);
         timer = null;
       }
-      try {
-        stdin.setRawMode?.(originalRaw);
-      } catch {
-        // ignore
-      }
+      void tryAsync<void, TerminalColorError>({
+        try: () => {
+          stdin.setRawMode?.(originalRaw);
+          return Promise.resolve();
+        },
+        catch: () => new TerminalColorError({ operation: 'cleanup', reason: 'setRawMode failed' }),
+      });
     };
 
-    const finish = (result: { foreground?: number; background?: number; paletteOverrides?: Map<number, number> } | null) => {
+    const finish = (result: OscColorsResult | null) => {
       cleanup();
       resolve(result);
     };
@@ -155,35 +165,53 @@ async function queryOscColors(
       }
     }, timeoutMs);
 
-    try {
-      stdin.setRawMode?.(true);
-    } catch {
-      if (timer) {
-        clearTimeout(timer);
-        timer = null;
+    void tryAsync<void, TerminalColorError>({
+      try: () => {
+        stdin.setRawMode?.(true);
+        return Promise.resolve();
+      },
+      catch: () => {
+        if (timer) {
+          clearTimeout(timer);
+          timer = null;
+        }
+        return new TerminalColorError({ operation: 'setRawMode', reason: 'Failed to set raw mode' });
+      },
+    }).then((result) => {
+      if (result instanceof TerminalColorError) {
+        resolve(result);
+        return;
       }
-      resolve(null);
-      return;
-    }
 
-    stdin.on('data', onData);
+      stdin.on('data', onData);
 
-    try {
-      // Query default foreground/background (OSC 10/11) and base 0-15 (OSC 4)
-      let osc = '\x1b]10;?\x07\x1b]11;?\x07';
-      for (let i = 0; i < 16; i++) {
-        osc += `\x1b]4;${i};?\x07`;
-      }
-      if (!writeHostSequence(osc)) {
-        process.stdout.write(osc);
-      }
-    } catch {
-      if (timer) {
-        clearTimeout(timer);
-        timer = null;
-      }
-      finish(null);
-    }
+      void tryAsync<boolean, TerminalColorError>({
+        try: () => {
+          // Query default foreground/background (OSC 10/11) and base 0-15 (OSC 4)
+          let osc = '\x1b]10;?\x07\x1b]11;?\x07';
+          for (let i = 0; i < 16; i++) {
+            osc += `\x1b]4;${i};?\x07`;
+          }
+          const success = writeHostSequence(osc);
+          if (!success) {
+            process.stdout.write(osc);
+          }
+          return Promise.resolve(true);
+        },
+        catch: () => {
+          if (timer) {
+            clearTimeout(timer);
+            timer = null;
+          }
+          finish(null);
+          return new TerminalColorError({ operation: 'query', reason: 'Failed to write OSC query' });
+        },
+      }).then((writeResult) => {
+        if (writeResult instanceof TerminalColorError) {
+          resolve(null);
+        }
+      });
+    });
   });
 }
 
@@ -277,36 +305,36 @@ export async function queryHostColors(
   const fallbackColors = getHostColors() ?? null;
 
   // First, try OSC queries (best-effort, only if TTY + raw mode available)
-  try {
-  const osc = await queryOscColors(
-    _timeoutMs,
-    options?.oscMode === 'fast'
-      ? { requirePalette: false, requireFgBg: true }
-      : { requirePalette: true, requireFgBg: true }
-  );
-    if (osc && (osc.foreground !== undefined || osc.background !== undefined || osc.paletteOverrides)) {
-      const base = fallbackColors ?? detectColorsFromEnvironment();
-      const palette = base.palette.slice();
-      if (osc.paletteOverrides) {
-        for (const [idx, color] of osc.paletteOverrides.entries()) {
-          if (idx >= 0 && idx < palette.length) {
-            palette[idx] = color;
-          }
+  const oscResult = await tryAsync<OscColorsResult | null, TerminalColorError>({
+    try: () => queryOscColors(
+      _timeoutMs,
+      options?.oscMode === 'fast'
+        ? { requirePalette: false, requireFgBg: true }
+        : { requirePalette: true, requireFgBg: true }
+    ).then(r => r instanceof TerminalColorError ? null : r),
+    catch: (e) => new TerminalColorError({ operation: 'query', reason: String(e) }),
+  });
+
+  if (!(oscResult instanceof TerminalColorError) && oscResult && (oscResult.foreground !== undefined || oscResult.background !== undefined || oscResult.paletteOverrides)) {
+    const base = fallbackColors ?? detectColorsFromEnvironment();
+    const palette = base.palette.slice();
+    if (oscResult.paletteOverrides) {
+      for (const [idx, color] of oscResult.paletteOverrides.entries()) {
+        if (idx >= 0 && idx < palette.length) {
+          palette[idx] = color;
         }
       }
-      const hasFg = osc.foreground !== undefined;
-      const hasBg = osc.background !== undefined;
-      const hasComplete = hasFg && hasBg;
-      result = {
-        foreground: hasFg ? osc.foreground! : base.foreground,
-        background: hasBg ? osc.background! : base.background,
-        palette,
-        // Only treat as non-default if we have both fg+bg or a non-default fallback.
-        isDefault: base.isDefault && !hasComplete,
-      };
     }
-  } catch {
-    // Fall back to environment detection on any error
+    const hasFg = oscResult.foreground !== undefined;
+    const hasBg = oscResult.background !== undefined;
+    const hasComplete = hasFg && hasBg;
+    result = {
+      foreground: hasFg ? oscResult.foreground! : base.foreground,
+      background: hasBg ? oscResult.background! : base.background,
+      palette,
+      // Only treat as non-default if we have both fg+bg or a non-default fallback.
+      isDefault: base.isDefault && !hasComplete,
+    };
   }
 
   if (!result) {

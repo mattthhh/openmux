@@ -14,7 +14,7 @@ export interface FileSystem {
   writeJson<A>(path: string, schema: z.ZodSchema<A>, data: A): Promise<FileSystemError | void>
 
   /** Check if a file exists */
-  exists(path: string): Promise<boolean>
+  exists(path: string): Promise<FileSystemError | boolean>
 
   /** Ensure a directory exists (creates recursively if needed) */
   ensureDir(path: string): Promise<FileSystemError | void>
@@ -41,14 +41,12 @@ export const createFileSystem = (): FileSystem => {
     const file = Bun.file(path)
 
     // Check if file exists
-    let fileExists: boolean
-    try {
-      fileExists = await file.exists()
-    } catch {
-      fileExists = false
-    }
-
-    if (!fileExists) {
+    const existsResult = await tryAsync<boolean, FileSystemError>({
+      try: () => file.exists(),
+      catch: (e) => new FileSystemError({ operation: "read", path, reason: String(e) }),
+    })
+    if (existsResult instanceof FileSystemError) return existsResult
+    if (!existsResult) {
       return new FileSystemError({
         operation: "read",
         path,
@@ -109,12 +107,12 @@ export const createFileSystem = (): FileSystem => {
     return undefined
   }
 
-  const exists = async (path: string): Promise<boolean> => {
-    try {
-      return await Bun.file(path).exists()
-    } catch {
-      return false
-    }
+  const exists = async (path: string): Promise<FileSystemError | boolean> => {
+    const result = await tryAsync<boolean, FileSystemError>({
+      try: () => Bun.file(path).exists(),
+      catch: (e) => new FileSystemError({ operation: "read", path, reason: String(e) }),
+    })
+    return result
   }
 
   const ensureDir = async (path: string): Promise<FileSystemError | void> => {
@@ -160,14 +158,12 @@ export const createFileSystem = (): FileSystem => {
     const file = Bun.file(path)
 
     // Check if file exists
-    let fileExists: boolean
-    try {
-      fileExists = await file.exists()
-    } catch {
-      fileExists = false
-    }
-
-    if (!fileExists) {
+    const existsResult = await tryAsync<boolean, FileSystemError>({
+      try: () => file.exists(),
+      catch: (e) => new FileSystemError({ operation: "read", path, reason: String(e) }),
+    })
+    if (existsResult instanceof FileSystemError) return existsResult
+    if (!existsResult) {
       return new FileSystemError({
         operation: "read",
         path,
@@ -274,7 +270,7 @@ export const createTestFileSystem = (): InMemoryFileSystem => {
     return undefined
   }
 
-  const exists = async (path: string): Promise<boolean> => {
+  const exists = async (path: string): Promise<FileSystemError | boolean> => {
     return files.has(path) || directories.has(path)
   }
 

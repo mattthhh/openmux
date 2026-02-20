@@ -7,6 +7,13 @@ import type { InternalPtySession } from "./types"
 import { deferMacrotask } from "../../../core/scheduling"
 import { tracePtyChunk, tracePtyEvent } from "../../../terminal/pty-trace"
 import { copyToClipboard } from "../../bridge"
+import { createTaggedError } from "errore"
+
+/** Base64 decode error for clipboard operations */
+class ClipboardDecodeError extends createTaggedError({
+  name: "ClipboardDecodeError",
+  message: "Clipboard base64 decode failed: $reason",
+}) {}
 
 interface DataHandlerOptions {
   session: InternalPtySession
@@ -72,33 +79,40 @@ function processClipboardResponses(
     if (response.startsWith(CLIPBOARD_PREFIX) && response.endsWith(BEL)) {
       // Extract base64 data
       const base64Data = response.slice(CLIPBOARD_PREFIX.length, -BEL.length)
-      if (base64Data.length > 0) {
-        // Decode base64 and copy to clipboard
-        try {
-          const decoded = Buffer.from(base64Data, "base64").toString("utf-8")
-          if (decoded.length > 0) {
-            copyToClipboard(decoded).catch((err: unknown) => {
-              tracePtyEvent("clipboard-copy-error", {
-                ptyId,
-                error: err instanceof Error ? err.message : String(err),
-              })
-            })
-            tracePtyEvent("clipboard-copy", {
-              ptyId,
-              charCount: decoded.length,
-            })
-          }
-        } catch (err: unknown) {
-          tracePtyEvent("clipboard-decode-error", {
-            ptyId,
-            error: err instanceof Error ? err.message : String(err),
-          })
-        }
+      if (base64Data.length === 0) continue
+
+      // Decode base64 and copy to clipboard
+      let decoded: string
+      try {
+        decoded = Buffer.from(base64Data, "base64").toString("utf-8")
+      } catch (err: unknown) {
+        const error = new ClipboardDecodeError({
+          reason: err instanceof Error ? err.message : String(err),
+        })
+        tracePtyEvent("clipboard-decode-error", {
+          ptyId,
+          error: error.message,
+        })
+        continue
       }
-    } else {
-      // Not a clipboard response, pass through to PTY
-      ptyResponses.push(response)
+
+      if (decoded.length === 0) continue
+
+      copyToClipboard(decoded).catch((err: unknown) => {
+        tracePtyEvent("clipboard-copy-error", {
+          ptyId,
+          error: err instanceof Error ? err.message : String(err),
+        })
+      })
+      tracePtyEvent("clipboard-copy", {
+        ptyId,
+        charCount: decoded.length,
+      })
+      continue
     }
+
+    // Not a clipboard response, pass through to PTY
+    ptyResponses.push(response)
   }
 
   return ptyResponses

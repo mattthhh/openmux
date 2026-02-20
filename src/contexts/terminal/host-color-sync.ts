@@ -12,6 +12,7 @@ import {
 import { onHostColorScheme, type HostColorScheme } from '../../terminal/host-color-scheme';
 import { applyHostColors } from '../../effect/bridge';
 import { watchSystemAppearance } from '../../../native/zig-pty/ts/index';
+import { tryAsync } from 'errore';
 
 export interface HostColorSyncDeps {
   renderer: { requestRender: () => void };
@@ -41,44 +42,42 @@ export function createHostColorSync(deps: HostColorSyncDeps): HostColorSync {
     options?: { timeoutMs?: number; forceApply?: boolean; oscMode?: 'fast' | 'full' }
   ): Promise<boolean> => {
     if (refreshInFlight) return refreshInFlight;
+
     refreshInFlight = (async () => {
-      try {
-        const previous = getHostColors();
-        const next = await refreshHostColorsCache({
-          timeoutMs: options?.timeoutMs ?? 500,
-          oscMode: options?.oscMode,
-        });
-        if (!deps.isActive()) return false;
-        const didChange = !areTerminalColorsEqual(previous, next);
-        if (!didChange && !options?.forceApply) return false;
+      const previous = getHostColors();
+      const next = await refreshHostColorsCache({
+        timeoutMs: options?.timeoutMs ?? 500,
+        oscMode: options?.oscMode,
+      });
 
-        if (lastHostScheme && !next.isDefault) {
-          schemeColors.set(lastHostScheme, next);
-        }
-        setHostCapabilitiesColors(next);
-        if (didChange) {
-          deps.bumpHostColorsVersion();
-        }
-        deps.renderer.requestRender();
+      if (!deps.isActive()) return false;
 
-        try {
-          await applyHostColors(next);
-        } catch (error) {
-          console.warn('[openmux] Failed to apply host colors:', error);
-        }
+      const didChange = !areTerminalColorsEqual(previous, next);
+      if (!didChange && !options?.forceApply) return false;
 
-        return didChange;
-      } catch (error) {
-        console.warn('[openmux] Failed to refresh host colors:', error);
-        return false;
+      if (lastHostScheme && !next.isDefault) {
+        schemeColors.set(lastHostScheme, next);
       }
+      setHostCapabilitiesColors(next);
+      if (didChange) {
+        deps.bumpHostColorsVersion();
+      }
+      deps.renderer.requestRender();
+
+      const applyResult = await tryAsync<void, Error>({
+        try: () => applyHostColors(next),
+        catch: (error) => new Error(String(error)),
+      });
+      if (applyResult instanceof Error) {
+        console.warn('[openmux] Failed to apply host colors:', applyResult);
+      }
+
+      return didChange;
     })();
 
-    try {
-      return await refreshInFlight;
-    } finally {
-      refreshInFlight = null;
-    }
+    const result = await refreshInFlight;
+    refreshInFlight = null;
+    return result;
   };
 
   const startAppearanceWatcher = () => {

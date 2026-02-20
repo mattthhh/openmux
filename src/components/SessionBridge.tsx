@@ -24,6 +24,7 @@ import {
   getPtyTitle,
   waitForShimClient,
 } from '../effect/bridge';
+import { tryAsync } from 'errore';
 
 interface SessionBridgeProps extends ParentProps {}
 
@@ -66,46 +67,46 @@ export function SessionBridge(props: SessionBridgeProps) {
     return layout.state.activeWorkspaceId;
   };
 
-  const hydratePaneTitles = async (workspacesToLoad: Workspaces) => {
-    try {
-      const panes: PaneData[] = [];
-      for (const workspace of Object.values(workspacesToLoad)) {
-        if (!workspace) continue;
-        if (workspace.mainPane) {
-          collectPanes(workspace.mainPane, panes);
-        }
-        for (const node of workspace.stackPanes) {
-          collectPanes(node, panes);
-        }
+  const hydratePaneTitles = async (workspacesToLoad: Workspaces): Promise<void> => {
+    const panes: PaneData[] = [];
+    for (const workspace of Object.values(workspacesToLoad)) {
+      if (!workspace) continue;
+      if (workspace.mainPane) {
+        collectPanes(workspace.mainPane, panes);
       }
-
-      if (panes.length === 0) return;
-
-      const manualPaneIds = new Set<string>();
-      for (const pane of panes) {
-        titleContext.clearTitle(pane.id);
-        const trimmedTitle = pane.title?.trim();
-        if (trimmedTitle && trimmedTitle !== DEFAULT_PANE_TITLE) {
-          manualPaneIds.add(pane.id);
-          titleContext.setManualTitle(pane.id, trimmedTitle);
-        }
+      for (const node of workspace.stackPanes) {
+        collectPanes(node, panes);
       }
-
-      await waitForShimClient();
-
-      await Promise.all(
-        panes.map(async (pane) => {
-          if (!pane.ptyId) return;
-          if (manualPaneIds.has(pane.id)) return;
-          const title = (await getPtyTitle(pane.ptyId)).trim();
-          if (title) {
-            titleContext.setTitle(pane.id, title);
-          }
-        })
-      );
-    } catch {
-      // Best-effort hydration; ignore failures on detach/attach races.
     }
+
+    if (panes.length === 0) return;
+
+    const manualPaneIds = new Set<string>();
+    for (const pane of panes) {
+      titleContext.clearTitle(pane.id);
+      const trimmedTitle = pane.title?.trim();
+      if (trimmedTitle && trimmedTitle !== DEFAULT_PANE_TITLE) {
+        manualPaneIds.add(pane.id);
+        titleContext.setManualTitle(pane.id, trimmedTitle);
+      }
+    }
+
+    const waitResult = await tryAsync<void, Error>({
+      try: () => waitForShimClient(),
+      catch: () => new Error('Detach/attach race'),
+    });
+    if (waitResult instanceof Error) return;
+
+    await Promise.all(
+      panes.map(async (pane) => {
+        if (!pane.ptyId) return;
+        if (manualPaneIds.has(pane.id)) return;
+        const title = (await getPtyTitle(pane.ptyId)).trim();
+        if (title) {
+          titleContext.setTitle(pane.id, title);
+        }
+      })
+    );
   };
 
   const onSessionLoad = async (

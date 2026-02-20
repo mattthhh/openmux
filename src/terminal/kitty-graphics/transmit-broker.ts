@@ -1,5 +1,7 @@
 import { Buffer } from 'buffer';
 import fs from 'fs';
+import { tryAsync } from 'errore';
+import { KittyOffloadError } from '../../effect/errors';
 import { getHostCapabilities } from '../capabilities';
 import type { KittyGraphicsImageInfo } from '../emulator-interface';
 import { buildDeleteImage } from './commands';
@@ -135,7 +137,7 @@ export class KittyTransmitBroker {
   clearPty(ptyId: string): void {
     const state = this.stateByPty.get(ptyId);
     if (state?.pendingChunk?.offload) {
-      this.abortOffload(state.pendingChunk.offload);
+      void this.abortOffload(state.pendingChunk.offload);
     }
     this.stateByPty.delete(ptyId);
   }
@@ -183,7 +185,7 @@ export class KittyTransmitBroker {
       const deleteTarget = parsed.params.get('d') ?? '';
       if (deleteTarget === 'a') {
         if (state.pendingChunk?.offload) {
-          this.abortOffload(state.pendingChunk.offload);
+          void this.abortOffload(state.pendingChunk.offload);
         }
         state.pendingChunk = null;
         // Host renders are driven by the emulator state; forwarding d=a would
@@ -278,7 +280,7 @@ export class KittyTransmitBroker {
         bytesWritten: offload.bytesWritten,
         control: hostControl,
         });
-        this.scheduleCleanup(filePath);
+        void this.scheduleCleanup(filePath);
       }
     } else {
       const hostSequence = buildHostTransmitSequence(hostId, mergedParams, parsed.data);
@@ -409,36 +411,49 @@ export class KittyTransmitBroker {
     return offload.filePath;
   }
 
-  private abortOffload(offload: OffloadState): void {
-    try {
-      fs.closeSync(offload.fd);
-    } catch {
-      // ignore
+  private async abortOffload(offload: OffloadState): Promise<KittyOffloadError | void> {
+    const closeResult = await tryAsync<void, KittyOffloadError>({
+      try: () => {
+        fs.closeSync(offload.fd);
+        return Promise.resolve();
+      },
+      catch: (e) => new KittyOffloadError({ operation: 'close', reason: String(e) }),
+    });
+    if (closeResult instanceof KittyOffloadError) {
+      return closeResult;
     }
-    try {
-      fs.unlinkSync(offload.filePath);
-    } catch {
-      // ignore
-    }
+
+    const unlinkResult = await tryAsync<void, KittyOffloadError>({
+      try: () => {
+        fs.unlinkSync(offload.filePath);
+        return Promise.resolve();
+      },
+      catch: (e) => new KittyOffloadError({ operation: 'unlink', reason: String(e) }),
+    });
+    return unlinkResult;
   }
 
-  private scheduleCleanup(filePath: string): void {
+  private async scheduleCleanup(filePath: string): Promise<KittyOffloadError | void> {
     if (this.offloadCleanupDelayMs <= 0) {
-      try {
-        fs.unlinkSync(filePath);
-      } catch {
-        // ignore
-      }
-      return;
+      const result = await tryAsync<void, KittyOffloadError>({
+        try: () => {
+          fs.unlinkSync(filePath);
+          return Promise.resolve();
+        },
+        catch: (e) => new KittyOffloadError({ operation: 'cleanup', reason: String(e) }),
+      });
+      return result;
     }
 
     const timer = setTimeout(() => {
       this.cleanupTimers.delete(timer);
-      try {
-        fs.unlinkSync(filePath);
-      } catch {
-        // ignore
-      }
+      void tryAsync<void, KittyOffloadError>({
+        try: () => {
+          fs.unlinkSync(filePath);
+          return Promise.resolve();
+        },
+        catch: (e) => new KittyOffloadError({ operation: 'cleanup', reason: String(e) }),
+      });
     }, this.offloadCleanupDelayMs);
     this.cleanupTimers.add(timer);
   }

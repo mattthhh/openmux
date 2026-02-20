@@ -4,8 +4,10 @@
 
 import fs from "node:fs"
 import fsp from "node:fs/promises"
+import { tryAsync } from "errore"
 import path from "node:path"
 import type { TerminalCell } from "../core/types"
+import { ScrollbackArchiveError } from "../effect/errors"
 import { packRow, unpackRow, CELL_SIZE } from "./cell-serialization"
 import { ScrollbackCache } from "./emulator-utils/scrollback-cache"
 import {
@@ -99,10 +101,12 @@ export class ScrollbackArchive {
     this.cache.clear()
     void this.enqueue(async () => {
       for (const chunk of chunksToDelete) {
-        try {
-          await fsp.unlink(chunk.path)
-        } catch {
-          // Ignore cleanup errors.
+        const result = await tryAsync<void, ScrollbackArchiveError>({
+          try: () => fsp.unlink(chunk.path),
+          catch: (e) => new ScrollbackArchiveError({ operation: 'delete', reason: String(e) }),
+        });
+        if (result instanceof ScrollbackArchiveError) {
+          continue;
         }
       }
       await this.flushMeta()
@@ -133,7 +137,13 @@ export class ScrollbackArchive {
     const flushBuffer = async (): Promise<boolean> => {
       if (!currentChunk || buffered.length === 0) return true
       const payload = buffered.length === 1 ? buffered[0] : Buffer.concat(buffered, bufferedBytes)
-      await fsp.appendFile(currentChunk.path, payload)
+      const result = await tryAsync<void, ScrollbackArchiveError>({
+        try: () => fsp.appendFile(currentChunk!.path, payload),
+        catch: (e) => new ScrollbackArchiveError({ operation: 'write', reason: String(e) }),
+      });
+      if (result instanceof ScrollbackArchiveError) {
+        return false;
+      }
       if (generation !== this.generation) return false
       buffered = []
       bufferedBytes = 0
@@ -206,10 +216,12 @@ export class ScrollbackArchive {
     this.totalBytes -= chunk.bytes
     this.cache.clear()
     void this.enqueue(async () => {
-      try {
-        await fsp.unlink(chunk.path)
-      } catch {
-        // Ignore cleanup errors.
+      const result = await tryAsync<void, ScrollbackArchiveError>({
+        try: () => fsp.unlink(chunk.path),
+        catch: (e) => new ScrollbackArchiveError({ operation: 'delete', reason: String(e) }),
+      });
+      if (result instanceof ScrollbackArchiveError) {
+        return;
       }
       await this.flushMeta()
     })
@@ -280,6 +292,7 @@ export class ScrollbackArchive {
 
     let bytesRead = 0
     let fd: number | null = null
+    
     try {
       fd = fs.openSync(chunk.path, "r")
       bytesRead = fs.readSync(fd, buffer, 0, totalBytes, offsetBytes)
@@ -290,7 +303,7 @@ export class ScrollbackArchive {
         try {
           fs.closeSync(fd)
         } catch {
-          // Ignore close errors.
+          // Ignore close errors
         }
       }
     }
@@ -320,11 +333,14 @@ export class ScrollbackArchive {
   private loadMeta(): void {
     if (!fs.existsSync(this.metaPath)) return
     let parsed: ArchiveMeta | null = null
+    
     try {
-      parsed = JSON.parse(fs.readFileSync(this.metaPath, "utf8")) as ArchiveMeta
+      const data = fs.readFileSync(this.metaPath, "utf8")
+      parsed = JSON.parse(data) as ArchiveMeta
     } catch {
       return
     }
+    
     if (!parsed || parsed.version !== 1) return
 
     this.chunks = []
@@ -370,10 +386,12 @@ export class ScrollbackArchive {
         createdAt: chunk.createdAt,
       })),
     }
-    try {
-      await fsp.writeFile(this.metaPath, JSON.stringify(meta), "utf8")
-    } catch {
-      // Ignore metadata write failures.
+    const result = await tryAsync<void, ScrollbackArchiveError>({
+      try: () => fsp.writeFile(this.metaPath, JSON.stringify(meta), "utf8"),
+      catch: (e) => new ScrollbackArchiveError({ operation: 'write', reason: String(e) }),
+    });
+    if (result instanceof ScrollbackArchiveError) {
+      return;
     }
   }
 }

@@ -47,45 +47,45 @@ export function createSocketDataStream(
         if (resolveNext) {
           resolveNext({ value: chunk, done: false });
           resolveNext = null;
-        } else {
-          buffer.push(chunk);
+          return;
         }
+        buffer.push(chunk);
       };
 
       const handleClose = () => {
         isDone = true;
-        if (resolveNext) {
-          resolveNext({ value: undefined as unknown as Buffer, done: true });
-          resolveNext = null;
-        }
+        if (!resolveNext) return;
+        resolveNext({ value: undefined as unknown as Buffer, done: true });
+        resolveNext = null;
       };
 
       client.on('data', handleData);
       client.on('close', handleClose);
       client.on('end', handleClose);
 
-      try {
-        while (!isDone) {
-          let value: Buffer;
-          
-          if (buffer.length > 0) {
-            value = buffer.shift()!;
-          } else {
-            const result = await new Promise<IteratorResult<Buffer>>((resolve) => {
-              resolveNext = resolve;
-            });
-            if (result.done) break;
-            value = result.value;
-          }
-          
-          // Feed to frame reader
-          frameReader.feed(value, handleFrame);
-          yield value;
+      await using cleanup = {
+        [Symbol.asyncDispose]: async () => {
+          client.off('data', handleData);
+          client.off('close', handleClose);
+          client.off('end', handleClose);
+        },
+      };
+
+      while (!isDone) {
+        let value: Buffer;
+        
+        if (buffer.length > 0) {
+          value = buffer.shift()!;
+        } else {
+          const result = await new Promise<IteratorResult<Buffer>>((resolve) => {
+            resolveNext = resolve;
+          });
+          if (result.done) break;
+          value = result.value;
         }
-      } finally {
-        client.off('data', handleData);
-        client.off('close', handleClose);
-        client.off('end', handleClose);
+        
+        frameReader.feed(value, handleFrame);
+        yield value;
       }
     },
   };

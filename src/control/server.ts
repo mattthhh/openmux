@@ -1,5 +1,7 @@
 import net from 'net';
 import fs from 'fs/promises';
+import { tryAsync } from 'errore';
+import { createTaggedError } from 'errore';
 
 import type { TerminalScrollState, TerminalState, Workspace, WorkspaceId } from '../core/types';
 import type { LayoutState } from '../core/operations/layout-actions';
@@ -33,6 +35,14 @@ export type ControlServer = {
 
 type ControlErrorCode = 'invalid_request' | 'not_found' | 'ambiguous' | 'internal' | 'session_creation_failed';
 
+/** Error processing control request */
+export class ControlRequestError extends createTaggedError({
+  name: 'ControlRequestError',
+  message: 'Control request failed: $reason',
+}) {
+  code: ControlErrorCode = 'internal';
+}
+
 function parseWorkspaceId(value: unknown): WorkspaceId | undefined {
   if (typeof value !== 'number' || !Number.isFinite(value)) return undefined;
   const intValue = Math.floor(value);
@@ -49,6 +59,226 @@ function parseCaptureFormat(value: unknown): CaptureFormat | null {
 function getNumberParam(value: unknown, fallback: number): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
   return value;
+}
+
+async function handleHello(
+  requestId: number,
+  deps: ControlServerDeps,
+  sendResponse: (requestId: number, result?: unknown) => void
+): Promise<void> {
+  sendResponse(requestId, {
+    pid: process.pid,
+    protocolVersion: CONTROL_PROTOCOL_VERSION,
+    activeSessionId: deps.getActiveSessionId() ?? null,
+  });
+}
+
+async function handleSessionCreate(
+  requestId: number,
+  params: Record<string, unknown>,
+  deps: ControlServerDeps,
+  sendResponse: (requestId: number, result?: unknown) => void,
+  sendError: (requestId: number, message: string, code: ControlErrorCode) => void
+): Promise<void> {
+  const name = typeof params.name === 'string' ? params.name : undefined;
+  const result = await deps.createSession(name);
+  if (result instanceof SessionStorageError) {
+    sendError(requestId, result.message, 'session_creation_failed');
+    return;
+  }
+  sendResponse(requestId, { session: result });
+}
+
+async function handlePaneSplit(
+  requestId: number,
+  params: Record<string, unknown>,
+  deps: ControlServerDeps,
+  sendResponse: (requestId: number, result?: unknown) => void,
+  sendError: (requestId: number, message: string, code: ControlErrorCode) => void
+): Promise<ControlRequestError | void> {
+  const direction = params.direction;
+  if (direction !== 'horizontal' && direction !== 'vertical') {
+    sendError(requestId, 'Invalid direction; use horizontal or vertical.', 'invalid_request');
+    return;
+  }
+
+  const selectorParse = parsePaneSelector(
+    typeof params.pane === 'string' ? params.pane : undefined
+  );
+  if (!selectorParse.ok) {
+    sendError(requestId, selectorParse.error, 'invalid_request');
+    return;
+  }
+  if (selectorParse.selector.type === 'pty') {
+    sendError(requestId, 'PTY selectors cannot be split.', 'invalid_request');
+    return;
+  }
+
+  const workspaceId = parseWorkspaceId(params.workspaceId);
+  const layoutState = deps.getLayoutState();
+  const activeWorkspace = deps.getActiveWorkspace();
+  const resolved = resolvePaneSelector({
+    selector: selectorParse.selector,
+    layoutState,
+    activeWorkspace,
+    workspaceId,
+  });
+
+  if (!resolved.ok) {
+    sendError(requestId, resolved.message, resolved.errorCode);
+    return;
+  }
+
+  if (activeWorkspace.id !== resolved.workspaceId) {
+    deps.switchWorkspace(resolved.workspaceId);
+  }
+  deps.focusPane(resolved.pane.id);
+  deps.splitPane(direction);
+  sendResponse(requestId, { ok: true });
+}
+
+async function handlePaneSend(
+  requestId: number,
+  params: Record<string, unknown>,
+  deps: ControlServerDeps,
+  sendResponse: (requestId: number, result?: unknown) => void,
+  sendError: (requestId: number, message: string, code: ControlErrorCode) => void
+): Promise<void> {
+  const text = typeof params.text === 'string' ? params.text : null;
+  if (!text) {
+    sendError(requestId, 'Missing --text payload.', 'invalid_request');
+    return;
+  }
+
+  const selectorParse = parsePaneSelector(
+    typeof params.pane === 'string' ? params.pane : undefined
+  );
+  if (!selectorParse.ok) {
+    sendError(requestId, selectorParse.error, 'invalid_request');
+    return;
+  }
+
+  const workspaceId = parseWorkspaceId(params.workspaceId);
+  const layoutState = deps.getLayoutState();
+  const activeWorkspace = deps.getActiveWorkspace();
+  const resolved = resolvePaneSelector({
+    selector: selectorParse.selector,
+    layoutState,
+    activeWorkspace,
+    workspaceId,
+  });
+
+  if (!resolved.ok) {
+    sendError(requestId, resolved.message, resolved.errorCode);
+    return;
+  }
+
+  const ptyId = resolved.pane.ptyId;
+  if (!ptyId) {
+    sendError(requestId, 'Pane has no PTY.', 'not_found');
+    return;
+  }
+
+  deps.writeToPty(ptyId, text);
+  sendResponse(requestId, { ok: true });
+}
+
+async function handlePaneCapture(
+  requestId: number,
+  params: Record<string, unknown>,
+  deps: ControlServerDeps,
+  sendResponse: (requestId: number, result?: unknown) => void,
+  sendError: (requestId: number, message: string, code: ControlErrorCode) => void
+): Promise<void> {
+  const selectorParse = parsePaneSelector(
+    typeof params.pane === 'string' ? params.pane : undefined
+  );
+  if (!selectorParse.ok) {
+    sendError(requestId, selectorParse.error, 'invalid_request');
+    return;
+  }
+
+  const format = parseCaptureFormat(params.format);
+  if (!format) {
+    sendError(requestId, 'Invalid format; use text or ansi.', 'invalid_request');
+    return;
+  }
+
+  const lines = Math.max(1, Math.floor(getNumberParam(params.lines, 200)));
+  const raw = params.raw === true;
+  const workspaceId = parseWorkspaceId(params.workspaceId);
+  const layoutState = deps.getLayoutState();
+  const activeWorkspace = deps.getActiveWorkspace();
+  const resolved = resolvePaneSelector({
+    selector: selectorParse.selector,
+    layoutState,
+    activeWorkspace,
+    workspaceId,
+  });
+
+  if (!resolved.ok) {
+    sendError(requestId, resolved.message, resolved.errorCode);
+    return;
+  }
+
+  const ptyId = resolved.pane.ptyId;
+  if (!ptyId) {
+    sendError(requestId, 'Pane has no PTY.', 'not_found');
+    return;
+  }
+
+  if (deps.capturePty) {
+    const captureResult = await tryAsync<string, ControlRequestError>({
+      try: async () => {
+        const result = await deps.capturePty!(ptyId, { lines, format, raw });
+        if (result === null) {
+          throw new Error('Capture returned null');
+        }
+        return result;
+      },
+      catch: (e: unknown) => new ControlRequestError({ reason: String(e) }),
+    });
+    if (!(captureResult instanceof ControlRequestError)) {
+      sendResponse(requestId, { text: captureResult, format, lines });
+      return;
+    }
+  }
+
+  const emulator = deps.getEmulator(ptyId);
+  if (!emulator || emulator.isDisposed) {
+    sendError(requestId, 'PTY emulator not available.', 'not_found');
+    return;
+  }
+
+  await deps.fetchTerminalState(ptyId, { force: true }).catch(() => {});
+  await deps.fetchScrollState(ptyId, { force: true }).catch(() => {});
+
+  const state = emulator.getTerminalState();
+  const scrollbackLength = emulator.getScrollbackLength();
+
+  if (state.rows === 0 && scrollbackLength === 0) {
+    sendResponse(requestId, { text: '', format, lines });
+    return;
+  }
+
+  const totalLines = scrollbackLength + state.rows;
+  const start = Math.max(0, totalLines - lines);
+  if (start < scrollbackLength && 'prefetchScrollbackLines' in emulator) {
+    const end = Math.min(scrollbackLength, start + lines);
+    const count = Math.max(0, end - start);
+    if (count > 0) {
+      await (emulator as { prefetchScrollbackLines: (offset: number, count: number) => Promise<void> })
+        .prefetchScrollbackLines(start, count);
+    }
+  }
+
+  const text = captureEmulator(emulator, {
+    lines,
+    format,
+    trimTrailing: !raw,
+    trimTrailingLines: !raw,
+  });
+  sendResponse(requestId, { text, format, lines });
 }
 
 export async function startControlServer(deps: ControlServerDeps): Promise<ControlServer> {
@@ -85,197 +315,33 @@ export async function startControlServer(deps: ControlServerDeps): Promise<Contr
       const method = header.method as string | undefined;
       const params = (header.params as Record<string, unknown>) ?? {};
 
-      try {
-        switch (method) {
-          case 'hello': {
-            sendResponse(requestId, {
-              pid: process.pid,
-              protocolVersion: CONTROL_PROTOCOL_VERSION,
-              activeSessionId: deps.getActiveSessionId() ?? null,
-            });
-            return;
+      const result = await tryAsync<void, ControlRequestError>({
+        try: async () => {
+          switch (method) {
+            case 'hello':
+              await handleHello(requestId, deps, sendResponse);
+              return;
+            case 'session.create':
+              await handleSessionCreate(requestId, params, deps, sendResponse, sendError);
+              return;
+            case 'pane.split':
+              await handlePaneSplit(requestId, params, deps, sendResponse, sendError);
+              return;
+            case 'pane.send':
+              await handlePaneSend(requestId, params, deps, sendResponse, sendError);
+              return;
+            case 'pane.capture':
+              await handlePaneCapture(requestId, params, deps, sendResponse, sendError);
+              return;
+            default:
+              sendError(requestId, `Unknown method: ${method}`, 'invalid_request');
           }
-          case 'session.create': {
-            const name = typeof params.name === 'string' ? params.name : undefined;
-            const result = await deps.createSession(name);
-            if (result instanceof SessionStorageError) {
-              sendError(requestId, result.message, 'session_creation_failed');
-              return;
-            }
-            sendResponse(requestId, { session: result });
-            return;
-          }
-          case 'pane.split': {
-            const direction = params.direction;
-            if (direction !== 'horizontal' && direction !== 'vertical') {
-              sendError(requestId, 'Invalid direction; use horizontal or vertical.', 'invalid_request');
-              return;
-            }
+        },
+        catch: (e: unknown) => new ControlRequestError({ reason: e instanceof Error ? e.message : 'Request failed' }),
+      });
 
-            const selectorParse = parsePaneSelector(
-              typeof params.pane === 'string' ? params.pane : undefined
-            );
-            if (!selectorParse.ok) {
-              sendError(requestId, selectorParse.error, 'invalid_request');
-              return;
-            }
-            if (selectorParse.selector.type === 'pty') {
-              sendError(requestId, 'PTY selectors cannot be split.', 'invalid_request');
-              return;
-            }
-
-            const workspaceId = parseWorkspaceId(params.workspaceId);
-            const layoutState = deps.getLayoutState();
-            const activeWorkspace = deps.getActiveWorkspace();
-            const resolved = resolvePaneSelector({
-              selector: selectorParse.selector,
-              layoutState,
-              activeWorkspace,
-              workspaceId,
-            });
-
-            if (!resolved.ok) {
-              sendError(requestId, resolved.message, resolved.errorCode);
-              return;
-            }
-
-            if (activeWorkspace.id !== resolved.workspaceId) {
-              deps.switchWorkspace(resolved.workspaceId);
-            }
-            deps.focusPane(resolved.pane.id);
-            deps.splitPane(direction);
-            sendResponse(requestId, { ok: true });
-            return;
-          }
-          case 'pane.send': {
-            const text = typeof params.text === 'string' ? params.text : null;
-            if (!text) {
-              sendError(requestId, 'Missing --text payload.', 'invalid_request');
-              return;
-            }
-
-            const selectorParse = parsePaneSelector(
-              typeof params.pane === 'string' ? params.pane : undefined
-            );
-            if (!selectorParse.ok) {
-              sendError(requestId, selectorParse.error, 'invalid_request');
-              return;
-            }
-
-            const workspaceId = parseWorkspaceId(params.workspaceId);
-            const layoutState = deps.getLayoutState();
-            const activeWorkspace = deps.getActiveWorkspace();
-            const resolved = resolvePaneSelector({
-              selector: selectorParse.selector,
-              layoutState,
-              activeWorkspace,
-              workspaceId,
-            });
-
-            if (!resolved.ok) {
-              sendError(requestId, resolved.message, resolved.errorCode);
-              return;
-            }
-
-            const ptyId = resolved.pane.ptyId;
-            if (!ptyId) {
-              sendError(requestId, 'Pane has no PTY.', 'not_found');
-              return;
-            }
-
-            deps.writeToPty(ptyId, text);
-            sendResponse(requestId, { ok: true });
-            return;
-          }
-          case 'pane.capture': {
-            const selectorParse = parsePaneSelector(
-              typeof params.pane === 'string' ? params.pane : undefined
-            );
-            if (!selectorParse.ok) {
-              sendError(requestId, selectorParse.error, 'invalid_request');
-              return;
-            }
-
-            const format = parseCaptureFormat(params.format);
-            if (!format) {
-              sendError(requestId, 'Invalid format; use text or ansi.', 'invalid_request');
-              return;
-            }
-
-            const lines = Math.max(1, Math.floor(getNumberParam(params.lines, 200)));
-            const raw = params.raw === true;
-            const workspaceId = parseWorkspaceId(params.workspaceId);
-            const layoutState = deps.getLayoutState();
-            const activeWorkspace = deps.getActiveWorkspace();
-            const resolved = resolvePaneSelector({
-              selector: selectorParse.selector,
-              layoutState,
-              activeWorkspace,
-              workspaceId,
-            });
-
-            if (!resolved.ok) {
-              sendError(requestId, resolved.message, resolved.errorCode);
-              return;
-            }
-
-            const ptyId = resolved.pane.ptyId;
-            if (!ptyId) {
-              sendError(requestId, 'Pane has no PTY.', 'not_found');
-              return;
-            }
-
-            if (deps.capturePty) {
-              const direct = await deps.capturePty(ptyId, { lines, format, raw }).catch(() => null);
-              if (direct !== null) {
-                sendResponse(requestId, { text: direct, format, lines });
-                return;
-              }
-            }
-
-            const emulator = deps.getEmulator(ptyId);
-            if (!emulator || emulator.isDisposed) {
-              sendError(requestId, 'PTY emulator not available.', 'not_found');
-              return;
-            }
-
-            await deps.fetchTerminalState(ptyId, { force: true }).catch(() => {});
-            await deps.fetchScrollState(ptyId, { force: true }).catch(() => {});
-
-            const state = emulator.getTerminalState();
-            const scrollbackLength = emulator.getScrollbackLength();
-
-            if (state.rows === 0 && scrollbackLength === 0) {
-              sendResponse(requestId, { text: '', format, lines });
-              return;
-            }
-
-            const totalLines = scrollbackLength + state.rows;
-            const start = Math.max(0, totalLines - lines);
-            if (start < scrollbackLength && 'prefetchScrollbackLines' in emulator) {
-              const end = Math.min(scrollbackLength, start + lines);
-              const count = Math.max(0, end - start);
-              if (count > 0) {
-                await (emulator as { prefetchScrollbackLines: (offset: number, count: number) => Promise<void> })
-                  .prefetchScrollbackLines(start, count);
-              }
-            }
-
-            const text = captureEmulator(emulator, {
-              lines,
-              format,
-              trimTrailing: !raw,
-              trimTrailingLines: !raw,
-            });
-            sendResponse(requestId, { text, format, lines });
-            return;
-          }
-          default:
-            sendError(requestId, `Unknown method: ${method}`, 'invalid_request');
-        }
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Request failed';
-        sendError(requestId, message, 'internal');
+      if (result instanceof ControlRequestError) {
+        sendError(requestId, result.message, 'internal');
       }
     };
 

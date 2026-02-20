@@ -3,6 +3,7 @@ import type { TerminalCell, UnifiedTerminalUpdate } from '../../core/types';
 import { subscribeUnifiedToPty, getEmulator } from '../../effect/bridge';
 import { deferMacrotask } from '../../core/scheduling';
 import { getKittyGraphicsRenderer } from '../../terminal/kitty-graphics';
+import { tryAsync } from 'errore';
 import {
   attachVisibleEmulator,
   clearVisiblePty,
@@ -64,20 +65,22 @@ export function setupUnifiedSubscription(deps: UnifiedSubscriptionDeps): void {
           viewState.pendingPrefetch = null;
           viewState.prefetchInProgress = true;
 
-          try {
-            const currentEmulator = viewState.emulator;
-            if (currentEmulator && 'prefetchScrollbackLines' in currentEmulator) {
-              await (currentEmulator as { prefetchScrollbackLines: (start: number, count: number) => Promise<void> })
-                .prefetchScrollbackLines(start, count);
-            }
-            if (mounted) {
-              requestRenderFrame();
-            }
-          } finally {
-            viewState.prefetchInProgress = false;
-            if (viewState.pendingPrefetch && mounted) {
-              executePrefetch();
-            }
+          const currentEmulator = viewState.emulator;
+          if (currentEmulator && 'prefetchScrollbackLines' in currentEmulator) {
+            await tryAsync<void, Error>({
+              try: () => (currentEmulator as { prefetchScrollbackLines: (start: number, count: number) => Promise<void> })
+                .prefetchScrollbackLines(start, count),
+              catch: () => new Error('Prefetch failed'),
+            });
+          }
+
+          if (mounted) {
+            requestRenderFrame();
+          }
+
+          viewState.prefetchInProgress = false;
+          if (viewState.pendingPrefetch && mounted) {
+            executePrefetch();
           }
         };
 
@@ -88,49 +91,55 @@ export function setupUnifiedSubscription(deps: UnifiedSubscriptionDeps): void {
 
           const em = await getEmulator(ptyId);
           if (!mounted) return;
+
           viewState.emulator = em;
           attachVisibleEmulator(ptyId, em);
 
-          unsubscribe = await subscribeUnifiedToPty(ptyId, (update: UnifiedTerminalUpdate) => {
-            if (!mounted) return;
+          const unsubResult = await tryAsync<() => void, Error>({
+            try: () => subscribeUnifiedToPty(ptyId, (update: UnifiedTerminalUpdate) => {
+              if (!mounted) return;
 
-            const { terminalUpdate } = update;
-            if (terminalUpdate.isFull && terminalUpdate.fullState) {
-              viewState.terminalState = terminalUpdate.fullState;
-              cachedRows = [...terminalUpdate.fullState.cells];
-            } else {
-              const existingState = viewState.terminalState;
-              if (existingState) {
-                for (const [rowIdx, newRow] of terminalUpdate.dirtyRows) {
-                  cachedRows[rowIdx] = newRow;
-                }
-                viewState.terminalState = {
-                  ...existingState,
-                  cells: cachedRows,
-                  cursor: terminalUpdate.cursor,
-                  alternateScreen: terminalUpdate.alternateScreen,
-                  mouseTracking: terminalUpdate.mouseTracking,
-                  cursorKeyMode: terminalUpdate.cursorKeyMode,
-                };
-              }
-            }
-
-            viewState.scrollState = update.scrollState;
-
-            if (viewState.lastScrollbackLength !== null && viewState.scrollState.viewportOffset > 0) {
-              const scrollbackDelta = viewState.scrollState.scrollbackLength - viewState.lastScrollbackLength;
-              if (scrollbackDelta > 0 && viewState.emulator) {
-                const start = Math.max(0, viewState.scrollState.scrollbackLength - recentPrefetchWindow);
-                for (let offset = start; offset < viewState.scrollState.scrollbackLength; offset++) {
-                  viewState.emulator.getScrollbackLine(offset);
+              const { terminalUpdate } = update;
+              if (terminalUpdate.isFull && terminalUpdate.fullState) {
+                viewState.terminalState = terminalUpdate.fullState;
+                cachedRows = [...terminalUpdate.fullState.cells];
+              } else {
+                const existingState = viewState.terminalState;
+                if (existingState) {
+                  for (const [rowIdx, newRow] of terminalUpdate.dirtyRows) {
+                    cachedRows[rowIdx] = newRow;
+                  }
+                  viewState.terminalState = {
+                    ...existingState,
+                    cells: cachedRows,
+                    cursor: terminalUpdate.cursor,
+                    alternateScreen: terminalUpdate.alternateScreen,
+                    mouseTracking: terminalUpdate.mouseTracking,
+                    cursorKeyMode: terminalUpdate.cursorKeyMode,
+                  };
                 }
               }
-            }
-            viewState.lastScrollbackLength = viewState.scrollState.scrollbackLength;
 
-            requestRenderFrame();
+              viewState.scrollState = update.scrollState;
+
+              if (viewState.lastScrollbackLength !== null && viewState.scrollState.viewportOffset > 0) {
+                const scrollbackDelta = viewState.scrollState.scrollbackLength - viewState.lastScrollbackLength;
+                if (scrollbackDelta > 0 && viewState.emulator) {
+                  const start = Math.max(0, viewState.scrollState.scrollbackLength - recentPrefetchWindow);
+                  for (let offset = start; offset < viewState.scrollState.scrollbackLength; offset++) {
+                    viewState.emulator.getScrollbackLine(offset);
+                  }
+                }
+              }
+              viewState.lastScrollbackLength = viewState.scrollState.scrollbackLength;
+
+              requestRenderFrame();
+            }),
+            catch: () => new Error('Failed to subscribe to PTY'),
           });
+          if (unsubResult instanceof Error) return;
 
+          unsubscribe = unsubResult;
           requestRenderFrame();
         };
 

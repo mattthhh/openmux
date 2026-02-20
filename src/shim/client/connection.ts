@@ -2,11 +2,13 @@ import net from 'net';
 import fs from 'fs/promises';
 import { spawn } from 'child_process';
 import type { Buffer } from 'buffer';
+import { tryAsync } from 'errore';
 
 import { getHostColors } from '../../terminal/terminal-colors';
 import { encodeFrame, FrameReader, SHIM_SOCKET_DIR, SHIM_SOCKET_PATH, type ShimHeader } from '../protocol';
 import { createFrameHandler, type FrameHandlerDeps } from './frame-handler';
 import { createSocketDataStream } from './socket-stream';
+import { ShimConnectionError } from '../../effect/errors';
 
 const CLIENT_VERSION = 1;
 const CLIENT_ID = `client_${Date.now()}_${Math.random().toString(16).slice(2)}`;
@@ -20,7 +22,7 @@ const pendingRequests = new Map<number, PendingRequest>();
 let nextRequestId = 1;
 let socket: net.Socket | null = null;
 let reader: FrameReader | null = null;
-let connecting: Promise<void> | null = null;
+let connecting: Promise<void | ShimConnectionError> | null = null;
 let spawnAttempted = false;
 let shimPid: number | null = null;
 let detached = false;
@@ -34,14 +36,15 @@ function handleResponseFrame(header: ShimHeader, payloads: Buffer[]): boolean {
   }
 
   const pending = pendingRequests.get(header.requestId);
-  if (pending) {
-    pendingRequests.delete(header.requestId);
-    if (header.ok) {
-      pending.resolve({ header, payloads });
-    } else {
-      pending.reject(new Error(header.error ?? 'Shim request failed'));
-    }
+  if (!pending) return false;
+  
+  pendingRequests.delete(header.requestId);
+  if (header.ok) {
+    pending.resolve({ header, payloads });
+  } else {
+    pending.reject(new Error(header.error ?? 'Shim request failed'));
   }
+  
   return true;
 }
 
@@ -52,52 +55,62 @@ const handleFrame = createFrameHandler({
   },
 } satisfies FrameHandlerDeps);
 
-async function connectSocket(): Promise<void> {
-  await fs.mkdir(SHIM_SOCKET_DIR, { recursive: true });
+async function connectSocket(): Promise<void | ShimConnectionError> {
+  const mkdirResult = await tryAsync<string | undefined, ShimConnectionError>({
+    try: () => fs.mkdir(SHIM_SOCKET_DIR, { recursive: true }),
+    catch: (e) => new ShimConnectionError({ reason: `Failed to create socket directory: ${e}` }),
+  });
+  if (mkdirResult instanceof ShimConnectionError) return mkdirResult;
 
-  await new Promise<void>((resolve, reject) => {
-    const client = net.createConnection(SHIM_SOCKET_PATH);
-    const handleError = (error: Error) => {
-      client.removeListener('connect', handleConnect);
-      reject(error);
-    };
-    const handleConnect = () => {
-      client.removeListener('error', handleError);
-      socket = client;
-      reader = new FrameReader();
-      client.on('error', () => {
-        // ignore, reconnect on demand
-      });
-      client.on('close', () => {
+  const connectResult = await tryAsync<void, ShimConnectionError>({
+    try: () => new Promise<void>((resolve, reject) => {
+      const client = net.createConnection(SHIM_SOCKET_PATH);
+      const handleError = (error: Error) => {
+        client.removeListener('connect', handleConnect);
+        reject(error);
+      };
+      const handleConnect = () => {
+        client.removeListener('error', handleError);
+        socket = client;
+        reader = new FrameReader();
+        client.on('error', () => {
+          // ignore, reconnect on demand
+        });
+        client.on('close', () => {
+          socketDataStop?.();
+          socketDataStop = null;
+          socket = null;
+          reader = null;
+          markDetached();
+        });
         socketDataStop?.();
-        socketDataStop = null;
+        socketDataStop = createSocketDataStream(client, reader, handleFrame);
+        resolve();
+      };
+      client.once('error', handleError);
+      client.once('connect', handleConnect);
+    }),
+    catch: (e) => new ShimConnectionError({ reason: `Failed to connect to socket: ${e}` }),
+  });
+  if (connectResult instanceof ShimConnectionError) return connectResult;
+
+  const helloResult = await tryAsync<{ header: ShimHeader; payloads: Buffer[] }, ShimConnectionError>({
+    try: () => sendRequest('hello', { clientId: CLIENT_ID, version: CLIENT_VERSION }),
+    catch: (e) => {
+      if (e instanceof Error && e.message.toLowerCase().includes('detached')) {
+        socket?.destroy();
         socket = null;
         reader = null;
         markDetached();
-      });
-      socketDataStop?.();
-      socketDataStop = createSocketDataStream(client, reader, handleFrame);
-      resolve();
-    };
-    client.once('error', handleError);
-    client.once('connect', handleConnect);
+      }
+      return new ShimConnectionError({ reason: `Hello request failed: ${e}` });
+    },
   });
+  if (helloResult instanceof ShimConnectionError) return helloResult;
 
-  let hello: { header: ShimHeader; payloads: Buffer[] };
-  try {
-    hello = await sendRequest('hello', { clientId: CLIENT_ID, version: CLIENT_VERSION });
-  } catch (error) {
-    if (error instanceof Error && error.message.toLowerCase().includes('detached')) {
-      socket?.destroy();
-      socket = null;
-      reader = null;
-      markDetached();
-    }
-    throw error;
-  }
-  const helloResult = hello.header.result as { pid?: number } | undefined;
-  if (helloResult && typeof helloResult.pid === 'number') {
-    shimPid = helloResult.pid;
+  const helloData = helloResult.header.result as { pid?: number } | undefined;
+  if (helloData && typeof helloData.pid === 'number') {
+    shimPid = helloData.pid;
   }
 
   const colors = getHostColors();
@@ -107,9 +120,7 @@ async function connectSocket(): Promise<void> {
 }
 
 function spawnShimProcess(): void {
-  if (spawnAttempted) {
-    return;
-  }
+  if (spawnAttempted) return;
   spawnAttempted = true;
 
   const baseArgs = process.argv.slice(1).filter((arg) => arg !== '--shim');
@@ -133,55 +144,58 @@ function spawnShimProcess(): void {
   child.unref();
 }
 
-async function connectWithRetry(attempts = 25, delayMs = 120): Promise<void> {
+async function connectWithRetry(attempts = 25, delayMs = 120): Promise<void | ShimConnectionError> {
   let lastError: Error | undefined;
+  
   for (let i = 0; i < attempts; i++) {
-    try {
-      await connectSocket();
-      return;
-    } catch (error) {
-      lastError = error instanceof Error ? error : new Error('Failed to connect to shim');
-      await new Promise((resolve) => setTimeout(resolve, delayMs));
-    }
+    const result = await connectSocket();
+    if (!(result instanceof ShimConnectionError)) return;
+    
+    lastError = result;
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
   }
-  throw lastError ?? new Error('Failed to connect to shim');
+  
+  return lastError instanceof ShimConnectionError 
+    ? lastError 
+    : new ShimConnectionError({ reason: 'Failed to connect to shim after retries' });
 }
 
 async function ensureConnectedWithoutSpawn(): Promise<boolean> {
-  if (socket && !socket.destroyed) {
-    return true;
-  }
-  try {
-    await connectWithRetry(3, 80);
-    return true;
-  } catch {
-    return false;
-  }
+  if (socket && !socket.destroyed) return true;
+  
+  const result = await connectWithRetry(3, 80);
+  return !(result instanceof ShimConnectionError);
 }
 
-async function ensureConnected(): Promise<void> {
+async function ensureConnected(): Promise<void | ShimConnectionError> {
   if (detached) {
-    throw new Error('Shim client detached');
+    return new ShimConnectionError({ reason: 'Shim client detached' });
   }
-  if (socket && !socket.destroyed) {
+  if (socket && !socket.destroyed) return;
+  
+  if (connecting) {
+    const result = await connecting;
+    return result instanceof ShimConnectionError ? result : undefined;
+  }
+  
+  connecting = (async (): Promise<void | ShimConnectionError> => {
+    const result = await connectSocket();
+    if (result instanceof ShimConnectionError) {
+      if (detached) return result;
+      
+      spawnShimProcess();
+      const retryResult = await connectWithRetry();
+      return retryResult;
+    }
     return;
+  })();
+  
+  try {
+    const result = await connecting;
+    return result instanceof ShimConnectionError ? result : undefined;
+  } finally {
+    connecting = null;
   }
-  if (!connecting) {
-    connecting = (async () => {
-      try {
-        await connectSocket();
-      } catch (error) {
-        if (detached) {
-          throw error;
-        }
-        spawnShimProcess();
-        await connectWithRetry();
-      } finally {
-        connecting = null;
-      }
-    })();
-  }
-  await connecting;
 }
 
 export async function sendRequestDirect(
@@ -189,9 +203,9 @@ export async function sendRequestDirect(
   params?: Record<string, unknown>,
   payloads: ArrayBuffer[] = [],
   timeoutMs?: number
-): Promise<{ header: ShimHeader; payloads: Buffer[] }> {
+): Promise<{ header: ShimHeader; payloads: Buffer[] } | ShimConnectionError> {
   if (!socket || socket.destroyed) {
-    throw new Error('Shim socket not available');
+    return new ShimConnectionError({ reason: 'Shim socket not available' });
   }
 
   const requestId = nextRequestId++;
@@ -203,21 +217,24 @@ export async function sendRequestDirect(
     payloadLengths: payloads.map((payload) => payload.byteLength),
   };
 
-  return new Promise((resolve, reject) => {
-    pendingRequests.set(requestId, { resolve, reject });
+  return new Promise((resolve) => {
+    pendingRequests.set(requestId, { 
+      resolve, 
+      reject: (error) => resolve(new ShimConnectionError({ reason: error.message })) 
+    });
+    
     if (timeoutMs) {
       setTimeout(() => {
-        if (pendingRequests.has(requestId)) {
-          pendingRequests.delete(requestId);
-          reject(new Error('Shim request timed out'));
-        }
+        if (!pendingRequests.has(requestId)) return;
+        pendingRequests.delete(requestId);
+        resolve(new ShimConnectionError({ reason: 'Shim request timed out' }));
       }, timeoutMs);
     }
+    
     socket?.write(encodeFrame(header, payloads), (err) => {
-      if (err) {
-        pendingRequests.delete(requestId);
-        reject(err);
-      }
+      if (!err) return;
+      pendingRequests.delete(requestId);
+      resolve(new ShimConnectionError({ reason: err.message }));
     });
   });
 }
@@ -227,10 +244,9 @@ export async function sendRequest(
   params?: Record<string, unknown>,
   payloads: ArrayBuffer[] = []
 ): Promise<{ header: ShimHeader; payloads: Buffer[] }> {
-  await ensureConnected();
-  if (!socket) {
-    throw new Error('Shim socket not available');
-  }
+  const connectResult = await ensureConnected();
+  if (connectResult instanceof ShimConnectionError) throw connectResult;
+  if (!socket) throw new Error('Shim socket not available');
 
   const requestId = nextRequestId++;
   const header: ShimHeader = {
@@ -258,27 +274,27 @@ export async function shutdownShim(): Promise<void> {
   if (connecting) {
     await connecting.catch(() => {});
   }
+  
   const connected = await ensureConnectedWithoutSpawn();
   if (connected) {
-    const shutdownOk = await sendRequestDirect('shutdown', undefined, [], 500)
-      .then(() => true)
-      .catch(() => false);
-    if (shutdownOk) {
-      return;
-    }
+    const shutdownResult = await sendRequestDirect('shutdown', undefined, [], 500);
+    if (!(shutdownResult instanceof ShimConnectionError)) return;
   }
 
-  if (shimPid) {
-    try {
-      process.kill(shimPid);
-    } catch {
-      // ignore
-    }
+  if (!shimPid) return;
+  
+  try {
+    process.kill(shimPid);
+  } catch {
+    // Ignore kill errors
   }
 }
 
 export async function waitForShim(): Promise<void> {
-  await ensureConnected();
+  const result = await ensureConnected();
+  if (result instanceof ShimConnectionError) {
+    throw new Error(result.message);
+  }
 }
 
 function markDetached(): void {

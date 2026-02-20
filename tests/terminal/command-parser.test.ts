@@ -5,12 +5,12 @@ import { describe, test, expect, vi } from "bun:test"
 import { createCommandParser } from '../../src/terminal/command-parser'
 
 describe('Command Parser', () => {
-  test('parses OSC 9 notifications with title and body', () => {
+  test('parses OSC 9 notifications with title and body', async () => {
     const onCommand = vi.fn()
     const onNotification = vi.fn()
     const parser = createCommandParser({ onCommand, onNotification })
 
-    parser.processData('\x1b]9;System Alert;Process completed.\x07')
+    await parser.processData('\x1b]9;System Alert;Process completed.\x07')
 
     expect(onCommand).not.toHaveBeenCalled()
     expect(onNotification).toHaveBeenCalledTimes(1)
@@ -21,12 +21,12 @@ describe('Command Parser', () => {
     })
   })
 
-  test('parses OSC 9 notifications with body only', () => {
+  test('parses OSC 9 notifications with body only', async () => {
     const onCommand = vi.fn()
     const onNotification = vi.fn()
     const parser = createCommandParser({ onCommand, onNotification })
 
-    parser.processData('\x1b]9;Process completed.\x07')
+    await parser.processData('\x1b]9;Process completed.\x07')
 
     expect(onNotification).toHaveBeenCalledWith({
       title: '',
@@ -35,7 +35,7 @@ describe('Command Parser', () => {
     })
   })
 
-  test('ignores OSC 9 ConEmu commands', () => {
+  test('ignores OSC 9 ConEmu commands', async () => {
     const onCommand = vi.fn()
     const onNotification = vi.fn()
     const parser = createCommandParser({ onCommand, onNotification })
@@ -51,19 +51,19 @@ describe('Command Parser', () => {
     ]
 
     for (const seq of sequences) {
-      parser.processData(seq)
+      await parser.processData(seq)
     }
 
     expect(onNotification).not.toHaveBeenCalled()
   })
 
-  test('parses OSC 9 notifications that are not valid ConEmu commands', () => {
+  test('parses OSC 9 notifications that are not valid ConEmu commands', async () => {
     const onCommand = vi.fn()
     const onNotification = vi.fn()
     const parser = createCommandParser({ onCommand, onNotification })
 
-    parser.processData('\x1b]9;1a;Notice\x07')
-    parser.processData('\x1b]9;4;1x\x07')
+    await parser.processData('\x1b]9;1a;Notice\x07')
+    await parser.processData('\x1b]9;4;1x\x07')
 
     expect(onNotification).toHaveBeenCalledTimes(2)
     expect(onNotification).toHaveBeenNthCalledWith(1, {
@@ -78,12 +78,12 @@ describe('Command Parser', () => {
     })
   })
 
-  test('parses OSC 777 notify payloads', () => {
+  test('parses OSC 777 notify payloads', async () => {
     const onCommand = vi.fn()
     const onNotification = vi.fn()
     const parser = createCommandParser({ onCommand, onNotification })
 
-    parser.processData('\x1b]777;notify;Task;Done\x07')
+    await parser.processData('\x1b]777;notify;Task;Done\x07')
 
     expect(onNotification).toHaveBeenCalledWith({
       title: 'Task',
@@ -92,24 +92,24 @@ describe('Command Parser', () => {
     })
   })
 
-  test('does not emit notification for openmux command', () => {
+  test('does not emit notification for openmux command', async () => {
     const onCommand = vi.fn()
     const onNotification = vi.fn()
     const parser = createCommandParser({ onCommand, onNotification })
 
-    parser.processData('\x1b]777;openmux;cmd=ls\x07')
+    await parser.processData('\x1b]777;openmux;cmd=ls\x07')
 
     expect(onCommand).toHaveBeenCalledTimes(1)
     expect(onNotification).not.toHaveBeenCalled()
   })
 
-  test('handles chunked OSC 9 sequences', () => {
+  test('handles chunked OSC 9 sequences', async () => {
     const onCommand = vi.fn()
     const onNotification = vi.fn()
     const parser = createCommandParser({ onCommand, onNotification })
 
-    parser.processData('\x1b]9;Chunk')
-    parser.processData('ed;Notice\x07')
+    await parser.processData('\x1b]9;Chunk')
+    await parser.processData('ed;Notice\x07')
 
     expect(onNotification).toHaveBeenCalledWith({
       title: 'Chunked',

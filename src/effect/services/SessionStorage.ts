@@ -68,9 +68,13 @@ export async function createSessionStorage(
   }
 
   const loadIndex = async (): Promise<SessionStorageError | SessionIndex> => {
-    const exists = await fs.exists(indexPath)
+    const existsResult = await fs.exists(indexPath)
 
-    if (!exists) {
+    if (existsResult instanceof FileSystemError) {
+      return createEmptySessionIndex()
+    }
+
+    if (!existsResult) {
       return createEmptySessionIndex()
     }
 
@@ -104,9 +108,13 @@ export async function createSessionStorage(
     id: SessionId
   ): Promise<SessionStorageError | SessionNotFoundError | SessionCorruptedError | SerializedSession> => {
     const path = sessionPath(id)
-    const exists = await fs.exists(path)
+    const existsResult = await fs.exists(path)
 
-    if (!exists) {
+    if (existsResult instanceof FileSystemError) {
+      return new SessionNotFoundError({ sessionId: id })
+    }
+
+    if (!existsResult) {
       return new SessionNotFoundError({ sessionId: id })
     }
 
@@ -170,7 +178,9 @@ export async function createSessionStorage(
   }
 
   const sessionExists = async (id: SessionId): Promise<boolean> => {
-    return fs.exists(sessionPath(id))
+    const result = await fs.exists(sessionPath(id))
+    if (result instanceof FileSystemError) return false
+    return result
   }
 
   return {

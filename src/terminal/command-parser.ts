@@ -8,6 +8,9 @@
  * Where <encoded> is percent-encoded to avoid control characters.
  */
 
+import { tryAsync } from "errore";
+import { ValidationError } from "../effect/errors";
+
 const ESC = '\x1b';
 const BEL = '\x07';
 const COMMAND_CODE = 777;
@@ -29,17 +32,24 @@ export interface CommandParserOptions {
   shellName?: string;
 }
 
-function decodeOscText(encoded: string): string {
+async function decodeOscText(encoded: string): Promise<ValidationError | string> {
   if (!encoded) return '';
-  try {
-    return decodeURIComponent(encoded);
-  } catch {
+  const result = await tryAsync<string, ValidationError>({
+    try: () => Promise.resolve(decodeURIComponent(encoded)),
+    catch: (e) => new ValidationError({ reason: `Failed to decode OSC text: ${String(e)}` }),
+  });
+  if (result instanceof ValidationError) {
     return encoded;
   }
+  return result;
 }
 
-function decodeCommand(encoded: string): string {
-  return decodeOscText(encoded);
+async function decodeCommand(encoded: string): Promise<string> {
+  const result = await decodeOscText(encoded);
+  if (result instanceof ValidationError) {
+    return encoded;
+  }
+  return result;
 }
 
 function isConEmuOsc9Payload(payload: string): boolean {
@@ -89,10 +99,11 @@ function splitNotificationPayload(payload: string): { title: string; body: strin
   return { title, body };
 }
 
-function parseDesktopNotification(code: number, oscText: string): DesktopNotification | null {
+async function parseDesktopNotification(code: number, oscText: string): Promise<DesktopNotification | null> {
   if (code === NOTIFY_CODE) {
     if (isConEmuOsc9Payload(oscText)) return null;
-    const decoded = decodeOscText(oscText);
+    const decoded = await decodeOscText(oscText);
+    if (decoded instanceof ValidationError) return null;
     const payload = splitNotificationPayload(decoded);
     if (!payload) return null;
     return { ...payload, source: 'osc9' };
@@ -100,7 +111,8 @@ function parseDesktopNotification(code: number, oscText: string): DesktopNotific
 
   if (code === COMMAND_CODE) {
     if (!oscText.startsWith(NOTIFY_PREFIX)) return null;
-    const decoded = decodeOscText(oscText.slice(NOTIFY_PREFIX.length));
+    const decoded = await decodeOscText(oscText.slice(NOTIFY_PREFIX.length));
+    if (decoded instanceof ValidationError) return null;
     const payload = splitNotificationPayload(decoded);
     if (!payload) return null;
     return { ...payload, source: 'osc777' };
@@ -147,19 +159,19 @@ export function createCommandParser(options: CommandParserOptions) {
   let oscCodeBuffer: string[] = [];
   let oscTextBuffer: string[] = [];
 
-  function processData(data: string): void {
+  async function processData(data: string): Promise<void> {
     for (let i = 0; i < data.length; i++) {
       const char = data[i];
 
       if (inOscSequence) {
         if (char === BEL) {
-          handleOscComplete();
+          await handleOscComplete();
           continue;
         }
 
         if (char === ESC && i + 1 < data.length && data[i + 1] === '\\') {
           i += 1;
-          handleOscComplete();
+          await handleOscComplete();
           continue;
         }
 
@@ -187,7 +199,7 @@ export function createCommandParser(options: CommandParserOptions) {
     }
   }
 
-  function handleOscComplete(): void {
+  async function handleOscComplete(): Promise<void> {
     const oscCode = oscCodeBuffer.join('');
     const oscText = oscTextBuffer.join('');
     const code = Number.parseInt(oscCode, 10);
@@ -196,7 +208,7 @@ export function createCommandParser(options: CommandParserOptions) {
 
     if (code === COMMAND_CODE && oscText.startsWith(COMMAND_PREFIX)) {
       const encoded = oscText.slice(COMMAND_PREFIX.length);
-      const decoded = decodeCommand(encoded);
+      const decoded = await decodeCommand(encoded);
       const sanitized = sanitizeCommand(decoded, shellName);
       if (sanitized) {
         onCommand(sanitized);
@@ -205,7 +217,7 @@ export function createCommandParser(options: CommandParserOptions) {
     }
 
     if (!handledCommand && onNotification) {
-      const notification = parseDesktopNotification(code, oscText);
+      const notification = await parseDesktopNotification(code, oscText);
       if (notification) {
         onNotification(notification);
       }

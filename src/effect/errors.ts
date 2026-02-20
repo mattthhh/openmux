@@ -96,3 +96,33 @@ export class FileSystemError extends createTaggedError({
   name: "FileSystemError",
   message: "File system $operation failed for $path: $reason",
 }) {}
+
+/** Shim connection error */
+export class ShimConnectionError extends createTaggedError({
+  name: "ShimConnectionError",
+  message: "Shim connection failed: $reason",
+}) {}
+
+/** Kitty graphics offload error */
+export class KittyOffloadError extends createTaggedError({
+  name: "KittyOffloadError",
+  message: "Kitty graphics offload $operation failed: $reason",
+}) {}
+
+/** Scrollback archive error */
+export class ScrollbackArchiveError extends createTaggedError({
+  name: "ScrollbackArchiveError",
+  message: "Scrollback archive $operation failed: $reason",
+}) {}
+
+/** Terminal color query error */
+export class TerminalColorError extends createTaggedError({
+  name: "TerminalColorError",
+  message: "Terminal color $operation failed: $reason",
+}) {}
+
+/** PTY trace error */
+export class PtyTraceError extends createTaggedError({
+  name: "PtyTraceError",
+  message: "PTY trace $operation failed: $reason",
+}) {}

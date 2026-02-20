@@ -5,9 +5,17 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import * as TOML from '@iarna/toml';
+import { tryFn as trySync } from 'errore';
+import { createTaggedError } from 'errore';
 import type { LayoutMode, Padding, Theme } from './types';
 import { DEFAULT_CONFIG, DEFAULT_THEME } from './config';
 import { DEFAULT_KEYBINDINGS, type KeybindingMap, type KeybindingsConfig } from './keybindings';
+
+/** Error parsing user configuration */
+export class ConfigParseError extends createTaggedError({
+  name: 'ConfigParseError',
+  message: 'Failed to parse config at $path: $reason',
+}) {}
 
 export interface LayoutSettings {
   windowGap: number;
@@ -241,14 +249,18 @@ export function loadUserConfigSync(options?: { createIfMissing?: boolean }): Use
     return DEFAULT_USER_CONFIG;
   }
 
-  try {
-    const raw = TOML.parse(fs.readFileSync(configPath, 'utf8')) as Partial<UserConfig>;
-    const merged = mergeUserConfig(DEFAULT_USER_CONFIG, raw);
-    return applyEnvOverrides(merged);
-  } catch (error) {
-    console.warn('[openmux] Failed to parse config, using defaults:', error);
+  const rawResult = trySync<Partial<UserConfig>, ConfigParseError>({
+    try: () => TOML.parse(fs.readFileSync(configPath, 'utf8')) as Partial<UserConfig>,
+    catch: (e) => new ConfigParseError({ path: configPath, reason: String(e) }),
+  });
+
+  if (rawResult instanceof ConfigParseError) {
+    console.warn('[openmux] Failed to parse config, using defaults:', rawResult);
     return applyEnvOverrides(DEFAULT_USER_CONFIG);
   }
+
+  const merged = mergeUserConfig(DEFAULT_USER_CONFIG, rawResult);
+  return applyEnvOverrides(merged);
 }
 
 function updateTomlKeyInSection(

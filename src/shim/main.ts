@@ -10,7 +10,11 @@ export async function runShim(): Promise<void> {
   }
   setServices(services);
 
-  const server = await startShimServer();
+  const serverResult = await startShimServer();
+  if (serverResult instanceof Error) {
+    throw new Error(`Failed to start shim server: ${serverResult.message}`);
+  }
+  const server = serverResult;
 
   const cleanup = () => {
     server.close();

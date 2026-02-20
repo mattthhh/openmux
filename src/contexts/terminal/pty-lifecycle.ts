@@ -18,6 +18,7 @@ import {
   type PtyCaches,
 } from '../../hooks/usePtySubscription';
 import { deferMacrotask } from '../../core/scheduling';
+import { tryAsync } from 'errore';
 
 export interface PtyLifecycleDeps {
   /** Map of ptyId -> paneId for current session */
@@ -187,9 +188,10 @@ export function createPtyLifecycleHandlers(deps: PtyLifecycleDeps) {
     const metrics = getCellMetrics?.() ?? null;
     const pixelWidth = metrics ? cols * metrics.cellWidth : undefined;
     const pixelHeight = metrics ? rows * metrics.cellHeight : undefined;
+
     // Ghostty-vt is initialized per PTY session
     const result = await createPtySession({ cols, rows, cwd, pixelWidth, pixelHeight });
-    if (result instanceof Error) {
+    if (result instanceof PtySpawnError) {
       console.error('Failed to create PTY:', result.message);
       return '';
     }
@@ -211,7 +213,15 @@ export function createPtyLifecycleHandlers(deps: PtyLifecycleDeps) {
     // TerminalView has its own subscription, so we can defer the context subscription
     setPanePty(paneId, ptyId);
 
-    const exitUnsub = await subscribeToPtyExit(ptyId, paneId, handlePtyExit);
+    const exitUnsubResult = await tryAsync<() => void, Error>({
+      try: () => subscribeToPtyExit(ptyId, paneId, handlePtyExit),
+      catch: () => new Error('Failed to subscribe to PTY exit'),
+    });
+    if (exitUnsubResult instanceof Error) {
+      cleanupPty(ptyId, { paneId, closePane: true, destroy: true });
+      return '';
+    }
+    const exitUnsub = exitUnsubResult;
     unsubscribeFns.set(ptyId, exitUnsub);
 
     // Defer subscription setup to next frame to avoid blocking the render
@@ -220,13 +230,20 @@ export function createPtyLifecycleHandlers(deps: PtyLifecycleDeps) {
       if (!ptyToPaneMap.has(ptyId)) {
         return;
       }
-      const unsub = await subscribeToPtyWithCaches(
-        ptyId,
-        paneId,
-        ptyCaches,
-        handlePtyExit,
-        { cacheScrollState: shouldCacheScrollState, skipExit: true }
-      );
+      const unsubResult = await tryAsync<() => void, Error>({
+        try: () => subscribeToPtyWithCaches(
+          ptyId,
+          paneId,
+          ptyCaches,
+          handlePtyExit,
+          { cacheScrollState: shouldCacheScrollState, skipExit: true }
+        ),
+        catch: () => new Error('Failed to subscribe to PTY'),
+      });
+      if (unsubResult instanceof Error) {
+        return;
+      }
+      const unsub = unsubResult;
       if (!ptyToPaneMap.has(ptyId)) {
         unsub();
         return;
@@ -255,7 +272,7 @@ export function createPtyLifecycleHandlers(deps: PtyLifecycleDeps) {
 
     // Create PTY first (async - this is the expensive part)
     const result = await createPtySession({ cols, rows, cwd, pixelWidth, pixelHeight });
-    if (result instanceof Error) {
+    if (result instanceof PtySpawnError) {
       console.error('Failed to create PTY:', result.message);
       return '';
     }
@@ -267,7 +284,15 @@ export function createPtyLifecycleHandlers(deps: PtyLifecycleDeps) {
     // Track the mapping
     ptyToPaneMap.set(ptyId, paneId);
 
-    const exitUnsub = await subscribeToPtyExit(ptyId, paneId, handlePtyExit);
+    const exitUnsubResult = await tryAsync<() => void, Error>({
+      try: () => subscribeToPtyExit(ptyId, paneId, handlePtyExit),
+      catch: () => new Error('Failed to subscribe to PTY exit'),
+    });
+    if (exitUnsubResult instanceof Error) {
+      cleanupPty(ptyId, { paneId, closePane: true, destroy: true });
+      return '';
+    }
+    const exitUnsub = exitUnsubResult;
     unsubscribeFns.set(ptyId, exitUnsub);
 
     const sessionId = getActiveSessionIdForShim();
@@ -284,13 +309,20 @@ export function createPtyLifecycleHandlers(deps: PtyLifecycleDeps) {
       if (!ptyToPaneMap.has(ptyId)) {
         return;
       }
-      const unsub = await subscribeToPtyWithCaches(
-        ptyId,
-        paneId,
-        ptyCaches,
-        handlePtyExit,
-        { cacheScrollState: shouldCacheScrollState, skipExit: true }
-      );
+      const unsubResult = await tryAsync<() => void, Error>({
+        try: () => subscribeToPtyWithCaches(
+          ptyId,
+          paneId,
+          ptyCaches,
+          handlePtyExit,
+          { cacheScrollState: shouldCacheScrollState, skipExit: true }
+        ),
+        catch: () => new Error('Failed to subscribe to PTY'),
+      });
+      if (unsubResult instanceof Error) {
+        return;
+      }
+      const unsub = unsubResult;
       if (!ptyToPaneMap.has(ptyId)) {
         unsub();
         return;

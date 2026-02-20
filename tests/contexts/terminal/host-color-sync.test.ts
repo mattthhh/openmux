@@ -161,7 +161,7 @@ describe("createHostColorSync", () => {
   });
 
   it("polls fast then schedules full refresh on appearance change", async () => {
-    vi.useFakeTimers();
+    // Use real timers since fake timers struggle with nested async + timer scheduling
     const next = makeColors(0x333333, 0x444444);
     mocks.refreshHostColorsCache.mockResolvedValue(next);
 
@@ -175,9 +175,12 @@ describe("createHostColorSync", () => {
     expect(mocks.appearanceTriggerRef.current).not.toBeNull();
 
     mocks.appearanceTriggerRef.current?.();
-    await vi.runAllTimersAsync();
+    
+    // Wait for debounce (50ms) + palette delay (400ms) + buffer
+    await new Promise(resolve => setTimeout(resolve, 500));
 
-    expect(mocks.refreshHostColorsCache).toHaveBeenCalledWith({ timeoutMs: 200, oscMode: "fast" });
-    expect(mocks.refreshHostColorsCache).toHaveBeenCalledWith({ timeoutMs: 500, oscMode: "full" });
+    expect(mocks.refreshHostColorsCache).toHaveBeenCalledTimes(2);
+    expect(mocks.refreshHostColorsCache).toHaveBeenNthCalledWith(1, { timeoutMs: 200, oscMode: "fast" });
+    expect(mocks.refreshHostColorsCache).toHaveBeenNthCalledWith(2, { timeoutMs: 500, oscMode: "full" });
   });
 });

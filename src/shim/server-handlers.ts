@@ -1,5 +1,6 @@
 import type net from 'net';
 import { dirname } from 'path';
+import { tryAsync } from 'errore';
 
 import { asPtyId } from '../effect/types';
 import { ResourceStack } from '../effect/resources.js';
@@ -14,6 +15,7 @@ import type { ShimServerState } from './server-state';
 import { createRequestHandler } from './server-requests';
 import { sendFrame, sendResponse, sendError } from './server/frames';
 import { createKittyHandlers } from './server/kitty';
+import { ShimConnectionError } from '../effect/errors';
 
 export type WithPty = <A>(fn: (pty: any) => Promise<A> | A) => Promise<A>;
 
@@ -41,7 +43,13 @@ export function createServerHandlers(state: ShimServerState, options?: ShimServe
 
   const applyHostColors = async (colors: TerminalColors): Promise<void> => {
     setHostColors(colors);
-    await withPty((pty) => pty.setHostColors(colors));
+    const result = await tryAsync<void, ShimConnectionError>({
+      try: () => withPty((pty) => pty.setHostColors(colors)),
+      catch: (e) => new ShimConnectionError({ reason: `Failed to apply host colors: ${e}` }),
+    });
+    if (result instanceof ShimConnectionError) {
+      console.warn('Failed to apply host colors:', result.message);
+    }
   };
 
   const sendEvent = (header: ShimHeader, payloads: ArrayBuffer[] = []) => {
@@ -71,59 +79,72 @@ export function createServerHandlers(state: ShimServerState, options?: ShimServe
     state.ptyToPane.delete(ptyId);
   }
 
-  async function subscribeToPty(ptyId: string): Promise<void> {
+  async function subscribeToPty(ptyId: string): Promise<void | ShimConnectionError> {
     if (state.ptySubscriptions.has(ptyId)) return;
 
-    const emulator = await withPty((pty) => pty.getEmulator(asPtyId(ptyId))) as ITerminalEmulator;
-    state.ptyEmulators.set(ptyId, emulator);
+    const emulatorResult = await tryAsync<ITerminalEmulator, ShimConnectionError>({
+      try: () => withPty((pty) => pty.getEmulator(asPtyId(ptyId))) as Promise<ITerminalEmulator>,
+      catch: (e) => new ShimConnectionError({ reason: `Failed to get emulator for PTY ${ptyId}: ${e}` }),
+    });
+    if (emulatorResult instanceof ShimConnectionError) return emulatorResult;
+    
+    state.ptyEmulators.set(ptyId, emulatorResult);
 
-    const unifiedUnsub = await withPty<() => void>((pty) =>
-      pty.subscribeUnified(asPtyId(ptyId), (update: UnifiedTerminalUpdate) => {
-        const packed = packDirtyUpdate(update.terminalUpdate);
-        const payloads: ArrayBuffer[] = [
-          packed.dirtyRowIndices.buffer.slice(0) as ArrayBuffer,
-          packed.dirtyRowData as ArrayBuffer,
-          (packed.fullStateData ?? new ArrayBuffer(0)) as ArrayBuffer,
-        ];
+    const unifiedUnsubResult = await tryAsync<() => void, ShimConnectionError>({
+      try: () => withPty((pty) =>
+        pty.subscribeUnified(asPtyId(ptyId), (update: UnifiedTerminalUpdate) => {
+          const packed = packDirtyUpdate(update.terminalUpdate);
+          const payloads: ArrayBuffer[] = [
+            packed.dirtyRowIndices.buffer.slice(0) as ArrayBuffer,
+            packed.dirtyRowData as ArrayBuffer,
+            (packed.fullStateData ?? new ArrayBuffer(0)) as ArrayBuffer,
+          ];
 
-        const header: ShimHeader = {
-          type: 'ptyUpdate',
-          ptyId,
-          packed: {
-            cursor: packed.cursor,
-            cols: packed.cols,
-            rows: packed.rows,
-            scrollbackLength: packed.scrollbackLength,
-            isFull: packed.isFull,
-            alternateScreen: packed.alternateScreen,
-            mouseTracking: packed.mouseTracking,
-            cursorKeyMode: packed.cursorKeyMode,
-            kittyKeyboardFlags: packed.kittyKeyboardFlags,
-            inBandResize: packed.inBandResize,
-          },
-          scrollState: {
-            viewportOffset: update.scrollState.viewportOffset,
-            isAtBottom: update.scrollState.isAtBottom,
-          },
-          payloadLengths: payloads.map((payload) => payload.byteLength),
-        };
+          const header: ShimHeader = {
+            type: 'ptyUpdate',
+            ptyId,
+            packed: {
+              cursor: packed.cursor,
+              cols: packed.cols,
+              rows: packed.rows,
+              scrollbackLength: packed.scrollbackLength,
+              isFull: packed.isFull,
+              alternateScreen: packed.alternateScreen,
+              mouseTracking: packed.mouseTracking,
+              cursorKeyMode: packed.cursorKeyMode,
+              kittyKeyboardFlags: packed.kittyKeyboardFlags,
+              inBandResize: packed.inBandResize,
+            },
+            scrollState: {
+              viewportOffset: update.scrollState.viewportOffset,
+              isAtBottom: update.scrollState.isAtBottom,
+            },
+            payloadLengths: payloads.map((payload) => payload.byteLength),
+          };
 
-        sendEvent(header, payloads);
-        const kittyEmulator = state.ptyEmulators.get(ptyId);
-        if (kittyEmulator) {
-          sendKittyUpdate(ptyId, kittyEmulator);
-        }
-      })
-    );
+          sendEvent(header, payloads);
+          const kittyEmulator = state.ptyEmulators.get(ptyId);
+          if (kittyEmulator) {
+            sendKittyUpdate(ptyId, kittyEmulator);
+          }
+        })
+      ),
+      catch: (e) => new ShimConnectionError({ reason: `Failed to subscribe to unified updates: ${e}` }),
+    });
+    if (unifiedUnsubResult instanceof ShimConnectionError) return unifiedUnsubResult;
 
-    const exitUnsub = await withPty<() => void>((pty) =>
-      pty.onExit(asPtyId(ptyId), (exitCode: number) => {
-        removeMappingForPty(ptyId);
-        sendEvent({ type: 'ptyExit', ptyId, exitCode });
-      })
-    );
+    const exitUnsubResult = await tryAsync<() => void, ShimConnectionError>({
+      try: () => withPty((pty) =>
+        pty.onExit(asPtyId(ptyId), (exitCode: number) => {
+          removeMappingForPty(ptyId);
+          sendEvent({ type: 'ptyExit', ptyId, exitCode });
+        })
+      ),
+      catch: (e) => new ShimConnectionError({ reason: `Failed to subscribe to exit events: ${e}` }),
+    });
+    if (exitUnsubResult instanceof ShimConnectionError) return exitUnsubResult;
 
-    state.ptySubscriptions.set(ptyId, { unifiedUnsub, exitUnsub });
+    state.ptySubscriptions.set(ptyId, { unifiedUnsub: unifiedUnsubResult, exitUnsub: exitUnsubResult });
   }
 
   async function unsubscribeFromPty(ptyId: string): Promise<void> {
@@ -143,105 +164,151 @@ export function createServerHandlers(state: ShimServerState, options?: ShimServe
     resources.deferSafe(() => { state.kittyTransmitInvalidated.delete(ptyId); });
   }
 
-  async function subscribeAllPtys(): Promise<string[]> {
-    const ptyIds = await withPty((pty) => pty.listAll()) as Array<string>;
-    await Promise.all(ptyIds.map((id) => subscribeToPty(String(id))));
-    return ptyIds;
-  }
+  async function subscribeAllPtys(): Promise<string[] | ShimConnectionError> {
+    const ptyIdsResult = await tryAsync<string[], ShimConnectionError>({
+      try: () => withPty((pty) => pty.listAll()) as Promise<string[]>,
+      catch: (e) => new ShimConnectionError({ reason: `Failed to list PTYs: ${e}` }),
+    });
+    if (ptyIdsResult instanceof ShimConnectionError) return ptyIdsResult;
 
-  async function handleLifecycle(): Promise<void> {
-    state.lifecycleUnsub = await withPty<() => void>((pty) => pty.subscribeToLifecycle((event: { type: 'created' | 'destroyed'; ptyId: string }) => {
-      const ptyId = String(event.ptyId);
-      if (event.type === 'created') {
-        subscribeToPty(ptyId).catch(() => {});
-      } else {
-        unsubscribeFromPty(ptyId).catch(() => {});
-        removeMappingForPty(ptyId);
+    for (const id of ptyIdsResult) {
+      const result = await subscribeToPty(String(id));
+      if (result instanceof ShimConnectionError) {
+        console.warn(`Failed to subscribe to PTY ${id}:`, result.message);
       }
-      sendEvent({ type: 'ptyLifecycle', ptyId, event: event.type });
-    }));
-  }
-
-  async function handleTitles(): Promise<void> {
-    state.titleUnsub = await withPty<() => void>((pty) => pty.subscribeToAllTitleChanges((event: { ptyId: string; title: string }) => {
-      sendEvent({ type: 'ptyTitle', ptyId: String(event.ptyId), title: event.title });
-    }));
-  }
-
-  async function sendSnapshot(ptyId: string): Promise<void> {
-    if (!state.activeClient) return;
-    try {
-      const result = await withPty(async (pty) => {
-        const s = await pty.getTerminalState(asPtyId(ptyId));
-        const scrollState = await pty.getScrollState(asPtyId(ptyId));
-        return { state: s, scrollState };
-      }) as { state: TerminalState; scrollState: TerminalScrollState };
-
-      const update: DirtyTerminalUpdate = {
-        dirtyRows: new Map(),
-        cursor: result.state.cursor,
-        scrollState: result.scrollState,
-        cols: result.state.cols,
-        rows: result.state.rows,
-        isFull: true,
-        fullState: result.state,
-        alternateScreen: result.state.alternateScreen,
-        mouseTracking: result.state.mouseTracking,
-        cursorKeyMode: result.state.cursorKeyMode ?? 'normal',
-        kittyKeyboardFlags: result.state.kittyKeyboardFlags ?? 0,
-        inBandResize: false,
-      };
-
-      const packed = packDirtyUpdate(update);
-      const payloads: ArrayBuffer[] = [
-        packed.dirtyRowIndices.buffer.slice(0) as ArrayBuffer,
-        packed.dirtyRowData as ArrayBuffer,
-        (packed.fullStateData ?? new ArrayBuffer(0)) as ArrayBuffer,
-      ];
-
-      sendEvent({
-        type: 'ptyUpdate',
-        ptyId,
-        packed: {
-          cursor: packed.cursor,
-          cols: packed.cols,
-          rows: packed.rows,
-          scrollbackLength: packed.scrollbackLength,
-          isFull: packed.isFull,
-          alternateScreen: packed.alternateScreen,
-          mouseTracking: packed.mouseTracking,
-          cursorKeyMode: packed.cursorKeyMode,
-          kittyKeyboardFlags: packed.kittyKeyboardFlags,
-          inBandResize: packed.inBandResize,
-        },
-        scrollState: {
-          viewportOffset: result.scrollState.viewportOffset,
-          isAtBottom: result.scrollState.isAtBottom,
-        },
-        payloadLengths: payloads.map((payload) => payload.byteLength),
-      }, payloads);
-
-      const emulator = state.ptyEmulators.get(ptyId) ??
-        await withPty((pty) => pty.getEmulator(asPtyId(ptyId))) as ITerminalEmulator;
-      if (emulator) {
-        state.ptyEmulators.set(ptyId, emulator);
-        const cache = state.kittyTransmitCache.get(ptyId);
-        if (cache && cache.size > 0) {
-          for (const sequences of cache.values()) {
-            for (const seq of sequences) {
-              sendKittyTransmit(ptyId, seq);
-            }
-          }
-        }
-        sendKittyUpdate(ptyId, emulator, true);
-      }
-    } catch {
-      // ignore snapshot errors
     }
+    return ptyIdsResult;
+  }
+
+  async function handleLifecycle(): Promise<void | ShimConnectionError> {
+    const result = await tryAsync<() => void, ShimConnectionError>({
+      try: () => withPty((pty) =>
+        pty.subscribeToLifecycle((event: { type: 'created' | 'destroyed'; ptyId: string }) => {
+          const ptyId = String(event.ptyId);
+          if (event.type === 'created') {
+            subscribeToPty(ptyId).catch((e) => {
+              console.warn(`Failed to subscribe to new PTY ${ptyId}:`, e);
+            });
+          } else {
+            unsubscribeFromPty(ptyId).catch((e) => {
+              console.warn(`Failed to unsubscribe from PTY ${ptyId}:`, e);
+            });
+            removeMappingForPty(ptyId);
+          }
+          sendEvent({ type: 'ptyLifecycle', ptyId, event: event.type });
+        })
+      ),
+      catch: (e) => new ShimConnectionError({ reason: `Failed to subscribe to lifecycle events: ${e}` }),
+    });
+    if (result instanceof ShimConnectionError) return result;
+    state.lifecycleUnsub = result;
+  }
+
+  async function handleTitles(): Promise<void | ShimConnectionError> {
+    const result = await tryAsync<() => void, ShimConnectionError>({
+      try: () => withPty((pty) =>
+        pty.subscribeToAllTitleChanges((event: { ptyId: string; title: string }) => {
+          sendEvent({ type: 'ptyTitle', ptyId: String(event.ptyId), title: event.title });
+        })
+      ),
+      catch: (e) => new ShimConnectionError({ reason: `Failed to subscribe to title changes: ${e}` }),
+    });
+    if (result instanceof ShimConnectionError) return result;
+    state.titleUnsub = result;
+  }
+
+  async function sendSnapshot(ptyId: string): Promise<void | ShimConnectionError> {
+    if (!state.activeClient) return;
+
+    const stateResult = await tryAsync<{
+      state: TerminalState;
+      scrollState: TerminalScrollState;
+    }, ShimConnectionError>({
+      try: async () => {
+        return await withPty(async (pty) => {
+          const s = await pty.getTerminalState(asPtyId(ptyId));
+          const scrollState = await pty.getScrollState(asPtyId(ptyId));
+          return { state: s, scrollState };
+        }) as { state: TerminalState; scrollState: TerminalScrollState };
+      },
+      catch: (e) => new ShimConnectionError({ reason: `Failed to get terminal state: ${e}` }),
+    });
+    if (stateResult instanceof ShimConnectionError) return stateResult;
+
+    const update: DirtyTerminalUpdate = {
+      dirtyRows: new Map(),
+      cursor: stateResult.state.cursor,
+      scrollState: stateResult.scrollState,
+      cols: stateResult.state.cols,
+      rows: stateResult.state.rows,
+      isFull: true,
+      fullState: stateResult.state,
+      alternateScreen: stateResult.state.alternateScreen,
+      mouseTracking: stateResult.state.mouseTracking,
+      cursorKeyMode: stateResult.state.cursorKeyMode ?? 'normal',
+      kittyKeyboardFlags: stateResult.state.kittyKeyboardFlags ?? 0,
+      inBandResize: false,
+    };
+
+    const packed = packDirtyUpdate(update);
+    const payloads: ArrayBuffer[] = [
+      packed.dirtyRowIndices.buffer.slice(0) as ArrayBuffer,
+      packed.dirtyRowData as ArrayBuffer,
+      (packed.fullStateData ?? new ArrayBuffer(0)) as ArrayBuffer,
+    ];
+
+    sendEvent({
+      type: 'ptyUpdate',
+      ptyId,
+      packed: {
+        cursor: packed.cursor,
+        cols: packed.cols,
+        rows: packed.rows,
+        scrollbackLength: packed.scrollbackLength,
+        isFull: packed.isFull,
+        alternateScreen: packed.alternateScreen,
+        mouseTracking: packed.mouseTracking,
+        cursorKeyMode: packed.cursorKeyMode,
+        kittyKeyboardFlags: packed.kittyKeyboardFlags,
+        inBandResize: packed.inBandResize,
+      },
+      scrollState: {
+        viewportOffset: stateResult.scrollState.viewportOffset,
+        isAtBottom: stateResult.scrollState.isAtBottom,
+      },
+      payloadLengths: payloads.map((payload) => payload.byteLength),
+    }, payloads);
+
+    let emulator = state.ptyEmulators.get(ptyId);
+    if (!emulator) {
+      const emulatorResult = await tryAsync<ITerminalEmulator, ShimConnectionError>({
+        try: () => withPty((pty) => pty.getEmulator(asPtyId(ptyId))) as Promise<ITerminalEmulator>,
+        catch: (e) => new ShimConnectionError({ reason: `Failed to get emulator: ${e}` }),
+      });
+      if (emulatorResult instanceof ShimConnectionError) return emulatorResult;
+      emulator = emulatorResult;
+      state.ptyEmulators.set(ptyId, emulator);
+    }
+
+    const cache = state.kittyTransmitCache.get(ptyId);
+    if (cache && cache.size > 0) {
+      for (const sequences of cache.values()) {
+        for (const seq of sequences) {
+          sendKittyTransmit(ptyId, seq);
+        }
+      }
+    }
+    sendKittyUpdate(ptyId, emulator, true);
   }
 
   async function sendSnapshots(ptyIds: string[]): Promise<void> {
-    await Promise.all(ptyIds.map((ptyId) => sendSnapshot(ptyId)));
+    const results = await Promise.allSettled(ptyIds.map((ptyId) => sendSnapshot(ptyId)));
+    for (let i = 0; i < results.length; i++) {
+      const result = results[i];
+      if (result.status === 'rejected') {
+        console.warn(`Failed to send snapshot for PTY ${ptyIds[i]}:`, result.reason);
+      }
+    }
   }
 
   async function attachClient(socket: net.Socket, clientId: string): Promise<void> {
@@ -279,10 +346,24 @@ export function createServerHandlers(state: ShimServerState, options?: ShimServe
         subtitle: event.subtitle,
       });
     });
-    const ptyIds = await subscribeAllPtys();
-    await handleLifecycle();
-    await handleTitles();
-    await sendSnapshots(ptyIds);
+
+    const ptyIdsResult = await subscribeAllPtys();
+    if (ptyIdsResult instanceof ShimConnectionError) {
+      console.warn('Failed to subscribe to PTYs:', ptyIdsResult.message);
+      return;
+    }
+
+    const lifecycleResult = await handleLifecycle();
+    if (lifecycleResult instanceof ShimConnectionError) {
+      console.warn('Failed to subscribe to lifecycle:', lifecycleResult.message);
+    }
+
+    const titlesResult = await handleTitles();
+    if (titlesResult instanceof ShimConnectionError) {
+      console.warn('Failed to subscribe to titles:', titlesResult.message);
+    }
+
+    await sendSnapshots(ptyIdsResult);
   }
 
   async function detachClient(socket: net.Socket): Promise<void> {
@@ -297,7 +378,9 @@ export function createServerHandlers(state: ShimServerState, options?: ShimServe
     setNotificationForwarder(null);
 
     for (const ptyId of state.ptySubscriptions.keys()) {
-      resources.defer(() => unsubscribeFromPty(ptyId).catch(() => {}));
+      resources.defer(() => unsubscribeFromPty(ptyId).catch((e) => {
+        console.warn(`Failed to unsubscribe from PTY ${ptyId} during detach:`, e);
+      }));
     }
     resources.deferSafe(() => state.ptySubscriptions.clear());
 

@@ -7,6 +7,7 @@ import type { Pointer } from "bun:ffi";
 import { ghostty } from "./ghostty-vt/ffi";
 import type { ITerminalEmulator } from "./emulator-interface";
 import type { KeyboardEvent } from "../core/keyboard-event";
+import { ValidationError } from "../effect/errors";
 
 type KeyEncoderOptions = {
   cursorKeyApplication: boolean;
@@ -358,19 +359,22 @@ function resolveUnshiftedCodepoint(event: KeyboardEvent): number {
   return char.codePointAt(0) ?? 0;
 }
 
-function getModeSafe(emulator: ITerminalEmulator, mode: number): boolean {
+function getModeSafe(emulator: ITerminalEmulator, mode: number): boolean | ValidationError {
   try {
     return emulator.getMode(mode);
-  } catch {
-    return false;
+  } catch (e) {
+    return new ValidationError({ reason: String(e) });
   }
 }
 
 function getEncoderOptions(emulator: ITerminalEmulator): KeyEncoderOptions {
+  const keypadResult = getModeSafe(emulator, 66);
+  const ignoreNumlockResult = getModeSafe(emulator, 1035);
+  
   return {
     cursorKeyApplication: emulator.getCursorKeyMode() === "application",
-    keypadKeyApplication: getModeSafe(emulator, 66),
-    ignoreKeypadWithNumlock: getModeSafe(emulator, 1035),
+    keypadKeyApplication: keypadResult instanceof ValidationError ? false : keypadResult,
+    ignoreKeypadWithNumlock: ignoreNumlockResult instanceof ValidationError ? false : ignoreNumlockResult,
     altEscPrefix: true,
     modifyOtherKeysState2: false,
     kittyFlags: emulator.getKittyKeyboardFlags(),

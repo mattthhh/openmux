@@ -4,6 +4,9 @@
  * when rendering terminal content.
  */
 
+import { tryAsync } from "errore";
+import { ValidationError } from "../../effect/errors";
+
 /**
  * Check if a codepoint is valid and renderable.
  * Filters out null, replacement chars, surrogates, control chars, and invalid Unicode.
@@ -180,28 +183,46 @@ export function codepointToChar(codepoint: number, isInvisible: boolean = false)
     return String.fromCharCode(cp);
   } else if (cp >= 0x10000 && cp <= 0xcffff) {
     // Planes 1-12 (skip Plane 13 - unassigned, ghostty-vt returns garbage here)
-    try {
-      return String.fromCodePoint(cp);
-    } catch {
-      return ' ';
-    }
+    return tryFromCodePoint(cp);
   } else if (cp >= 0xe0000 && cp <= 0xeffff) {
     // Plane 14: SSP (tags, variation selectors supplement)
-    try {
-      return String.fromCodePoint(cp);
-    } catch {
-      return ' ';
-    }
+    return tryFromCodePoint(cp);
   } else if (cp >= 0xf0000 && cp <= 0xfffff) {
     // Plane 15: PUA-A (Supplementary Private Use Area A - file icons)
-    try {
-      return String.fromCodePoint(cp);
-    } catch {
-      return ' ';
-    }
+    return tryFromCodePoint(cp);
   }
 
   // Implicitly skip: DEL (0x7F), C1 controls (0x80-0x9F), surrogates (0xD800-0xDFFF),
   // replacement char (0xFFFD), non-characters, Plane 13 + Plane 16 (ghostty-vt bug)
   return ' ';
+}
+
+/**
+ * Try to convert a codepoint to a string, returning space on failure.
+ * This uses the errore pattern with early return.
+ */
+function tryFromCodePoint(codepoint: number): string {
+  const result = tryAsyncSync<string, ValidationError>({
+    try: () => String.fromCodePoint(codepoint),
+    catch: (e) => new ValidationError({ reason: `Invalid codepoint ${codepoint}: ${String(e)}` }),
+  });
+  
+  if (result instanceof ValidationError) {
+    return ' ';
+  }
+  return result;
+}
+
+/**
+ * Synchronous version of tryAsync for use in synchronous functions.
+ */
+function tryAsyncSync<T, E extends Error>(options: {
+  try: () => T;
+  catch: (error: unknown) => E;
+}): T | E {
+  try {
+    return options.try();
+  } catch (e) {
+    return options.catch(e);
+  }
 }

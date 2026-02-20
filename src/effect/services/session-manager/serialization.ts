@@ -3,6 +3,7 @@
  * Migrated from Effect to errore - uses plain functions
  */
 
+import { tryAsync } from "errore"
 import type { WorkspaceLayoutNode, WorkspaceState } from "./types"
 import type { SessionMetadata } from "../../models"
 import type {
@@ -12,6 +13,7 @@ import type {
   SerializedSplitNode,
   SerializedLayoutNode,
 } from "../../models"
+import { PtyCwdError } from "../../errors"
 import { makeWorkspaceId } from "../../types"
 
 function isSplitNode(node: WorkspaceLayoutNode): node is Extract<WorkspaceLayoutNode, { type: "split" }> {
@@ -98,12 +100,12 @@ export async function collectCwdMap(
 
     for (const pane of panes) {
       if (!pane.ptyId) continue
-      try {
-        const cwd = await getCwd(pane.ptyId)
-        cwdMap.set(pane.ptyId, cwd)
-      } catch {
-        cwdMap.set(pane.ptyId, fallbackCwd)
-      }
+      const cwdResult = await tryAsync<string, PtyCwdError>({
+        try: () => getCwd(pane.ptyId!),
+        catch: (e) => new PtyCwdError({ ptyId: pane.ptyId!, reason: String(e) }),
+      })
+      const cwd = cwdResult instanceof PtyCwdError ? fallbackCwd : cwdResult
+      cwdMap.set(pane.ptyId, cwd)
     }
   }
 

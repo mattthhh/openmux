@@ -4,12 +4,26 @@
  */
 
 import { watch } from "fs"
+import { tryAsync } from "errore"
 import {
   getRepoStatusAsync,
   getDiffStatsAsync,
   type GitDiffStats as NativeGitDiffStats,
   type GitRepoState,
 } from "../../../../native/zig-git/ts/index"
+import { createTaggedError } from "errore"
+
+/** Git watcher setup error */
+class GitWatcherError extends createTaggedError({
+  name: "GitWatcherError",
+  message: "Git watcher setup failed for $gitDir: $reason",
+}) {}
+
+/** Git info fetch error */
+class GitInfoError extends createTaggedError({
+  name: "GitInfoError",
+  message: "Git info fetch failed for $cwd: $reason",
+}) {}
 
 export interface GitInfo {
   branch: string | undefined
@@ -276,25 +290,27 @@ export async function getGitInfo(
   cwd: string,
   options?: { force?: boolean; maxAgeMs?: number }
 ): Promise<GitInfo | undefined> {
-  try {
-    const entry = await getRepoEntry(cwd, options)
-    if (!entry) return undefined
-    return {
-      branch: entry.branch,
-      dirty: entry.dirty,
-      staged: entry.staged,
-      unstaged: entry.unstaged,
-      untracked: entry.untracked,
-      conflicted: entry.conflicted,
-      ahead: entry.ahead,
-      behind: entry.behind,
-      stashCount: entry.stashCount,
-      state: entry.state,
-      detached: entry.detached,
-      repoKey: entry.key,
-    }
-  } catch {
-    return undefined
+  const entryResult = await tryAsync<RepoEntry | null, GitInfoError>({
+    try: () => getRepoEntry(cwd, options),
+    catch: (e) => new GitInfoError({ cwd, reason: String(e) }),
+  })
+
+  if (entryResult instanceof GitInfoError) return undefined
+  if (!entryResult) return undefined
+
+  return {
+    branch: entryResult.branch,
+    dirty: entryResult.dirty,
+    staged: entryResult.staged,
+    unstaged: entryResult.unstaged,
+    untracked: entryResult.untracked,
+    conflicted: entryResult.conflicted,
+    ahead: entryResult.ahead,
+    behind: entryResult.behind,
+    stashCount: entryResult.stashCount,
+    state: entryResult.state,
+    detached: entryResult.detached,
+    repoKey: entryResult.key,
   }
 }
 
@@ -311,25 +327,26 @@ export async function getGitBranch(cwd: string): Promise<string | undefined> {
  * Includes untracked changes and binary file count.
  */
 export async function getGitDiffStats(cwd: string): Promise<GitDiffStats | undefined> {
-  try {
-    const entry = await getRepoEntry(cwd)
-    if (!entry) return undefined
+  const entryResult = await tryAsync<RepoEntry | null, GitInfoError>({
+    try: () => getRepoEntry(cwd),
+    catch: (e) => new GitInfoError({ cwd, reason: String(e) }),
+  })
 
-    entry.lastAccess = Date.now()
-    if (entry.diffInFlight) return entry.diffInFlight
+  if (entryResult instanceof GitInfoError) return undefined
+  if (!entryResult) return undefined
 
-    entry.diffInFlight = getDiffStatsAsync(cwd).then((stats: NativeGitDiffStats | null) => {
-      entry.diffInFlight = undefined
-      if (!stats || (stats.added === 0 && stats.removed === 0 && stats.binary === 0)) {
-        entry.diffStats = undefined
-        return undefined
-      }
-      entry.diffStats = stats
-      return stats
-    })
+  entryResult.lastAccess = Date.now()
+  if (entryResult.diffInFlight) return entryResult.diffInFlight
 
-    return entry.diffInFlight
-  } catch {
-    return undefined
-  }
+  entryResult.diffInFlight = getDiffStatsAsync(cwd).then((stats: NativeGitDiffStats | null) => {
+    entryResult.diffInFlight = undefined
+    if (!stats || (stats.added === 0 && stats.removed === 0 && stats.binary === 0)) {
+      entryResult.diffStats = undefined
+      return undefined
+    }
+    entryResult.diffStats = stats
+    return stats
+  })
+
+  return entryResult.diffInFlight
 }

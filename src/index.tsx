@@ -2,7 +2,21 @@
  * Terminal multiplexer with master-stack layout
  */
 
+import { tryAsync, tryFn as trySync } from 'errore';
+import { createTaggedError } from 'errore';
 import { getCliVersion } from './cli/version';
+
+/** Error during application startup */
+export class StartupError extends createTaggedError({
+  name: 'StartupError',
+  message: 'Failed to start openmux: $reason',
+}) {}
+
+/** Error writing startup error log */
+export class StartupLogError extends createTaggedError({
+  name: 'StartupLogError',
+  message: 'Failed to write startup error log: $reason',
+}) {}
 
 async function handleCliFlags(): Promise<boolean> {
   const args = process.argv.slice(2);
@@ -24,6 +38,113 @@ async function runShimIfRequested(): Promise<boolean> {
   return true;
 }
 
+async function initializeAndRender(): Promise<StartupError | void> {
+  const { initializeServices } = await import('./effect/services');
+  const { setServices } = await import('./effect/bridge/services-instance');
+  const services = await initializeServices();
+  if (services instanceof Error) {
+    return new StartupError({ reason: `Failed to initialize services: ${services.message}` });
+  }
+  setServices(services);
+
+  const { render, useRenderer } = await import('@opentui/solid');
+  const { ConsolePosition } = await import('@opentui/core');
+  const { App } = await import('./App');
+  const { detectHostCapabilities } = await import('./terminal');
+  const { onMount, onCleanup } = await import('solid-js');
+  const { createPasteInterceptingStdin } = await import('./terminal/paste-intercepting-stdin');
+  const { triggerClipboardPaste } = await import('./terminal/focused-pty-registry');
+  const { setHostSequenceWriter, writeHostSequence } = await import('./terminal/host-output');
+
+  function AppWithSetup() {
+    const renderer = useRenderer();
+
+    onMount(() => {
+      setHostSequenceWriter((sequence) => {
+        const stdout = (renderer as any).stdout ?? process.stdout;
+        const writeOut = (renderer as any).realStdoutWrite ?? stdout.write.bind(stdout);
+        writeOut.call(stdout, sequence);
+        if (stdout.isTTY) {
+          (stdout as any)._handle?.flush?.();
+        }
+      });
+      renderer.enableKittyKeyboard(3);
+      writeHostSequence('\x1b[=3;1u');
+      writeHostSequence('\x1b[?1004h');
+      writeHostSequence('\x1b[?2031h');
+    });
+
+    onCleanup(() => {
+      writeHostSequence('\x1b[?1004l');
+      writeHostSequence('\x1b[?2031l');
+      setHostSequenceWriter(null);
+    });
+
+    return <App />;
+  }
+
+  const hostCaps = await detectHostCapabilities();
+  const useThreadEnv = (process.env.OPENMUX_RENDER_USE_THREAD ?? '').toLowerCase();
+  const useThread =
+    useThreadEnv === '1' || useThreadEnv === 'true'
+      ? true
+      : useThreadEnv === '0' || useThreadEnv === 'false'
+        ? false
+        : !hostCaps.kittyGraphics;
+
+  const interceptingStdin = createPasteInterceptingStdin(
+    process.stdin,
+    {
+      onPasteTriggered: () => {
+        triggerClipboardPaste();
+      },
+    }
+  );
+
+  const renderResult = await tryAsync<void, StartupError>({
+    try: async () => {
+      await render(() => <AppWithSetup />, {
+        stdin: interceptingStdin,
+        exitOnCtrlC: false,
+        exitSignals: ['SIGTERM', 'SIGQUIT', 'SIGABRT'],
+        useMouse: true,
+        enableMouseMovement: true,
+        useConsole: true,
+        useKittyKeyboard: { events: true },
+        useThread,
+        consoleOptions: {
+          position: ConsolePosition.BOTTOM,
+          sizePercent: 30,
+        },
+      });
+    },
+    catch: (e) => new StartupError({ reason: e instanceof Error ? e.message : String(e) }),
+  });
+
+  return renderResult instanceof StartupError ? renderResult : undefined;
+}
+
+async function writeStartupErrorLog(error: unknown): Promise<void> {
+  const fs = await import('node:fs');
+  const path = await import('node:path');
+  const home = process.env.HOME ?? process.env.USERPROFILE ?? process.cwd();
+  const base = process.env.XDG_CONFIG_HOME ?? path.join(home, '.config');
+  const dir = path.join(base, 'openmux');
+  const logPath = path.join(dir, 'startup-error.log');
+  const message = error instanceof Error ? (error.stack ?? error.message) : String(error);
+
+  const mkdirResult = trySync<void, StartupLogError>({
+    try: () => fs.mkdirSync(dir, { recursive: true }),
+    catch: (e: unknown) => new StartupLogError({ reason: String(e) }),
+  });
+  if (mkdirResult instanceof StartupLogError) return;
+
+  trySync<void, StartupLogError>({
+    try: () => fs.writeFileSync(logPath, `${message}\n`, 'utf8'),
+    catch: () => new StartupLogError({ reason: 'Write failed' }),
+  });
+}
+
 async function main() {
   if (await handleCliFlags()) {
     return;
@@ -42,121 +163,10 @@ async function main() {
     process.env.OPENMUX_START_SESSION = cliOutcome.session;
   }
 
-  try {
-    // Initialize services first
-    const { initializeServices } = await import('./effect/services');
-    const { setServices } = await import('./effect/bridge/services-instance');
-    const services = await initializeServices();
-    if (services instanceof Error) {
-      throw new Error(`Failed to initialize services: ${services.message}`);
-    }
-    setServices(services);
-
-    const { render, useRenderer } = await import('@opentui/solid');
-    const { ConsolePosition } = await import('@opentui/core');
-    const { App } = await import('./App');
-    const { detectHostCapabilities } = await import('./terminal');
-    const { onMount, onCleanup } = await import('solid-js');
-    const { createPasteInterceptingStdin } = await import('./terminal/paste-intercepting-stdin');
-    const { triggerClipboardPaste } = await import('./terminal/focused-pty-registry');
-    const { setHostSequenceWriter, writeHostSequence } = await import('./terminal/host-output');
-
-    // Wrapper component that handles kitty keyboard setup after render
-    function AppWithSetup() {
-      const renderer = useRenderer();
-
-      onMount(() => {
-        setHostSequenceWriter((sequence) => {
-          const stdout = (renderer as any).stdout ?? process.stdout;
-          const writeOut = (renderer as any).realStdoutWrite ?? stdout.write.bind(stdout);
-          writeOut.call(stdout, sequence);
-          if (stdout.isTTY) {
-            (stdout as any)._handle?.flush?.();
-          }
-        });
-        // Enable kitty keyboard protocol AFTER renderer setup
-        // Flag 1 = disambiguate escape codes (detect Alt+key without breaking regular input)
-        // Flag 2 = report key releases/repeats
-        // Flag 8 was too aggressive - it reports ALL keys as escape codes, breaking shift
-        // Must be done after createCliRenderer since setupTerminal() resets modes
-        // See: https://sw.kovidgoyal.net/kitty/keyboard-protocol/
-        renderer.enableKittyKeyboard(3);
-        // Use set mode to ensure report_events is enabled in Ghostty.
-        writeHostSequence('\x1b[=3;1u');
-        // Enable focus-in/out events from the host terminal.
-        writeHostSequence('\x1b[?1004h');
-        // Enable color scheme reporting (Ghostty mode 2031).
-        writeHostSequence('\x1b[?2031h');
-      });
-
-      onCleanup(() => {
-        // Disable focus tracking so we don't pollute the parent shell.
-        writeHostSequence('\x1b[?1004l');
-        writeHostSequence('\x1b[?2031l');
-        setHostSequenceWriter(null);
-      });
-
-      return <App />;
-    }
-
-    // Prime host capabilities (including color query) before the renderer takes over stdin
-    const hostCaps = await detectHostCapabilities();
-    const useThreadEnv = (process.env.OPENMUX_RENDER_USE_THREAD ?? '').toLowerCase();
-    const useThread =
-      useThreadEnv === '1' || useThreadEnv === 'true'
-        ? true
-        : useThreadEnv === '0' || useThreadEnv === 'false'
-          ? false
-          : !hostCaps.kittyGraphics;
-
-    // Create paste-intercepting stdin wrapper
-    // This intercepts bracketed paste sequences at the raw Buffer level (before UTF-8 encoding)
-    // and triggers clipboard read instead of using unreliable stdin paste data
-    const interceptingStdin = createPasteInterceptingStdin(
-      process.stdin,
-      {
-        onPasteTriggered: () => {
-          // Trigger clipboard read and PTY write
-          // App.tsx registers the handler which:
-          // - Reads from system clipboard (always complete, no chunking issues)
-          // - Checks if child app has mode 2004 enabled
-          // - Wraps with bracketed paste markers if needed
-          // - Writes atomically to PTY
-          triggerClipboardPaste();
-        },
-      }
-    );
-
-    // Render the app with Solid - render creates the renderer internally
-    await render(() => <AppWithSetup />, {
-      stdin: interceptingStdin,
-      exitOnCtrlC: false,
-      exitSignals: ['SIGTERM', 'SIGQUIT', 'SIGABRT'], // No SIGINT - let Ctrl+C go to PTY
-      useMouse: true, // Enable mouse tracking to properly consume mouse escape sequences
-      enableMouseMovement: true, // Track mouse movement for drag and hover events
-      useConsole: true, // Enable debug console (toggle with prefix + `)
-      useKittyKeyboard: { events: true },
-      useThread,
-      consoleOptions: {
-        position: ConsolePosition.BOTTOM,
-        sizePercent: 30,
-      },
-    });
-  } catch (error) {
-    console.error('Failed to start openmux:', error);
-    try {
-      const fs = await import('node:fs');
-      const path = await import('node:path');
-      const home = process.env.HOME ?? process.env.USERPROFILE ?? process.cwd();
-      const base = process.env.XDG_CONFIG_HOME ?? path.join(home, '.config');
-      const dir = path.join(base, 'openmux');
-      const logPath = path.join(dir, 'startup-error.log');
-      const message = error instanceof Error ? (error.stack ?? error.message) : String(error);
-      fs.mkdirSync(dir, { recursive: true });
-      fs.writeFileSync(logPath, `${message}\n`, 'utf8');
-    } catch {
-      // Best-effort logging only.
-    }
+  const result = await initializeAndRender();
+  if (result instanceof StartupError) {
+    console.error('Failed to start openmux:', result);
+    await writeStartupErrorLog(result);
     process.exit(1);
   }
 }
