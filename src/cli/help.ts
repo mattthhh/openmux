@@ -1,6 +1,7 @@
 export type HelpTopic =
   | 'root'
   | 'attach'
+  | 'update'
   | 'session'
   | 'session.list'
   | 'session.create'
@@ -26,6 +27,7 @@ const ROOT_HELP = (version?: string): string[] => [
   '',
   'Commands:',
   '  attach           Steal and attach to the UI (default).',
+  '  update           Check for and install new releases.',
   '  session          List/create sessions (disk-backed).',
   '  pane             Control panes in the active UI.',
   '',
@@ -59,6 +61,24 @@ const ATTACH_HELP = (version?: string): string[] => [
   '',
   'Options:',
   '  --session <name|id>   Start in a specific session (creates if missing).',
+];
+
+const UPDATE_HELP = (version?: string): string[] => [
+  formatHeader('update', version),
+  '',
+  'Usage:',
+  '  openmux update [--yes] [--prerelease]',
+  '',
+  'Description:',
+  '  Checks GitHub Releases and installs a newer openmux release when available.',
+  '',
+  'Options:',
+  '  --yes           Skip confirmation prompt.',
+  '  --prerelease    Include prerelease tags when selecting latest version.',
+  '',
+  'Notes:',
+  '  Only managed installs are supported ($XDG_DATA_HOME/openmux).',
+  '  In non-interactive mode, pass --yes.',
 ];
 
 const SESSION_HELP = (version?: string): string[] => [
@@ -170,6 +190,7 @@ const PANE_CAPTURE_HELP = (version?: string): string[] => [
 const HELP_TOPICS: Record<HelpTopic, (version?: string) => string[]> = {
   root: ROOT_HELP,
   attach: ATTACH_HELP,
+  update: UPDATE_HELP,
   session: SESSION_HELP,
   'session.list': SESSION_LIST_HELP,
   'session.create': SESSION_CREATE_HELP,

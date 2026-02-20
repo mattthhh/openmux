@@ -9,6 +9,7 @@ type PaneCommandBase = {
 export type CliCommand =
   | { kind: 'help'; topic: HelpTopic }
   | { kind: 'attach'; session?: string }
+  | { kind: 'update'; yes: boolean; prerelease: boolean }
   | { kind: 'session.list'; json: boolean }
   | { kind: 'session.create'; name?: string }
   | ({ kind: 'pane.split'; direction: 'horizontal' | 'vertical' } & PaneCommandBase)
@@ -35,6 +36,7 @@ function resolveHelpTopic(args: string[]): HelpTopic {
 
   if (!first) return 'root';
   if (first === 'attach') return 'attach';
+  if (first === 'update') return 'update';
   if (first === 'session') {
     if (second === 'list') return 'session.list';
     if (second === 'create') return 'session.create';
@@ -211,6 +213,25 @@ function parseSession(args: string[]): ParseResult {
   return { ok: false, error: 'Unknown session command.' };
 }
 
+function parseUpdate(args: string[]): ParseResult {
+  let yes = false;
+  let prerelease = false;
+
+  for (const arg of args) {
+    if (arg === '--yes') {
+      yes = true;
+      continue;
+    }
+    if (arg === '--prerelease') {
+      prerelease = true;
+      continue;
+    }
+    return { ok: false, error: `Unknown argument: ${arg}` };
+  }
+
+  return { ok: true, command: { kind: 'update', yes, prerelease } };
+}
+
 function parsePaneSplit(args: string[]): ParseResult {
   let direction: 'horizontal' | 'vertical' | null = null;
   let workspaceId: number | undefined;
@@ -378,6 +399,10 @@ export function parseCliArgs(args: string[]): ParseResult {
 
   if (command === 'session') {
     return parseSession(rest);
+  }
+
+  if (command === 'update') {
+    return parseUpdate(rest);
   }
 
   if (command === 'pane') {

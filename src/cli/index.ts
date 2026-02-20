@@ -3,6 +3,7 @@ import { formatHelp } from './help';
 import { parseCliArgs, type CliCommand } from './parse';
 import { getCliVersion } from './version';
 import { createSessionOnDisk, listSessionsOnDisk } from './session-store';
+import { runUpdateCommand } from './update';
 
 const EXIT_SUCCESS = 0;
 const EXIT_USAGE = 2;
@@ -180,6 +181,8 @@ export async function runCli(args: string[]): Promise<CliOutcome> {
     }
     case 'attach':
       return { kind: 'attach', session: command.session };
+    case 'update':
+      return runUpdateCommand(command);
     case 'session.list':
       return runSessionList(command.json);
     case 'session.create':

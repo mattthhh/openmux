@@ -22,6 +22,27 @@ describe('cli parser', () => {
     expect(result).toEqual({ ok: true, command: { kind: 'attach', session: 'dev' } });
   });
 
+  test('parses update', () => {
+    const result = parseCliArgs(['update']);
+    expect(result).toEqual({
+      ok: true,
+      command: { kind: 'update', yes: false, prerelease: false },
+    });
+  });
+
+  test('parses update flags', () => {
+    const result = parseCliArgs(['update', '--yes', '--prerelease']);
+    expect(result).toEqual({
+      ok: true,
+      command: { kind: 'update', yes: true, prerelease: true },
+    });
+  });
+
+  test('parses update help topic', () => {
+    const result = parseCliArgs(['update', '--help']);
+    expect(result).toEqual({ ok: true, command: { kind: 'help', topic: 'update' } });
+  });
+
   test('parses session list --json', () => {
     const result = parseCliArgs(['session', 'list', '--json']);
     expect(result).toEqual({ ok: true, command: { kind: 'session.list', json: true } });
@@ -77,6 +98,11 @@ describe('cli parser', () => {
 
   test('reports missing direction', () => {
     const result = parseCliArgs(['pane', 'split']);
+    expect(result.ok).toBe(false);
+  });
+
+  test('reports unknown update argument', () => {
+    const result = parseCliArgs(['update', '--force']);
     expect(result.ok).toBe(false);
   });
 });
