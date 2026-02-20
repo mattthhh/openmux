@@ -2,6 +2,39 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.1](https://github.com/monotykamary/openmux/compare/v0.3.0...v0.3.1) (2026-02-20)
+
+
+### Bug Fixes
+
+* **resources:** add proper cleanup for long-running sessions ([647da47](https://github.com/monotykamary/openmux/commit/647da47f6aa699b1f5c84ff024726caaf219af58))
+* **stream-utils:** prevent infinite loop in debounce function ([35b88fa](https://github.com/monotykamary/openmux/commit/35b88fa1623db99d0b91614b462e6db2665a33e1))
+
+
+### Refactoring
+
+* **effect:** convert all try-catch to errore patterns with early returns ([e03563c](https://github.com/monotykamary/openmux/commit/e03563c93a4b231ef913255a9af27c66076588be))
+* **effect:** convert try-catch to errore patterns with early returns ([8ba3e01](https://github.com/monotykamary/openmux/commit/8ba3e01dc93569644323da169294372d153207e5))
+* **effect:** replace Effect Stream with native async iterables ([9bba212](https://github.com/monotykamary/openmux/commit/9bba212feb02df808ce329e6fda535b9becbc6b1))
+
+
+### Styling
+
+* fix lint errors ([96cfdad](https://github.com/monotykamary/openmux/commit/96cfdada438f7cfb660bf626a0eef778fb353f0f))
+
+
+### CI/CD
+
+* build native libraries before running TypeScript tests ([4921b94](https://github.com/monotykamary/openmux/commit/4921b94af53326aff4d5fabb81b882c640300c00))
+* cache native library builds to speed up CI ([66c91a4](https://github.com/monotykamary/openmux/commit/66c91a4c855862fa225dab1516f4a5ceb8443af6))
+
+
+### Tests
+
+* fix TypeScript errors in session-factory tests ([3335b62](https://github.com/monotykamary/openmux/commit/3335b624f825a32ca4b2f25447d74fc351264061))
+* remove process.env.CI bypass flags ([4e07e65](https://github.com/monotykamary/openmux/commit/4e07e6585938785f439a5c42e007785f3e48b467))
+* **stream-utils:** add comprehensive test coverage for async iterables ([8a68ff2](https://github.com/monotykamary/openmux/commit/8a68ff2dfcb5e20ebae77a3611d9bdad455cd076))
+
 ## [0.3.0](https://github.com/monotykamary/openmux/compare/v0.2.134...v0.3.0) (2026-02-20)
 
 
