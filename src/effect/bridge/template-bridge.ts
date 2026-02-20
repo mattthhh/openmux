@@ -50,7 +50,18 @@ export async function loadTemplate(id: string): Promise<TemplateSession | null> 
 export async function listTemplatesWithService(storage: TemplateStorage): Promise<TemplateSession[]> {
   const result = await storage.listTemplates()
   if (result instanceof Error) return []
-  return result as unknown as TemplateSession[]
+
+  const metadata = result
+  const templates: TemplateSession[] = []
+
+  for (const m of metadata) {
+    const template = await storage.loadTemplate(m.id)
+    if (template && !(template instanceof Error)) {
+      templates.push(template)
+    }
+  }
+
+  return templates
 }
 
 /** Save template with a specific service */
