@@ -17,6 +17,20 @@ import {
 import { SessionStorageError, SessionNotFoundError, SessionCorruptedError } from '../effect/errors';
 import { ResourceStack } from '../effect/resources.js';
 
+/** AsyncDisposable guard for switching state */
+class SwitchingGuard implements AsyncDisposable {
+  constructor(
+    private dispatch: (action: SessionAction) => void,
+    private isActive: boolean
+  ) {}
+
+  async [Symbol.asyncDispose](): Promise<void> {
+    if (this.isActive) {
+      this.dispatch({ type: 'SET_SWITCHING', switching: false });
+    }
+  }
+}
+
 export interface SessionOperationsParams {
   getState: () => SessionState;
   dispatch: (action: SessionAction) => void;
@@ -127,41 +141,38 @@ export function createSessionOperations(params: SessionOperationsParams) {
     resources.defer(() => {
       dispatch({ type: 'CLOSE_SESSION_PICKER' });
     });
+    await using _switchingGuard = new SwitchingGuard(dispatch, true);
 
-    try {
-      // Load new session
-      const switchResult = await switchToSession(id);
-      if (switchResult instanceof SessionNotFoundError || switchResult instanceof SessionCorruptedError || switchResult instanceof SessionStorageError) {
-        console.error('Failed to switch to session:', switchResult.message);
-        return;
-      }
-      const data = await loadSessionData(id);
-
-      if (data) {
-        dispatch({ type: 'SET_ACTIVE_SESSION', id, session: data.metadata });
-        // IMPORTANT: Await onSessionLoad to ensure CWD map is set before switching completes
-        await onSessionLoad(
-          data.workspaces,
-          data.activeWorkspaceId,
-          data.cwdMap,
-          new Map(),
-          id,
-          { allowPrune: true }
-        );
-      } else {
-        // Load failure - keep layout consistent by clearing to an empty session
-        const fallbackSession = state.sessions.find((session) => session.id === id);
-        if (fallbackSession) {
-          dispatch({ type: 'SET_ACTIVE_SESSION', id, session: fallbackSession });
-        }
-        await onSessionLoad({}, 1, new Map(), new Map(), id, { allowPrune: false });
-      }
-
-      await refreshSessions();
-    } finally {
-      // Mark switching complete
-      dispatch({ type: 'SET_SWITCHING', switching: false });
+    // Load new session
+    const switchResult = await switchToSession(id);
+    if (switchResult instanceof SessionNotFoundError || switchResult instanceof SessionCorruptedError || switchResult instanceof SessionStorageError) {
+      console.error('Failed to switch to session:', switchResult.message);
+      return;
     }
+    const data = await loadSessionData(id);
+
+    if (data instanceof SessionNotFoundError || data instanceof SessionCorruptedError) {
+      console.error('Failed to load session data:', data.message);
+      // Load failure - keep layout consistent by clearing to an empty session
+      const fallbackSession = state.sessions.find((session) => session.id === id);
+      if (fallbackSession) {
+        dispatch({ type: 'SET_ACTIVE_SESSION', id, session: fallbackSession });
+      }
+      await onSessionLoad({}, 1, new Map(), new Map(), id, { allowPrune: false });
+    } else {
+      dispatch({ type: 'SET_ACTIVE_SESSION', id, session: data.metadata });
+      // IMPORTANT: Await onSessionLoad to ensure CWD map is set before switching completes
+      await onSessionLoad(
+        data.workspaces,
+        data.activeWorkspaceId,
+        data.cwdMap,
+        new Map(),
+        id,
+        { allowPrune: true }
+      );
+    }
+
+    await refreshSessions();
   };
 
   const switchSession = async (id: SessionId): Promise<void> =>
@@ -194,43 +205,39 @@ export function createSessionOperations(params: SessionOperationsParams) {
       dispatch({ type: 'SET_SWITCHING', switching: true });
     }
 
-    try {
-      // If deleting the active session, suspend before cleanup to capture PTYs.
-      if (isActive && state.activeSessionId) {
-        await onBeforeSwitch(state.activeSessionId);
-      }
+    await using _switchingGuard = new SwitchingGuard(dispatch, isActive);
 
-      // Clean up PTYs for the deleted session
-      onDeleteSession(id);
+    // If deleting the active session, suspend before cleanup to capture PTYs.
+    if (isActive && state.activeSessionId) {
+      await onBeforeSwitch(state.activeSessionId);
+    }
 
-      const deleteResult = await deleteSessionOnDisk(id);
-      if (deleteResult instanceof SessionNotFoundError || deleteResult instanceof SessionCorruptedError || deleteResult instanceof SessionStorageError) {
-        console.error('Failed to delete session:', deleteResult.message);
-        return;
-      }
-      await refreshSessions();
+    // Clean up PTYs for the deleted session
+    onDeleteSession(id);
 
-      // If deleting active session, switch to another
-      if (isActive) {
-        const sessions = await listSessions();
-        const nextSession = sessions.find((session) => session.id !== id) ?? null;
-        if (nextSession) {
-          await switchSessionInternal(nextSession.id, { skipSave: true, skipBeforeSwitch: true });
-        } else {
-          const createResult = await createSessionOnDisk();
-          if (createResult instanceof SessionStorageError) {
-            console.error('Failed to create new session:', createResult.message);
-            return;
-          }
-          const metadata = createResult;
-          dispatch({ type: 'SET_ACTIVE_SESSION', id: metadata.id, session: metadata });
-          await onSessionLoad({}, 1, new Map(), new Map(), metadata.id, { allowPrune: false });
-          await refreshSessions();
+    const deleteResult = await deleteSessionOnDisk(id);
+    if (deleteResult instanceof SessionNotFoundError || deleteResult instanceof SessionCorruptedError || deleteResult instanceof SessionStorageError) {
+      console.error('Failed to delete session:', deleteResult.message);
+      return;
+    }
+    await refreshSessions();
+
+    // If deleting active session, switch to another
+    if (isActive) {
+      const sessions = await listSessions();
+      const nextSession = sessions.find((session) => session.id !== id) ?? null;
+      if (nextSession) {
+        await switchSessionInternal(nextSession.id, { skipSave: true, skipBeforeSwitch: true });
+      } else {
+        const createResult = await createSessionOnDisk();
+        if (createResult instanceof SessionStorageError) {
+          console.error('Failed to create new session:', createResult.message);
+          return;
         }
-      }
-    } finally {
-      if (isActive) {
-        dispatch({ type: 'SET_SWITCHING', switching: false });
+        const metadata = createResult;
+        dispatch({ type: 'SET_ACTIVE_SESSION', id: metadata.id, session: metadata });
+        await onSessionLoad({}, 1, new Map(), new Map(), metadata.id, { allowPrune: false });
+        await refreshSessions();
       }
     }
   };

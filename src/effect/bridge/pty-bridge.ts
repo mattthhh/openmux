@@ -15,7 +15,8 @@ import { deferMacrotask } from "../../core/scheduling"
 import { isShimClient } from "../../shim/mode"
 import * as ShimClient from "../../shim/client"
 import { getPtyService } from "./services-instance"
-import { PtySpawnError } from '../errors'
+import { PtySpawnError, PtyCwdError, PtyNotFoundError } from '../errors'
+import { tryAsync } from "errore"
 
 /** Helper to convert string to PtyId branded type */
 const asPtyId = (id: string): PtyId => id as PtyId
@@ -232,13 +233,9 @@ export async function resizePtyWithService(
 
 /** Get CWD with a specific service */
 export async function getPtyCwdWithService(pty: PtyService, ptyId: string): Promise<string> {
-  try {
-    const result = await pty.getCwd(asPtyId(ptyId))
-    if (result instanceof Error) return process.cwd()
-    return result
-  } catch {
-    return process.cwd()
-  }
+  const result = await pty.getCwd(asPtyId(ptyId))
+  if (result instanceof Error) return process.cwd()
+  return result
 }
 
 /** Get foreground process with a specific service */

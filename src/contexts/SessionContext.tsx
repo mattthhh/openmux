@@ -33,7 +33,7 @@ import {
 } from '../effect/bridge';
 import { runStream, repeatWithInterval, tap } from '../effect/stream-utils';
 import type { TemplateSession } from '../effect/models';
-import { SessionStorageError } from '../effect/errors';
+import { SessionStorageError, SessionCorruptedError, SessionNotFoundError } from '../effect/errors';
 import {
   type SessionState,
   type SessionAction,
@@ -328,18 +328,8 @@ export function SessionProvider(props: SessionProviderProps) {
 
       // Load session data and notify parent
       const data = await loadSessionData(activeId);
-      if (data) {
-        // IMPORTANT: Await onSessionLoad to ensure CWD map is set before initialized
-        await props.onSessionLoad(
-          data.workspaces,
-          data.activeWorkspaceId,
-          data.cwdMap,
-          new Map(),
-          activeId,
-          { allowPrune: false }
-        );
-      }
-      if (!data) {
+      if (data instanceof SessionNotFoundError || data instanceof SessionCorruptedError) {
+        console.error('Failed to load session:', data.message);
         // Session failed to load - create a fresh session instead of overwriting
         const result = await createSessionOnDisk();
         if (!(result instanceof SessionStorageError)) {
@@ -352,6 +342,16 @@ export function SessionProvider(props: SessionProviderProps) {
           console.error('Failed to create replacement session:', result.message);
           // Continue without changing session state
         }
+      } else {
+        // IMPORTANT: Await onSessionLoad to ensure CWD map is set before initialized
+        await props.onSessionLoad(
+          data.workspaces,
+          data.activeWorkspaceId,
+          data.cwdMap,
+          new Map(),
+          activeId,
+          { allowPrune: false }
+        );
       }
 
       refreshTask = switchPromise.then(() => refreshSessions()).catch(() => {});

@@ -24,7 +24,10 @@ import { resolveActiveWorkspaceId } from "./session-bridge-utils"
 import {
   SessionError,
   SessionStorageError,
+  SessionCorruptedError,
+  SessionNotFoundError,
 } from "../errors"
+import { tryAsync } from "errore"
 
 /** List all sessions */
 export async function listSessions(): Promise<readonly SessionMetadata[]> {
@@ -126,12 +129,16 @@ export async function saveCurrentSession(
 /** Load a session from disk */
 export async function loadSessionData(
   sessionId: string
-): Promise<{
-  metadata: LegacySessionMetadata
-  workspaces: Workspaces
-  activeWorkspaceId: WorkspaceId
-  cwdMap: Map<string, string>
-} | null> {
+): Promise<
+  | {
+      metadata: LegacySessionMetadata
+      workspaces: Workspaces
+      activeWorkspaceId: WorkspaceId
+      cwdMap: Map<string, string>
+    }
+  | SessionCorruptedError
+  | SessionNotFoundError
+> {
   return loadSessionDataWithService(getSessionManager(), sessionId)
 }
 
@@ -350,41 +357,73 @@ export async function saveCurrentSessionWithService(
 export async function loadSessionDataWithService(
   manager: SessionManager,
   sessionId: string
-): Promise<{
-  metadata: LegacySessionMetadata
-  workspaces: Workspaces
-  activeWorkspaceId: WorkspaceId
-  cwdMap: Map<string, string>
-} | null> {
-  try {
-    const session = await manager.loadSession(sessionId as SessionId)
-    if (session instanceof Error) return null
-
-    const metadata: LegacySessionMetadata = {
-      id: session.metadata.id,
-      name: session.metadata.name,
-      createdAt: session.metadata.createdAt,
-      lastSwitchedAt: session.metadata.lastSwitchedAt,
-      autoNamed: session.metadata.autoNamed,
+): Promise<
+  | {
+      metadata: LegacySessionMetadata
+      workspaces: Workspaces
+      activeWorkspaceId: WorkspaceId
+      cwdMap: Map<string, string>
     }
+  | SessionCorruptedError
+  | SessionNotFoundError
+> {
+  const sessionResult = await tryAsync<
+    SerializedSession,
+    SessionCorruptedError | SessionNotFoundError
+  >({
+    try: async () => {
+      const session = await manager.loadSession(sessionId as SessionId)
+      if (session instanceof Error) {
+        if (session._tag === 'SessionNotFoundError') {
+          throw new SessionNotFoundError({ sessionId })
+        }
+        throw new SessionCorruptedError({
+          sessionId,
+          reason: session.message,
+        })
+      }
+      return session
+    },
+    catch: (e) =>
+      e instanceof SessionNotFoundError || e instanceof SessionCorruptedError
+        ? e
+        : new SessionCorruptedError({
+            sessionId,
+            reason: e instanceof Error ? e.message : String(e),
+          }),
+  })
 
-    const workspaces: Workspaces = {}
-    for (const ws of session.workspaces) {
-      workspaces[ws.id as WorkspaceId] = deserializeWorkspace(ws as { id: number; label?: string; mainPane: unknown; stackPanes: unknown[]; focusedPaneId: string | null; activeStackIndex: number; lastFocusedPaneIds?: (string | null)[]; layoutMode: string; zoomed: boolean })
-    }
+  if (sessionResult instanceof Error) {
+    return sessionResult
+  }
 
-    const storedActiveId = session.activeWorkspaceId as WorkspaceId
-    const resolvedActiveWorkspaceId = resolveActiveWorkspaceId(workspaces, storedActiveId)
+  const session = sessionResult
 
-    const cwdMap = extractCwdMap(session)
+  const metadata: LegacySessionMetadata = {
+    id: session.metadata.id,
+    name: session.metadata.name,
+    createdAt: session.metadata.createdAt,
+    lastSwitchedAt: session.metadata.lastSwitchedAt,
+    autoNamed: session.metadata.autoNamed,
+  }
 
-    return {
-      metadata,
-      workspaces,
-      activeWorkspaceId: resolvedActiveWorkspaceId,
-      cwdMap,
-    }
-  } catch {
-    return null
+  const workspaces: Workspaces = {}
+  for (const ws of session.workspaces) {
+    workspaces[ws.id as WorkspaceId] = deserializeWorkspace(ws as unknown as Parameters<typeof deserializeWorkspace>[0])
+  }
+
+  const storedActiveId = session.activeWorkspaceId as WorkspaceId
+  const resolvedActiveWorkspaceId = resolveActiveWorkspaceId(
+    workspaces,
+    storedActiveId
+  )
+
+  const cwdMap = extractCwdMap(session)
+
+  return {
+    metadata,
+    workspaces,
+    activeWorkspaceId: resolvedActiveWorkspaceId,
+    cwdMap,
   }
 }

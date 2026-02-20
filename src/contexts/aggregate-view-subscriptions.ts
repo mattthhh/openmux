@@ -31,6 +31,20 @@ export interface RefreshState {
   selectedDiffRefreshInProgress: boolean;
 }
 
+/** AsyncDisposable guard for refresh state flags */
+class RefreshGuard implements AsyncDisposable {
+  constructor(
+    private state: RefreshState,
+    private key: keyof RefreshState
+  ) {
+    this.state[this.key] = true;
+  }
+
+  async [Symbol.asyncDispose](): Promise<void> {
+    this.state[this.key] = false;
+  }
+}
+
 export function createSubscriptionManager(): SubscriptionManager {
   return {
     lifecycle: null,
@@ -55,106 +69,94 @@ export function createAggregateViewRefreshers(
 ) {
   const refreshPtys = async () => {
     if (refreshState.refreshInProgress) return;
-    refreshState.refreshInProgress = true;
+    await using _guard = new RefreshGuard(refreshState, 'refreshInProgress');
 
-    try {
-      setState('isLoading', true);
-      const ptys = await listAllPtysWithMetadata({ skipGitDiffStats: true });
+    setState('isLoading', true);
+    const ptys = await listAllPtysWithMetadata({ skipGitDiffStats: true });
 
-      setState(produce((s) => {
-        const merged = ptys.map((pty) => {
-          const prevIndex = s.allPtysIndex.get(pty.ptyId);
-          if (prevIndex === undefined) return pty;
-          const prev = s.allPtys[prevIndex];
-          const repoChanged =
-            prev.cwd !== pty.cwd ||
-            prev.gitBranch !== pty.gitBranch ||
-            prev.gitDirty !== pty.gitDirty ||
-            prev.gitStaged !== pty.gitStaged ||
-            prev.gitUnstaged !== pty.gitUnstaged ||
-            prev.gitUntracked !== pty.gitUntracked ||
-            prev.gitConflicted !== pty.gitConflicted ||
-            prev.gitRepoKey !== pty.gitRepoKey;
-          const gitDiffStats =
-            pty.gitDiffStats ?? (repoChanged ? undefined : prev.gitDiffStats);
-          return { ...pty, gitDiffStats };
-        });
+    setState(produce((s) => {
+      const merged = ptys.map((pty) => {
+        const prevIndex = s.allPtysIndex.get(pty.ptyId);
+        if (prevIndex === undefined) return pty;
+        const prev = s.allPtys[prevIndex];
+        const repoChanged =
+          prev.cwd !== pty.cwd ||
+          prev.gitBranch !== pty.gitBranch ||
+          prev.gitDirty !== pty.gitDirty ||
+          prev.gitStaged !== pty.gitStaged ||
+          prev.gitUnstaged !== pty.gitUnstaged ||
+          prev.gitUntracked !== pty.gitUntracked ||
+          prev.gitConflicted !== pty.gitConflicted ||
+          prev.gitRepoKey !== pty.gitRepoKey;
+        const gitDiffStats =
+          pty.gitDiffStats ?? (repoChanged ? undefined : prev.gitDiffStats);
+        return { ...pty, gitDiffStats };
+      });
 
-        s.allPtys = merged;
-        s.allPtysIndex = buildPtyIndex(merged);
-        s.isLoading = false;
-        recomputeMatches(s);
-      }));
-    } finally {
-      refreshState.refreshInProgress = false;
-    }
+      s.allPtys = merged;
+      s.allPtysIndex = buildPtyIndex(merged);
+      s.isLoading = false;
+      recomputeMatches(s);
+    }));
   };
 
   const refreshPtysSubset = async (ptyIds: string[]) => {
     if (refreshState.subsetRefreshInProgress || ptyIds.length === 0) return;
-    refreshState.subsetRefreshInProgress = true;
+    await using _guard = new RefreshGuard(refreshState, 'subsetRefreshInProgress');
 
-    try {
-      const results = await Promise.all(
-        ptyIds.map((id) => getPtyMetadata(id, { skipGitDiffStats: true }))
-      );
-      const updates = results.filter((result): result is PtyInfo => result !== null);
+    const results = await Promise.all(
+      ptyIds.map((id) => getPtyMetadata(id, { skipGitDiffStats: true }))
+    );
+    const updates = results.filter((result): result is PtyInfo => result !== null);
 
-      if (updates.length === 0) return;
+    if (updates.length === 0) return;
 
-      setState(produce((s) => {
-        for (const update of updates) {
-          const index = s.allPtysIndex.get(update.ptyId);
-          if (index === undefined || !s.allPtys[index]) continue;
-          // Replace entire object for proper SolidJS reactivity
-          s.allPtys[index] = {
-            ...s.allPtys[index],
-            foregroundProcess: update.foregroundProcess,
-            gitBranch: update.gitBranch,
-            gitDirty: update.gitDirty,
-            gitStaged: update.gitStaged,
-            gitUnstaged: update.gitUnstaged,
-            gitUntracked: update.gitUntracked,
-            gitConflicted: update.gitConflicted,
-            gitAhead: update.gitAhead,
-            gitBehind: update.gitBehind,
-            gitStashCount: update.gitStashCount,
-            gitState: update.gitState,
-            gitDetached: update.gitDetached,
-            gitRepoKey: update.gitRepoKey,
-          };
-        }
+    setState(produce((s) => {
+      for (const update of updates) {
+        const index = s.allPtysIndex.get(update.ptyId);
+        if (index === undefined || !s.allPtys[index]) continue;
+        // Replace entire object for proper SolidJS reactivity
+        s.allPtys[index] = {
+          ...s.allPtys[index],
+          foregroundProcess: update.foregroundProcess,
+          gitBranch: update.gitBranch,
+          gitDirty: update.gitDirty,
+          gitStaged: update.gitStaged,
+          gitUnstaged: update.gitUnstaged,
+          gitUntracked: update.gitUntracked,
+          gitConflicted: update.gitConflicted,
+          gitAhead: update.gitAhead,
+          gitBehind: update.gitBehind,
+          gitStashCount: update.gitStashCount,
+          gitState: update.gitState,
+          gitDetached: update.gitDetached,
+          gitRepoKey: update.gitRepoKey,
+        };
+      }
 
-        recomputeMatches(s);
-      }));
-    } finally {
-      refreshState.subsetRefreshInProgress = false;
-    }
+      recomputeMatches(s);
+    }));
   };
 
   const refreshSelectedDiffStats = async (ptyId: string) => {
     if (refreshState.selectedDiffRefreshInProgress) return;
-    refreshState.selectedDiffRefreshInProgress = true;
+    await using _guard = new RefreshGuard(refreshState, 'selectedDiffRefreshInProgress');
 
-    try {
-      const update = await getPtyMetadata(ptyId, { skipGitDiffStats: false });
-      if (!update) return;
+    const update = await getPtyMetadata(ptyId, { skipGitDiffStats: false });
+    if (!update) return;
 
-      setState(produce((s) => {
-        const index = s.allPtysIndex.get(update.ptyId);
-        if (index !== undefined && s.allPtys[index]) {
-          // Replace entire object for proper SolidJS reactivity
-          s.allPtys[index] = { ...s.allPtys[index], gitDiffStats: update.gitDiffStats };
-        }
-        const matchedIndex = s.matchedPtysIndex.get(update.ptyId);
-        if (matchedIndex !== undefined && s.matchedPtys[matchedIndex]) {
-          // Replace entire object for proper SolidJS reactivity
-          s.matchedPtys[matchedIndex] = { ...s.matchedPtys[matchedIndex], gitDiffStats: update.gitDiffStats };
-        }
-      }));
-    } finally {
-      refreshState.selectedDiffRefreshInProgress = false;
-    }
+    setState(produce((s) => {
+      const index = s.allPtysIndex.get(update.ptyId);
+      if (index !== undefined && s.allPtys[index]) {
+        // Replace entire object for proper SolidJS reactivity
+        s.allPtys[index] = { ...s.allPtys[index], gitDiffStats: update.gitDiffStats };
+      }
+      const matchedIndex = s.matchedPtysIndex.get(update.ptyId);
+      if (matchedIndex !== undefined && s.matchedPtys[matchedIndex]) {
+        // Replace entire object for proper SolidJS reactivity
+        s.matchedPtys[matchedIndex] = { ...s.matchedPtys[matchedIndex], gitDiffStats: update.gitDiffStats };
+      }
+    }));
   };
 
   return { refreshPtys, refreshPtysSubset, refreshSelectedDiffStats };

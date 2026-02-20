@@ -489,7 +489,7 @@ describe("Session Operations Integration", () => {
     const error = new SessionNotFoundError({ sessionId: "session-2" })
     
     ;(switchToSession as any).mockResolvedValue(error)
-    ;(loadSessionData as any).mockResolvedValue(null)
+    ;(loadSessionData as any).mockResolvedValue(new SessionNotFoundError({ sessionId: "session-2" }))
     
     await ops.switchSession("session-2")
 
