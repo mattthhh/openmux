@@ -20,7 +20,6 @@
     "build:release": "./scripts/build.sh --release",
     "install:local": "./scripts/build.sh --install",
     "update:submodules": "./scripts/update-submodules.sh",
-    "prepare": "effect-language-service patch",
     "test": "bun test && (cd native/zig-pty && zig build test --summary all) && (cd native/zig-git && zig build test --summary all) && bun run test:zig-ghostty-wrapper",
     "test:ts": "bun test",
     "test:pty": "cd native/zig-pty && zig build test --summary all",
@@ -30,9 +29,7 @@
     "test:ghostty-vt": "bun run test:zig-ghostty-wrapper",
     "test:watch": "bun test --watch",
     "check:circular": "bunx madge --circular --extensions ts,tsx src/",
-    "lint:effect": "effect-language-service diagnostics --format pretty --project ./tsconfig.json",
-    "lint:ts": "eslint src",
-    "lint": "bun run lint:effect && bun run lint:ts",
+    "lint": "eslint src",
     "config:doc": "bun scripts/generate-config-doc.ts",
     "release": "standard-version",
     "release:minor": "standard-version --release-as minor",
@@ -65,26 +62,21 @@
     "bun": ">=1.0.0"
   },
   "devDependencies": {
-    "@effect/eslint-plugin": "^0.3.2",
-    "@effect/language-service": "^0.60.0",
     "@types/bun": "latest",
     "@types/node": "^25.3.0",
     "@typescript-eslint/eslint-plugin": "^8.56.0",
     "@typescript-eslint/parser": "^8.56.0",
-    "eslint": "^9.39.2",
+    "eslint": "^10.0.1",
     "standard-version": "^9.5.0"
   },
   "peerDependencies": {
     "typescript": "^5.9.3"
   },
   "dependencies": {
-    "@effect/cli": "^0.72.1",
-    "@effect/platform": "^0.93.8",
     "@iarna/toml": "^3.0.0",
     "@opentui/core": "^0.1.80",
     "@opentui/solid": "^0.1.80",
-    "effect": "^3.19.18",
-    "errore": "^0.12.0",
+    "errore": "^0.13.0",
     "solid-js": "^1.9.11",
     "zod": "^4.3.6"
   }
