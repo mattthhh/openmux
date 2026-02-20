@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline/promises';
+import crypto from 'node:crypto';
 
 import { compareSemver } from '../core/update-check';
 
@@ -331,6 +332,81 @@ async function downloadReleaseAsset(io: UpdateIO, url: string, destination: stri
   await io.writeFile(destination, payload);
 }
 
+export async function computeFileSha256(io: UpdateIO, filePath: string): Promise<string> {
+  const data = await io.readFile(filePath);
+  const hash = crypto.createHash('sha256').update(data).digest('hex');
+  return hash;
+}
+
+export function parseChecksumFile(content: string, targetFilename: string): string | null {
+  const lines = content.split('\n');
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+
+    // Format: <hash> <filename> or <hash>  <filename> (GNU coreutils style)
+    const match = trimmed.match(/^([a-f0-9]{64})\s+\*?(\S+)$/i);
+    if (match) {
+      const [, hash, filename] = match;
+      if (filename === targetFilename || path.basename(filename) === targetFilename) {
+        return hash.toLowerCase();
+      }
+    }
+  }
+  return null;
+}
+
+export async function verifyReleaseChecksum(
+  io: UpdateIO,
+  release: GitHubRelease,
+  archivePath: string,
+  assetName: string
+): Promise<void> {
+  const assets = release.assets ?? [];
+
+  // Look for checksum file (SHA256SUMS, sha256sums.txt, checksums.txt, etc.)
+  const checksumAsset = assets.find(
+    (a) =>
+      a.name?.match(/^(SHA256SUMS|sha256sums\.txt|checksums\.txt|sha256\.txt)$/i) &&
+      a.browser_download_url
+  );
+
+  if (!checksumAsset?.browser_download_url) {
+    // No checksum file available - skip verification but warn
+    io.log('Warning: No checksum file available for verification.');
+    return;
+  }
+
+  // Download checksum file
+  const checksumResponse = await io.fetch(checksumAsset.browser_download_url, {
+    headers: {
+      Accept: 'text/plain',
+      'User-Agent': 'openmux-update',
+    },
+  });
+
+  if (!checksumResponse.ok) {
+    throw new Error(`Failed to download checksum file (${checksumResponse.status}).`);
+  }
+
+  const checksumContent = await checksumResponse.text();
+  const expectedHash = parseChecksumFile(checksumContent, assetName);
+
+  if (!expectedHash) {
+    throw new Error(`Could not find checksum for ${assetName} in checksum file.`);
+  }
+
+  const actualHash = await computeFileSha256(io, archivePath);
+
+  if (actualHash !== expectedHash) {
+    throw new Error(
+      `Checksum verification failed for ${assetName}.\n` +
+        `Expected: ${expectedHash}\n` +
+        `Actual:   ${actualHash}`
+    );
+  }
+}
+
 async function ensureFileExists(io: UpdateIO, filePath: string): Promise<void> {
   try {
     await io.access(filePath);
@@ -381,6 +457,7 @@ async function installRelease(io: UpdateIO, release: GitHubRelease, installDir: 
 
     await io.mkdir(extractedPath);
     await downloadReleaseAsset(io, asset.url, archivePath);
+    await verifyReleaseChecksum(io, release, archivePath, asset.name);
     await io.extractTarGz(archivePath, extractedPath);
 
     const requiredFiles = [
