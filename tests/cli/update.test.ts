@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises';
+import fsSync from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
@@ -470,6 +471,145 @@ b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3  openmux-v1.0.0
       await expect(
         verifyReleaseChecksum(io as UpdateIO, release, archivePath, 'openmux-v1.0.0-linux-x64.tar.gz')
       ).resolves.toBeUndefined();
+    });
+  });
+
+  describe('package manager detection', () => {
+    test('detects npm install from node_modules path', async () => {
+      const install = await makeManagedInstall('1.0.0');
+      cleanupRoots.push(install.rootDir);
+
+      const logs: string[] = [];
+      const result = await runUpdateCommand(
+        { kind: 'update', yes: true, prerelease: false },
+        createIoForInstall(install, {
+          execPath: '/usr/local/lib/node_modules/openmux/dist/openmux-bin',
+          fetch: vi.fn(),
+        }, logs)
+      );
+
+      expect(result.exitCode).toBe(0);
+      expect(logs.some((line) => line.includes('npm'))).toBe(true);
+      expect(logs.some((line) => line.includes('npm update -g openmux'))).toBe(true);
+    });
+
+    test('detects npm install from .npm path', async () => {
+      const install = await makeManagedInstall('1.0.0');
+      cleanupRoots.push(install.rootDir);
+
+      const logs: string[] = [];
+      const result = await runUpdateCommand(
+        { kind: 'update', yes: true, prerelease: false },
+        createIoForInstall(install, {
+          execPath: '/home/user/.npm/_npx/openmux/dist/openmux-bin',
+          fetch: vi.fn(),
+        }, logs)
+      );
+
+      expect(result.exitCode).toBe(0);
+      expect(logs.some((line) => line.includes('npm'))).toBe(true);
+    });
+
+    test('detects bun install from .bun path', async () => {
+      const install = await makeManagedInstall('1.0.0');
+      cleanupRoots.push(install.rootDir);
+
+      const logs: string[] = [];
+      const result = await runUpdateCommand(
+        { kind: 'update', yes: true, prerelease: false },
+        createIoForInstall(install, {
+          execPath: '/home/user/.bun/install/global/openmux/dist/openmux-bin',
+          fetch: vi.fn(),
+        }, logs)
+      );
+
+      expect(result.exitCode).toBe(0);
+      expect(logs.some((line) => line.includes('bun'))).toBe(true);
+      expect(logs.some((line) => line.includes('bun update -g openmux'))).toBe(true);
+    });
+
+    test('detects bun install from bun.lockb marker file', async () => {
+      const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'bun-pm-test-'));
+      cleanupRoots.push(tempDir);
+
+      // Create a fake bun.lockb file
+      await fs.writeFile(path.join(tempDir, 'bun.lockb'), 'fake lockfile');
+
+      const logs: string[] = [];
+      const result = await runUpdateCommand(
+        { kind: 'update', yes: true, prerelease: false },
+        createIoForInstall(
+          { dataHome: tempDir, binHome: tempDir, installDir: tempDir, execPath: path.join(tempDir, 'openmux-bin') },
+          { fetch: vi.fn() },
+          logs
+        )
+      );
+
+      expect(result.exitCode).toBe(0);
+      expect(logs.some((line) => line.includes('bun'))).toBe(true);
+    });
+
+    test('detects npm install from package-lock.json marker file', async () => {
+      const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'npm-pm-test-'));
+      cleanupRoots.push(tempDir);
+
+      // Create a fake package-lock.json file
+      await fs.writeFile(path.join(tempDir, 'package-lock.json'), '{}');
+
+      const logs: string[] = [];
+      const result = await runUpdateCommand(
+        { kind: 'update', yes: true, prerelease: false },
+        createIoForInstall(
+          { dataHome: tempDir, binHome: tempDir, installDir: tempDir, execPath: path.join(tempDir, 'openmux-bin') },
+          { fetch: vi.fn() },
+          logs
+        )
+      );
+
+      expect(result.exitCode).toBe(0);
+      expect(logs.some((line) => line.includes('npm'))).toBe(true);
+    });
+
+    test('falls back to managed install when no package manager detected', async () => {
+      const install = await makeManagedInstall('1.0.0');
+      cleanupRoots.push(install.rootDir);
+
+      const logs: string[] = [];
+      const errors: string[] = [];
+
+      const fetch = vi.fn(async (input: string | URL | Request): Promise<Response> => {
+        const url = String(input);
+        if (url.endsWith('/releases/latest')) {
+          return jsonResponse({
+            tag_name: 'v1.2.0',
+            draft: false,
+            prerelease: false,
+            assets: [{ name: 'openmux-v1.2.0-linux-x64.tar.gz', browser_download_url: 'https://example.com/asset' }],
+          });
+        }
+        if (url === 'https://example.com/asset') {
+          return new Response('archive-bytes', { status: 200 });
+        }
+        return new Response('not found', { status: 404 });
+      });
+
+      const result = await runUpdateCommand(
+        { kind: 'update', yes: true, prerelease: false },
+        createIoForInstall(install, {
+          fetch,
+          extractTarGz: async (_archivePath, destination) => {
+            await fs.writeFile(path.join(destination, 'openmux-bin'), 'new-bin');
+            await fs.writeFile(path.join(destination, 'libzig_pty.so'), 'new-pty');
+            await fs.writeFile(path.join(destination, 'libzig_git.so'), 'new-git');
+            await fs.writeFile(path.join(destination, 'libghostty-vt.so'), 'new-ghostty');
+            await fs.writeFile(path.join(destination, 'bunfig.toml'), '# bunfig');
+          },
+        }, logs, errors)
+      );
+
+      expect(result.exitCode).toBe(0);
+      expect(logs.some((line) => line.includes('Downloading'))).toBe(true);
+      expect(logs.some((line) => line.includes('Updated openmux'))).toBe(true);
     });
   });
 });

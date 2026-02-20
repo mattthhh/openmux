@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises';
+import fsSync from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
@@ -36,6 +37,13 @@ type GitHubRelease = {
 type PlatformInfo = {
   target: string;
   libExt: 'dylib' | 'so';
+};
+
+type PackageManager = 'npm' | 'bun' | null;
+
+type PackageManagerInstall = {
+  type: PackageManager;
+  updateCommand: string;
 };
 
 type ManagedInstall = {
@@ -317,6 +325,60 @@ export async function detectManagedInstall(io: UpdateIO): Promise<{ ok: true; va
   };
 }
 
+function detectPackageManager(execPath: string): PackageManagerInstall | null {
+  // Check for npm global install patterns
+  // npm global: typically in node_modules/.bin/ or contains npm paths
+  if (
+    execPath.includes('node_modules') ||
+    execPath.includes('.npm') ||
+    execPath.includes('/usr/local/lib/node_modules') ||
+    execPath.includes('/usr/lib/node_modules')
+  ) {
+    return { type: 'npm', updateCommand: 'npm update -g openmux' };
+  }
+
+  // Check for bun global install patterns
+  // bun global: typically in ~/.bun/install/global/
+  if (execPath.includes('.bun') || execPath.includes('bun/install')) {
+    return { type: 'bun', updateCommand: 'bun update -g openmux' };
+  }
+
+  // Check package.json or bunfig.toml in parent directories
+  // This catches cases where the path doesn't obviously indicate the package manager
+  let currentDir = path.dirname(execPath);
+  let depth = 0;
+  const maxDepth = 5;
+
+  while (currentDir !== '/' && depth < maxDepth) {
+    try {
+      // Check for bun's metadata
+      fsSync.accessSync(path.join(currentDir, 'bun.lockb'), fsSync.constants.F_OK);
+      return { type: 'bun', updateCommand: 'bun update -g openmux' };
+    } catch {
+      // File doesn't exist, continue
+    }
+
+    try {
+      // Check for npm's metadata
+      fsSync.accessSync(path.join(currentDir, 'package-lock.json'), fsSync.constants.F_OK);
+      return { type: 'npm', updateCommand: 'npm update -g openmux' };
+    } catch {
+      // File doesn't exist, continue
+    }
+    const parentDir = path.dirname(currentDir);
+    if (parentDir === currentDir) break;
+    currentDir = parentDir;
+    depth++;
+  }
+
+  return null;
+}
+
+function suggestPackageManagerUpdate(io: UpdateIO, pmInstall: PackageManagerInstall): void {
+  io.log(`openmux is installed via ${pmInstall.type}.`);
+  io.log(`To update, run: ${pmInstall.updateCommand}`);
+}
+
 async function downloadReleaseAsset(io: UpdateIO, url: string, destination: string): Promise<void> {
   const response = await io.fetch(url, {
     headers: {
@@ -555,6 +617,13 @@ export async function runUpdateCommand(command: UpdateCommand, overrides: Partia
     ...createDefaultUpdateIO(),
     ...overrides,
   };
+
+  // Check if installed via package manager (npm/bun) first
+  const pmInstall = detectPackageManager(io.execPath);
+  if (pmInstall) {
+    suggestPackageManagerUpdate(io, pmInstall);
+    return toCliOutcome(EXIT_SUCCESS);
+  }
 
   const platformInfo = getPlatformInfo(io.platform, io.arch);
   if (!platformInfo) {
