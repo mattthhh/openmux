@@ -30,6 +30,21 @@ A terminal multiplexer with master-stack layout (Zellij-style), built with:
 
 ## Installation
 
+> ⚠️ **Important Update Note for v0.3.0 Users**
+> 
+> openmux v0.3.0 contains a quirky bug that prevents `openmux update` from working correctly.
+> If you're on v0.3.0, please update manually using one of the following methods:
+>
+> ```bash
+> # Option 1: Reinstall via install script
+> curl -fsSL https://raw.githubusercontent.com/monotykamary/openmux/main/scripts/install.sh | bash
+>
+> # Option 2: Update via package manager
+> bun update -g openmux
+> # or
+> npm update -g openmux
+> ```
+
 ### Quick Install (curl)
 
 ```bash

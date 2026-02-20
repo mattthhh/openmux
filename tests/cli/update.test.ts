@@ -288,6 +288,37 @@ b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3  openmux-v1.0.0
       expect(result).toBeNull();
     });
 
+    test('verifies checksum using GitHub API digest field', async () => {
+      const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'checksum-digest-test-'));
+      cleanupRoots.push(tempDir);
+
+      const archivePath = path.join(tempDir, 'openmux-v1.0.0-linux-x64.tar.gz');
+      const content = 'fake archive content';
+      await fs.writeFile(archivePath, content);
+      const expectedHash = crypto.createHash('sha256').update(content).digest('hex');
+
+      const logs: string[] = [];
+      const io: Partial<UpdateIO> = {
+        log: (message) => logs.push(message),
+        readFile: (filePath) => fs.readFile(filePath, 'utf8'),
+      };
+
+      const release = {
+        tag_name: 'v1.0.0',
+        assets: [
+          { 
+            name: 'openmux-v1.0.0-linux-x64.tar.gz', 
+            browser_download_url: 'https://example.com/asset',
+            digest: `sha256:${expectedHash}`
+          },
+        ],
+      };
+
+      await verifyReleaseChecksum(io as UpdateIO, release, archivePath, 'openmux-v1.0.0-linux-x64.tar.gz');
+      // Should not log about using legacy SHA256SUMS
+      expect(logs.some((line) => line.includes('legacy'))).toBe(false);
+    });
+
     test('verifies checksum successfully', async () => {
       const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'checksum-verify-test-'));
       cleanupRoots.push(tempDir);
@@ -370,6 +401,7 @@ b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3  openmux-v1.0.0
       const logs: string[] = [];
       const io: Partial<UpdateIO> = {
         log: (message) => logs.push(message),
+        readFile: (filePath) => fs.readFile(filePath, 'utf8'),
       };
 
       const release = {
@@ -379,7 +411,7 @@ b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3  openmux-v1.0.0
 
       await verifyReleaseChecksum(io as UpdateIO, release, archivePath, 'openmux-v1.0.0-linux-x64.tar.gz');
 
-      expect(logs.some((line) => line.includes('Warning: No checksum file'))).toBe(true);
+      expect(logs.some((line) => line.includes('Warning: No checksum available'))).toBe(true);
     });
 
     test('throws when checksum file download fails', async () => {
@@ -389,7 +421,9 @@ b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3  openmux-v1.0.0
       const archivePath = path.join(tempDir, 'openmux-v1.0.0-linux-x64.tar.gz');
       await fs.writeFile(archivePath, 'content');
 
+      const logs: string[] = [];
       const io: Partial<UpdateIO> = {
+        log: (message) => logs.push(message),
         fetch: vi.fn().mockResolvedValue(
           new Response('Not found', { status: 404 })
         ),
@@ -417,7 +451,9 @@ b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3  openmux-v1.0.0
       // Checksums file doesn't contain our file
       const checksumsContent = `a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2 other-file.tar.gz`;
 
+      const logs: string[] = [];
       const io: Partial<UpdateIO> = {
+        log: (message) => logs.push(message),
         fetch: vi.fn().mockResolvedValue(
           new Response(checksumsContent, {
             status: 200,

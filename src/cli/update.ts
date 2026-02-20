@@ -25,6 +25,7 @@ type CliOutcome = { kind: 'handled'; exitCode: number };
 type GitHubReleaseAsset = {
   name?: string;
   browser_download_url?: string;
+  digest?: string;
 };
 
 type GitHubRelease = {
@@ -325,7 +326,7 @@ export async function detectManagedInstall(io: UpdateIO): Promise<{ ok: true; va
   };
 }
 
-function detectPackageManager(execPath: string): PackageManagerInstall | null {
+function detectPackageManager(execPath: string, env: NodeJS.ProcessEnv): PackageManagerInstall | null {
   // Check for npm global install patterns
   // npm global: typically in node_modules/.bin/ or contains npm paths
   if (
@@ -341,6 +342,24 @@ function detectPackageManager(execPath: string): PackageManagerInstall | null {
   // bun global: typically in ~/.bun/install/global/
   if (execPath.includes('.bun') || execPath.includes('bun/install')) {
     return { type: 'bun', updateCommand: 'bun update -g openmux' };
+  }
+
+  // Check if binary is in managed install location but wrapper exists in bun global bin
+  // This happens when installed via 'bun install -g openmux' - the wrapper script
+  // at ~/.bun/bin/openmux executes the binary at ~/.local/share/openmux/openmux-bin
+  const managedDir = getManagedInstallDir(env);
+  if (managedDir && path.resolve(path.dirname(execPath)) === path.resolve(managedDir)) {
+    const home = env.HOME ?? env.USERPROFILE ?? '';
+    if (home) {
+      const bunGlobalBin = path.join(home, '.bun', 'bin', 'openmux');
+      try {
+        fsSync.accessSync(bunGlobalBin, fsSync.constants.F_OK);
+        // Wrapper script exists in bun global bin
+        return { type: 'bun', updateCommand: 'bun update -g openmux' };
+      } catch {
+        // No bun wrapper found, continue with other checks
+      }
+    }
   }
 
   // Check package.json or bunfig.toml in parent directories
@@ -394,8 +413,9 @@ async function downloadReleaseAsset(io: UpdateIO, url: string, destination: stri
   await io.writeFile(destination, payload);
 }
 
-export async function computeFileSha256(io: UpdateIO, filePath: string): Promise<string> {
-  const data = await io.readFile(filePath);
+export async function computeFileSha256(_io: UpdateIO, filePath: string): Promise<string> {
+  // Read file as binary buffer, not UTF-8 text
+  const data = await fs.readFile(filePath);
   const hash = crypto.createHash('sha256').update(data).digest('hex');
   return hash;
 }
@@ -418,6 +438,13 @@ export function parseChecksumFile(content: string, targetFilename: string): stri
   return null;
 }
 
+function parseGitHubDigest(digest: string | undefined): string | null {
+  if (!digest) return null;
+  // GitHub returns digest in format "sha256:<hash>"
+  const match = digest.match(/^sha256:([a-f0-9]{64})$/i);
+  return match?.[1]?.toLowerCase() ?? null;
+}
+
 export async function verifyReleaseChecksum(
   io: UpdateIO,
   release: GitHubRelease,
@@ -426,36 +453,42 @@ export async function verifyReleaseChecksum(
 ): Promise<void> {
   const assets = release.assets ?? [];
 
-  // Look for checksum file (SHA256SUMS, sha256sums.txt, checksums.txt, etc.)
-  const checksumAsset = assets.find(
-    (a) =>
-      a.name?.match(/^(SHA256SUMS|sha256sums\.txt|checksums\.txt|sha256\.txt)$/i) &&
-      a.browser_download_url
-  );
-
-  if (!checksumAsset?.browser_download_url) {
-    // No checksum file available - skip verification but warn
-    io.log('Warning: No checksum file available for verification.');
-    return;
-  }
-
-  // Download checksum file
-  const checksumResponse = await io.fetch(checksumAsset.browser_download_url, {
-    headers: {
-      Accept: 'text/plain',
-      'User-Agent': 'openmux-update',
-    },
-  });
-
-  if (!checksumResponse.ok) {
-    throw new Error(`Failed to download checksum file (${checksumResponse.status}).`);
-  }
-
-  const checksumContent = await checksumResponse.text();
-  const expectedHash = parseChecksumFile(checksumContent, assetName);
+  // Find the asset to get its digest from GitHub API
+  const asset = assets.find((a) => a.name === assetName);
+  let expectedHash = parseGitHubDigest(asset?.digest);
 
   if (!expectedHash) {
-    throw new Error(`Could not find checksum for ${assetName} in checksum file.`);
+    // Fallback to SHA256SUMS file for older releases without digest
+    io.log('Note: Using legacy SHA256SUMS file for verification.');
+
+    const checksumAsset = assets.find(
+      (a) =>
+        a.name?.match(/^(SHA256SUMS|sha256sums\.txt|checksums\.txt|sha256\.txt)$/i) &&
+        a.browser_download_url
+    );
+
+    if (!checksumAsset?.browser_download_url) {
+      io.log('Warning: No checksum available for verification.');
+      return;
+    }
+
+    const checksumResponse = await io.fetch(checksumAsset.browser_download_url, {
+      headers: {
+        Accept: 'text/plain',
+        'User-Agent': 'openmux-update',
+      },
+    });
+
+    if (!checksumResponse.ok) {
+      throw new Error(`Failed to download checksum file (${checksumResponse.status}).`);
+    }
+
+    const checksumContent = await checksumResponse.text();
+    expectedHash = parseChecksumFile(checksumContent, assetName);
+
+    if (!expectedHash) {
+      throw new Error(`Could not find checksum for ${assetName} in checksum file.`);
+    }
   }
 
   const actualHash = await computeFileSha256(io, archivePath);
@@ -619,7 +652,7 @@ export async function runUpdateCommand(command: UpdateCommand, overrides: Partia
   };
 
   // Check if installed via package manager (npm/bun) first
-  const pmInstall = detectPackageManager(io.execPath);
+  const pmInstall = detectPackageManager(io.execPath, io.env);
   if (pmInstall) {
     suggestPackageManagerUpdate(io, pmInstall);
     return toCliOutcome(EXIT_SUCCESS);
