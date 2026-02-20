@@ -1,5 +1,6 @@
 import net from 'net';
 
+import { ResourceStack } from '../effect/resources.js';
 import { CONTROL_SOCKET_PATH, encodeFrame, FrameReader, type ControlHeader } from './protocol';
 
 type PendingRequest = {
@@ -96,43 +97,50 @@ export async function connectControlClient(options?: {
   const socketPath = options?.socketPath ?? CONTROL_SOCKET_PATH;
   const timeoutMs = options?.timeoutMs ?? 500;
 
-  return new Promise((resolve, reject) => {
-    const client = net.createConnection(socketPath);
-    let timer: ReturnType<typeof setTimeout> | null = null;
+  const client = net.createConnection(socketPath);
+  const resources = new ResourceStack();
+
+  return new Promise<ControlClient>((resolve, reject) => {
     let settled = false;
 
-    const cleanup = () => {
-      if (timer) {
-        clearTimeout(timer);
-        timer = null;
-      }
-      client.removeListener('error', handleError);
-      client.removeListener('connect', handleConnect);
+    const cleanupAndResolve = (result: ControlClient) => {
+      if (settled) return;
+      settled = true;
+      // Dispose resources after resolving - they did their job
+      void resources[Symbol.asyncDispose]();
+      resolve(result);
+    };
+
+    const cleanupAndReject = (error: Error) => {
+      if (settled) return;
+      settled = true;
+      // Dispose resources before rejecting
+      void resources[Symbol.asyncDispose]().finally(() => reject(error));
+    };
+
+    const handleConnect = () => {
+      cleanupAndResolve(new ControlClient(client));
     };
 
     const handleError = (error: Error) => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      reject(error);
+      cleanupAndReject(error);
     };
-    const handleConnect = () => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      resolve(new ControlClient(client));
-    };
-    client.once('error', handleError);
+
     client.once('connect', handleConnect);
+    client.once('error', handleError);
+
+    resources.defer(() => {
+      client.removeListener('connect', handleConnect);
+    });
+    resources.defer(() => {
+      client.removeListener('error', handleError);
+    });
 
     if (timeoutMs > 0) {
-      timer = setTimeout(() => {
-        if (settled) return;
-        settled = true;
-        cleanup();
-        client.destroy();
-        reject(new Error('Control socket connection timed out'));
+      const timer = setTimeout(() => {
+        cleanupAndReject(new Error('Control socket connection timed out'));
       }, timeoutMs);
+      resources.registerTimer(timer);
     }
   });
 }

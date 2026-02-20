@@ -15,6 +15,7 @@ import {
   switchToSession,
 } from '../effect/bridge';
 import { SessionStorageError, SessionNotFoundError, SessionCorruptedError } from '../effect/errors';
+import { ResourceStack } from '../effect/resources.js';
 
 export interface SessionOperationsParams {
   getState: () => SessionState;
@@ -70,21 +71,24 @@ export function createSessionOperations(params: SessionOperationsParams) {
       await onBeforeSwitch(state.activeSessionId);
     }
 
+    // Guaranteed cleanup: always close session picker when function exits
+    await using resources = new ResourceStack();
+    resources.defer(() => {
+      dispatch({ type: 'CLOSE_SESSION_PICKER' });
+    });
+
     const result = await createSessionOnDisk(name);
     if (result instanceof SessionStorageError) {
       console.error('Failed to create session:', result.message);
-      dispatch({ type: 'CLOSE_SESSION_PICKER' });
       return result;
     }
+
     const metadata = result;
     await refreshSessions();
     dispatch({ type: 'SET_ACTIVE_SESSION', id: metadata.id, session: metadata });
 
     // Load empty workspaces for new session
     await onSessionLoad({}, 1, new Map(), new Map(), metadata.id, { allowPrune: false });
-
-    // Close the session picker after creating a new session
-    dispatch({ type: 'CLOSE_SESSION_PICKER' });
 
     return metadata;
   };
@@ -118,13 +122,17 @@ export function createSessionOperations(params: SessionOperationsParams) {
     // Mark switching in progress to prevent "No panes" flash
     dispatch({ type: 'SET_SWITCHING', switching: true });
 
+    // Guaranteed cleanup: always close picker and reset switching state
+    await using resources = new ResourceStack();
+    resources.defer(() => {
+      dispatch({ type: 'CLOSE_SESSION_PICKER' });
+    });
+
     try {
       // Load new session
       const switchResult = await switchToSession(id);
       if (switchResult instanceof SessionNotFoundError || switchResult instanceof SessionCorruptedError || switchResult instanceof SessionStorageError) {
         console.error('Failed to switch to session:', switchResult.message);
-        dispatch({ type: 'CLOSE_SESSION_PICKER' });
-        dispatch({ type: 'SET_SWITCHING', switching: false });
         return;
       }
       const data = await loadSessionData(id);
@@ -149,7 +157,6 @@ export function createSessionOperations(params: SessionOperationsParams) {
         await onSessionLoad({}, 1, new Map(), new Map(), id, { allowPrune: false });
       }
 
-      dispatch({ type: 'CLOSE_SESSION_PICKER' });
       await refreshSessions();
     } finally {
       // Mark switching complete

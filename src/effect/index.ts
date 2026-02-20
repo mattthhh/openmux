@@ -14,3 +14,5 @@ export * from "./Config"
 export * from "./services"
 
 export * from "./bridge"
+
+export * from "./resources"
