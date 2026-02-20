@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.2](https://github.com/monotykamary/openmux/compare/v0.3.1...v0.3.2) (2026-02-20)
+
+
+### Bug Fixes
+
+* **update:** resolve checksum verification failure and package manager detection ([bbace9b](https://github.com/monotykamary/openmux/commit/bbace9b250be32ca0e69f4778a50939255a59cfe))
+
 ### [0.3.1](https://github.com/monotykamary/openmux/compare/v0.3.0...v0.3.1) (2026-02-20)
 
 
