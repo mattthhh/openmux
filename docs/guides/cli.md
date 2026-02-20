@@ -35,6 +35,18 @@ openmux attach [--session <name|id>]
 - `--session` switches to the requested session on startup.
 - If the named session does not exist, it is created and set active.
 
+### Update
+
+```
+openmux update [--yes] [--prerelease]
+```
+
+- Checks GitHub Releases for a newer openmux version.
+- Installs update assets into the managed runtime directory (`$XDG_DATA_HOME/openmux`).
+- By default, prompts before installing.
+- In non-interactive mode, pass `--yes`.
+- `--prerelease` includes prerelease tags when selecting the latest version.
+
 ### Session
 
 ```
@@ -111,6 +123,8 @@ openmux pane capture --help
 openmux session list --json
 openmux session create dev
 openmux attach --session dev
+openmux update
+openmux update --yes
 openmux pane split --direction vertical --workspace 2
 openmux pane send --pane focused --text "npm test\n"
 openmux pane capture --pane focused --lines 200 --format ansi

@@ -92,6 +92,8 @@ Examples:
 openmux session list --json
 openmux session create dev
 openmux attach --session dev
+openmux update
+openmux update --yes
 openmux pane split --direction vertical --workspace 2
 openmux pane send --pane focused --text "npm test\n"
 openmux pane capture --pane focused --lines 200 --format ansi
