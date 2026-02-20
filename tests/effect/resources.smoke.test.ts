@@ -283,6 +283,7 @@ describe("ResourceStack smoke tests", () => {
     });
 
     it("should handle safe cleanup that doesn't throw", async () => {
+      const consoleSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
       const cleanupOrder: string[] = [];
 
       await using resources = new ResourceStack();
@@ -304,6 +305,11 @@ describe("ResourceStack smoke tests", () => {
       expect(cleanupOrder).toContain("safe-1");
       expect(cleanupOrder).toContain("safe-2");
       expect(cleanupOrder.length).toBe(2);
+      expect(consoleSpy).toHaveBeenCalledWith(
+        "Resource cleanup failed:",
+        expect.any(Error)
+      );
+      consoleSpy.mockRestore();
     });
   });
 

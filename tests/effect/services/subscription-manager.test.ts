@@ -101,6 +101,7 @@ describe('SubscriptionRegistry', () => {
     })
 
     test('should continue notifying other subscribers if one throws', () => {
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
       const callback1 = vi.fn()
       const callback2 = vi.fn().mockImplementation(() => {
         throw new Error('Test error')
@@ -118,6 +119,8 @@ describe('SubscriptionRegistry', () => {
       expect(callback1).toHaveBeenCalled()
       expect(callback2).toHaveBeenCalled()
       expect(callback3).toHaveBeenCalled()
+      expect(consoleSpy).toHaveBeenCalledWith('Subscription callback error:', expect.any(Error))
+      consoleSpy.mockRestore()
     })
 
     test('should handle synchronous notifications', () => {
