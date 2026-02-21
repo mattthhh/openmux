@@ -36,7 +36,7 @@ bun run check:circular # Detect circular deps in src/
 - **SolidJS** - Reactive UI framework via OpenTUI's SolidJS reconciler
 - **zig-pty** - PTY support for shell process management (pure Zig implementation)
 - **libghostty-vt** - Native terminal emulator (VT parsing/state)
-- **Effect** - Typed functional programming for services (gradual migration in src/effect/)
+- **errore** - Type-safe error handling with Golang-style returns (replaces heavy Effect.ts)
 
 ## Architecture Overview
 
@@ -113,11 +113,295 @@ ThemeProvider              // Styling/theming
 - `ThemeContext.tsx`, `TitleContext.tsx`, `AggregateViewContext.tsx`
 
 **Effect module (src/effect/)**
-- `services/`, `models.ts`, `types.ts` - Effect services and schemas
-- `bridge/`, `bridge.ts` - SolidJS/Effect interoperability
-- `runtime.ts`, `Config.ts`, `errors.ts`
+- `errors.ts` - Domain-specific tagged errors using errore
+- `resources.ts` - ResourceStack for cleanup with `using`/`defer`
+- `services/` - Service implementations (PTY, Session, etc.)
+- `models.ts`, `types.ts` - Type definitions
+- `bridge/` - SolidJS/Effect service bridge
 
-### SolidJS Reactivity Patterns
+## Error Handling Patterns (Golang-Style with errore)
+
+We use the [`errore`](https://www.npmjs.com/package/errore) library for type-safe, Golang-style error handling instead of throwing exceptions.
+
+### Core Principle
+
+Functions return `Result | Error` unions. Callers explicitly check for errors using `instanceof`. This makes all error paths explicit and type-safe.
+
+```typescript
+import { tryAsync, tryFn as trySync } from 'errore';
+import { createTaggedError } from 'errore';
+
+// Define tagged errors with template messages
+export class SessionStorageError extends createTaggedError({
+  name: 'SessionStorageError',
+  message: 'Session storage $operation failed for $path: $reason',
+}) {}
+
+// Async operations return unions: Promise<Result | Error>
+async function loadSession(id: string): Promise<SessionData | SessionStorageError> {
+  const result = await tryAsync<SessionData, SessionStorageError>({
+    try: () => fs.readFile(getPath(id), 'utf8').then(JSON.parse),
+    catch: (e) => new SessionStorageError({ operation: 'read', path: id, reason: String(e) }),
+  });
+  
+  // Golang-style: if err != nil { return err }
+  if (result instanceof SessionStorageError) {
+    return result;
+  }
+  
+  return validateSession(result);
+}
+
+// Sync operations work the same way
+function parseConfig(path: string): Config | ConfigParseError {
+  const result = trySync<Config, ConfigParseError>({
+    try: () => TOML.parse(fs.readFileSync(path, 'utf8')) as Config,
+    catch: (e) => new ConfigParseError({ path, reason: String(e) }),
+  });
+  
+  if (result instanceof ConfigParseError) {
+    console.warn('Failed to parse config:', result);
+    return DEFAULT_CONFIG;
+  }
+  
+  return result;
+}
+```
+
+### Error Definitions
+
+All domain errors are defined in `src/effect/errors.ts`:
+
+```typescript
+import { createTaggedError } from 'errore';
+
+// PTY errors
+export class PtySpawnError extends createTaggedError({
+  name: 'PtySpawnError',
+  message: 'Failed to spawn PTY shell $shell in $cwd: $reason',
+}) {}
+
+export class PtyNotFoundError extends createTaggedError({
+  name: 'PtyNotFoundError',
+  message: 'PTY session $ptyId not found',
+}) {}
+
+// Session errors
+export class SessionNotFoundError extends createTaggedError({
+  name: 'SessionNotFoundError',
+  message: 'Session $sessionId not found',
+}) {}
+
+export class SessionCorruptedError extends createTaggedError({
+  name: 'SessionCorruptedError',
+  message: 'Session $sessionId is corrupted: $reason',
+}) {}
+
+// Union types for error handling
+export type PtyError = PtySpawnError | PtyNotFoundError | PtyCwdError;
+export type SessionError = SessionNotFoundError | SessionCorruptedError | SessionStorageError;
+```
+
+### Error Propagation
+
+Errors are values that propagate explicitly up the call chain:
+
+```typescript
+async function initializeAndRender(): Promise<void | StartupError> {
+  const services = await initializeServices();
+  if (services instanceof Error) {
+    return new StartupError({ reason: `Failed to initialize: ${services.message}` });
+  }
+  
+  const renderResult = await tryAsync<void, StartupError>({
+    try: () => render(() => <App />),
+    catch: (e) => new StartupError({ reason: String(e) }),
+  });
+  
+  // Return error up the chain
+  if (renderResult instanceof StartupError) {
+    return renderResult;
+  }
+}
+
+// Top-level handling
+const result = await initializeAndRender();
+if (result instanceof StartupError) {
+  console.error('Failed to start:', result);
+  process.exit(1);
+}
+```
+
+### Benefits
+
+- **Type safety**: Return types explicitly include possible errors
+- **No hidden throws**: Every error path is visible in the code
+- **Explicit propagation**: Errors must be explicitly returned (or handled)
+- **No stack unwinding**: Errors are values, not exceptions
+- **Pattern matching**: `instanceof` checks work reliably across modules
+
+## Resource Management with `using` and `defer`
+
+We use TypeScript's Explicit Resource Management (`using` keyword) combined with `AsyncDisposableStack` from errore for automatic, guaranteed cleanup.
+
+### The `using` Keyword
+
+The `using` declaration (TypeScript 5.2+) automatically calls `[Symbol.dispose]` or `[Symbol.asyncDispose]` when the variable goes out of scope — even if an error is thrown.
+
+```typescript
+// Synchronous disposal
+using file = fs.openSync('/tmp/data.txt', 'w');
+fs.writeSync(file, 'data');
+// file is automatically closed here
+
+// Asynchronous disposal (what we use most)
+async function fetchWithCleanup() {
+  await using conn = await createConnection();
+  await conn.send(data);
+  // conn.disconnect() called automatically via asyncDispose
+}
+```
+
+### ResourceStack: Golang-like defer
+
+Our `ResourceStack` class (in `src/effect/resources.ts`) wraps `AsyncDisposableStack` with typed error handling and convenience methods:
+
+```typescript
+import { ResourceStack } from '../effect/resources';
+
+async function processPty(ptyId: string): Promise<void | PtyError> {
+  await using resources = new ResourceStack();
+  
+  // Defer cleanup (like Go's defer) - runs LIFO on scope exit
+  const tempFile = await createTempFile();
+  resources.defer(() => fs.unlink(tempFile));
+  
+  // Register subscriptions for auto-cleanup
+  const unsub = subscribeToUpdates(ptyId, handleUpdate);
+  resources.registerSubscription(unsub);
+  
+  // Register timers/intervals
+  const timeout = setTimeout(() => cancelOperation(), 5000);
+  resources.registerTimer(timeout);
+  
+  // Register AbortController
+  const controller = new AbortController();
+  resources.registerAbortController(controller);
+  
+  // Defer with error logging (cleanup failures don't block other cleanups)
+  resources.deferSafe(() => {
+    state.activeProcesses.delete(ptyId);
+  });
+  
+  // Do work...
+  const result = await doWork(tempFile, controller.signal);
+  
+  // All cleanup runs automatically when function exits
+  return result;
+}
+```
+
+### Guard Classes with AsyncDisposable
+
+Common pattern for state guards that reset flags on exit:
+
+```typescript
+/** AsyncDisposable guard for refresh state flags */
+class RefreshGuard implements AsyncDisposable {
+  constructor(
+    private state: RefreshState,
+    private key: keyof RefreshState
+  ) {
+    this.state[this.key] = true;
+  }
+
+  async [Symbol.asyncDispose](): Promise<void> {
+    this.state[this.key] = false;
+  }
+}
+
+// Usage: automatically resets refreshInProgress when done
+async function refreshData() {
+  if (refreshState.refreshInProgress) return;
+  await using _guard = new RefreshGuard(refreshState, 'refreshInProgress');
+  
+  // Do work while flag is true...
+  await fetchData();
+  
+  // Flag automatically reset here, even if fetchData() throws
+}
+```
+
+### Inline AsyncDisposable Objects
+
+For quick cleanup without defining a class:
+
+```typescript
+await using cleanup = {
+  [Symbol.asyncDispose]: async () => {
+    client.off('data', handleData);
+    client.off('close', handleClose);
+    client.off('end', handleClose);
+  },
+};
+```
+
+### ResourceStack API Reference
+
+```typescript
+class ResourceStack extends AsyncDisposableStack {
+  // Basic defer (LIFO order - last deferred runs first)
+  defer(cleanup: () => void | Promise<void>): void;
+  
+  // Defer with error logging (cleanup errors don't stop other cleanups)
+  deferSafe(cleanup: () => void | Promise<void>): void;
+  
+  // Defer multiple at once
+  deferAll(...cleanups: Array<() => void | Promise<void>>): void;
+  
+  // Register common resource types
+  registerTimer(timer: ReturnType<typeof setTimeout>): void;
+  registerInterval(interval: ReturnType<typeof setInterval>): void;
+  registerAbortController(controller: AbortController): void;
+  registerSubscription(unsubscribe: () => void): void;
+  registerEventListener(emitter, event, handler): void;
+  registerDisposable<T extends AsyncDisposable>(resource: T): T;
+}
+```
+
+### When to Use
+
+| Pattern | Use Case |
+|---------|----------|
+| `await using resources = new ResourceStack()` | Multiple cleanup operations needed |
+| `await using guard = new SomeGuard()` | State flag management (prevents re-entrant calls) |
+| `await using _ = { [Symbol.asyncDispose]: ... }` | One-off inline cleanup |
+| `using file = openSync(...)` | Synchronous resources (rare in our codebase) |
+
+### Example: Session Operations
+
+```typescript
+async function handleSessionSwitch(id: string): Promise<void> {
+  // Guaranteed cleanup: always close picker when function exits
+  await using resources = new ResourceStack();
+  resources.defer(() => {
+    dispatch({ type: 'CLOSE_SESSION_PICKER' });
+  });
+  
+  // Prevent concurrent switching
+  await using _guard = new SwitchingGuard(dispatch, true);
+  
+  const result = await switchToSession(id);
+  if (result instanceof SessionError) {
+    console.error('Failed to switch:', result.message);
+    return;
+  }
+  
+  // picker closed and guard reset automatically
+}
+```
+
+## SolidJS Reactivity Patterns
 
 Contexts expose values via object properties. Understanding what's safe to destructure is critical:
 
@@ -152,14 +436,14 @@ layout.panes;               // Calls getter each time, stays reactive
 - `SelectionContext`: `selectionVersion`, `copyNotification`
 - `SearchContext`: `searchState`, `searchVersion`
 
-### Layout Modes
+## Layout Modes
 
 Each workspace has a `layoutMode` that determines pane arrangement:
 - **vertical**: Main pane left, stack panes split vertically on right
 - **horizontal**: Main pane top, stack panes split horizontally on bottom
 - **stacked**: Main pane left, stack panes tabbed on right (only active visible)
 
-### Workspaces and Sessions
+## Workspaces and Sessions
 
 - Workspaces are indexed 1-9 and maintain separate layout state.
 - Sessions persist to `~/.config/openmux/sessions/` and are coordinated by `SessionContext` and `SessionBridge`.
@@ -181,15 +465,3 @@ Instead, use:
 - Simple inline comments when necessary: `// Brief explanation`
 - Group related functions with a single comment or whitespace, not decorative borders
 - Session restores reuse existing PTYs when possible, otherwise new PTYs are created from stored CWDs.
-
-<!-- effect-solutions:start -->
-## Effect Solutions Usage
-
-The Effect Solutions CLI provides curated best practices and patterns for Effect TypeScript. Before working on Effect code, check if there's a relevant topic that covers your use case.
-
-- `effect-solutions list` - List all available topics
-- `effect-solutions show <slug...>` - Read one or more topics
-- `effect-solutions search <term>` - Search topics by keyword
-
-**Local Effect Source:** The Effect repository is cloned to `~/.local/share/effect-solutions/effect` for reference. Use this to explore APIs, find usage examples, and understand implementation details when the documentation isn't enough.
-<!-- effect-solutions:end -->
