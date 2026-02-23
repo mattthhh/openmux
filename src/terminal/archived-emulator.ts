@@ -19,8 +19,22 @@ import type { TerminalColors } from "./terminal-colors"
 import { searchTerminal } from "./ghostty-vt/terminal-search"
 import { createEmptyRow } from "./ghostty-emulator/cell-converter"
 import type { ScrollbackArchive } from "./scrollback-archive"
+import type { ArchivePlacement } from "./kitty-graphics/archive-placement"
+
+/** Cache entry for archived placements */
+interface PlacementCache {
+  /** Archived placements adjusted for current viewport */
+  placements: KittyGraphicsPlacement[]
+  /** Archive length when cache was built */
+  archiveLength: number
+  /** Base emulator placement count when cache was built */
+  basePlacementCount: number
+}
 
 export class ArchivedTerminalEmulator implements ITerminalEmulator {
+  /** Cache for archived placements to avoid recalculation */
+  private placementCache: PlacementCache | null = null
+
   constructor(
     private base: ITerminalEmulator,
     private archive: ScrollbackArchive
@@ -52,6 +66,7 @@ export class ArchivedTerminalEmulator implements ITerminalEmulator {
 
   reset(): void {
     this.base.reset()
+    this.invalidatePlacementCache()
   }
 
   dispose(): void {
@@ -161,7 +176,104 @@ export class ArchivedTerminalEmulator implements ITerminalEmulator {
   }
 
   getKittyPlacements(): KittyGraphicsPlacement[] {
-    return this.base.getKittyPlacements?.() ?? []
+    // Get base emulator placements
+    const basePlacements = this.base.getKittyPlacements?.() ?? []
+
+    // Get archived placements
+    const archivedPlacements = this.getArchivedPlacements(basePlacements.length)
+
+    if (archivedPlacements.length === 0) {
+      return basePlacements
+    }
+
+    if (basePlacements.length === 0) {
+      return archivedPlacements
+    }
+
+    // Merge and deduplicate by (imageId, placementId)
+    const seen = new Set<string>()
+    const merged: KittyGraphicsPlacement[] = []
+
+    // Add archived placements first (they're "behind" live ones)
+    for (const p of archivedPlacements) {
+      const key = `${p.imageId}:${p.placementId}`
+      if (!seen.has(key)) {
+        seen.add(key)
+        merged.push(p)
+      }
+    }
+
+    // Add base placements
+    for (const p of basePlacements) {
+      const key = `${p.imageId}:${p.placementId}`
+      if (!seen.has(key)) {
+        seen.add(key)
+        merged.push(p)
+      }
+    }
+
+    return merged
+  }
+
+  /**
+   * Get placements from the scrollback archive.
+   * Adjusts screenY coordinates to account for archive offset.
+   * Results are cached for performance.
+   */
+  private getArchivedPlacements(basePlacementCount: number): KittyGraphicsPlacement[] {
+    // Check if we can use cached placements
+    if (this.placementCache) {
+      const archiveLength = this.archive.length
+      if (
+        this.placementCache.archiveLength === archiveLength &&
+        this.placementCache.basePlacementCount === basePlacementCount
+      ) {
+        return this.placementCache.placements
+      }
+    }
+
+    // Get placements from archive
+    // Note: getPlacementsForLineRange will be added by task-2
+    // For now, we handle the case where the method doesn't exist
+    const archivePlacements: ArchivePlacement[] =
+      (this.archive as unknown as { getPlacementsForLineRange?(start: number, end: number): ArchivePlacement[] })
+        .getPlacementsForLineRange?.(0, this.archive.length) ?? []
+
+    if (archivePlacements.length === 0) {
+      this.placementCache = {
+        placements: [],
+        archiveLength: this.archive.length,
+        basePlacementCount,
+      }
+      return []
+    }
+
+    // Adjust screenY coordinates: archived lines are now at negative screen positions
+    // screenY = -(archiveLength - archiveOffset) when visible at top of scrollback
+    // For rendering purposes, we need to map to the visible coordinate space
+    const archiveLength = this.archive.length
+    const adjustedPlacements: KittyGraphicsPlacement[] = archivePlacements.map((p) => ({
+      ...p,
+      // Map archive offset to screen coordinate
+      // When viewing scrollback, line at archive offset N appears at screenY = -(archiveLength - N)
+      screenY: p.archiveOffset - archiveLength,
+    }))
+
+    this.placementCache = {
+      placements: adjustedPlacements,
+      archiveLength,
+      basePlacementCount,
+    }
+
+    return adjustedPlacements
+  }
+
+  /**
+   * Invalidate the placement cache.
+   * Called when archive is reset or when we need to force recalculation.
+   */
+  private invalidatePlacementCache(): void {
+    this.placementCache = null
   }
 
   drainResponses(): string[] {
