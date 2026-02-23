@@ -7,6 +7,7 @@ import fsp from "node:fs/promises"
 import { tryAsync } from "errore"
 import path from "node:path"
 import type { TerminalCell } from "../core/types"
+import type { KittyGraphicsPlacement } from "./emulator-interface"
 import { ScrollbackArchiveError } from "../effect/errors"
 import { packRow, unpackRow, CELL_SIZE } from "./cell-serialization"
 import { ScrollbackCache } from "./emulator-utils/scrollback-cache"
@@ -14,6 +15,120 @@ import {
   SCROLLBACK_ARCHIVE_CHUNK_MAX_LINES,
   SCROLLBACK_ARCHIVE_MAX_BYTES_PER_PTY,
 } from "./scrollback-config"
+
+/**
+ * Binary format for ArchivePlacement (60 bytes total):
+ * - bytes 0-3:   imageId (u32)
+ * - bytes 4-7:   placementId (u32)
+ * - bytes 8-11:  placementTag (u32, 0=internal, 1=external)
+ * - bytes 12-15: screenX (u32)
+ * - bytes 16-19: screenY (u32)
+ * - bytes 20-23: xOffset (u32)
+ * - bytes 24-27: yOffset (u32)
+ * - bytes 28-31: sourceX (u32)
+ * - bytes 32-35: sourceY (u32)
+ * - bytes 36-39: sourceWidth (u32)
+ * - bytes 40-43: sourceHeight (u32)
+ * - bytes 44-47: columns (u32)
+ * - bytes 48-51: rows (u32)
+ * - bytes 52-55: z (u32, signed stored as u32)
+ * - bytes 56-59: archiveOffset (u32)
+ * - bytes 60-63: originalScreenY (u32)
+ * 
+ * Note: 4 bytes padding to align to 64 bytes for cache efficiency
+ */
+export const PLACEMENT_SIZE = 64 // bytes per placement
+
+/**
+ * Pack a single ArchivePlacement into a DataView at the given offset
+ */
+function packPlacementAt(view: DataView, offset: number, placement: ArchivePlacement): void {
+  view.setUint32(offset, placement.imageId, true)
+  view.setUint32(offset + 4, placement.placementId, true)
+  view.setUint32(offset + 8, placement.placementTag, true)
+  view.setUint32(offset + 12, placement.screenX, true)
+  view.setUint32(offset + 16, placement.screenY, true)
+  view.setUint32(offset + 20, placement.xOffset, true)
+  view.setUint32(offset + 24, placement.yOffset, true)
+  view.setUint32(offset + 28, placement.sourceX, true)
+  view.setUint32(offset + 32, placement.sourceY, true)
+  view.setUint32(offset + 36, placement.sourceWidth, true)
+  view.setUint32(offset + 40, placement.sourceHeight, true)
+  view.setUint32(offset + 44, placement.columns, true)
+  view.setUint32(offset + 48, placement.rows, true)
+  view.setInt32(offset + 52, placement.z, true)
+  view.setUint32(offset + 56, placement.archiveOffset, true)
+  view.setUint32(offset + 60, placement.originalScreenY, true)
+}
+
+/**
+ * Unpack a single ArchivePlacement from a DataView at the given offset
+ */
+function unpackPlacementAt(view: DataView, offset: number): ArchivePlacement {
+  return {
+    imageId: view.getUint32(offset, true),
+    placementId: view.getUint32(offset + 4, true),
+    placementTag: view.getUint32(offset + 8, true) as 0 | 1,
+    screenX: view.getUint32(offset + 12, true),
+    screenY: view.getUint32(offset + 16, true),
+    xOffset: view.getUint32(offset + 20, true),
+    yOffset: view.getUint32(offset + 24, true),
+    sourceX: view.getUint32(offset + 28, true),
+    sourceY: view.getUint32(offset + 32, true),
+    sourceWidth: view.getUint32(offset + 36, true),
+    sourceHeight: view.getUint32(offset + 40, true),
+    columns: view.getUint32(offset + 44, true),
+    rows: view.getUint32(offset + 48, true),
+    z: view.getInt32(offset + 52, true),
+    archiveOffset: view.getUint32(offset + 56, true),
+    originalScreenY: view.getUint32(offset + 60, true),
+  }
+}
+
+/**
+ * Pack an array of ArchivePlacements into a Buffer
+ */
+export function packPlacements(placements: ArchivePlacement[]): Buffer {
+  const buffer = Buffer.alloc(placements.length * PLACEMENT_SIZE)
+  const view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength)
+  
+  for (let i = 0; i < placements.length; i++) {
+    packPlacementAt(view, i * PLACEMENT_SIZE, placements[i])
+  }
+  
+  return buffer
+}
+
+/**
+ * Unpack ArchivePlacements from a Buffer
+ */
+export function unpackPlacements(buffer: Buffer): ArchivePlacement[] {
+  const view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength)
+  const count = buffer.byteLength / PLACEMENT_SIZE
+  const placements: ArchivePlacement[] = new Array(count)
+  
+  for (let i = 0; i < count; i++) {
+    placements[i] = unpackPlacementAt(view, i * PLACEMENT_SIZE)
+  }
+  
+  return placements
+}
+
+/**
+ * ArchivePlacement extends KittyGraphicsPlacement with archive-specific metadata.
+ * This is stored alongside cell data to preserve Kitty graphics in scrollback.
+ * 
+ * Fields:
+ * - All KittyGraphicsPlacement fields (imageId, placementId, screenX, screenY, etc.)
+ * - archiveOffset: The scrollback offset where this placement starts (0 = oldest line in archive)
+ * - originalScreenY: The original Y coordinate on screen when archived (for coordinate mapping)
+ */
+export type ArchivePlacement = KittyGraphicsPlacement & {
+  /** Scrollback offset where this placement starts (0 = oldest line in archive) */
+  archiveOffset: number
+  /** Original Y coordinate on screen when archived (for coordinate mapping) */
+  originalScreenY: number
+}
 
 type ArchiveChunk = {
   id: number
@@ -24,6 +139,10 @@ type ArchiveChunk = {
   lineCount: number
   bytes: number
   createdAt: number
+  /** Reference to placement data file (undefined for backward compatibility) */
+  placementFilename?: string
+  placementPath?: string
+  placementBytes?: number
 }
 
 type ArchiveMeta = {
@@ -37,6 +156,9 @@ type ArchiveMeta = {
     lineCount: number
     bytes: number
     createdAt: number
+    /** Placement chunk reference (undefined for backward compatibility) */
+    placementFilename?: string
+    placementBytes?: number
   }>
 }
 
@@ -87,6 +209,105 @@ export class ScrollbackArchive {
     return this.chunks.length > 0 ? this.chunks[0] : null
   }
 
+  /**
+   * Append placements to the archive, associated with the current chunk.
+   * Placements are stored in a separate file alongside the cell chunk.
+   * @param placements Array of ArchivePlacement to store
+   */
+  appendPlacements(placements: ArchivePlacement[]): Promise<void> {
+    if (placements.length === 0) return Promise.resolve()
+    const generation = this.generation
+    return this.enqueue(() => this.appendPlacementsInternal(placements, generation))
+  }
+
+  private async appendPlacementsInternal(
+    placements: ArchivePlacement[],
+    generation: number
+  ): Promise<void> {
+    if (placements.length === 0) return
+    if (generation !== this.generation) return
+
+    this.ensureDir()
+
+    const currentChunk = this.chunks[this.chunks.length - 1]
+    if (!currentChunk) return
+
+    // Ensure placement file is set up for this chunk
+    if (!currentChunk.placementPath) {
+      currentChunk.placementFilename = `chunk-${currentChunk.id}-placements.bin`
+      currentChunk.placementPath = path.join(this.rootDir, currentChunk.placementFilename)
+      currentChunk.placementBytes = 0
+    }
+
+    const packed = packPlacements(placements)
+    const result = await tryAsync<void, ScrollbackArchiveError>({
+      try: () => fsp.appendFile(currentChunk.placementPath!, packed),
+      catch: (e) => new ScrollbackArchiveError({ operation: 'write', reason: String(e) }),
+    })
+
+    if (result instanceof ScrollbackArchiveError) {
+      return
+    }
+
+    if (generation !== this.generation) return
+
+    currentChunk.placementBytes = (currentChunk.placementBytes ?? 0) + packed.byteLength
+    await this.flushMeta()
+  }
+
+  /**
+   * Get placements for a given line range in the archive.
+   * Returns placements whose archiveOffset falls within [startOffset, endOffset).
+   * @param startOffset Start line offset (inclusive, 0 = oldest line)
+   * @param endOffset End line offset (exclusive)
+   * @returns Array of ArchivePlacement within the range
+   */
+  getPlacementsForLineRange(startOffset: number, endOffset: number): ArchivePlacement[] {
+    if (startOffset < 0) startOffset = 0
+    if (endOffset > this.totalLines) endOffset = this.totalLines
+    if (startOffset >= endOffset) return []
+
+    const placements: ArchivePlacement[] = []
+
+    // Find which chunks overlap with the requested range
+    let chunkStart = 0
+    for (const chunk of this.chunks) {
+      const chunkEnd = chunkStart + chunk.lineCount
+      
+      // Check if this chunk overlaps with the requested range
+      if (chunkEnd > startOffset && chunkStart < endOffset) {
+        // This chunk has relevant lines, check for placement data
+        if (chunk.placementPath && chunk.placementBytes && chunk.placementBytes > 0) {
+          const chunkPlacements = this.readPlacementsFromChunk(chunk)
+          // Filter placements within the requested range
+          for (const placement of chunkPlacements) {
+            if (placement.archiveOffset >= startOffset && placement.archiveOffset < endOffset) {
+              placements.push(placement)
+            }
+          }
+        }
+      }
+      
+      chunkStart = chunkEnd
+      if (chunkStart >= endOffset) break
+    }
+
+    return placements
+  }
+
+  private readPlacementsFromChunk(chunk: ArchiveChunk): ArchivePlacement[] {
+    if (!chunk.placementPath || !chunk.placementBytes || chunk.placementBytes === 0) {
+      return []
+    }
+
+    try {
+      const buffer = fs.readFileSync(chunk.placementPath)
+      return unpackPlacements(buffer)
+    } catch {
+      return []
+    }
+  }
+
   clearCache(): void {
     this.cache.clear()
   }
@@ -101,12 +322,24 @@ export class ScrollbackArchive {
     this.cache.clear()
     void this.enqueue(async () => {
       for (const chunk of chunksToDelete) {
+        // Delete cell data file
         const result = await tryAsync<void, ScrollbackArchiveError>({
           try: () => fsp.unlink(chunk.path),
           catch: (e) => new ScrollbackArchiveError({ operation: 'delete', reason: String(e) }),
         });
         if (result instanceof ScrollbackArchiveError) {
-          continue;
+          // Continue to try deleting placement file
+        }
+        
+        // Delete placement data file if it exists
+        if (chunk.placementPath) {
+          const placementResult = await tryAsync<void, ScrollbackArchiveError>({
+            try: () => fsp.unlink(chunk.placementPath!),
+            catch: (e) => new ScrollbackArchiveError({ operation: 'delete', reason: String(e) }),
+          });
+          if (placementResult instanceof ScrollbackArchiveError) {
+            // Ignore errors for placement file
+          }
         }
       }
       await this.flushMeta()
@@ -216,13 +449,26 @@ export class ScrollbackArchive {
     this.totalBytes -= chunk.bytes
     this.cache.clear()
     void this.enqueue(async () => {
+      // Delete cell data file
       const result = await tryAsync<void, ScrollbackArchiveError>({
         try: () => fsp.unlink(chunk.path),
         catch: (e) => new ScrollbackArchiveError({ operation: 'delete', reason: String(e) }),
       });
       if (result instanceof ScrollbackArchiveError) {
-        return;
+        // Continue to try deleting placement file even if cell delete fails
       }
+      
+      // Delete placement data file if it exists
+      if (chunk.placementPath) {
+        const placementResult = await tryAsync<void, ScrollbackArchiveError>({
+          try: () => fsp.unlink(chunk.placementPath!),
+          catch: (e) => new ScrollbackArchiveError({ operation: 'delete', reason: String(e) }),
+        });
+        if (placementResult instanceof ScrollbackArchiveError) {
+          // Ignore errors for placement file - it may not exist
+        }
+      }
+      
       await this.flushMeta()
     })
     return { linesRemoved: chunk.lineCount, bytesRemoved: chunk.bytes }
@@ -360,6 +606,12 @@ export class ScrollbackArchive {
         lineCount: entry.lineCount,
         bytes: entry.bytes,
         createdAt: entry.createdAt,
+        // Backward compatibility: placement fields may be undefined in older archives
+        placementFilename: entry.placementFilename,
+        placementPath: entry.placementFilename 
+          ? path.join(this.rootDir, entry.placementFilename) 
+          : undefined,
+        placementBytes: entry.placementBytes ?? 0,
       }
       this.chunks.push(chunk)
       this.totalLines += chunk.lineCount
@@ -384,6 +636,9 @@ export class ScrollbackArchive {
         lineCount: chunk.lineCount,
         bytes: chunk.bytes,
         createdAt: chunk.createdAt,
+        // Include placement metadata if this chunk has placement data
+        placementFilename: chunk.placementFilename,
+        placementBytes: chunk.placementBytes,
       })),
     }
     const result = await tryAsync<void, ScrollbackArchiveError>({

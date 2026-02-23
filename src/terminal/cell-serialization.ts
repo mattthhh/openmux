@@ -34,6 +34,17 @@ import type {
 } from '../core/types';
 import type { SerializedDirtyUpdate } from './emulator-interface';
 
+// Re-export placement serialization from kitty-graphics module
+export {
+  PLACEMENT_SIZE,
+  packPlacement,
+  unpackPlacement,
+  packPlacements,
+  unpackPlacements,
+  toArchivePlacement,
+  type ArchivePlacement,
+} from './kitty-graphics/archive-placement';
+
 export const CELL_SIZE = 16; // bytes per cell
 
 const FLAG_BOLD = 1 << 0;
