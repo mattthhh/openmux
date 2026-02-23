@@ -19,12 +19,15 @@ function createMockEmulator(
   } = {}
 ): ITerminalEmulator {
   const {
-    scrollbackLength = 1000,
+    scrollbackLength: initialScrollbackLength = 1000,
     placements = [],
     supportsKittyGraphics = true,
   } = options;
 
-  return {
+  // Use a mutable variable so trimScrollback can update it
+  let currentScrollbackLength = initialScrollbackLength;
+
+  const emulator = {
     cols: 80,
     rows: 24,
     isDisposed: false,
@@ -32,9 +35,9 @@ function createMockEmulator(
     resize: vi.fn(),
     reset: vi.fn(),
     dispose: vi.fn(),
-    getScrollbackLength: vi.fn(() => scrollbackLength),
+    getScrollbackLength: vi.fn(() => currentScrollbackLength),
     getScrollbackLine: vi.fn((offset: number): TerminalCell[] | null => {
-      if (offset < 0 || offset >= scrollbackLength) return null;
+      if (offset < 0 || offset >= currentScrollbackLength) return null;
       // Return a simple line with some cells
       return Array.from({ length: 80 }, (_, i) => ({
         char: "X",
@@ -71,9 +74,14 @@ function createMockEmulator(
     ...(supportsKittyGraphics && {
       getKittyPlacements: vi.fn(() => placements),
     }),
-    // trimScrollback is a Ghostty-specific method
-    trimScrollback: vi.fn(),
-  } as ITerminalEmulator;
+  } as ITerminalEmulator & { trimScrollback?: (lines: number) => void };
+
+  // Add trimScrollback that actually updates the scrollback length
+  emulator.trimScrollback = (lines: number) => {
+    currentScrollbackLength = Math.max(0, currentScrollbackLength - lines);
+  };
+
+  return emulator;
 }
 
 /**
@@ -289,8 +297,8 @@ describe("ScrollbackArchiver", () => {
     });
 
     test("preserves original screenY in placement metadata", async () => {
-      const scrollbackLength = 12000;
-      const originalScreenY = -12000;
+      const scrollbackLength = 2500;
+      const originalScreenY = -2500;
       const placements: KittyGraphicsPlacement[] = [
         {
           imageId: 1,
@@ -331,7 +339,7 @@ describe("ScrollbackArchiver", () => {
 
     test("returns empty array when no placements exist", async () => {
       const emulator = createMockEmulator({
-        scrollbackLength: 12000,
+        scrollbackLength: 2500,
         placements: [],
         supportsKittyGraphics: true,
       });
@@ -352,7 +360,7 @@ describe("ScrollbackArchiver", () => {
 
   describe("coordinate mapping", () => {
     test("calculates archiveOffset correctly", async () => {
-      const scrollbackLength = 12000;
+      const scrollbackLength = 2500;
       const archiveStartOffset = 500; // Archive already has 500 lines
       const placements: KittyGraphicsPlacement[] = [
         {
@@ -360,7 +368,7 @@ describe("ScrollbackArchiver", () => {
           placementId: 1,
           placementTag: 0,
           screenX: 0,
-          screenY: -12000, // Line 0 - will have archiveOffset = 500 + 0 = 500
+          screenY: -2500, // Line 0 - will have archiveOffset = 500 + 0 = 500
           xOffset: 0,
           yOffset: 0,
           sourceX: 0,
@@ -398,9 +406,8 @@ describe("ScrollbackArchiver", () => {
 
   describe("edge cases", () => {
     test("handles placement partially overlapping archived range", async () => {
-      const scrollbackLength = 12000;
-      const batchSize = 256;
-      // Placement spans lines 200-210, but batch only archives 0-255
+      const scrollbackLength = 2500;
+      // Placement spans lines 100-109, batch archives 0-255
       // So this placement IS fully within the archived range
       const placements: KittyGraphicsPlacement[] = [
         {
@@ -408,7 +415,7 @@ describe("ScrollbackArchiver", () => {
           placementId: 1,
           placementTag: 0,
           screenX: 0,
-          screenY: -11800, // Line 200
+          screenY: -2400, // Line 100
           xOffset: 0,
           yOffset: 0,
           sourceX: 0,
@@ -416,7 +423,7 @@ describe("ScrollbackArchiver", () => {
           sourceWidth: 100,
           sourceHeight: 100,
           columns: 10,
-          rows: 10, // Spans lines 200-210
+          rows: 10, // Spans lines 100-109
           z: 0,
         },
       ];
@@ -438,13 +445,11 @@ describe("ScrollbackArchiver", () => {
 
     test("handles emulator returning undefined for getKittyPlacements", async () => {
       const emulator = createMockEmulator({
-        scrollbackLength: 12000,
+        scrollbackLength: 2500,
         supportsKittyGraphics: true,
       });
       // Override to return undefined
-      if (emulator.getKittyPlacements) {
-        vi.mocked(emulator.getKittyPlacements).mockReturnValue(undefined as unknown as KittyGraphicsPlacement[]);
-      }
+      (emulator as ITerminalEmulator & { getKittyPlacements: () => undefined }).getKittyPlacements = () => undefined as unknown as undefined;
 
       const archive = createMockScrollbackArchive();
       const session = createMockSession(archive, emulator);

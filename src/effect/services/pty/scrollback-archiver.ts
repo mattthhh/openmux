@@ -136,7 +136,7 @@ export class ScrollbackArchiver {
     }
 
     const placements = this.liveEmulator.getKittyPlacements()
-    if (placements.length === 0) {
+    if (!placements || placements.length === 0) {
       return []
     }
 
