@@ -7,7 +7,6 @@ import fsp from "node:fs/promises"
 import { tryAsync } from "errore"
 import path from "node:path"
 import type { TerminalCell } from "../core/types"
-import type { KittyGraphicsPlacement } from "./emulator-interface"
 import { ScrollbackArchiveError } from "../effect/errors"
 import { packRow, unpackRow, CELL_SIZE } from "./cell-serialization"
 import { ScrollbackCache } from "./emulator-utils/scrollback-cache"
@@ -15,119 +14,35 @@ import {
   SCROLLBACK_ARCHIVE_CHUNK_MAX_LINES,
   SCROLLBACK_ARCHIVE_MAX_BYTES_PER_PTY,
 } from "./scrollback-config"
+import {
+  PLACEMENT_SIZE,
+  packPlacements as packPlacementsToArrayBuffer,
+  unpackPlacements as unpackPlacementsFromArrayBuffer,
+  type ArchivePlacement,
+} from "./kitty-graphics/archive-placement"
+
+export { PLACEMENT_SIZE, type ArchivePlacement }
 
 /**
- * Binary format for ArchivePlacement (60 bytes total):
- * - bytes 0-3:   imageId (u32)
- * - bytes 4-7:   placementId (u32)
- * - bytes 8-11:  placementTag (u32, 0=internal, 1=external)
- * - bytes 12-15: screenX (u32)
- * - bytes 16-19: screenY (u32)
- * - bytes 20-23: xOffset (u32)
- * - bytes 24-27: yOffset (u32)
- * - bytes 28-31: sourceX (u32)
- * - bytes 32-35: sourceY (u32)
- * - bytes 36-39: sourceWidth (u32)
- * - bytes 40-43: sourceHeight (u32)
- * - bytes 44-47: columns (u32)
- * - bytes 48-51: rows (u32)
- * - bytes 52-55: z (u32, signed stored as u32)
- * - bytes 56-59: archiveOffset (u32)
- * - bytes 60-63: originalScreenY (u32)
- * 
- * Note: 4 bytes padding to align to 64 bytes for cache efficiency
+ * Pack an array of ArchivePlacements into a Buffer for file storage.
+ * Converts the ArrayBuffer from packPlacementsToArrayBuffer to Node.js Buffer.
  */
-export const PLACEMENT_SIZE = 64 // bytes per placement
-
-/**
- * Pack a single ArchivePlacement into a DataView at the given offset
- */
-function packPlacementAt(view: DataView, offset: number, placement: ArchivePlacement): void {
-  view.setUint32(offset, placement.imageId, true)
-  view.setUint32(offset + 4, placement.placementId, true)
-  view.setUint32(offset + 8, placement.placementTag, true)
-  view.setUint32(offset + 12, placement.screenX, true)
-  view.setUint32(offset + 16, placement.screenY, true)
-  view.setUint32(offset + 20, placement.xOffset, true)
-  view.setUint32(offset + 24, placement.yOffset, true)
-  view.setUint32(offset + 28, placement.sourceX, true)
-  view.setUint32(offset + 32, placement.sourceY, true)
-  view.setUint32(offset + 36, placement.sourceWidth, true)
-  view.setUint32(offset + 40, placement.sourceHeight, true)
-  view.setUint32(offset + 44, placement.columns, true)
-  view.setUint32(offset + 48, placement.rows, true)
-  view.setInt32(offset + 52, placement.z, true)
-  view.setUint32(offset + 56, placement.archiveOffset, true)
-  view.setUint32(offset + 60, placement.originalScreenY, true)
+function packPlacements(placements: ArchivePlacement[]): Buffer {
+  const arrayBuffer = packPlacementsToArrayBuffer(placements)
+  return Buffer.from(arrayBuffer)
 }
 
 /**
- * Unpack a single ArchivePlacement from a DataView at the given offset
+ * Unpack ArchivePlacements from a Buffer read from file.
+ * Converts the Node.js Buffer to ArrayBuffer for unpackPlacementsFromArrayBuffer.
  */
-function unpackPlacementAt(view: DataView, offset: number): ArchivePlacement {
-  return {
-    imageId: view.getUint32(offset, true),
-    placementId: view.getUint32(offset + 4, true),
-    placementTag: view.getUint32(offset + 8, true) as 0 | 1,
-    screenX: view.getUint32(offset + 12, true),
-    screenY: view.getUint32(offset + 16, true),
-    xOffset: view.getUint32(offset + 20, true),
-    yOffset: view.getUint32(offset + 24, true),
-    sourceX: view.getUint32(offset + 28, true),
-    sourceY: view.getUint32(offset + 32, true),
-    sourceWidth: view.getUint32(offset + 36, true),
-    sourceHeight: view.getUint32(offset + 40, true),
-    columns: view.getUint32(offset + 44, true),
-    rows: view.getUint32(offset + 48, true),
-    z: view.getInt32(offset + 52, true),
-    archiveOffset: view.getUint32(offset + 56, true),
-    originalScreenY: view.getUint32(offset + 60, true),
-  }
-}
-
-/**
- * Pack an array of ArchivePlacements into a Buffer
- */
-export function packPlacements(placements: ArchivePlacement[]): Buffer {
-  const buffer = Buffer.alloc(placements.length * PLACEMENT_SIZE)
-  const view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength)
-  
-  for (let i = 0; i < placements.length; i++) {
-    packPlacementAt(view, i * PLACEMENT_SIZE, placements[i])
-  }
-  
-  return buffer
-}
-
-/**
- * Unpack ArchivePlacements from a Buffer
- */
-export function unpackPlacements(buffer: Buffer): ArchivePlacement[] {
-  const view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength)
-  const count = buffer.byteLength / PLACEMENT_SIZE
-  const placements: ArchivePlacement[] = new Array(count)
-  
-  for (let i = 0; i < count; i++) {
-    placements[i] = unpackPlacementAt(view, i * PLACEMENT_SIZE)
-  }
-  
-  return placements
-}
-
-/**
- * ArchivePlacement extends KittyGraphicsPlacement with archive-specific metadata.
- * This is stored alongside cell data to preserve Kitty graphics in scrollback.
- * 
- * Fields:
- * - All KittyGraphicsPlacement fields (imageId, placementId, screenX, screenY, etc.)
- * - archiveOffset: The scrollback offset where this placement starts (0 = oldest line in archive)
- * - originalScreenY: The original Y coordinate on screen when archived (for coordinate mapping)
- */
-export type ArchivePlacement = KittyGraphicsPlacement & {
-  /** Scrollback offset where this placement starts (0 = oldest line in archive) */
-  archiveOffset: number
-  /** Original Y coordinate on screen when archived (for coordinate mapping) */
-  originalScreenY: number
+function unpackPlacements(buffer: Buffer): ArchivePlacement[] {
+  // Create a proper ArrayBuffer from the Buffer's slice
+  const arrayBuffer = buffer.buffer.slice(
+    buffer.byteOffset,
+    buffer.byteOffset + buffer.byteLength
+  ) as ArrayBuffer
+  return unpackPlacementsFromArrayBuffer(arrayBuffer)
 }
 
 type ArchiveChunk = {
