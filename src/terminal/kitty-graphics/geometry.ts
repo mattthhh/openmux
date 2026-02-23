@@ -9,7 +9,15 @@ export function computePlacementRender(
 ): PlacementRender | null {
   const { cellWidth, cellHeight } = metrics;
 
-  const viewportRow = placement.screenY - (pane.scrollbackLength - pane.viewportOffset);
+  // Handle archived placements (negative screenY) vs live placements (non-negative screenY)
+  // Archived placements have screenY = archiveOffset - archiveLength (negative)
+  // We need to adjust by adding scrollbackLength to get correct viewport position
+  const isArchived = placement.screenY < 0;
+  const adjustedScreenY = isArchived
+    ? placement.screenY + pane.scrollbackLength
+    : placement.screenY;
+
+  const viewportRow = adjustedScreenY - (pane.scrollbackLength - pane.viewportOffset);
   const viewportCol = placement.screenX;
 
   const srcWidth = placement.sourceWidth > 0 ? placement.sourceWidth : image.width;
