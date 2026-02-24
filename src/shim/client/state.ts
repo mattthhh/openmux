@@ -31,6 +31,7 @@ export type KittyGraphicsState = {
   images: Map<number, KittyGraphicsImageEntry>;
   placements: KittyGraphicsPlacement[];
   dirty: boolean;
+  seedImageIds: Set<number>;
 };
 
 export type KittyScreenKey = 'main' | 'alt';
@@ -111,7 +112,7 @@ export function deletePtyState(ptyId: string): void {
 }
 
 function createEmptyKittyState(): KittyGraphicsState {
-  return { images: new Map(), placements: [], dirty: false };
+  return { images: new Map(), placements: [], dirty: false, seedImageIds: new Set() };
 }
 
 function getKittyScreenState(ptyId: string, screen: KittyScreenKey): KittyGraphicsState {
@@ -199,6 +200,7 @@ export function handlePtyKittyUpdate(
     images: nextImages,
     placements: update.placements,
     dirty: true,
+    seedImageIds: new Set(update.imageData.keys()),
   };
   const bundle = kittyStates.get(ptyId) ?? { main: createEmptyKittyState(), alt: createEmptyKittyState() };
   bundle[screen] = nextState;

@@ -255,6 +255,7 @@ describe('shim client state', () => {
 
     const state = getKittyState(ptyId);
     expect(state?.dirty).toBe(true);
+    expect(state?.seedImageIds.has(info.id)).toBe(true);
     expect(state?.images.get(info.id)?.data).toEqual(data);
     expect(state?.placements).toHaveLength(1);
 
@@ -267,6 +268,7 @@ describe('shim client state', () => {
 
     const next = getKittyState(ptyId);
     expect(next?.images.get(info.id)?.data).toEqual(data);
+    expect(next?.seedImageIds.has(info.id)).toBe(false);
 
     handlePtyKittyUpdate(ptyId, {
       images: [],

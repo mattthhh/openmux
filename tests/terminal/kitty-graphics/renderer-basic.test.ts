@@ -77,7 +77,7 @@ describe('KittyGraphicsRenderer (basic)', () => {
     expect(dirty).toBe(false);
   });
 
-  it('seeds host image data even when broker mapping already exists', () => {
+  it('does not seed host image data for broker mappings without an explicit hint', () => {
     const broker = new KittyTransmitBroker();
     broker.setWriter(() => {});
     setKittyTransmitBroker(broker);
@@ -106,6 +106,55 @@ describe('KittyGraphicsRenderer (basic)', () => {
 
     renderer.updatePane('pane-9', {
       ptyId: 'pty-9',
+      emulator,
+      offsetX: 0,
+      offsetY: 0,
+      width: 10,
+      height: 10,
+      cols: 10,
+      rows: 10,
+      viewportOffset: 0,
+      scrollbackLength: 0,
+      isAlternateScreen: false,
+    });
+
+    renderer.flush(renderTarget);
+
+    const joined = output.join('');
+    expect(joined).not.toContain('t=d');
+    expect(joined).toContain('\x1b_Ga=p');
+  });
+
+  it('seeds host image data for broker mappings when emulator requests fallback', () => {
+    const broker = new KittyTransmitBroker();
+    broker.setWriter(() => {});
+    setKittyTransmitBroker(broker);
+    const renderer = new KittyGraphicsRenderer();
+    const output: string[] = [];
+    const renderTarget = defaultRenderTarget(output);
+
+    let dirty = true;
+    const imageInfo = createImageInfo(10, 10n);
+    const placement = createPlacement(10);
+    const emulator = {
+      getKittyImagesDirty: () => dirty,
+      clearKittyImagesDirty: () => {
+        dirty = false;
+      },
+      shouldSeedKittyImage: (imageId: number) => imageId === 10,
+      getKittyImageIds: () => [10],
+      getKittyImageInfo: () => imageInfo,
+      getKittyImageData: () => new Uint8Array([40, 50, 60]),
+      getKittyPlacements: () => [placement],
+      isAlternateScreen: () => false,
+    } as ITerminalEmulator;
+
+    const ESC = '\x1b';
+    const shmPayload = Buffer.from('SHMKEY2').toString('base64');
+    broker.handleSequence('pty-10', `${ESC}_Ga=T,q=2,t=s,s=1,v=1,S=3,i=10;${shmPayload}${ESC}\\`);
+
+    renderer.updatePane('pane-10', {
+      ptyId: 'pty-10',
       emulator,
       offsetX: 0,
       offsetY: 0,

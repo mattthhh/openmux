@@ -93,7 +93,11 @@ export function updatePtyState(params: {
       imagesChanged = true;
     }
 
-    if (changed) {
+    const shouldSeedMappedImage = brokerHostId
+      ? (emulator.shouldSeedKittyImage?.(id) ?? false)
+      : false;
+    const shouldTransmitData = (!brokerHostId && changed) || shouldSeedMappedImage;
+    if (shouldTransmitData) {
       const data = emulator.getKittyImageData?.(id);
       if (data) {
         const transmit = buildTransmitImage(hostId, info, data);
@@ -104,7 +108,7 @@ export function updatePtyState(params: {
               ptyId,
               imageId: id,
               hostId,
-              reason: 'broker-mapped',
+              reason: 'seed-hint',
             });
           }
         }

@@ -166,6 +166,12 @@ export interface ITerminalEmulator {
   /** Get kitty image data by ID. */
   getKittyImageData?(imageId: number): Uint8Array | null;
 
+  /**
+   * Whether renderer should seed host image bytes for a broker-mapped image.
+   * Used by shim emulators to request explicit fallback seeding on selected updates.
+   */
+  shouldSeedKittyImage?(imageId: number): boolean;
+
   /** Get kitty placements for the active screen. */
   getKittyPlacements?(): KittyGraphicsPlacement[];
 

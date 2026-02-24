@@ -139,6 +139,7 @@ export class RemoteEmulator implements ITerminalEmulator {
     const state = this.deps.getKittyState(this.ptyId, alternateScreen);
     if (state) {
       state.dirty = false;
+      state.seedImageIds.clear();
     }
   }
 
@@ -157,6 +158,12 @@ export class RemoteEmulator implements ITerminalEmulator {
   getKittyImageData(imageId: number): Uint8Array | null {
     const alternateScreen = this.deps.getPtyState(this.ptyId)?.terminalState?.alternateScreen ?? false;
     return this.deps.getKittyState(this.ptyId, alternateScreen)?.images.get(imageId)?.data ?? null;
+  }
+
+  shouldSeedKittyImage(imageId: number): boolean {
+    const alternateScreen = this.deps.getPtyState(this.ptyId)?.terminalState?.alternateScreen ?? false;
+    const state = this.deps.getKittyState(this.ptyId, alternateScreen);
+    return state?.seedImageIds.has(imageId) ?? false;
   }
 
   getKittyPlacements(): KittyGraphicsPlacement[] {
