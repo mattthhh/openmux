@@ -162,7 +162,7 @@ export function createKittyHandlers(state: ShimServerState, sendEvent: SendEvent
     }
 
     const transmit = parseTransmitParams(parsed);
-    if (!transmit && parsed.params.size > 0) return;
+    const pending = getTransmitPending(ptyId);
 
     let guestKey = resolveGuestKey(parsed.params);
     if (!guestKey) {
@@ -170,9 +170,20 @@ export function createKittyHandlers(state: ShimServerState, sendEvent: SendEvent
     }
     if (!guestKey) return;
 
+    const hasPendingChunk = pending.has(guestKey);
+    if (!transmit) {
+      const actionValue = parsed.params.get('a');
+      if (actionValue && actionValue !== 't' && actionValue !== 'T') return;
+      for (const key of parsed.params.keys()) {
+        if (key !== 'i' && key !== 'I') {
+          return;
+        }
+      }
+      if (!hasPendingChunk) return;
+    }
+
     const more = transmit?.more ?? false;
     const cache = getTransmitCache(ptyId);
-    const pending = getTransmitPending(ptyId);
 
     if (more) {
       const chunks = pending.get(guestKey) ?? [];

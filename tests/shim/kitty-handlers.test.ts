@@ -113,4 +113,21 @@ describe('createKittyHandlers', () => {
     expect(cache?.get('i:8')).toEqual([first, second, third]);
     expect(state.kittyTransmitPending.get('pty-1')?.has('i:8') ?? false).toBe(false);
   });
+
+  it('finalizes chunked transmits when relay-only continuation carries i without action', () => {
+    const state = createShimServerState();
+    state.activeClient = {} as any;
+
+    const handlers = createKittyHandlers(state, () => {});
+
+    const first = '\x1b_Ga=t,f=100,i=11,m=1;AAAA\x1b\\';
+    const second = '\x1b_Gi=11;BBBB\x1b\\';
+
+    handlers.sendKittyTransmit('pty-1', first);
+    handlers.sendKittyTransmit('pty-1', second);
+
+    const cache = state.kittyTransmitCache.get('pty-1');
+    expect(cache?.get('i:11')).toEqual([first, second]);
+    expect(state.kittyTransmitPending.get('pty-1')?.has('i:11') ?? false).toBe(false);
+  });
 });
