@@ -18,27 +18,8 @@ import {
  */
 
 describe('Kitty Graphics Scrollback Archive Edge Cases', () => {
-  const testDir = '/tmp/openmux-test-scrollback-edge-cases';
-
-  beforeEach(() => {
-    // Clean up test directory before each test
-    try {
-      const fs = require('node:fs');
-      fs.rmSync(testDir, { recursive: true, force: true });
-    } catch {
-      // Ignore cleanup errors
-    }
-  });
-
-  afterEach(() => {
-    // Clean up test directory after each test
-    try {
-      const fs = require('node:fs');
-      fs.rmSync(testDir, { recursive: true, force: true });
-    } catch {
-      // Ignore cleanup errors
-    }
-  });
+  // Use unique directories for each test to avoid pollution
+  const getTestDir = () => `/tmp/om-edge-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
   /**
    * Test: Rapid scrollback trimming doesn't lose placements
@@ -65,7 +46,7 @@ describe('Kitty Graphics Scrollback Archive Edge Cases', () => {
         imageInfo: createImageInfo(1, 1n),
       });
 
-      const archive = new ScrollbackArchive({ rootDir: testDir });
+      const archive = new ScrollbackArchive({ rootDir: getTestDir() });
       const session = createMockSession(archive, liveEmulator);
       const archiver = new ScrollbackArchiver(session, liveEmulator);
 
@@ -103,7 +84,7 @@ describe('Kitty Graphics Scrollback Archive Edge Cases', () => {
         imageInfo: createImageInfo(1, 1n),
       });
 
-      const archive = new ScrollbackArchive({ rootDir: testDir });
+      const archive = new ScrollbackArchive({ rootDir: getTestDir() });
       const session = createMockSession(archive, liveEmulator);
       const archiver = new ScrollbackArchiver(session, liveEmulator);
 
@@ -136,7 +117,7 @@ describe('Kitty Graphics Scrollback Archive Edge Cases', () => {
         imageInfo: createImageInfo(1, 1n),
       });
 
-      const archive = new ScrollbackArchive({ rootDir: testDir });
+      const archive = new ScrollbackArchive({ rootDir: getTestDir() });
       const session = createMockSession(archive, liveEmulator);
       const archiver = new ScrollbackArchiver(session, liveEmulator);
 
@@ -165,7 +146,7 @@ describe('Kitty Graphics Scrollback Archive Edge Cases', () => {
    */
   describe('resize while viewing archived images', () => {
     it('preserves archived placements after resize', async () => {
-      const archive = new ScrollbackArchive({ rootDir: testDir });
+      const archive = new ScrollbackArchive({ rootDir: getTestDir() });
 
       // Add archived lines with placements
       const lines: TerminalCell[][] = [];
@@ -207,7 +188,7 @@ describe('Kitty Graphics Scrollback Archive Edge Cases', () => {
     });
 
     it('adjusts coordinates correctly after multiple resizes', async () => {
-      const archive = new ScrollbackArchive({ rootDir: testDir });
+      const archive = new ScrollbackArchive({ rootDir: getTestDir() });
 
       // Add archived content
       const lines: TerminalCell[][] = [];
@@ -253,7 +234,7 @@ describe('Kitty Graphics Scrollback Archive Edge Cases', () => {
    */
   describe('image deleted after archival', () => {
     it('gracefully handles missing image data', async () => {
-      const archive = new ScrollbackArchive({ rootDir: testDir });
+      const archive = new ScrollbackArchive({ rootDir: getTestDir() });
 
       // Add archived placement
       const lines: TerminalCell[][] = [];
@@ -294,7 +275,7 @@ describe('Kitty Graphics Scrollback Archive Edge Cases', () => {
     });
 
     it('handles mixed deleted and existing images', async () => {
-      const archive = new ScrollbackArchive({ rootDir: testDir });
+      const archive = new ScrollbackArchive({ rootDir: getTestDir() });
 
       const lines: TerminalCell[][] = [];
       for (let i = 0; i < 100; i++) {
@@ -348,7 +329,7 @@ describe('Kitty Graphics Scrollback Archive Edge Cases', () => {
    */
   describe('large images', () => {
     it('handles images spanning many rows', async () => {
-      const archive = new ScrollbackArchive({ rootDir: testDir });
+      const archive = new ScrollbackArchive({ rootDir: getTestDir() });
 
       // Add many lines
       const lines: TerminalCell[][] = [];
@@ -391,7 +372,7 @@ describe('Kitty Graphics Scrollback Archive Edge Cases', () => {
     });
 
     it('handles wide images spanning many columns', async () => {
-      const archive = new ScrollbackArchive({ rootDir: testDir });
+      const archive = new ScrollbackArchive({ rootDir: getTestDir() });
 
       const lines: TerminalCell[][] = [];
       for (let i = 0; i < 100; i++) {
@@ -420,7 +401,7 @@ describe('Kitty Graphics Scrollback Archive Edge Cases', () => {
     });
 
     it('handles many small images in archive', async () => {
-      const archive = new ScrollbackArchive({ rootDir: testDir });
+      const archive = new ScrollbackArchive({ rootDir: getTestDir() });
 
       const lines: TerminalCell[][] = [];
       for (let i = 0; i < 1000; i++) {
@@ -464,8 +445,8 @@ describe('Kitty Graphics Scrollback Archive Edge Cases', () => {
   describe('multiple PTYs', () => {
     it('keeps archives isolated between PTYs', async () => {
       // Create two separate archives
-      const testDir1 = `${testDir}/pty1`;
-      const testDir2 = `${testDir}/pty2`;
+      const testDir1 = `${getTestDir()}/pty1`;
+      const testDir2 = `${getTestDir()}/pty2`;
 
       const archive1 = new ScrollbackArchive({ rootDir: testDir1 });
       const archive2 = new ScrollbackArchive({ rootDir: testDir2 });
@@ -519,8 +500,8 @@ describe('Kitty Graphics Scrollback Archive Edge Cases', () => {
     });
 
     it('handles concurrent operations on different PTYs', async () => {
-      const testDir1 = `${testDir}/pty1-concurrent`;
-      const testDir2 = `${testDir}/pty2-concurrent`;
+      const testDir1 = `${getTestDir()}/pty1-concurrent`;
+      const testDir2 = `${getTestDir()}/pty2-concurrent`;
 
       const archive1 = new ScrollbackArchive({ rootDir: testDir1 });
       const archive2 = new ScrollbackArchive({ rootDir: testDir2 });
@@ -580,7 +561,7 @@ describe('Kitty Graphics Scrollback Archive Edge Cases', () => {
    */
   describe('boundary conditions', () => {
     it('handles placement at archive boundary', async () => {
-      const archive = new ScrollbackArchive({ rootDir: testDir });
+      const archive = new ScrollbackArchive({ rootDir: getTestDir() });
 
       // Add exactly 100 lines
       const lines: TerminalCell[][] = [];
@@ -609,7 +590,7 @@ describe('Kitty Graphics Scrollback Archive Edge Cases', () => {
     });
 
     it('handles zero-size queries gracefully', async () => {
-      const archive = new ScrollbackArchive({ rootDir: testDir });
+      const archive = new ScrollbackArchive({ rootDir: getTestDir() });
 
       const lines: TerminalCell[][] = [];
       for (let i = 0; i < 50; i++) {
@@ -636,7 +617,7 @@ describe('Kitty Graphics Scrollback Archive Edge Cases', () => {
     });
 
     it('handles very large archive offsets', async () => {
-      const archive = new ScrollbackArchive({ rootDir: testDir });
+      const archive = new ScrollbackArchive({ rootDir: getTestDir() });
 
       // Simulate a very large archive
       const lines: TerminalCell[][] = [];

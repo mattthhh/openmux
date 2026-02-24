@@ -119,18 +119,12 @@ function createMockScrollbackArchive(
   if (supportsPlacements) {
     (
       archive as ScrollbackArchive & {
-        appendLinesWithPlacements: (
-          lines: TerminalCell[][],
-          placements: unknown[]
-        ) => Promise<void>;
+        appendPlacements: (placements: unknown[]) => Promise<void>;
         getStoredPlacements: () => unknown[];
       }
-    ).appendLinesWithPlacements = vi.fn(
-      async (lines: TerminalCell[][], placements: unknown[]) => {
-        currentLength += lines.length;
-        storedPlacements.push(...placements);
-      }
-    );
+    ).appendPlacements = vi.fn(async (placements: unknown[]) => {
+      storedPlacements.push(...placements);
+    });
     (
       archive as ScrollbackArchive & { getStoredPlacements: () => unknown[] }
     ).getStoredPlacements = () => storedPlacements;
@@ -401,6 +395,67 @@ describe("ScrollbackArchiver", () => {
 
       // Verify archiving occurred
       expect(archive.appendLines).toHaveBeenCalled();
+    });
+
+    test("captures top-of-history placements using positive Ghostty coordinates", async () => {
+      const scrollbackLength = 2300;
+      const placements: KittyGraphicsPlacement[] = [
+        {
+          imageId: 10,
+          placementId: 1,
+          placementTag: 0,
+          screenX: 1,
+          screenY: 5, // inside first archived batch [0, 256)
+          xOffset: 0,
+          yOffset: 0,
+          sourceX: 0,
+          sourceY: 0,
+          sourceWidth: 100,
+          sourceHeight: 100,
+          columns: 5,
+          rows: 3,
+          z: 0,
+        },
+        {
+          imageId: 11,
+          placementId: 1,
+          placementTag: 0,
+          screenX: 1,
+          screenY: 400, // outside first archived batch
+          xOffset: 0,
+          yOffset: 0,
+          sourceX: 0,
+          sourceY: 0,
+          sourceWidth: 100,
+          sourceHeight: 100,
+          columns: 5,
+          rows: 3,
+          z: 0,
+        },
+      ];
+
+      const emulator = createMockEmulator({
+        scrollbackLength,
+        placements,
+        supportsKittyGraphics: true,
+      });
+      const archive = createMockScrollbackArchive({ supportsPlacements: true });
+      const session = createMockSession(archive, emulator);
+      const archiver = new ScrollbackArchiver(session, emulator);
+
+      archiver.schedule();
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      const placementsArchive = archive as ScrollbackArchive & {
+        getStoredPlacements: () => Array<{ imageId: number; archiveOffset: number; screenY: number }>;
+      };
+      const stored = placementsArchive.getStoredPlacements();
+
+      expect(stored.length).toBeGreaterThan(0);
+      const captured = stored.find((p) => p.imageId === 10);
+      expect(captured).toBeDefined();
+      expect(captured?.archiveOffset).toBe(5);
+      expect(captured?.screenY).toBe(5);
     });
   });
 

@@ -139,8 +139,42 @@ describe('Kitty Graphics Scrollback Archive', () => {
       const archivedPlacement = placements.find(p => p.imageId === 1 && p.placementId === 1);
       
       expect(archivedPlacement).toBeDefined();
-      // screenY should be adjusted: archiveOffset - archiveLength = 5 - 30 = -25
-      expect(archivedPlacement!.screenY).toBe(-25);
+      // screenY is set to archiveOffset (absolute line position)
+      expect(archivedPlacement!.screenY).toBe(5);
+
+      archive.dispose();
+    });
+
+    it('offsets live placement coordinates by archive length', async () => {
+      // Live emulator placement coordinates are relative to the live buffer.
+      // Once lines are archived, wrapped emulator should shift by archive length
+      // so geometry math still aligns with total scrollback.
+      const livePlacement: KittyGraphicsPlacement = createPlacement(1, 7, {
+        screenX: 2,
+        screenY: 2000,
+        columns: 10,
+        rows: 3,
+      });
+
+      const liveEmulator = createMockEmulatorWithPlacements({
+        scrollbackLength: 1980,
+        placements: [livePlacement],
+        imageInfo: createImageInfo(1, 1n),
+      });
+
+      const archive = new ScrollbackArchive({ rootDir: testDir });
+      const lines: TerminalCell[][] = [];
+      for (let i = 0; i < 20; i++) {
+        lines.push(createMockLine(80));
+      }
+      await archive.appendLines(lines);
+
+      const archivedEmulator = new ArchivedTerminalEmulator(liveEmulator, archive);
+      const placements = archivedEmulator.getKittyPlacements();
+      const placement = placements.find((p) => p.imageId === 1 && p.placementId === 7);
+
+      expect(placement).toBeDefined();
+      expect(placement!.screenY).toBe(2020);
 
       archive.dispose();
     });
@@ -174,10 +208,10 @@ describe('Kitty Graphics Scrollback Archive', () => {
       }
       await archive.appendLines(lines);
 
-      // Place image at archive offset 30 (visible at viewportOffset 40)
-      // scrollbackLength = 60, viewportOffset = 40, rows = 25
-      // viewportRow = archiveOffset - 50 + 40 = archiveOffset - 10
-      // archiveOffset 30 -> viewportRow = 20 (visible)
+      // Place image at archive offset 30
+      // scrollbackLength = 60, rows = 25
+      // Formula: viewportRow = screenY - scrollbackLength + viewportOffset
+      // For archiveOffset 30 to be at row 5: 30 - 60 + viewportOffset = 5, so viewportOffset = 35
       const archivePlacement: ArchivePlacement = {
         ...createPlacement(1, 1, { screenX: 0, screenY: 0, columns: 10, rows: 5 }),
         archiveOffset: 30,
@@ -190,6 +224,7 @@ describe('Kitty Graphics Scrollback Archive', () => {
       const totalScrollback = archive.length + liveEmulator.getScrollbackLength();
       
       // Update renderer with archived emulator
+      // viewportOffset = 35: viewing archive offsets 0-25 (archiveOffset 30 is at row 5)
       renderer.updatePane('pane-1', {
         ptyId: 'pty-1',
         emulator: archivedEmulator,
@@ -199,7 +234,7 @@ describe('Kitty Graphics Scrollback Archive', () => {
         height: 500,
         cols: 80,
         rows: 25,
-        viewportOffset: 40, // Viewing lines 40-64 in scrollback
+        viewportOffset: 35, // Viewing archive offsets 0-25 + live rows (archiveOffset 30 visible at row 5)
         scrollbackLength: totalScrollback,
         isAlternateScreen: false,
       });
@@ -293,9 +328,11 @@ describe('Kitty Graphics Scrollback Archive', () => {
       // Should have placements from both archive and live
       expect(placements.length).toBeGreaterThanOrEqual(1);
 
-      // Check that archived placement has correct screenY
-      const archived = placements.find(p => p.screenY < 0);
+      // Check that archived placement has archiveOffset property (marks it as archived)
+      const archived = placements.find(p => 'archiveOffset' in p);
       expect(archived).toBeDefined();
+      // Archived placements have screenY = archiveOffset (absolute position)
+      expect(archived!.screenY).toBe(15);
 
       archive.dispose();
     });
@@ -374,24 +411,24 @@ describe('Kitty Graphics Scrollback Archive', () => {
       await archive.appendLines(lines);
 
       // Add multiple archive placements (positioned to be visible)
-      // scrollbackLength = 105 (100 archive + 5 live), viewportOffset = 80, rows = 25
-      // viewportRow = archiveOffset - 100 + 80 = archiveOffset - 20
-      // For visible range 0-24, archiveOffset needs to be 20-44
+      // scrollbackLength = 105 (100 archive + 5 live), rows = 25
+      // Formula: viewportRow = archiveOffset - scrollbackLength + viewportOffset
+      // For archiveOffset 80 to be at viewportRow 0: 80 - 105 + viewportOffset = 0, so viewportOffset = 25
       // Using imageId 1 for all since mock only has image 1 data
       const archivePlacements: ArchivePlacement[] = [
         {
           ...createPlacement(1, 1, { screenX: 0, screenY: 0, columns: 10, rows: 5 }),
-          archiveOffset: 30, // viewportRow = 10
+          archiveOffset: 80, // viewportRow = 80 - 105 + 25 = 0
           originalScreenY: 0,
         },
         {
           ...createPlacement(1, 2, { screenX: 20, screenY: 2, columns: 15, rows: 8 }),
-          archiveOffset: 35, // viewportRow = 15
+          archiveOffset: 85, // viewportRow = 5
           originalScreenY: 2,
         },
         {
           ...createPlacement(1, 3, { screenX: 5, screenY: 5, columns: 8, rows: 4 }),
-          archiveOffset: 40, // viewportRow = 20
+          archiveOffset: 90, // viewportRow = 10
           originalScreenY: 5,
         },
       ];
@@ -404,7 +441,7 @@ describe('Kitty Graphics Scrollback Archive', () => {
       sendKittyTransmit(broker, 'pty-1', 2, [0, 255, 0]);
       sendKittyTransmit(broker, 'pty-1', 3, [0, 0, 255]);
 
-      // View near the end of archive / beginning of live area
+      // View archive offsets 80-104 (end of archive into live area)
       renderer.updatePane('pane-1', {
         ptyId: 'pty-1',
         emulator: archivedEmulator,
@@ -414,7 +451,7 @@ describe('Kitty Graphics Scrollback Archive', () => {
         height: 500,
         cols: 80,
         rows: 25,
-        viewportOffset: 80, // Viewing lines 80-104
+        viewportOffset: 25, // Viewing archive offsets 80-104 (rows 0-24)
         scrollbackLength: archive.length + liveEmulator.getScrollbackLength(),
         isAlternateScreen: false,
       });

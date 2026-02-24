@@ -9,15 +9,13 @@ export function computePlacementRender(
 ): PlacementRender | null {
   const { cellWidth, cellHeight } = metrics;
 
-  // Handle archived placements (negative screenY) vs live placements (non-negative screenY)
-  // Archived placements have screenY = archiveOffset - archiveLength (negative)
-  // We need to adjust by adding scrollbackLength to get correct viewport position
-  const isArchived = placement.screenY < 0;
-  const adjustedScreenY = isArchived
-    ? placement.screenY + pane.scrollbackLength
-    : placement.screenY;
-
-  const viewportRow = adjustedScreenY - (pane.scrollbackLength - pane.viewportOffset);
+  // screenY is expressed in the wrapped emulator's absolute line space:
+  //   0 = oldest line in total scrollback (archive + live)
+  // Row-fetching uses:
+  //   absoluteY = scrollbackLength - viewportOffset + viewportRow
+  // therefore:
+  //   viewportRow = absoluteY - scrollbackLength + viewportOffset
+  const viewportRow = placement.screenY - pane.scrollbackLength + pane.viewportOffset;
   const viewportCol = placement.screenX;
 
   const srcWidth = placement.sourceWidth > 0 ? placement.sourceWidth : image.width;

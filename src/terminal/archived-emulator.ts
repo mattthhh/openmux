@@ -164,7 +164,39 @@ export class ArchivedTerminalEmulator implements ITerminalEmulator {
   }
 
   getKittyImageIds(): number[] {
-    return this.base.getKittyImageIds?.() ?? []
+    // Get live emulator IDs
+    const baseIds = this.base.getKittyImageIds?.() ?? []
+    
+    // Get archived image IDs from placements
+    const archivedIds = this.getArchivedImageIds()
+    
+    if (archivedIds.length === 0) {
+      return baseIds
+    }
+    
+    // Merge and deduplicate
+    const merged = new Set([...baseIds, ...archivedIds])
+    return Array.from(merged)
+  }
+  
+  /**
+   * Get unique image IDs referenced by archived placements.
+   */
+  private getArchivedImageIds(): number[] {
+    const archivePlacements: ArchivePlacement[] =
+      (this.archive as unknown as { getPlacementsForLineRange?(start: number, end: number): ArchivePlacement[] })
+        .getPlacementsForLineRange?.(0, this.archive.length) ?? []
+    
+    if (archivePlacements.length === 0) {
+      return []
+    }
+    
+    const ids = new Set<number>()
+    for (const p of archivePlacements) {
+      ids.add(p.imageId)
+    }
+    
+    return Array.from(ids)
   }
 
   getKittyImageInfo(imageId: number): KittyGraphicsImageInfo | null {
@@ -176,11 +208,22 @@ export class ArchivedTerminalEmulator implements ITerminalEmulator {
   }
 
   getKittyPlacements(): KittyGraphicsPlacement[] {
-    // Get base emulator placements
-    const basePlacements = this.base.getKittyPlacements?.() ?? []
+    const archiveLength = this.archive.length
 
-    // Get archived placements
-    const archivedPlacements = this.getArchivedPlacements(basePlacements.length)
+    // Ghostty placement coordinates from the live emulator are relative to the
+    // live scrollback buffer (which excludes archived lines after trim).
+    // Convert them into the wrapped emulator's absolute coordinate space by
+    // shifting them down by current archive length.
+    const rawBasePlacements = this.base.getKittyPlacements?.() ?? []
+    const basePlacements = archiveLength > 0
+      ? rawBasePlacements.map((placement) => ({
+          ...placement,
+          screenY: placement.screenY + archiveLength,
+        }))
+      : rawBasePlacements
+
+    // Get archived placements (already in wrapped absolute space)
+    const archivedPlacements = this.getArchivedPlacements(rawBasePlacements.length)
 
     if (archivedPlacements.length === 0) {
       return basePlacements
@@ -248,20 +291,17 @@ export class ArchivedTerminalEmulator implements ITerminalEmulator {
       return []
     }
 
-    // Adjust screenY coordinates: archived lines are now at negative screen positions
-    // screenY = -(archiveLength - archiveOffset) when visible at top of scrollback
-    // For rendering purposes, we need to map to the visible coordinate space
-    const archiveLength = this.archive.length
+    // Return archived placements with screenY = archiveOffset (absolute line position)
+    // The geometry calculation handles the transformation:
+    // viewportRow = screenY - (scrollbackLength - viewportOffset)
     const adjustedPlacements: KittyGraphicsPlacement[] = archivePlacements.map((p) => ({
       ...p,
-      // Map archive offset to screen coordinate
-      // When viewing scrollback, line at archive offset N appears at screenY = -(archiveLength - N)
-      screenY: p.archiveOffset - archiveLength,
+      screenY: p.archiveOffset,
     }))
 
     this.placementCache = {
       placements: adjustedPlacements,
-      archiveLength,
+      archiveLength: this.archive.length,
       basePlacementCount,
     }
 

@@ -69,17 +69,11 @@ export class ScrollbackArchiver {
         const placements = this.capturePlacements(lines.length, archiveStartOffset)
 
         // Store lines and placements in archive
-        // Note: Task-2 will add appendLinesWithPlacements to ScrollbackArchive
-        // For now, we use a temporary approach by storing placements separately
-        if (placements.length > 0 && "appendLinesWithPlacements" in this.session.scrollbackArchive) {
-          const archive = this.session.scrollbackArchive as typeof this.session.scrollbackArchive & {
-            appendLinesWithPlacements?: (lines: TerminalCell[][], placements: ArchivePlacement[]) => Promise<void>
-          }
-          await archive.appendLinesWithPlacements?.(lines, placements)
-        } else {
-          await this.session.scrollbackArchive.appendLines(lines)
-          // TODO(task-2): Store placements separately once ScrollbackArchive supports it
-          // For now, placements are captured but not stored (graceful degradation)
+        await this.session.scrollbackArchive.appendLines(lines)
+        
+        // Store placements separately (ScrollbackArchive has dedicated method)
+        if (placements.length > 0) {
+          await this.session.scrollbackArchive.appendPlacements(placements)
         }
 
         // Now safe to trim - placements have been captured
@@ -143,36 +137,30 @@ export class ScrollbackArchiver {
     const archivedPlacements: ArchivePlacement[] = []
 
     for (const placement of placements) {
-      // A placement overlaps the archived range if its screenY is within [0, linesArchived)
-      // placements are on the visible screen, so screenY is relative to scrollback end
+      // Ghostty reports placement.screenY in active-screen coordinates where:
+      //   0 = oldest history line in the live emulator
+      //   scrollbackLength = first visible row
+      // We archive the oldest [0, linesArchived) history range.
       const placementStartY = placement.screenY
-      const placementEndY = placement.screenY + placement.rows - 1
+      const placementRows = Math.max(1, placement.rows)
+      const placementEndYExclusive = placementStartY + placementRows
 
-      // Check if placement overlaps with lines being archived (top of scrollback buffer)
-      // The lines being archived have negative screenY relative to visible area
-      // When scrollback is at index i, screenY = i - scrollbackLength
-      // Lines at scrollback indices 0..linesArchived-1 have screenY in range [-scrollbackLength, -(scrollbackLength-linesArchived))
-      // We need to check if the placement is on a line that's being archived
-      
-      // Since getKittyPlacements() returns placements relative to current visible screen,
-      // we need to calculate the absolute scrollback line index for each placement
-      const scrollbackLength = this.liveEmulator.getScrollbackLength()
-      const absoluteLineIndex = placementStartY + scrollbackLength
-
-      // Check if this placement's starting line is within the range being archived
-      if (absoluteLineIndex >= 0 && absoluteLineIndex < linesArchived) {
-        // Placement overlaps with archived lines - adjust coordinates
-        const archivePlacement: ArchivePlacement = {
-          ...placement,
-          // archiveOffset: where this placement starts in the archive (0 = oldest)
-          archiveOffset: archiveStartOffset + absoluteLineIndex,
-          // originalScreenY: the original Y coordinate when archived (for coordinate mapping)
-          originalScreenY: placement.screenY,
-          // Adjust screenY to be relative to archived scrollback
-          screenY: absoluteLineIndex,
-        }
-        archivedPlacements.push(archivePlacement)
+      // Keep placements whose vertical span intersects the pruned history range.
+      if (placementEndYExclusive <= 0 || placementStartY >= linesArchived) {
+        continue
       }
+
+      const archiveLine = Math.max(0, placementStartY)
+      const archivePlacement: ArchivePlacement = {
+        ...placement,
+        // archiveOffset: absolute line index in persisted archive
+        archiveOffset: archiveStartOffset + archiveLine,
+        // Preserve original coordinate from live emulator for debugging/migration.
+        originalScreenY: placement.screenY,
+        // Stored as archive-relative absolute (0 = oldest archived line)
+        screenY: archiveLine,
+      }
+      archivedPlacements.push(archivePlacement)
     }
 
     return archivedPlacements
