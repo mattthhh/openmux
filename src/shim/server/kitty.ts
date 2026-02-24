@@ -207,16 +207,44 @@ export function createKittyHandlers(state: ShimServerState, sendEvent: SendEvent
     cache.set(guestKey, [cacheSequence]);
   };
 
-  const hasCachedTransmit = (ptyId: string, info: KittyGraphicsImageInfo): boolean => {
+  const getCachedTransmitChunks = (ptyId: string, info: KittyGraphicsImageInfo): string[] | null => {
     const cache = state.kittyTransmitCache.get(ptyId);
-    if (!cache || cache.size === 0) return false;
+    if (!cache || cache.size === 0) return null;
+
     const idKey = buildGuestKey(info.id, null);
-    if (idKey && cache.has(idKey)) return true;
+    if (idKey) {
+      const chunks = cache.get(idKey);
+      if (chunks) return chunks;
+    }
+
     if (info.number > 0) {
       const numberKey = buildGuestKey(null, info.number);
-      if (numberKey && cache.has(numberKey)) return true;
+      if (numberKey) {
+        const chunks = cache.get(numberKey);
+        if (chunks) return chunks;
+      }
     }
-    return false;
+
+    return null;
+  };
+
+  const hasCachedTransmit = (ptyId: string, info: KittyGraphicsImageInfo): boolean => {
+    return getCachedTransmitChunks(ptyId, info) !== null;
+  };
+
+  const hasReplayableCachedTransmit = (ptyId: string, info: KittyGraphicsImageInfo): boolean => {
+    const chunks = getCachedTransmitChunks(ptyId, info);
+    if (!chunks || chunks.length === 0) return false;
+
+    // Shared-memory transmits (t=s) are not durable across detach/reattach,
+    // because the backing shm key can be invalid by replay time.
+    for (const chunk of chunks) {
+      if (chunk.includes('t=s')) {
+        return false;
+      }
+    }
+
+    return true;
   };
 
   const getKittyImagesForScreen = (ptyId: string, screen: KittyScreenKey): Map<number, KittyGraphicsImageInfo> => {
@@ -278,7 +306,7 @@ export function createKittyHandlers(state: ShimServerState, sendEvent: SendEvent
         invalidation?.all || (guestKey && invalidation?.keys?.has(guestKey))
       );
       const changed = force || shouldForceData || !prev || !isSameKittyImage(prev, info);
-      const shouldIncludeData = shouldForceData || (changed && !hasCachedTransmit(ptyId, info));
+      const shouldIncludeData = shouldForceData || (changed && !hasReplayableCachedTransmit(ptyId, info));
       if (shouldIncludeData) {
         const data = emulator.getKittyImageData?.(id);
         if (data) {

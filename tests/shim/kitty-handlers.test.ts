@@ -93,6 +93,35 @@ describe('createKittyHandlers', () => {
     }
   });
 
+  it('includes image data on snapshot when cached transmit uses shared memory', () => {
+    const state = createShimServerState();
+    const events: Array<{ header: any; payloads: ArrayBuffer[] }> = [];
+    state.activeClient = {} as any;
+
+    const handlers = createKittyHandlers(state, (header, payloads = []) => {
+      events.push({ header, payloads });
+    });
+
+    const info = makeImageInfo(1, 2n);
+    const emulator: ITerminalEmulator = {
+      getKittyImagesDirty: () => false,
+      clearKittyImagesDirty: () => {},
+      getKittyImageIds: () => [1],
+      getKittyImageInfo: () => info,
+      getKittyImageData: () => new Uint8Array([9, 8, 7]),
+      getKittyPlacements: () => [],
+      isAlternateScreen: () => false,
+    } as ITerminalEmulator;
+
+    const sharedMemoryPayload = Buffer.from('SHMKEY', 'utf8').toString('base64');
+    handlers.sendKittyTransmit('pty-1', `\x1b_Ga=T,t=s,s=10,v=12,S=120,i=1;${sharedMemoryPayload}\x1b\\`);
+    handlers.sendKittyUpdate('pty-1', emulator, true);
+
+    const update = events.find((event) => event.header.type === 'ptyKitty');
+    expect(update?.header.kitty.imageDataIds).toEqual([1]);
+    expect(update?.payloads.length).toBe(1);
+  });
+
   it('finalizes chunked transmits when continuation chunks omit control params', () => {
     const state = createShimServerState();
     state.activeClient = {} as any;
