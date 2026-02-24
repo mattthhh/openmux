@@ -387,12 +387,28 @@ function isLineBreakSequence(sequence?: string): sequence is "\n" | "\r" {
   return sequence === "\n" || sequence === "\r";
 }
 
+function isEscPrefixedLinefeed(event: KeyboardEvent): boolean {
+  // Some terminal setups emit Shift+Enter as ESC+LF (meta+linefeed).
+  // Treat that as a plain line break so apps can interpret it as newline
+  // instead of Alt+Enter.
+  return (
+    event.sequence === "\x1b\n" &&
+    event.key === "linefeed" &&
+    !event.ctrl &&
+    !event.meta
+  );
+}
+
 export function encodeKeyForEmulator(
   event: KeyboardEvent,
   emulator: ITerminalEmulator | null
 ): string {
   if (!emulator || emulator.isDisposed) return "";
   const action = resolveAction(event);
+
+  if (action !== KEY_ACTION_RELEASE && isEscPrefixedLinefeed(event)) {
+    return "\n";
+  }
 
   if (
     action !== KEY_ACTION_RELEASE &&
