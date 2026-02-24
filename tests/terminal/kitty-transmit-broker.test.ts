@@ -90,6 +90,26 @@ describe('KittyTransmitBroker', () => {
     expect(writes[1]).toContain('i=1');
   });
 
+  it('finalizes chunked relay continuations that include only image id', () => {
+    const broker = new KittyTransmitBroker();
+    const writes: string[] = [];
+    broker.setWriter((chunk) => writes.push(chunk));
+
+    const first = `${ESC}_Ga=t,f=24,i=7,m=1;QUJ${ESC}\\`;
+    const second = `${ESC}_Gi=7;DRA=${ESC}\\`;
+
+    const outFirst = broker.handleSequence('pty-3b', first);
+    const outSecond = broker.handleSequence('pty-3b', second);
+
+    expect(outFirst).toBe(first);
+    expect(outSecond).toBe(second);
+    expect(writes).toHaveLength(2);
+    expect(writes[0]).toContain('m=1');
+    expect(writes[0]).toContain('i=1');
+    expect(writes[1]).not.toContain('m=1');
+    expect(writes[1]).toContain('i=1');
+  });
+
   it('strips png payloads for emulator sequences', () => {
     withStubEnv(() => {
       const broker = new KittyTransmitBroker();

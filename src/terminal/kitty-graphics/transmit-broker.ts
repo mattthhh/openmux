@@ -221,8 +221,21 @@ export class KittyTransmitBroker {
     });
     const state = this.getState(ptyId);
     let transmit = parseTransmitParams(parsed);
-    if (!transmit && state.pendingChunk && parsed.params.size === 0) {
-      transmit = { ...state.pendingChunk.params, more: false };
+    if (!transmit && state.pendingChunk) {
+      const actionParam = parsed.params.get('a');
+      let continuationOnlyIds = true;
+      if (actionParam && actionParam !== 't' && actionParam !== 'T') {
+        continuationOnlyIds = false;
+      }
+      for (const key of parsed.params.keys()) {
+        if (key !== 'i' && key !== 'I' && key !== 'a') {
+          continuationOnlyIds = false;
+          break;
+        }
+      }
+      if (continuationOnlyIds) {
+        transmit = { ...state.pendingChunk.params, more: false };
+      }
     }
     if (!transmit) return sequence;
     const guestId = normalizeParamId(parsed.params.get('i'));
