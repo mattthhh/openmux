@@ -383,21 +383,32 @@ function getEncoderOptions(emulator: ITerminalEmulator): KeyEncoderOptions {
 
 const sharedEncoder = new GhosttyKeyEncoder();
 
+function isLineBreakSequence(sequence?: string): sequence is "\n" | "\r" {
+  return sequence === "\n" || sequence === "\r";
+}
+
 export function encodeKeyForEmulator(
   event: KeyboardEvent,
   emulator: ITerminalEmulator | null
 ): string {
   if (!emulator || emulator.isDisposed) return "";
   const action = resolveAction(event);
+
   if (
     action !== KEY_ACTION_RELEASE &&
-    event.sequence === "\n" &&
+    isLineBreakSequence(event.sequence) &&
     !event.ctrl &&
     !event.alt &&
-    !event.meta &&
-    !event.shift
+    !event.meta
   ) {
-    return "\n";
+    // Keep Enter semantics stable across terminals:
+    // - Plain Enter should always submit a line break.
+    // - Shift+Enter should also submit a line break unless the app explicitly
+    //   enabled Kitty keyboard protocol (where Shift+Enter is distinct).
+    if (!event.shift || emulator.getKittyKeyboardFlags() === 0) {
+      return event.sequence;
+    }
   }
+
   return sharedEncoder.encode(event, getEncoderOptions(emulator));
 }
