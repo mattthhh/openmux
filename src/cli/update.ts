@@ -326,68 +326,102 @@ export async function detectManagedInstall(io: UpdateIO): Promise<{ ok: true; va
   };
 }
 
+function fileExists(targetPath: string): boolean {
+  try {
+    fsSync.accessSync(targetPath, fsSync.constants.F_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function detectPackageManagerFromPath(env: NodeJS.ProcessEnv): PackageManagerInstall | null {
+  const pathValue = env.PATH ?? '';
+  if (!pathValue) return null;
+
+  const entries = pathValue.split(path.delimiter).filter((entry) => entry.length > 0);
+  for (const entry of entries) {
+    const normalizedEntry = path.resolve(entry);
+
+    // Ignore project-local node_modules/.bin entries. We only care about global installs.
+    if (normalizedEntry.includes(`${path.sep}node_modules${path.sep}.bin`)) {
+      continue;
+    }
+
+    const wrapperPath = path.join(entry, 'openmux');
+    if (!fileExists(wrapperPath)) {
+      continue;
+    }
+
+    let resolvedWrapperPath = wrapperPath;
+    try {
+      resolvedWrapperPath = fsSync.realpathSync(wrapperPath);
+    } catch {
+      // Keep original wrapper path.
+    }
+
+    const candidates = [path.resolve(wrapperPath), path.resolve(resolvedWrapperPath)];
+
+    if (candidates.some((candidate) => candidate.includes(`${path.sep}.bun${path.sep}`) || candidate.includes('bun/install'))) {
+      return { type: 'bun', updateCommand: 'bun update -g openmux' };
+    }
+
+    if (
+      candidates.some(
+        (candidate) =>
+          candidate.includes(`${path.sep}node_modules${path.sep}openmux${path.sep}`) ||
+          candidate.includes(`${path.sep}.npm${path.sep}`)
+      )
+    ) {
+      return { type: 'npm', updateCommand: 'npm update -g openmux' };
+    }
+
+    if (path.basename(normalizedEntry) === 'bin') {
+      const npmPackagePath = path.join(path.dirname(normalizedEntry), 'lib', 'node_modules', 'openmux', 'package.json');
+      if (fileExists(npmPackagePath)) {
+        return { type: 'npm', updateCommand: 'npm update -g openmux' };
+      }
+    }
+  }
+
+  return null;
+}
+
 function detectPackageManager(execPath: string, env: NodeJS.ProcessEnv): PackageManagerInstall | null {
-  // Check for npm global install patterns
-  // npm global: typically in node_modules/.bin/ or contains npm paths
+  if (execPath.includes(`${path.sep}.bun${path.sep}`) || execPath.includes('bun/install')) {
+    return { type: 'bun', updateCommand: 'bun update -g openmux' };
+  }
+
   if (
-    execPath.includes('node_modules') ||
-    execPath.includes('.npm') ||
+    execPath.includes(`${path.sep}node_modules${path.sep}`) ||
+    execPath.includes(`${path.sep}.npm${path.sep}`) ||
     execPath.includes('/usr/local/lib/node_modules') ||
     execPath.includes('/usr/lib/node_modules')
   ) {
     return { type: 'npm', updateCommand: 'npm update -g openmux' };
   }
 
-  // Check for bun global install patterns
-  // bun global: typically in ~/.bun/install/global/
-  if (execPath.includes('.bun') || execPath.includes('bun/install')) {
-    return { type: 'bun', updateCommand: 'bun update -g openmux' };
-  }
-
-  // Check if binary is in managed install location but wrapper exists in bun global bin
-  // This happens when installed via 'bun install -g openmux' - the wrapper script
-  // at ~/.bun/bin/openmux executes the binary at ~/.local/share/openmux/openmux-bin
   const managedDir = getManagedInstallDir(env);
   if (managedDir && path.resolve(path.dirname(execPath)) === path.resolve(managedDir)) {
     const home = env.HOME ?? env.USERPROFILE ?? '';
     if (home) {
       const bunGlobalBin = path.join(home, '.bun', 'bin', 'openmux');
-      try {
-        fsSync.accessSync(bunGlobalBin, fsSync.constants.F_OK);
-        // Wrapper script exists in bun global bin
+      if (fileExists(bunGlobalBin)) {
         return { type: 'bun', updateCommand: 'bun update -g openmux' };
-      } catch {
-        // No bun wrapper found, continue with other checks
+      }
+
+      const npmGlobalPrefix = path.join(home, '.npm-global');
+      const npmGlobalWrapper = path.join(npmGlobalPrefix, 'bin', 'openmux');
+      const npmGlobalPackage = path.join(npmGlobalPrefix, 'lib', 'node_modules', 'openmux', 'package.json');
+      if (fileExists(npmGlobalWrapper) && fileExists(npmGlobalPackage)) {
+        return { type: 'npm', updateCommand: 'npm update -g openmux' };
       }
     }
-  }
 
-  // Check package.json or bunfig.toml in parent directories
-  // This catches cases where the path doesn't obviously indicate the package manager
-  let currentDir = path.dirname(execPath);
-  let depth = 0;
-  const maxDepth = 5;
-
-  while (currentDir !== '/' && depth < maxDepth) {
-    try {
-      // Check for bun's metadata
-      fsSync.accessSync(path.join(currentDir, 'bun.lockb'), fsSync.constants.F_OK);
-      return { type: 'bun', updateCommand: 'bun update -g openmux' };
-    } catch {
-      // File doesn't exist, continue
+    const fromPath = detectPackageManagerFromPath(env);
+    if (fromPath) {
+      return fromPath;
     }
-
-    try {
-      // Check for npm's metadata
-      fsSync.accessSync(path.join(currentDir, 'package-lock.json'), fsSync.constants.F_OK);
-      return { type: 'npm', updateCommand: 'npm update -g openmux' };
-    } catch {
-      // File doesn't exist, continue
-    }
-    const parentDir = path.dirname(currentDir);
-    if (parentDir === currentDir) break;
-    currentDir = parentDir;
-    depth++;
   }
 
   return null;

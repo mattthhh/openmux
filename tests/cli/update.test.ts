@@ -564,46 +564,89 @@ b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3  openmux-v1.0.0
       expect(logs.some((line) => line.includes('bun update -g openmux'))).toBe(true);
     });
 
-    test('detects bun install from bun.lockb marker file', async () => {
-      const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'bun-pm-test-'));
-      cleanupRoots.push(tempDir);
+    test('detects bun install from ~/.bun/bin wrapper for managed binary', async () => {
+      const install = await makeManagedInstall('1.0.0');
+      cleanupRoots.push(install.rootDir);
 
-      // Create a fake bun.lockb file
-      await fs.writeFile(path.join(tempDir, 'bun.lockb'), 'fake lockfile');
+      const bunWrapper = path.join(install.dataHome, '.bun', 'bin', 'openmux');
+      await fs.mkdir(path.dirname(bunWrapper), { recursive: true });
+      await fs.writeFile(bunWrapper, '#!/usr/bin/env bash\n');
 
       const logs: string[] = [];
       const result = await runUpdateCommand(
         { kind: 'update', yes: true, prerelease: false },
-        createIoForInstall(
-          { dataHome: tempDir, binHome: tempDir, installDir: tempDir, execPath: path.join(tempDir, 'openmux-bin') },
-          { fetch: vi.fn() },
-          logs
-        )
+        createIoForInstall(install, { fetch: vi.fn() }, logs)
       );
 
       expect(result.exitCode).toBe(0);
       expect(logs.some((line) => line.includes('bun'))).toBe(true);
+      expect(logs.some((line) => line.includes('bun update -g openmux'))).toBe(true);
     });
 
-    test('detects npm install from package-lock.json marker file', async () => {
-      const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'npm-pm-test-'));
-      cleanupRoots.push(tempDir);
+    test('detects npm global install from PATH wrapper and global package metadata', async () => {
+      const install = await makeManagedInstall('1.0.0');
+      cleanupRoots.push(install.rootDir);
 
-      // Create a fake package-lock.json file
-      await fs.writeFile(path.join(tempDir, 'package-lock.json'), '{}');
+      const npmPrefix = path.join(install.dataHome, '.npm-global');
+      const npmWrapper = path.join(npmPrefix, 'bin', 'openmux');
+      const npmPackageJson = path.join(npmPrefix, 'lib', 'node_modules', 'openmux', 'package.json');
+
+      await fs.mkdir(path.dirname(npmWrapper), { recursive: true });
+      await fs.mkdir(path.dirname(npmPackageJson), { recursive: true });
+      await fs.writeFile(npmWrapper, '#!/usr/bin/env bash\n');
+      await fs.writeFile(npmPackageJson, '{"name":"openmux"}');
 
       const logs: string[] = [];
       const result = await runUpdateCommand(
         { kind: 'update', yes: true, prerelease: false },
         createIoForInstall(
-          { dataHome: tempDir, binHome: tempDir, installDir: tempDir, execPath: path.join(tempDir, 'openmux-bin') },
-          { fetch: vi.fn() },
+          install,
+          {
+            env: {
+              HOME: install.dataHome,
+              XDG_DATA_HOME: install.dataHome,
+              XDG_BIN_HOME: install.binHome,
+              PATH: `${path.join(npmPrefix, 'bin')}${path.delimiter}${process.env.PATH ?? ''}`,
+            },
+            fetch: vi.fn(),
+          },
           logs
         )
       );
 
       expect(result.exitCode).toBe(0);
       expect(logs.some((line) => line.includes('npm'))).toBe(true);
+      expect(logs.some((line) => line.includes('npm update -g openmux'))).toBe(true);
+    });
+
+    test('does not detect npm from nearby package-lock.json files', async () => {
+      const install = await makeManagedInstall('1.0.0');
+      cleanupRoots.push(install.rootDir);
+
+      await fs.writeFile(path.join(install.dataHome, 'package-lock.json'), '{}');
+
+      const logs: string[] = [];
+      const result = await runUpdateCommand(
+        { kind: 'update', yes: true, prerelease: false },
+        createIoForInstall(
+          install,
+          {
+            fetch: vi.fn().mockResolvedValue(
+              jsonResponse({
+                tag_name: 'v1.0.0',
+                draft: false,
+                prerelease: false,
+                assets: [],
+              })
+            ),
+          },
+          logs
+        )
+      );
+
+      expect(result.exitCode).toBe(0);
+      expect(logs.some((line) => line.includes('installed via npm'))).toBe(false);
+      expect(logs.some((line) => line.includes('Already up to date'))).toBe(true);
     });
 
     test('falls back to managed install when no package manager detected', async () => {
