@@ -93,12 +93,20 @@ export function updatePtyState(params: {
       imagesChanged = true;
     }
 
-    if (changed && !brokerHostId) {
+    if (changed) {
       const data = emulator.getKittyImageData?.(id);
       if (data) {
         const transmit = buildTransmitImage(hostId, info, data);
         if (transmit) {
           output.push(transmit);
+          if (brokerHostId) {
+            tracePtyEvent('kitty-render-image-seed', {
+              ptyId,
+              imageId: id,
+              hostId,
+              reason: 'broker-mapped',
+            });
+          }
         }
       }
     }

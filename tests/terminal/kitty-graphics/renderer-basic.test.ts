@@ -1,3 +1,4 @@
+import { Buffer } from 'buffer';
 import { afterEach, beforeAll, describe, expect, it, vi } from "bun:test";
 import type { ITerminalEmulator } from '../../../src/terminal/emulator-interface';
 import * as capabilitiesActual from '../../../src/terminal/capabilities';
@@ -74,6 +75,55 @@ describe('KittyGraphicsRenderer (basic)', () => {
     const joined = output.join('');
     expect(joined).toContain('\x1b_Ga=p');
     expect(dirty).toBe(false);
+  });
+
+  it('seeds host image data even when broker mapping already exists', () => {
+    const broker = new KittyTransmitBroker();
+    broker.setWriter(() => {});
+    setKittyTransmitBroker(broker);
+    const renderer = new KittyGraphicsRenderer();
+    const output: string[] = [];
+    const renderTarget = defaultRenderTarget(output);
+
+    let dirty = true;
+    const imageInfo = createImageInfo(9, 9n);
+    const placement = createPlacement(9);
+    const emulator = {
+      getKittyImagesDirty: () => dirty,
+      clearKittyImagesDirty: () => {
+        dirty = false;
+      },
+      getKittyImageIds: () => [9],
+      getKittyImageInfo: () => imageInfo,
+      getKittyImageData: () => new Uint8Array([10, 20, 30]),
+      getKittyPlacements: () => [placement],
+      isAlternateScreen: () => false,
+    } as ITerminalEmulator;
+
+    const ESC = '\x1b';
+    const shmPayload = Buffer.from('SHMKEY').toString('base64');
+    broker.handleSequence('pty-9', `${ESC}_Ga=T,q=2,t=s,s=1,v=1,S=3,i=9;${shmPayload}${ESC}\\`);
+
+    renderer.updatePane('pane-9', {
+      ptyId: 'pty-9',
+      emulator,
+      offsetX: 0,
+      offsetY: 0,
+      width: 10,
+      height: 10,
+      cols: 10,
+      rows: 10,
+      viewportOffset: 0,
+      scrollbackLength: 0,
+      isAlternateScreen: false,
+    });
+
+    renderer.flush(renderTarget);
+
+    const joined = output.join('');
+    expect(joined).toContain('a=t');
+    expect(joined).toContain('t=d');
+    expect(joined).toContain('\x1b_Ga=p');
   });
 
   it('ignores disposed emulators', () => {
