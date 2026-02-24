@@ -114,7 +114,9 @@ describe('createKittyHandlers', () => {
     } as ITerminalEmulator;
 
     const sharedMemoryPayload = Buffer.from('SHMKEY', 'utf8').toString('base64');
-    handlers.sendKittyTransmit('pty-1', `\x1b_Ga=T,t=s,s=10,v=12,S=120,i=1;${sharedMemoryPayload}\x1b\\`);
+    handlers.sendKittyTransmit('pty-1', `\x1b_Ga=T,t=s,s=10,v=12,S=120,i=1;${sharedMemoryPayload}\x1b\\`, {
+      fromReplay: true,
+    });
     handlers.sendKittyUpdate('pty-1', emulator, true);
 
     const transmit = events.find((event) => event.header.type === 'ptyKittyTransmit');
@@ -123,6 +125,22 @@ describe('createKittyHandlers', () => {
     const update = events.find((event) => event.header.type === 'ptyKitty');
     expect(update?.header.kitty.imageDataIds).toEqual([1]);
     expect(update?.payloads.length).toBe(1);
+  });
+
+  it('still forwards shared-memory transmits during live streaming', () => {
+    const state = createShimServerState();
+    const events: Array<{ header: any; payloads: ArrayBuffer[] }> = [];
+    state.activeClient = {} as any;
+
+    const handlers = createKittyHandlers(state, (header, payloads = []) => {
+      events.push({ header, payloads });
+    });
+
+    const sharedMemoryPayload = Buffer.from('SHMKEY', 'utf8').toString('base64');
+    handlers.sendKittyTransmit('pty-1', `\x1b_Ga=T,t=s,s=10,v=12,S=120,i=1;${sharedMemoryPayload}\x1b\\`);
+
+    const transmit = events.find((event) => event.header.type === 'ptyKittyTransmit');
+    expect(transmit).toBeDefined();
   });
 
   it('finalizes chunked transmits when continuation chunks omit control params', () => {

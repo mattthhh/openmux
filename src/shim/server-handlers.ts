@@ -300,7 +300,7 @@ export function createServerHandlers(state: ShimServerState, options?: ShimServe
     if (cache && cache.size > 0) {
       for (const sequences of cache.values()) {
         for (const seq of sequences) {
-          sendKittyTransmit(ptyId, seq);
+          sendKittyTransmit(ptyId, seq, { fromReplay: true });
         }
       }
     }

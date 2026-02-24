@@ -14,7 +14,7 @@ import type { ShimHeader } from '../protocol';
 import type { KittyScreenImages, KittyScreenKey, ShimServerState } from '../server-state';
 
 export type KittyHandlers = {
-  sendKittyTransmit: (ptyId: string, sequence: string) => void;
+  sendKittyTransmit: (ptyId: string, sequence: string, options?: { fromReplay?: boolean }) => void;
   sendKittyUpdate: (ptyId: string, emulator: ITerminalEmulator, force?: boolean) => void;
   queueKittyUpdate: (ptyId: string) => void;
   hasCachedTransmit: (ptyId: string, info: KittyGraphicsImageInfo) => boolean;
@@ -264,18 +264,25 @@ export function createKittyHandlers(state: ShimServerState, sendEvent: SendEvent
     return screens[screen];
   };
 
-  const sendKittyTransmit = (ptyId: string, sequence: string): void => {
-    // Always cache replay data, even when no client is currently attached.
+  const sendKittyTransmit = (
+    ptyId: string,
+    sequence: string,
+    options?: { fromReplay?: boolean }
+  ): void => {
+    const fromReplay = options?.fromReplay ?? false;
+
+    // Always cache live replay data, even when no client is currently attached.
     // Detached sessions still receive Kitty transmits from the PTY stream and
     // must be able to replay them when the next client attaches.
-    recordKittyTransmit(ptyId, sequence);
+    if (!fromReplay) {
+      recordKittyTransmit(ptyId, sequence);
+    }
 
     if (!state.activeClient) return;
 
-    // Shared-memory transmits are not durable across detach/reattach and can
-    // become invalid by the time replay happens. Prefer ptyKitty imageData
-    // payloads for those images instead of forwarding t=s to the client broker.
-    if (getTransmitMedium(sequence) === 's') {
+    // Shared-memory transmits are fragile during replay (handles may no longer
+    // be valid). For replay frames we prefer ptyKitty imageData payloads.
+    if (fromReplay && getTransmitMedium(sequence) === 's') {
       return;
     }
 
