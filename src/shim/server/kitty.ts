@@ -334,6 +334,14 @@ export function createKittyHandlers(state: ShimServerState, sendEvent: SendEvent
               usedInvalidationKeys.add(guestKey);
             }
           }
+        } else {
+          tracePtyEvent('kitty-update-missing-image-data', {
+            ptyId,
+            imageId: id,
+            guestKey,
+            force,
+            shouldForceData,
+          });
         }
       }
 
