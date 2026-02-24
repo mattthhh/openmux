@@ -88,6 +88,10 @@ export class ScrollbackArchive {
   private readonly chunkMaxLines: number
   private readonly cache: ScrollbackCache
   private readonly manager?: ScrollbackArchiveManager
+  private readonly placementChunkCache = new Map<number, {
+    placementBytes: number
+    placements: ArchivePlacement[]
+  }>()
   private chunks: ArchiveChunk[] = []
   private totalLines = 0
   private totalBytes = 0
@@ -176,6 +180,7 @@ export class ScrollbackArchive {
     if (generation !== this.generation) return
 
     currentChunk.placementBytes = (currentChunk.placementBytes ?? 0) + packed.byteLength
+    this.placementChunkCache.delete(currentChunk.id)
     this.revision += 1
     await this.flushMeta()
   }
@@ -241,10 +246,21 @@ export class ScrollbackArchive {
       return []
     }
 
+    const cached = this.placementChunkCache.get(chunk.id)
+    if (cached && cached.placementBytes === chunk.placementBytes) {
+      return cached.placements
+    }
+
     try {
       const buffer = fs.readFileSync(chunk.placementPath)
-      return unpackPlacements(buffer)
+      const placements = unpackPlacements(buffer)
+      this.placementChunkCache.set(chunk.id, {
+        placementBytes: chunk.placementBytes,
+        placements,
+      })
+      return placements
     } catch {
+      this.placementChunkCache.delete(chunk.id)
       return []
     }
   }
@@ -261,6 +277,7 @@ export class ScrollbackArchive {
     this.totalBytes = 0
     this.nextChunkId = 1
     this.cache.clear()
+    this.placementChunkCache.clear()
     this.revision += 1
     void this.enqueue(async () => {
       for (const chunk of chunksToDelete) {
@@ -395,6 +412,7 @@ export class ScrollbackArchive {
     this.totalLines -= chunk.lineCount
     this.totalBytes -= chunk.bytes
     this.cache.clear()
+    this.placementChunkCache.delete(chunk.id)
     this.revision += 1
     void this.enqueue(async () => {
       // Delete cell data file
@@ -541,6 +559,7 @@ export class ScrollbackArchive {
     this.chunks = []
     this.totalLines = 0
     this.totalBytes = 0
+    this.placementChunkCache.clear()
     this.nextChunkId = parsed.nextChunkId || 1
 
     let currentStartOffset = 0

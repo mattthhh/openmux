@@ -33,9 +33,18 @@ interface PlacementCache {
   basePlacementCount: number
 }
 
+interface ArchiveSnapshotCache {
+  archiveLength: number
+  archiveRevision: number
+  placements: ArchivePlacement[]
+  imageIds: number[]
+}
+
 export class ArchivedTerminalEmulator implements ITerminalEmulator {
   /** Cache for archived placements to avoid recalculation */
   private placementCache: PlacementCache | null = null
+  /** Cache for full archived placement scans used by IDs + placements lookups */
+  private archiveSnapshotCache: ArchiveSnapshotCache | null = null
 
   constructor(
     private base: ITerminalEmulator,
@@ -185,20 +194,41 @@ export class ArchivedTerminalEmulator implements ITerminalEmulator {
    * Get unique image IDs referenced by archived placements.
    */
   private getArchivedImageIds(): number[] {
-    const archivePlacements: ArchivePlacement[] =
+    return this.getArchiveSnapshot().imageIds
+  }
+
+  /**
+   * Read archived placements once per archive revision and reuse for
+   * both image-id and placement queries.
+   */
+  private getArchiveSnapshot(): ArchiveSnapshotCache {
+    const archiveLength = this.archive.length
+    const archiveRevision = this.archive.getRevision()
+
+    if (
+      this.archiveSnapshotCache &&
+      this.archiveSnapshotCache.archiveLength === archiveLength &&
+      this.archiveSnapshotCache.archiveRevision === archiveRevision
+    ) {
+      return this.archiveSnapshotCache
+    }
+
+    const placements: ArchivePlacement[] =
       (this.archive as unknown as { getPlacementsForLineRange?(start: number, end: number): ArchivePlacement[] })
-        .getPlacementsForLineRange?.(0, this.archive.length) ?? []
-    
-    if (archivePlacements.length === 0) {
-      return []
+        .getPlacementsForLineRange?.(0, archiveLength) ?? []
+
+    const imageIds = placements.length === 0
+      ? []
+      : Array.from(new Set(placements.map((placement) => placement.imageId)))
+
+    const snapshot: ArchiveSnapshotCache = {
+      archiveLength,
+      archiveRevision,
+      placements,
+      imageIds,
     }
-    
-    const ids = new Set<number>()
-    for (const p of archivePlacements) {
-      ids.add(p.imageId)
-    }
-    
-    return Array.from(ids)
+    this.archiveSnapshotCache = snapshot
+    return snapshot
   }
 
   getKittyImageInfo(imageId: number): KittyGraphicsImageInfo | null {
@@ -280,12 +310,8 @@ export class ArchivedTerminalEmulator implements ITerminalEmulator {
       }
     }
 
-    // Get placements from archive
-    // Note: getPlacementsForLineRange will be added by task-2
-    // For now, we handle the case where the method doesn't exist
-    const archivePlacements: ArchivePlacement[] =
-      (this.archive as unknown as { getPlacementsForLineRange?(start: number, end: number): ArchivePlacement[] })
-        .getPlacementsForLineRange?.(0, archiveLength) ?? []
+    // Reuse revision-scoped archived placement snapshot.
+    const archivePlacements = this.getArchiveSnapshot().placements
 
     if (archivePlacements.length === 0) {
       this.placementCache = {
@@ -321,6 +347,7 @@ export class ArchivedTerminalEmulator implements ITerminalEmulator {
    */
   private invalidatePlacementCache(): void {
     this.placementCache = null
+    this.archiveSnapshotCache = null
   }
 
   drainResponses(): string[] {

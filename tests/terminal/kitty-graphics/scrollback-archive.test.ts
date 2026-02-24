@@ -286,6 +286,46 @@ describe('Kitty Graphics Scrollback Archive', () => {
 
       archive.dispose();
     });
+
+    it('reuses one archive scan for image id + placement queries', async () => {
+      const liveEmulator = createMockEmulatorWithPlacements({
+        scrollbackLength: 10,
+        placements: [],
+        imageInfo: createImageInfo(1, 1n),
+      });
+
+      const archive = new ScrollbackArchive({ rootDir: testDir });
+      const archivedEmulator = new ArchivedTerminalEmulator(liveEmulator, archive);
+
+      const lines: TerminalCell[][] = [];
+      for (let i = 0; i < 20; i++) {
+        lines.push(createMockLine(80));
+      }
+      await archive.appendLines(lines);
+      await archive.appendPlacements([{
+        ...createPlacement(2, 1),
+        archiveOffset: 8,
+        originalScreenY: 8,
+      }]);
+
+      const originalGetPlacementsForLineRange = archive.getPlacementsForLineRange.bind(archive);
+      let scanCount = 0;
+      (archive as any).getPlacementsForLineRange = (start: number, end: number) => {
+        scanCount += 1;
+        return originalGetPlacementsForLineRange(start, end);
+      };
+
+      const ids = archivedEmulator.getKittyImageIds();
+      expect(ids).toContain(1);
+      expect(ids).toContain(2);
+
+      const placements = archivedEmulator.getKittyPlacements();
+      expect(placements.some((p) => p.imageId === 2)).toBe(true);
+
+      expect(scanCount).toBe(1);
+
+      archive.dispose();
+    });
   });
 
   describe('litmus: Image spanning live/archive boundary', () => {
