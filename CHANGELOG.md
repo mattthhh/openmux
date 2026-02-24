@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.6](https://github.com/monotykamary/openmux/compare/v0.3.5...v0.3.6) (2026-02-24)
+
+
+### Bug Fixes
+
+* **terminal:** map esc+linefeed to newline input ([76a9da1](https://github.com/monotykamary/openmux/commit/76a9da109e4701e07330a0ba3d8da377c7e6d178))
+* **update:** only detect global package manager installs ([67ce2a0](https://github.com/monotykamary/openmux/commit/67ce2a06d6b896f1e1bad574ef9d2f2beedb3136))
+
 ### [0.3.5](https://github.com/monotykamary/openmux/compare/v0.3.4...v0.3.5) (2026-02-24)
 
 
