@@ -117,6 +117,9 @@ describe('createKittyHandlers', () => {
     handlers.sendKittyTransmit('pty-1', `\x1b_Ga=T,t=s,s=10,v=12,S=120,i=1;${sharedMemoryPayload}\x1b\\`);
     handlers.sendKittyUpdate('pty-1', emulator, true);
 
+    const transmit = events.find((event) => event.header.type === 'ptyKittyTransmit');
+    expect(transmit).toBeUndefined();
+
     const update = events.find((event) => event.header.type === 'ptyKitty');
     expect(update?.header.kitty.imageDataIds).toEqual([1]);
     expect(update?.payloads.length).toBe(1);

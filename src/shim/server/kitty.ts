@@ -70,6 +70,14 @@ const toArrayBuffer = (data: Uint8Array): ArrayBuffer => {
   return copy.buffer;
 };
 
+function getTransmitMedium(sequence: string): string | null {
+  const parsed = parseKittySequence(sequence);
+  if (!parsed) return null;
+  const transmit = parseTransmitParams(parsed);
+  if (!transmit) return null;
+  return transmit.medium ?? 'd';
+}
+
 function normalizeCachedTransmitSequence(sequence: string): string {
   const parsed = parseKittySequence(sequence);
   if (!parsed) return sequence;
@@ -263,6 +271,14 @@ export function createKittyHandlers(state: ShimServerState, sendEvent: SendEvent
     recordKittyTransmit(ptyId, sequence);
 
     if (!state.activeClient) return;
+
+    // Shared-memory transmits are not durable across detach/reattach and can
+    // become invalid by the time replay happens. Prefer ptyKitty imageData
+    // payloads for those images instead of forwarding t=s to the client broker.
+    if (getTransmitMedium(sequence) === 's') {
+      return;
+    }
+
     const payload = Buffer.from(sequence, 'utf8');
     sendEvent({
       type: 'ptyKittyTransmit',
