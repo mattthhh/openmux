@@ -158,9 +158,10 @@ export class KittyTransmitRelay {
     const activeOffload = this.pendingChunk?.offload ?? null;
     const shouldOffload = activeOffload ?? this.shouldOffload(mergedParams, parsed.data, transmit.more);
     const shouldStubSharedMemory = this.stubSharedMemory && medium === 's';
+    const shouldStubByFormat = this.stubAllFormats && (medium !== 's' || this.stubSharedMemory);
     const shouldStubEmulator =
       this.stubEmulator ||
-      this.stubAllFormats ||
+      shouldStubByFormat ||
       (this.stubPng && isPng) ||
       shouldStubSharedMemory;
     let offloadDims: { width: number; height: number } | null = null;

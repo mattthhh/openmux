@@ -80,7 +80,13 @@ export function setupQueryPassthrough(options: QuerySetupOptions): (() => void) 
   let relayCleanup: (() => void) | null = null
   if (ptyId) {
     if (isShimProcess()) {
-      const relay = new KittyTransmitRelay({ stubPng: true, stubAllFormats: true })
+      const relay = new KittyTransmitRelay({
+        stubPng: true,
+        stubAllFormats: true,
+        // Keep shared-memory payloads in the shim emulator so forced snapshots
+        // can attempt imageData extraction during detach/reattach.
+        stubSharedMemory: false,
+      })
       queryPassthrough.setKittySequenceHandler((sequence) => {
         const result = relay.handleSequence(String(ptyId), sequence)
         const forwarder = getKittyTransmitForwarder()

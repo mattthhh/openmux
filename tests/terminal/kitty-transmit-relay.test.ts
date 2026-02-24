@@ -122,6 +122,15 @@ describe('KittyTransmitRelay', () => {
     expect(result.emuSequence).not.toContain('SHMKEY');
   });
 
+  it('passes shared memory payloads through when shared-memory stubbing is disabled', () => {
+    const relay = new KittyTransmitRelay({ stubAllFormats: true, stubSharedMemory: false });
+    const sequence = `${ESC}_Ga=T,t=s,s=10,v=12,i=7;SHMKEY${ESC}\\`;
+    const result = relay.handleSequence('pty-5b', sequence);
+
+    expect(result.forwardSequence).toBe(sequence);
+    expect(result.emuSequence).toBe(sequence);
+  });
+
   it('stubs shared memory payloads when stubPng is enabled', () => {
     const relay = new KittyTransmitRelay({ stubPng: true });
     const sequence = `${ESC}_Ga=T,t=s,s=10,v=12,i=8;SHMKEY${ESC}\\`;
