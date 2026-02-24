@@ -1,10 +1,13 @@
 import { Buffer } from 'buffer';
+import fs from 'node:fs';
 import type { ITerminalEmulator, KittyGraphicsImageInfo, KittyGraphicsPlacement } from '../../terminal/emulator-interface';
 import {
   buildGuestKey,
+  decodeKittyFilePayload,
   normalizeParamId,
   parseKittySequence,
   parseTransmitParams,
+  rebuildControl,
 } from '../../terminal/kitty-graphics/sequence-utils';
 import { tracePtyEvent } from '../../terminal/pty-trace';
 import type { ShimHeader } from '../protocol';
@@ -67,6 +70,32 @@ const toArrayBuffer = (data: Uint8Array): ArrayBuffer => {
   return copy.buffer;
 };
 
+function normalizeCachedTransmitSequence(sequence: string): string {
+  const parsed = parseKittySequence(sequence);
+  if (!parsed) return sequence;
+
+  const transmit = parseTransmitParams(parsed);
+  if (!transmit || transmit.more) return sequence;
+  if ((transmit.medium ?? 'd') !== 'f') return sequence;
+
+  const filePath = decodeKittyFilePayload(parsed.data);
+  if (!filePath) return sequence;
+
+  let fileData: Buffer;
+  try {
+    fileData = fs.readFileSync(filePath);
+  } catch {
+    return sequence;
+  }
+
+  const params = new Map(parsed.params);
+  params.set('t', 'd');
+  params.delete('m');
+  const control = rebuildControl(params);
+  const payload = fileData.toString('base64');
+  return `${parsed.prefix}${control};${payload}${parsed.suffix}`;
+}
+
 export function createKittyHandlers(state: ShimServerState, sendEvent: SendEvent): KittyHandlers {
   const getTransmitCache = (ptyId: string): Map<string, string[]> => {
     let cache = state.kittyTransmitCache.get(ptyId);
@@ -90,6 +119,19 @@ export function createKittyHandlers(state: ShimServerState, sendEvent: SendEvent
     const guestId = normalizeParamId(params.get('i'));
     const guestNumber = normalizeParamId(params.get('I'));
     return buildGuestKey(guestId, guestNumber);
+  };
+
+  const resolvePendingGuestKey = (ptyId: string): string | null => {
+    const pending = state.kittyTransmitPending.get(ptyId);
+    if (!pending || pending.size === 0) return null;
+    if (pending.size === 1) {
+      return pending.keys().next().value ?? null;
+    }
+    let lastKey: string | null = null;
+    for (const key of pending.keys()) {
+      lastKey = key;
+    }
+    return lastKey;
   };
 
   const recordKittyTransmit = (ptyId: string, sequence: string): void => {
@@ -119,12 +161,16 @@ export function createKittyHandlers(state: ShimServerState, sendEvent: SendEvent
       return;
     }
 
-    if (action !== 't' && action !== 'T') return;
-    const guestKey = resolveGuestKey(parsed.params);
+    const transmit = parseTransmitParams(parsed);
+    if (!transmit && parsed.params.size > 0) return;
+
+    let guestKey = resolveGuestKey(parsed.params);
+    if (!guestKey) {
+      guestKey = resolvePendingGuestKey(ptyId);
+    }
     if (!guestKey) return;
 
-    const transmit = parseTransmitParams(parsed);
-    const more = transmit?.more ?? parsed.params.get('m') === '1';
+    const more = transmit?.more ?? false;
     const cache = getTransmitCache(ptyId);
     const pending = getTransmitPending(ptyId);
 
@@ -138,15 +184,16 @@ export function createKittyHandlers(state: ShimServerState, sendEvent: SendEvent
       return;
     }
 
+    const cacheSequence = normalizeCachedTransmitSequence(sequence);
     const chunks = pending.get(guestKey);
     if (chunks) {
-      chunks.push(sequence);
+      chunks.push(cacheSequence);
       pending.delete(guestKey);
       cache.set(guestKey, chunks);
       return;
     }
 
-    cache.set(guestKey, [sequence]);
+    cache.set(guestKey, [cacheSequence]);
   };
 
   const hasCachedTransmit = (ptyId: string, info: KittyGraphicsImageInfo): boolean => {

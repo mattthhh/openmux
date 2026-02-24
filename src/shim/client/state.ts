@@ -57,6 +57,8 @@ const globalTitleSubscribers = new Set<(event: TitleEvent) => void>();
 const lifecycleSubscribers = new Set<(event: LifecycleEvent) => void>();
 const kittyTransmitSubscribers = new Set<(event: KittyTransmitEvent) => void>();
 const kittyUpdateSubscribers = new Set<(event: KittyUpdateEvent) => void>();
+const pendingKittyTransmitEvents: KittyTransmitEvent[] = [];
+const MAX_PENDING_KITTY_TRANSMITS = 2048;
 
 const ptyStates = new Map<string, PtyState>();
 const emulatorCache = new Map<string, ScrollbackAwareEmulator>();
@@ -99,6 +101,13 @@ export function deletePtyState(ptyId: string): void {
   ptyStates.delete(ptyId);
   emulatorCache.delete(ptyId);
   kittyStates.delete(ptyId);
+
+  // Drop buffered kitty transmit events for destroyed PTYs.
+  for (let i = pendingKittyTransmitEvents.length - 1; i >= 0; i--) {
+    if (pendingKittyTransmitEvents[i]?.ptyId === ptyId) {
+      pendingKittyTransmitEvents.splice(i, 1);
+    }
+  }
 }
 
 function createEmptyKittyState(): KittyGraphicsState {
@@ -210,8 +219,18 @@ export function handlePtyKittyUpdate(
 }
 
 export function handlePtyKittyTransmit(ptyId: string, sequence: string): void {
+  const event: KittyTransmitEvent = { ptyId, sequence };
+
+  if (kittyTransmitSubscribers.size === 0) {
+    pendingKittyTransmitEvents.push(event);
+    if (pendingKittyTransmitEvents.length > MAX_PENDING_KITTY_TRANSMITS) {
+      pendingKittyTransmitEvents.splice(0, pendingKittyTransmitEvents.length - MAX_PENDING_KITTY_TRANSMITS);
+    }
+    return;
+  }
+
   for (const callback of kittyTransmitSubscribers) {
-    callback({ ptyId, sequence });
+    callback(event);
   }
 }
 
@@ -336,6 +355,16 @@ export function subscribeToLifecycle(callback: (event: LifecycleEvent) => void):
 
 export function subscribeKittyTransmit(callback: (event: KittyTransmitEvent) => void): () => void {
   kittyTransmitSubscribers.add(callback);
+
+  // Rehydrate transmits received before bridge subscription (common during
+  // shim attach snapshots where frames can arrive before UI mount).
+  if (pendingKittyTransmitEvents.length > 0) {
+    const pending = pendingKittyTransmitEvents.splice(0, pendingKittyTransmitEvents.length);
+    for (const event of pending) {
+      callback(event);
+    }
+  }
+
   return () => {
     kittyTransmitSubscribers.delete(callback);
   };

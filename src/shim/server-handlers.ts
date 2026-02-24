@@ -147,7 +147,10 @@ export function createServerHandlers(state: ShimServerState, options?: ShimServe
     state.ptySubscriptions.set(ptyId, { unifiedUnsub: unifiedUnsubResult, exitUnsub: exitUnsubResult });
   }
 
-  async function unsubscribeFromPty(ptyId: string): Promise<void> {
+  async function unsubscribeFromPty(
+    ptyId: string,
+    options?: { preserveKittyState?: boolean }
+  ): Promise<void> {
     const subs = state.ptySubscriptions.get(ptyId);
     if (!subs) return;
 
@@ -158,10 +161,13 @@ export function createServerHandlers(state: ShimServerState, options?: ShimServe
 
     resources.deferSafe(() => { state.ptySubscriptions.delete(ptyId); });
     resources.deferSafe(() => { state.ptyEmulators.delete(ptyId); });
-    resources.deferSafe(() => { state.kittyImages.delete(ptyId); });
-    resources.deferSafe(() => { state.kittyTransmitCache.delete(ptyId); });
-    resources.deferSafe(() => { state.kittyTransmitPending.delete(ptyId); });
-    resources.deferSafe(() => { state.kittyTransmitInvalidated.delete(ptyId); });
+
+    if (!options?.preserveKittyState) {
+      resources.deferSafe(() => { state.kittyImages.delete(ptyId); });
+      resources.deferSafe(() => { state.kittyTransmitCache.delete(ptyId); });
+      resources.deferSafe(() => { state.kittyTransmitPending.delete(ptyId); });
+      resources.deferSafe(() => { state.kittyTransmitInvalidated.delete(ptyId); });
+    }
   }
 
   async function subscribeAllPtys(): Promise<string[] | ShimConnectionError> {
@@ -378,11 +384,10 @@ export function createServerHandlers(state: ShimServerState, options?: ShimServe
     setNotificationForwarder(null);
 
     for (const ptyId of state.ptySubscriptions.keys()) {
-      resources.defer(() => unsubscribeFromPty(ptyId).catch((e) => {
+      resources.defer(() => unsubscribeFromPty(ptyId, { preserveKittyState: true }).catch((e) => {
         console.warn(`Failed to unsubscribe from PTY ${ptyId} during detach:`, e);
       }));
     }
-    resources.deferSafe(() => state.ptySubscriptions.clear());
 
     if (state.lifecycleUnsub) {
       resources.registerSubscription(state.lifecycleUnsub);

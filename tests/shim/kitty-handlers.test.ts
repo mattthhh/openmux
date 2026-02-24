@@ -1,3 +1,7 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { Buffer } from 'buffer';
 import { describe, expect, it } from "bun:test";
 import type { ITerminalEmulator, KittyGraphicsImageInfo } from '../../src/terminal/emulator-interface';
 import { KittyGraphicsCompression, KittyGraphicsFormat } from '../../src/terminal/emulator-interface';
@@ -48,5 +52,65 @@ describe('createKittyHandlers', () => {
     const update = events.find((event) => event.header.type === 'ptyKitty');
     expect(update?.header.kitty.imageDataIds).toEqual([1]);
     expect(update?.payloads.length).toBe(1);
+  });
+
+  it('stores file-medium transmits in cache as direct payloads for replay', () => {
+    const state = createShimServerState();
+    state.activeClient = {} as any;
+
+    const handlers = createKittyHandlers(state, () => {});
+
+    const tempPath = path.join(os.tmpdir(), `openmux-kitty-cache-test-${Date.now()}.bin`);
+    fs.writeFileSync(tempPath, Buffer.from([1, 2, 3, 4]));
+
+    try {
+      const encodedPath = Buffer.from(tempPath, 'utf8').toString('base64');
+      handlers.sendKittyTransmit('pty-1', `\x1b_Ga=t,f=100,t=f,i=9;${encodedPath}\x1b\\`);
+
+      const cache = state.kittyTransmitCache.get('pty-1');
+      const cachedSeq = cache?.get('i:9')?.[0] ?? '';
+
+      expect(cachedSeq).toContain('t=d');
+      expect(cachedSeq).not.toContain('t=f');
+      expect(cachedSeq).toContain('AQIDBA==');
+    } finally {
+      fs.rmSync(tempPath, { force: true });
+    }
+  });
+
+  it('finalizes chunked transmits when continuation chunks omit control params', () => {
+    const state = createShimServerState();
+    state.activeClient = {} as any;
+
+    const handlers = createKittyHandlers(state, () => {});
+
+    const first = '\x1b_Ga=t,f=100,i=7,m=1;AAAA\x1b\\';
+    const second = '\x1b_G;BBBB\x1b\\';
+
+    handlers.sendKittyTransmit('pty-1', first);
+    handlers.sendKittyTransmit('pty-1', second);
+
+    const cache = state.kittyTransmitCache.get('pty-1');
+    expect(cache?.get('i:7')).toEqual([first, second]);
+    expect(state.kittyTransmitPending.get('pty-1')?.has('i:7') ?? false).toBe(false);
+  });
+
+  it('tracks chunk continuations that carry m=1 without repeating ids', () => {
+    const state = createShimServerState();
+    state.activeClient = {} as any;
+
+    const handlers = createKittyHandlers(state, () => {});
+
+    const first = '\x1b_Ga=t,f=100,i=8,m=1;AAAA\x1b\\';
+    const second = '\x1b_Gm=1;BBBB\x1b\\';
+    const third = '\x1b_G;CCCC\x1b\\';
+
+    handlers.sendKittyTransmit('pty-1', first);
+    handlers.sendKittyTransmit('pty-1', second);
+    handlers.sendKittyTransmit('pty-1', third);
+
+    const cache = state.kittyTransmitCache.get('pty-1');
+    expect(cache?.get('i:8')).toEqual([first, second, third]);
+    expect(state.kittyTransmitPending.get('pty-1')?.has('i:8') ?? false).toBe(false);
   });
 });

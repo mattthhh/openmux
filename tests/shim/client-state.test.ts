@@ -6,11 +6,13 @@ import {
   getKittyState,
   getPtyState,
   handlePtyLifecycle,
+  handlePtyKittyTransmit,
   handlePtyKittyUpdate,
   handlePtyTitle,
   handleUnifiedUpdate,
   registerEmulatorFactory,
   setPtyState,
+  subscribeKittyTransmit,
   subscribeScroll,
   subscribeState,
   subscribeToAllTitles,
@@ -277,5 +279,27 @@ describe('shim client state', () => {
     expect(finalState?.images.size).toBe(0);
 
     deletePtyState(ptyId);
+  });
+
+  test('buffers kitty transmit events received before subscription', () => {
+    const events: Array<{ ptyId: string; sequence: string }> = [];
+
+    handlePtyKittyTransmit('pty-buffer', 'first-seq');
+    handlePtyKittyTransmit('pty-buffer', 'second-seq');
+
+    const unsubscribe = subscribeKittyTransmit((event) => {
+      events.push(event);
+    });
+
+    expect(events).toEqual([
+      { ptyId: 'pty-buffer', sequence: 'first-seq' },
+      { ptyId: 'pty-buffer', sequence: 'second-seq' },
+    ]);
+
+    handlePtyKittyTransmit('pty-buffer', 'live-seq');
+    expect(events[2]).toEqual({ ptyId: 'pty-buffer', sequence: 'live-seq' });
+
+    unsubscribe();
+    deletePtyState('pty-buffer');
   });
 });
