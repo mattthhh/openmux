@@ -542,13 +542,18 @@ describe('Kitty Graphics Scrollback Archive', () => {
       expect(dropped).not.toBeNull();
       expect(dropped!.linesRemoved).toBe(10);
 
-      // Verify placement from dropped chunk is gone
+      // Verify placement from dropped chunk is gone and remaining offsets are rebased.
       const remainingPlacements = archive.getPlacementsForLineRange(0, archive.length);
-      expect(remainingPlacements.length).toBeLessThan(5);
-      
-      // Placement 1 (in dropped chunk) should be gone
-      const placement1 = remainingPlacements.find(p => p.imageId === 1);
-      expect(placement1).toBeUndefined();
+      expect(remainingPlacements).toHaveLength(4);
+
+      const remainingIds = remainingPlacements.map((p) => p.imageId).sort((a, b) => a - b);
+      expect(remainingIds).toEqual([2, 3, 4, 5]);
+
+      const offsetByImageId = new Map(remainingPlacements.map((p) => [p.imageId, p.archiveOffset]));
+      expect(offsetByImageId.get(2)).toBe(0);
+      expect(offsetByImageId.get(3)).toBe(10);
+      expect(offsetByImageId.get(4)).toBe(20);
+      expect(offsetByImageId.get(5)).toBe(30);
 
       archive.dispose();
     });
@@ -617,7 +622,7 @@ describe('Kitty Graphics Scrollback Archive', () => {
       archive.dispose();
     });
 
-    it('invalidates placement cache when archive changes', async () => {
+    it('invalidates placement cache when archive content changes without length change', async () => {
       const liveEmulator = createMockEmulatorWithPlacements({
         scrollbackLength: 5,
         placements: [],
@@ -630,31 +635,48 @@ describe('Kitty Graphics Scrollback Archive', () => {
       });
       const archivedEmulator = new ArchivedTerminalEmulator(liveEmulator, archive);
 
-      // Add initial lines and placements
-      const lines: TerminalCell[][] = [];
-      for (let i = 0; i < 30; i++) {
-        lines.push(createMockLine(80));
+      // Build two chunks (length=20) and put a placement in chunk 2.
+      const initialLines: TerminalCell[][] = [];
+      for (let i = 0; i < 20; i++) {
+        initialLines.push(createMockLine(80));
       }
-      await archive.appendLines(lines);
-
-      const placement: ArchivePlacement = {
+      await archive.appendLines(initialLines);
+      await archive.appendPlacements([{
         ...createPlacement(1, 1),
-        archiveOffset: 5,
-        originalScreenY: 5,
-      };
-      await archive.appendPlacements([placement]);
+        archiveOffset: 12,
+        originalScreenY: 12,
+      }]);
 
-      // First access - builds cache
+      // First access builds cache.
       const placements1 = archivedEmulator.getKittyPlacements();
-      expect(placements1).toHaveLength(1);
+      expect(placements1.map((p) => p.imageId)).toEqual([1]);
 
-      // Drop a chunk - this should invalidate cache
-      archive.dropOldestChunk();
+      // Drop one chunk and append another so archive length stays at 20.
+      const dropped = archive.dropOldestChunk();
+      expect(dropped?.linesRemoved).toBe(10);
 
-      // Second access - should reflect dropped chunk
+      const refillLines: TerminalCell[][] = [];
+      for (let i = 0; i < 10; i++) {
+        refillLines.push(createMockLine(80));
+      }
+      await archive.appendLines(refillLines);
+      await archive.appendPlacements([{
+        ...createPlacement(2, 1),
+        archiveOffset: 10,
+        originalScreenY: 10,
+      }]);
+
+      expect(archive.length).toBe(20);
+
+      // Cache must refresh even though archive length is unchanged.
       const placements2 = archivedEmulator.getKittyPlacements();
-      // May have fewer placements after drop
-      expect(placements2.length).toBeLessThanOrEqual(placements1.length);
+      const imageIds = placements2.map((p) => p.imageId).sort((a, b) => a - b);
+      expect(imageIds).toEqual([1, 2]);
+
+      const image1 = placements2.find((p) => p.imageId === 1);
+      const image2 = placements2.find((p) => p.imageId === 2);
+      expect(image1?.screenY).toBe(2);
+      expect(image2?.screenY).toBe(10);
 
       archive.dispose();
     });

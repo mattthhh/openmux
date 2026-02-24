@@ -54,6 +54,8 @@ type ArchiveChunk = {
   lineCount: number
   bytes: number
   createdAt: number
+  /** Archive-relative start offset when this chunk was first created */
+  startOffsetAtWrite: number
   /** Reference to placement data file (undefined for backward compatibility) */
   placementFilename?: string
   placementPath?: string
@@ -71,6 +73,8 @@ type ArchiveMeta = {
     lineCount: number
     bytes: number
     createdAt: number
+    /** Archive-relative start offset when this chunk was first created */
+    startOffsetAtWrite?: number
     /** Placement chunk reference (undefined for backward compatibility) */
     placementFilename?: string
     placementBytes?: number
@@ -90,6 +94,7 @@ export class ScrollbackArchive {
   private nextChunkId = 1
   private appendQueue: Promise<void> = Promise.resolve()
   private generation = 0
+  private revision = 0
 
   constructor(options: {
     rootDir: string
@@ -118,6 +123,10 @@ export class ScrollbackArchive {
 
   get bytes(): number {
     return this.totalBytes
+  }
+
+  getRevision(): number {
+    return this.revision
   }
 
   getOldestChunk(): ArchiveChunk | null {
@@ -167,6 +176,7 @@ export class ScrollbackArchive {
     if (generation !== this.generation) return
 
     currentChunk.placementBytes = (currentChunk.placementBytes ?? 0) + packed.byteLength
+    this.revision += 1
     await this.flushMeta()
   }
 
@@ -194,11 +204,15 @@ export class ScrollbackArchive {
         // This chunk has relevant lines, check for placement data
         if (chunk.placementPath && chunk.placementBytes && chunk.placementBytes > 0) {
           const chunkPlacements = this.readPlacementsFromChunk(chunk)
-          // Filter placements within the requested range
+          // Rebase chunk placements into the current archive coordinate space.
           for (const placement of chunkPlacements) {
-            if (placement.archiveOffset >= startOffset && placement.archiveOffset < endOffset) {
-              placements.push(placement)
-            }
+            const rebasedOffset = this.rebasePlacementOffset(chunk, chunkStart, placement.archiveOffset)
+            if (rebasedOffset < startOffset || rebasedOffset >= endOffset) continue
+            if (rebasedOffset < 0 || rebasedOffset >= this.totalLines) continue
+            placements.push({
+              ...placement,
+              archiveOffset: rebasedOffset,
+            })
           }
         }
       }
@@ -208,6 +222,18 @@ export class ScrollbackArchive {
     }
 
     return placements
+  }
+
+  private rebasePlacementOffset(
+    chunk: ArchiveChunk,
+    currentChunkStart: number,
+    storedOffset: number
+  ): number {
+    // Stored offsets are archive-relative to the chunk's original write position.
+    // After oldest chunks are dropped, remaining chunk starts shift downward.
+    // Rebase into the current archive coordinate space.
+    const delta = chunk.startOffsetAtWrite - currentChunkStart
+    return storedOffset - delta
   }
 
   private readPlacementsFromChunk(chunk: ArchiveChunk): ArchivePlacement[] {
@@ -235,6 +261,7 @@ export class ScrollbackArchive {
     this.totalBytes = 0
     this.nextChunkId = 1
     this.cache.clear()
+    this.revision += 1
     void this.enqueue(async () => {
       for (const chunk of chunksToDelete) {
         // Delete cell data file
@@ -281,6 +308,7 @@ export class ScrollbackArchive {
     let currentChunk = this.chunks[this.chunks.length - 1] ?? null
     let buffered: Buffer[] = []
     let bufferedBytes = 0
+    let appendedLineCount = 0
 
     const flushBuffer = async (): Promise<boolean> => {
       if (!currentChunk || buffered.length === 0) return true
@@ -321,10 +349,14 @@ export class ScrollbackArchive {
       currentChunk.bytes += rowBytes
       this.totalLines += 1
       this.totalBytes += rowBytes
+      appendedLineCount += 1
     }
 
     const flushed = await flushBuffer()
     if (flushed === false || generation !== this.generation) return
+    if (appendedLineCount > 0) {
+      this.revision += 1
+    }
     await this.flushMeta()
     if (generation !== this.generation) return
     this.enforceLimit()
@@ -363,6 +395,7 @@ export class ScrollbackArchive {
     this.totalLines -= chunk.lineCount
     this.totalBytes -= chunk.bytes
     this.cache.clear()
+    this.revision += 1
     void this.enqueue(async () => {
       // Delete cell data file
       const result = await tryAsync<void, ScrollbackArchiveError>({
@@ -413,6 +446,7 @@ export class ScrollbackArchive {
       lineCount: 0,
       bytes: 0,
       createdAt: Date.now(),
+      startOffsetAtWrite: this.totalLines,
     }
   }
 
@@ -509,6 +543,7 @@ export class ScrollbackArchive {
     this.totalBytes = 0
     this.nextChunkId = parsed.nextChunkId || 1
 
+    let currentStartOffset = 0
     for (const entry of parsed.chunks ?? []) {
       const chunkPath = path.join(this.rootDir, entry.filename)
       if (!fs.existsSync(chunkPath)) continue
@@ -521,6 +556,8 @@ export class ScrollbackArchive {
         lineCount: entry.lineCount,
         bytes: entry.bytes,
         createdAt: entry.createdAt,
+        // Backward compatibility: older archives won't have this field.
+        startOffsetAtWrite: entry.startOffsetAtWrite ?? currentStartOffset,
         // Backward compatibility: placement fields may be undefined in older archives
         placementFilename: entry.placementFilename,
         placementPath: entry.placementFilename 
@@ -531,6 +568,7 @@ export class ScrollbackArchive {
       this.chunks.push(chunk)
       this.totalLines += chunk.lineCount
       this.totalBytes += chunk.bytes
+      currentStartOffset += chunk.lineCount
     }
 
     if (this.chunks.length > 0) {
@@ -551,6 +589,7 @@ export class ScrollbackArchive {
         lineCount: chunk.lineCount,
         bytes: chunk.bytes,
         createdAt: chunk.createdAt,
+        startOffsetAtWrite: chunk.startOffsetAtWrite,
         // Include placement metadata if this chunk has placement data
         placementFilename: chunk.placementFilename,
         placementBytes: chunk.placementBytes,

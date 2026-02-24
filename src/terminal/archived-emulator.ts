@@ -27,6 +27,8 @@ interface PlacementCache {
   placements: KittyGraphicsPlacement[]
   /** Archive length when cache was built */
   archiveLength: number
+  /** Archive content revision when cache was built */
+  archiveRevision: number
   /** Base emulator placement count when cache was built */
   basePlacementCount: number
 }
@@ -264,11 +266,14 @@ export class ArchivedTerminalEmulator implements ITerminalEmulator {
    * Results are cached for performance.
    */
   private getArchivedPlacements(basePlacementCount: number): KittyGraphicsPlacement[] {
+    const archiveLength = this.archive.length
+    const archiveRevision = this.archive.getRevision()
+
     // Check if we can use cached placements
     if (this.placementCache) {
-      const archiveLength = this.archive.length
       if (
         this.placementCache.archiveLength === archiveLength &&
+        this.placementCache.archiveRevision === archiveRevision &&
         this.placementCache.basePlacementCount === basePlacementCount
       ) {
         return this.placementCache.placements
@@ -280,12 +285,13 @@ export class ArchivedTerminalEmulator implements ITerminalEmulator {
     // For now, we handle the case where the method doesn't exist
     const archivePlacements: ArchivePlacement[] =
       (this.archive as unknown as { getPlacementsForLineRange?(start: number, end: number): ArchivePlacement[] })
-        .getPlacementsForLineRange?.(0, this.archive.length) ?? []
+        .getPlacementsForLineRange?.(0, archiveLength) ?? []
 
     if (archivePlacements.length === 0) {
       this.placementCache = {
         placements: [],
-        archiveLength: this.archive.length,
+        archiveLength,
+        archiveRevision,
         basePlacementCount,
       }
       return []
@@ -301,7 +307,8 @@ export class ArchivedTerminalEmulator implements ITerminalEmulator {
 
     this.placementCache = {
       placements: adjustedPlacements,
-      archiveLength: this.archive.length,
+      archiveLength,
+      archiveRevision,
       basePlacementCount,
     }
 

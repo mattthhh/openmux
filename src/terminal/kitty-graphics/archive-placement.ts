@@ -93,7 +93,7 @@ function unpackPlacementAt(view: DataView, offset: number): ArchivePlacement {
 /**
  * Pack an ArchivePlacement into an ArrayBuffer
  * @param placement The placement to serialize
- * @returns ArrayBuffer containing the serialized placement (60 bytes)
+ * @returns ArrayBuffer containing the serialized placement (64 bytes)
  */
 export function packPlacement(placement: ArchivePlacement): ArrayBuffer {
   const buffer = new ArrayBuffer(PLACEMENT_SIZE);
@@ -104,7 +104,7 @@ export function packPlacement(placement: ArchivePlacement): ArrayBuffer {
 
 /**
  * Unpack an ArchivePlacement from an ArrayBuffer
- * @param buffer The buffer to deserialize (must be at least 60 bytes)
+ * @param buffer The buffer to deserialize (must be at least 64 bytes)
  * @returns The deserialized ArchivePlacement
  */
 export function unpackPlacement(buffer: ArrayBuffer): ArchivePlacement {
