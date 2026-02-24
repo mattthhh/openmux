@@ -126,9 +126,10 @@ export class KittyGraphicsRenderer {
     if (nextKey === this.clipRectsKey) return;
     this.clipRects = nextRects;
     this.clipRectsKey = nextKey;
-    for (const pane of this.panes.values()) {
-      pane.needsClear = true;
-    }
+    tracePtyEvent('kitty-render-clips', {
+      clipCount: nextRects.length,
+      clipKeyLen: nextKey.length,
+    });
   }
 
   setVisibleLayers(layers: Iterable<KittyPaneLayer>): void {
@@ -245,7 +246,10 @@ export class KittyGraphicsRenderer {
 
     for (const [paneKey, pane] of this.panes) {
       if (pane.removed || !pane.ptyId || !pane.emulator) {
-        clearPanePlacements({ paneKey, placementsByPane: this.placementsByPane, output });
+        const reason = pane.removed
+          ? 'removed'
+          : (!pane.ptyId ? 'missing-pty' : 'missing-emulator');
+        clearPanePlacements({ paneKey, placementsByPane: this.placementsByPane, output, reason });
         if (pane.removed) {
           this.panes.delete(paneKey);
         }
@@ -254,14 +258,24 @@ export class KittyGraphicsRenderer {
 
       if (pane.hidden) {
         if (pane.needsClear) {
-          clearPanePlacements({ paneKey, placementsByPane: this.placementsByPane, output });
+          clearPanePlacements({
+            paneKey,
+            placementsByPane: this.placementsByPane,
+            output,
+            reason: 'hidden-layer',
+          });
           pane.needsClear = false;
         }
         continue;
       }
 
       if (pane.needsClear) {
-        clearPanePlacements({ paneKey, placementsByPane: this.placementsByPane, output });
+        clearPanePlacements({
+          paneKey,
+          placementsByPane: this.placementsByPane,
+          output,
+          reason: 'pane-reset',
+        });
         pane.needsClear = false;
       }
 

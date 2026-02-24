@@ -32,16 +32,18 @@ export function clearPanePlacements(params: {
   paneKey: string;
   placementsByPane: Map<string, Map<string, PlacementRender>>;
   output: string[];
+  reason?: string;
 }): void {
-  const { paneKey, placementsByPane, output } = params;
+  const { paneKey, placementsByPane, output, reason } = params;
   const placements = placementsByPane.get(paneKey);
   if (!placements) return;
 
   for (const placement of placements.values()) {
     output.push(buildDeletePlacement(placement.hostImageId, placement.hostPlacementId));
   }
+  const cleared = placements.size;
   placementsByPane.delete(paneKey);
-  tracePtyEvent('kitty-render-clear', { paneKey });
+  tracePtyEvent('kitty-render-clear', { paneKey, reason, cleared });
 }
 
 export function renderPanePlacements(params: {
