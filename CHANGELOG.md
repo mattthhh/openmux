@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.5](https://github.com/monotykamary/openmux/compare/v0.3.4...v0.3.5) (2026-02-24)
+
+
+### Bug Fixes
+
+* **pty:** reset stale focus tracking after transient apps ([e5c4225](https://github.com/monotykamary/openmux/commit/e5c42257ecf616e4553acee489dd77a2c8c035d4))
+
 ### [0.3.4](https://github.com/monotykamary/openmux/compare/v0.3.3...v0.3.4) (2026-02-24)
 
 
