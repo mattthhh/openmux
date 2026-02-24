@@ -2,6 +2,52 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.4](https://github.com/monotykamary/openmux/compare/v0.3.3...v0.3.4) (2026-02-24)
+
+
+### Features
+
+* **archived-emulator:** add Kitty placement support for archived scrollback ([0e75d79](https://github.com/monotykamary/openmux/commit/0e75d7916e27897d946e49af6ccb42403a4b22f0))
+* **archive:** extend scrollback archive storage format for placements ([3f1417c](https://github.com/monotykamary/openmux/commit/3f1417c757dab8cbdc9fdc5708db350121d3513e))
+* **kitty-graphics:** handle archived placements in computePlacementRender ([10e0d2c](https://github.com/monotykamary/openmux/commit/10e0d2c006be0c1b9cae96e006fcaead1d407859))
+* **kitty:** Define ArchivePlacement types and serialization ([6c3a98e](https://github.com/monotykamary/openmux/commit/6c3a98ea680e4fc1647540bc953616c79848e51f))
+* **scrollback-archiver:** capture Kitty placements before trimming ([07f7d80](https://github.com/monotykamary/openmux/commit/07f7d801accde24754729aa08ddda2061f05da18))
+* **tests:** Add Kitty graphics scrollback archive tests ([21f172d](https://github.com/monotykamary/openmux/commit/21f172d148bfc0a715f1959f4371d8f9350c8156))
+
+
+### Bug Fixes
+
+* **kitty-graphics:** align placement coordinates across archive trim ([3902157](https://github.com/monotykamary/openmux/commit/390215739a11c2350e5b9fc8c7c9fbb5ecba028f))
+* **kitty-graphics:** avoid hard clears on clip rect changes ([4453e06](https://github.com/monotykamary/openmux/commit/4453e06d1a3bff7626493d6cd6ff5d90db1ddb4e))
+* **kitty-graphics:** handle id-only relay chunk continuations ([eddfcd8](https://github.com/monotykamary/openmux/commit/eddfcd830d1ee1e77c7d436356eef21febf4cbd2))
+* **kitty-graphics:** rebase archived placements after chunk eviction ([ad1de1f](https://github.com/monotykamary/openmux/commit/ad1de1f092c0db30b9d70d6ea5b3eeca7963d174))
+* **kitty-graphics:** seed host image data for broker-mapped images ([f059289](https://github.com/monotykamary/openmux/commit/f05928912265c72520358d8bf69f565b2fc97bba))
+* **shim:** avoid replaying shared-memory kitty transmits ([200f996](https://github.com/monotykamary/openmux/commit/200f996402a819618f173a38c392afae2cf19615))
+* **shim:** cache relay chunk continuations for kitty replay ([c3b0560](https://github.com/monotykamary/openmux/commit/c3b0560c75f61da1367f29b72158fd260e6711bd))
+* **shim:** include image data when replay cache uses shared memory ([677adca](https://github.com/monotykamary/openmux/commit/677adca404e05311fccacfb38c56c40134fa528e))
+* **shim:** keep kitty replay cache fresh while detached ([36ff82d](https://github.com/monotykamary/openmux/commit/36ff82d5c2b57a29cedd4c2b931b8efcc76a378d))
+* **shim:** keep live shared-memory kitty transmits ([88e5197](https://github.com/monotykamary/openmux/commit/88e51977a4f052a11c4b888d723e5efe7a7ef6a7))
+* **shim:** preserve kitty replay across detach reattach ([758b24a](https://github.com/monotykamary/openmux/commit/758b24a397de008dd1d7830f35680cc64c5aa101))
+* **shim:** preserve shared-memory kitty payloads in server emulator ([9e18d50](https://github.com/monotykamary/openmux/commit/9e18d50a2cd6cd541da888c5694a0d02bf109373))
+* **shim:** replay shared-memory kitty when snapshot bytes are missing ([cce4dd1](https://github.com/monotykamary/openmux/commit/cce4dd17e2e8585c448e3e738e4069bf7aae5d1f))
+* **terminal:** preserve shift+enter newline without kitty protocol ([b4d5e55](https://github.com/monotykamary/openmux/commit/b4d5e55c1e1b251a07553ad46db7d1a8568f83f9))
+
+
+### Documentation
+
+* **agents:** update AGENTS.md with errore patterns and resource management ([a0f50f9](https://github.com/monotykamary/openmux/commit/a0f50f9f5ca70612c693564fc4be8d078cd65aa7))
+
+
+### Tests
+
+* **kitty:** add integration tests for scrollback archive edge cases ([f771f5f](https://github.com/monotykamary/openmux/commit/f771f5f44a3d4f5a0f85634588aff4d2ee6f4985))
+
+
+### Performance
+
+* **kitty-graphics:** avoid eager seeding for broker-mapped images ([b90edb7](https://github.com/monotykamary/openmux/commit/b90edb7013bfbcca0bd968fba727639e5f4263df))
+* **kitty-graphics:** cache archived placement scans ([2eb814f](https://github.com/monotykamary/openmux/commit/2eb814f258767828ce7160a1bf64e3854232f155))
+
 ### [0.3.3](https://github.com/monotykamary/openmux/compare/v0.3.2...v0.3.3) (2026-02-20)
 
 
