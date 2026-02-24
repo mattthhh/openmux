@@ -43,6 +43,25 @@ const SCROLLBACK_CLEAR_PROBE_LEN = 128
 const SCROLLBACK_CLEAR_REGEX = /\x1b\[([0-9;]*)J/g
 const SCROLLBACK_CLEAR_C1_REGEX = /\x9b([0-9;]*)J/g
 
+function normalizeProcessName(value: string | null | undefined): string | null {
+  if (!value) return null
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  const base = trimmed.split(/[\\/]/).pop() ?? trimmed
+  const normalized = base.replace(/^-+/, "").toLowerCase()
+  return normalized.length > 0 ? normalized : null
+}
+
+function resolveFocusTrackingOwnerProcess(session: InternalPtySession): string | null {
+  const ptyAny = session.pty as unknown as { getForegroundProcessName?: () => string | null }
+  if (typeof ptyAny.getForegroundProcessName !== "function") return null
+  try {
+    return normalizeProcessName(ptyAny.getForegroundProcessName())
+  } catch {
+    return null
+  }
+}
+
 function hasScrollbackEraseSequence(text: string, regex: RegExp): boolean {
   regex.lastIndex = 0
   let match: RegExpExecArray | null
@@ -166,10 +185,22 @@ export function createDataHandler(options: DataHandlerOptions) {
       const wasEnabled = session.focusTrackingEnabled
       session.focusTrackingEnabled = lastEnable > lastDisable
 
+      if (session.focusTrackingEnabled) {
+        const ownerProcess = resolveFocusTrackingOwnerProcess(session)
+        if (ownerProcess) {
+          session.focusTrackingOwnerProcess = ownerProcess
+        } else if (!wasEnabled) {
+          session.focusTrackingOwnerProcess = null
+        }
+      } else {
+        session.focusTrackingOwnerProcess = null
+      }
+
       if (session.focusTrackingEnabled !== wasEnabled) {
         tracePtyEvent("pty-focus-tracking", {
           ptyId: session.id,
           enabled: session.focusTrackingEnabled,
+          ownerProcess: session.focusTrackingOwnerProcess,
         })
       }
 

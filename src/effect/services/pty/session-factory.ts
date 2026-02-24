@@ -151,6 +151,7 @@ export async function createSession(
     lastCommand: null,
     focusTrackingEnabled: false,
     focusState: false,
+    focusTrackingOwnerProcess: null,
     pendingNotify: false,
     scrollState: { viewportOffset: 0, lastScrollbackLength: 0, lastIsAtBottom: true },
   }

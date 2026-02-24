@@ -47,6 +47,8 @@ export interface InternalPtySession {
   focusTrackingEnabled: boolean
   /** Last focus state requested by the UI */
   focusState: boolean
+  /** Foreground process name that most recently enabled focus tracking (normalized lowercase basename). */
+  focusTrackingOwnerProcess: string | null
   pendingNotify: boolean
   scrollState: {
     viewportOffset: number

@@ -15,6 +15,27 @@ import { tracePtyEvent, tracePtyChunk } from "../../../terminal/pty-trace"
 const FOCUS_IN_SEQUENCE = "\x1b[I"
 const FOCUS_OUT_SEQUENCE = "\x1b[O"
 
+function normalizeProcessName(value: string | null | undefined): string | null {
+  if (!value) return null
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  const base = trimmed.split(/[\\/]/).pop() ?? trimmed
+  const normalized = base.replace(/^-+/, "").toLowerCase()
+  return normalized.length > 0 ? normalized : null
+}
+
+function getShellProcessName(session: InternalPtySession): string | null {
+  return normalizeProcessName(session.shell)
+}
+
+function getForegroundProcessName(session: InternalPtySession): string | null {
+  try {
+    return normalizeProcessName(session.pty.getForegroundProcessName())
+  } catch {
+    return null
+  }
+}
+
 export interface OperationsDeps {
   sessions: Map<PtyId, InternalPtySession>
   lifecycleRegistry: SubscriptionRegistry<{ type: 'created' | 'destroyed'; ptyId: PtyId }>
@@ -55,11 +76,35 @@ export function createOperations(deps: OperationsDeps) {
     }
     const session = sessionOrError
     session.focusState = focused
+
+    const shellProcess = getShellProcessName(session)
+    const foregroundProcess = getForegroundProcessName(session)
+
+    if (
+      session.focusTrackingEnabled
+      && shellProcess
+      && foregroundProcess === shellProcess
+      && session.focusTrackingOwnerProcess
+      && session.focusTrackingOwnerProcess !== shellProcess
+    ) {
+      tracePtyEvent("pty-focus-tracking-stale-reset", {
+        ptyId: id,
+        ownerProcess: session.focusTrackingOwnerProcess,
+        shellProcess,
+        foregroundProcess,
+      })
+      session.focusTrackingEnabled = false
+      session.focusTrackingOwnerProcess = null
+    }
+
     const sequence = focused ? FOCUS_IN_SEQUENCE : FOCUS_OUT_SEQUENCE
     tracePtyEvent("pty-focus-send", {
       ptyId: id,
       focused,
       trackingEnabled: session.focusTrackingEnabled,
+      ownerProcess: session.focusTrackingOwnerProcess,
+      shellProcess,
+      foregroundProcess,
     })
     tracePtyChunk("pty-focus-seq", sequence, { ptyId: id })
     if (!session.focusTrackingEnabled) return

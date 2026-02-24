@@ -696,6 +696,7 @@ function createMockSession(
     lastCommand: null,
     focusTrackingEnabled: false,
     focusState: false,
+    focusTrackingOwnerProcess: null,
     pendingNotify: false,
     scrollState: {
       viewportOffset: 0,
