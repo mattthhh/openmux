@@ -54,6 +54,21 @@ describe('createKittyHandlers', () => {
     expect(update?.payloads.length).toBe(1);
   });
 
+  it('caches transmits even without an attached client', () => {
+    const state = createShimServerState();
+    const events: Array<{ header: any; payloads: ArrayBuffer[] }> = [];
+
+    const handlers = createKittyHandlers(state, (header, payloads = []) => {
+      events.push({ header, payloads });
+    });
+
+    const seq = '\x1b_Ga=t,f=100,i=42;QUJD\x1b\\';
+    handlers.sendKittyTransmit('pty-1', seq);
+
+    expect(events.length).toBe(0);
+    expect(state.kittyTransmitCache.get('pty-1')?.get('i:42')).toEqual([seq]);
+  });
+
   it('stores file-medium transmits in cache as direct payloads for replay', () => {
     const state = createShimServerState();
     state.activeClient = {} as any;

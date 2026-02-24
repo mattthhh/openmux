@@ -2,6 +2,7 @@ import type net from 'net';
 import { describe, expect, it, vi } from 'bun:test';
 
 import { createServerHandlers } from '../../src/shim/server-handlers';
+import { getKittyTransmitForwarder, setKittyTransmitForwarder } from '../../src/shim/kitty-forwarder';
 import { createShimServerState } from '../../src/shim/server-state';
 import {
   KittyGraphicsCompression,
@@ -63,7 +64,15 @@ describe('createServerHandlers detach behavior', () => {
     expect(state.kittyTransmitInvalidated.has('pty-1')).toBe(true);
     expect(state.kittyImages.has('pty-1')).toBe(true);
 
+    // Detached shim must keep recording transmits while no client is attached.
+    const forwarder = getKittyTransmitForwarder();
+    expect(typeof forwarder).toBe('function');
+    forwarder?.('pty-1', '\x1b_Ga=t,f=100,i=9;QUJD\x1b\\');
+    expect(state.kittyTransmitCache.get('pty-1')?.get('i:9')).toEqual(['\x1b_Ga=t,f=100,i=9;QUJD\x1b\\']);
+
     expect(unifiedUnsub).toHaveBeenCalledTimes(1);
     expect(exitUnsub).toHaveBeenCalledTimes(1);
+
+    setKittyTransmitForwarder(null);
   });
 });

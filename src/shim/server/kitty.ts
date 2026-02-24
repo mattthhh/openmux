@@ -229,8 +229,12 @@ export function createKittyHandlers(state: ShimServerState, sendEvent: SendEvent
   };
 
   const sendKittyTransmit = (ptyId: string, sequence: string): void => {
-    if (!state.activeClient) return;
+    // Always cache replay data, even when no client is currently attached.
+    // Detached sessions still receive Kitty transmits from the PTY stream and
+    // must be able to replay them when the next client attaches.
     recordKittyTransmit(ptyId, sequence);
+
+    if (!state.activeClient) return;
     const payload = Buffer.from(sequence, 'utf8');
     sendEvent({
       type: 'ptyKittyTransmit',

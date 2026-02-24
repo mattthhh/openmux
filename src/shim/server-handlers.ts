@@ -379,7 +379,9 @@ export function createServerHandlers(state: ShimServerState, options?: ShimServe
 
     state.activeClient = null;
     state.activeClientId = null;
-    setKittyTransmitForwarder(null);
+    // Keep capturing kitty transmits while detached so replay cache stays fresh.
+    // sendKittyTransmit short-circuits socket sends when no active client exists.
+    setKittyTransmitForwarder(sendKittyTransmit);
     setKittyUpdateForwarder(null);
     setNotificationForwarder(null);
 
