@@ -143,6 +143,25 @@ describe('createKittyHandlers', () => {
     expect(transmit).toBeDefined();
   });
 
+  it('allows explicit shared-memory replay fallback forwarding', () => {
+    const state = createShimServerState();
+    const events: Array<{ header: any; payloads: ArrayBuffer[] }> = [];
+    state.activeClient = {} as any;
+
+    const handlers = createKittyHandlers(state, (header, payloads = []) => {
+      events.push({ header, payloads });
+    });
+
+    const sharedMemoryPayload = Buffer.from('SHMKEY', 'utf8').toString('base64');
+    handlers.sendKittyTransmit('pty-1', `\x1b_Ga=T,t=s,s=10,v=12,S=120,i=1;${sharedMemoryPayload}\x1b\\`, {
+      fromReplay: true,
+      allowSharedMemoryReplay: true,
+    });
+
+    const transmit = events.find((event) => event.header.type === 'ptyKittyTransmit');
+    expect(transmit).toBeDefined();
+  });
+
   it('finalizes chunked transmits when continuation chunks omit control params', () => {
     const state = createShimServerState();
     state.activeClient = {} as any;

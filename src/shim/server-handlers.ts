@@ -8,6 +8,7 @@ import type { UnifiedTerminalUpdate, TerminalScrollState, TerminalState, DirtyTe
 import { packDirtyUpdate } from '../terminal/cell-serialization';
 import type { ITerminalEmulator } from '../terminal/emulator-interface';
 import { setHostColors as setHostColorsDefault, type TerminalColors } from '../terminal/terminal-colors';
+import { buildGuestKey } from '../terminal/kitty-graphics/sequence-utils';
 import { SHIM_SOCKET_PATH, type ShimHeader } from './protocol';
 import { setKittyTransmitForwarder, setKittyUpdateForwarder } from './kitty-forwarder';
 import { setNotificationForwarder } from './notification-forwarder';
@@ -298,9 +299,35 @@ export function createServerHandlers(state: ShimServerState, options?: ShimServe
 
     const cache = state.kittyTransmitCache.get(ptyId);
     if (cache && cache.size > 0) {
-      for (const sequences of cache.values()) {
+      const guestKeyHasImageData = new Map<string, boolean>();
+      const imageIds = emulator.getKittyImageIds?.() ?? [];
+      for (const imageId of imageIds) {
+        const info = emulator.getKittyImageInfo?.(imageId);
+        if (!info) continue;
+        const hasImageData = Boolean(emulator.getKittyImageData?.(imageId));
+
+        const idKey = buildGuestKey(info.id, null);
+        if (idKey) {
+          guestKeyHasImageData.set(idKey, hasImageData);
+        }
+
+        if (info.number > 0) {
+          const numberKey = buildGuestKey(null, info.number);
+          if (numberKey && !guestKeyHasImageData.has(numberKey)) {
+            guestKeyHasImageData.set(numberKey, hasImageData);
+          }
+        }
+      }
+
+      for (const [guestKey, sequences] of cache.entries()) {
+        const hasSharedMemoryChunk = sequences.some((seq) => seq.includes('t=s'));
+        const allowSharedMemoryReplay = hasSharedMemoryChunk && !guestKeyHasImageData.get(guestKey);
+
         for (const seq of sequences) {
-          sendKittyTransmit(ptyId, seq, { fromReplay: true });
+          sendKittyTransmit(ptyId, seq, {
+            fromReplay: true,
+            allowSharedMemoryReplay,
+          });
         }
       }
     }
