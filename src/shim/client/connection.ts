@@ -272,7 +272,9 @@ export function onShimDetached(callback: () => void): () => void {
 
 export async function shutdownShim(): Promise<void> {
   if (connecting) {
-    await connecting.catch(() => {});
+    await connecting.catch((e) => {
+      console.warn('[shim-client] Connection cleanup failed during shutdown:', e);
+    });
   }
   
   const connected = await ensureConnectedWithoutSpawn();

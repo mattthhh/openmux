@@ -442,9 +442,13 @@ export class ScrollbackArchive {
 
   private enqueue(task: () => Promise<void>): Promise<void> {
     this.appendQueue = this.appendQueue
-      .catch(() => {})
+      .catch((e) => {
+        console.warn('[scrollback-archive] Queue task failed:', e);
+      })
       .then(task)
-      .catch(() => {})
+      .catch((e) => {
+        console.warn('[scrollback-archive] Enqueued task failed:', e);
+      })
     return this.appendQueue
   }
 

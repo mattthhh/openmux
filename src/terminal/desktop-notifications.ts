@@ -96,7 +96,9 @@ end run`;
       ["osascript", "-e", script, "--", title, subtitle, body, sound],
       { stdout: "ignore", stderr: "ignore" }
     );
-    proc.exited.catch(() => {});
+    proc.exited.catch((e) => {
+      console.warn('[notifications] osascript process failed:', e);
+    });
     return true;
   } catch {
     // Ignore notification failures (e.g., missing osascript)

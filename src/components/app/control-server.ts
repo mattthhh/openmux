@@ -39,6 +39,8 @@ export function setupControlServer(params: {
 
   onCleanup(() => {
     if (!server) return;
-    server.close().catch(() => {});
+    server.close().catch((e) => {
+      console.warn('[control-server] Failed to close server:', e);
+    });
   });
 }

@@ -215,7 +215,9 @@ export function TerminalProvider(props: TerminalProviderProps) {
     initialized = true;
 
     if (isShimClient()) {
-      waitForShimClient().catch(() => {});
+      waitForShimClient().catch((e) => {
+        console.warn('[TerminalContext] Shim client wait failed:', e);
+      });
     }
 
     // Detect host capabilities first (for graphics passthrough)

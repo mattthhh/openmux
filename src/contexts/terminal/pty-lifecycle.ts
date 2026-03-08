@@ -206,7 +206,9 @@ export function createPtyLifecycleHandlers(deps: PtyLifecycleDeps) {
       mapping.set(paneId, ptyId);
       sessionPtyMap.set(sessionId, mapping);
       ptyToSessionMap.set(ptyId, { sessionId, paneId });
-      registerPtyPane(sessionId, paneId, ptyId).catch(() => {});
+      registerPtyPane(sessionId, paneId, ptyId).catch((e) => {
+        console.warn(`[pty-lifecycle] Failed to register PTY pane ${paneId} -> ${ptyId}:`, e);
+      });
     }
 
     // Update the pane with the PTY ID FIRST - this triggers TerminalView mounting
@@ -301,7 +303,9 @@ export function createPtyLifecycleHandlers(deps: PtyLifecycleDeps) {
       mapping.set(paneId, ptyId);
       sessionPtyMap.set(sessionId, mapping);
       ptyToSessionMap.set(ptyId, { sessionId, paneId });
-      registerPtyPane(sessionId, paneId, ptyId).catch(() => {});
+      registerPtyPane(sessionId, paneId, ptyId).catch((e) => {
+        console.warn(`[pty-lifecycle] Failed to register PTY pane ${paneId} -> ${ptyId}:`, e);
+      });
     }
 
     // Defer subscription setup to next frame to avoid blocking the render

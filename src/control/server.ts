@@ -250,8 +250,12 @@ async function handlePaneCapture(
     return;
   }
 
-  await deps.fetchTerminalState(ptyId, { force: true }).catch(() => {});
-  await deps.fetchScrollState(ptyId, { force: true }).catch(() => {});
+  await deps.fetchTerminalState(ptyId, { force: true }).catch((e) => {
+    console.warn(`[control] Failed to fetch terminal state for ${ptyId}:`, e);
+  });
+  await deps.fetchScrollState(ptyId, { force: true }).catch((e) => {
+    console.warn(`[control] Failed to fetch scroll state for ${ptyId}:`, e);
+  });
 
   const state = emulator.getTerminalState();
   const scrollbackLength = emulator.getScrollbackLength();
@@ -283,7 +287,9 @@ async function handlePaneCapture(
 
 export async function startControlServer(deps: ControlServerDeps): Promise<ControlServer> {
   await fs.mkdir(CONTROL_SOCKET_DIR, { recursive: true });
-  await fs.unlink(CONTROL_SOCKET_PATH).catch(() => {});
+  await fs.unlink(CONTROL_SOCKET_PATH).catch((e) => {
+    console.warn('[control] Failed to unlink control socket:', e);
+  });
 
   const server = net.createServer((socket) => {
     const reader = new FrameReader();
@@ -362,7 +368,9 @@ export async function startControlServer(deps: ControlServerDeps): Promise<Contr
     socketPath: CONTROL_SOCKET_PATH,
     close: async () => {
       await new Promise<void>((resolve) => server.close(() => resolve()));
-      await fs.unlink(CONTROL_SOCKET_PATH).catch(() => {});
+      await fs.unlink(CONTROL_SOCKET_PATH).catch((e) => {
+        console.warn('[control] Failed to unlink control socket on close:', e);
+      });
     },
   };
 }

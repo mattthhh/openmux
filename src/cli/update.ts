@@ -558,7 +558,9 @@ async function replaceFileAtomically(
     }
     await io.rename(tempDestination, destination);
   } catch (error) {
-    await io.rm(tempDestination).catch(() => undefined);
+    await io.rm(tempDestination).catch((e) => {
+      console.warn('[update] Failed to clean up temp destination:', e);
+    });
     throw error;
   }
 }
@@ -632,7 +634,9 @@ async function installRelease(io: UpdateIO, release: GitHubRelease, installDir: 
     await io.writeFile(path.join(installDir, '.version'), version);
     return version;
   } finally {
-    await io.rm(tempRoot).catch(() => undefined);
+    await io.rm(tempRoot).catch((e) => {
+      console.warn('[update] Failed to clean up temp root:', e);
+    });
   }
 }
 
@@ -658,7 +662,9 @@ async function replaceTextFileAtomically(io: UpdateIO, destination: string, cont
     }
     await io.rename(tempDestination, destination);
   } catch (error) {
-    await io.rm(tempDestination).catch(() => undefined);
+    await io.rm(tempDestination).catch((e) => {
+      console.warn('[update] Failed to clean up temp file:', e);
+    });
     throw error;
   }
 }

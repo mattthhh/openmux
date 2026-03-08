@@ -440,6 +440,8 @@ export async function loadSessionDataWithService(
     SerializedSession,
     SessionCorruptedError | SessionNotFoundError
   >({
+    // Note: throw inside tryAsync try block is caught by catch block - this is the expected pattern
+    // eslint-disable-next-line @typescript-eslint/no-throw-literal
     try: async () => {
       const session = await manager.loadSession(sessionId as SessionId)
       if (session instanceof Error) {

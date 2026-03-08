@@ -104,24 +104,35 @@ export function createHostColorSync(deps: HostColorSyncDeps): HostColorSync {
         const startedAt = Date.now();
 
         const attemptFastRefresh = async () => {
-          const didChange = await refreshHostColors({ timeoutMs: 200, oscMode: 'fast' }).catch(() => false);
+          const didChange = await refreshHostColors({ timeoutMs: 200, oscMode: 'fast' }).catch((e) => {
+            console.warn('[host-color-sync] Fast refresh failed:', e);
+            return false;
+          });
           if (!deps.isActive() || seq !== appearanceSequence) return;
           if (didChange) {
             appearanceRetryTimer = setTimeout(() => {
-              refreshHostColors({ timeoutMs: 500, oscMode: 'full' }).catch(() => {});
+              refreshHostColors({ timeoutMs: 500, oscMode: 'full' }).catch((e) => {
+                console.warn('[host-color-sync] Palette delay refresh failed:', e);
+              });
             }, paletteDelayMs);
             return;
           }
           if (Date.now() - startedAt >= pollWindowMs) {
-            refreshHostColors({ timeoutMs: 500, oscMode: 'full' }).catch(() => {});
+            refreshHostColors({ timeoutMs: 500, oscMode: 'full' }).catch((e) => {
+              console.warn('[host-color-sync] Poll window refresh failed:', e);
+            });
             return;
           }
           appearanceRetryTimer = setTimeout(() => {
-            attemptFastRefresh().catch(() => {});
+            attemptFastRefresh().catch((e) => {
+              console.warn('[host-color-sync] Poll interval refresh failed:', e);
+            });
           }, pollIntervalMs);
         };
 
-        attemptFastRefresh().catch(() => {});
+        attemptFastRefresh().catch((e) => {
+          console.warn('[host-color-sync] Initial appearance refresh failed:', e);
+        });
       }, 50);
     };
 
@@ -180,7 +191,9 @@ export function createHostColorSync(deps: HostColorSyncDeps): HostColorSync {
         console.warn('[openmux] Failed to apply cached host colors:', error);
       });
     }
-    refreshHostColors({ timeoutMs: 200, oscMode: 'fast', forceApply: true }).catch(() => {});
+    refreshHostColors({ timeoutMs: 200, oscMode: 'fast', forceApply: true }).catch((e) => {
+      console.warn('[host-color-sync] Forced refresh failed:', e);
+    });
   };
 
   const stop = () => {

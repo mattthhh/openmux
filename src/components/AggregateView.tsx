@@ -224,7 +224,8 @@ export function AggregateView(props: AggregateViewProps) {
           return;
         }
         activitySubscriptions.set(ptyId, unsubscribe);
-      }).catch(() => {
+      }).catch((e) => {
+        console.warn(`[AggregateView] Failed to subscribe to PTY activity for ${ptyId}:`, e);
         clearPtyStdoutActivity(ptyId);
       });
     }
@@ -545,7 +546,10 @@ export function AggregateView(props: AggregateViewProps) {
     const candidatePane = [...livePanes].reverse().find((pane) => !!pane.ptyId) ?? null;
     if (!candidatePane?.ptyId) return undefined;
 
-    const cwd = await getSessionCwd(candidatePane.ptyId).catch(() => undefined);
+    const cwd = await getSessionCwd(candidatePane.ptyId).catch((e) => {
+      console.warn(`[AggregateView] Failed to get session CWD for ${candidatePane.ptyId}:`, e);
+      return undefined;
+    });
     return cwd || undefined;
   };
 

@@ -41,18 +41,24 @@ export async function startShimServer(options?: ShimServerOptions): Promise<net.
     socket.on('data', (chunk) => {
       frameReader.feed(chunk as Buffer, (header, payloads) => {
         if (header.type !== 'request') return;
-        handlers.handleRequest(socket, header, payloads).catch(() => {});
+        handlers.handleRequest(socket, header, payloads).catch((e) => {
+          console.warn('[shim] Request handler failed:', e);
+        });
       });
     });
 
     socket.on('close', () => {
       shimState.clientIds.delete(socket);
-      handlers.detachClient(socket).catch(() => {});
+      handlers.detachClient(socket).catch((e) => {
+        console.warn('[shim] Detach on close failed:', e);
+      });
     });
 
     socket.on('error', () => {
       shimState.clientIds.delete(socket);
-      handlers.detachClient(socket).catch(() => {});
+      handlers.detachClient(socket).catch((e) => {
+        console.warn('[shim] Detach on error failed:', e);
+      });
     });
   });
 

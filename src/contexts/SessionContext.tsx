@@ -324,7 +324,9 @@ export function SessionProvider(props: SessionProviderProps) {
       dispatch({ type: 'SET_ACTIVE_SESSION', id: activeId, session: activeSession });
 
       // Update lastSwitchedAt so this session is properly marked as most recent
-      const switchPromise = switchToSession(activeId).catch(() => {});
+      const switchPromise = switchToSession(activeId).catch((e) => {
+        console.warn('[SessionContext] Failed to switch to session:', activeId, e);
+      });
 
       // Load session data and notify parent
       const data = await loadSessionData(activeId);
@@ -354,7 +356,9 @@ export function SessionProvider(props: SessionProviderProps) {
         );
       }
 
-      refreshTask = switchPromise.then(() => refreshSessions()).catch(() => {});
+      refreshTask = switchPromise.then(() => refreshSessions()).catch((e) => {
+        console.warn('[SessionContext] Failed to refresh sessions:', e);
+      });
     }
 
     dispatch({ type: 'SET_INITIALIZED' });
