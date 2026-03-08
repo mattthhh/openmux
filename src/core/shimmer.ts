@@ -11,6 +11,10 @@
 
 import type { PtyInfo } from '../contexts/aggregate-view-types';
 
+const OUTPUT_ACTIVITY_WINDOW_MS = 2500;
+const MIN_OUTPUT_EVENTS_FOR_SHIMMER = 2;
+const ptyStdoutActivity = new Map<string, number[]>();
+
 /**
  * Polyfill for requestAnimationFrame in Bun/Node environment
  * Falls back to setTimeout with 16ms delay (60fps)
@@ -163,6 +167,46 @@ function calculateShimmerColor(
 }
 
 /**
+ * Prune stale stdout activity entries for a PTY.
+ */
+function prunePtyStdoutActivity(ptyId: string, now = Date.now()): number[] {
+  const recent = (ptyStdoutActivity.get(ptyId) ?? []).filter(
+    (timestamp) => now - timestamp <= OUTPUT_ACTIVITY_WINDOW_MS
+  );
+
+  if (recent.length === 0) {
+    ptyStdoutActivity.delete(ptyId);
+    return [];
+  }
+
+  ptyStdoutActivity.set(ptyId, recent);
+  return recent;
+}
+
+/**
+ * Record that a PTY produced stdout-visible terminal output.
+ */
+export function recordPtyStdoutActivity(ptyId: string, time = Date.now()): void {
+  const recent = prunePtyStdoutActivity(ptyId, time);
+  recent.push(time);
+  ptyStdoutActivity.set(ptyId, recent);
+}
+
+/**
+ * Clear cached stdout activity for a PTY.
+ */
+export function clearPtyStdoutActivity(ptyId: string): void {
+  ptyStdoutActivity.delete(ptyId);
+}
+
+/**
+ * Check whether a PTY has sustained recent stdout activity.
+ */
+export function hasRecentPtyStdoutActivity(ptyId: string, now = Date.now()): boolean {
+  return prunePtyStdoutActivity(ptyId, now).length >= MIN_OUTPUT_EVENTS_FOR_SHIMMER;
+}
+
+/**
  * Background processes to exclude from shimmer
  * These are typically long-running watchers/servers
  */
@@ -196,45 +240,25 @@ function isBackgroundProcess(processName: string | undefined): boolean {
 }
 
 /**
- * Determine if a PTY has "meaningful activity" that warrants shimmer
- * 
+ * Determine if a PTY has meaningful shimmer activity.
+ *
  * Heuristic:
- * - Include: interactive coding agents, shells with recent commands
- * - Exclude: background servers (webpack, jest --watch), idle shells
- * - Active if foregroundProcess !== shell
+ * - require sustained recent stdout-visible terminal updates
+ * - exclude known background watchers/servers
+ * - do not shimmer merely because a process is still running
  */
 export function hasMeaningfulActivity(pty: PtyInfo): boolean {
-  const { foregroundProcess, shell, title } = pty;
+  const { foregroundProcess, ptyId } = pty;
 
-  // No foreground process means idle shell
   if (!foregroundProcess) {
     return false;
   }
 
-  const fg = foregroundProcess.toLowerCase();
-  const sh = shell?.toLowerCase() ?? '';
-
-  // Exclude known background processes/watchers
   if (isBackgroundProcess(foregroundProcess)) {
     return false;
   }
 
-  // If foreground process matches shell name, likely idle
-  // Compare base names (e.g., "zsh" matches "/bin/zsh")
-  const fgBase = fg.split('/').pop() ?? fg;
-  const shBase = sh.split('/').pop() ?? sh;
-  
-  if (fgBase === shBase) {
-    // Shell is in foreground - check if there's evidence of activity
-    // Active shells often have titles set by running programs
-    if (title && title !== foregroundProcess && title !== 'shell') {
-      return true;
-    }
-    return false;
-  }
-
-  // Foreground process is different from shell - likely active
-  return true;
+  return hasRecentPtyStdoutActivity(ptyId);
 }
 
 /**

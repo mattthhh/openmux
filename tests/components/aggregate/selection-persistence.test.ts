@@ -1,39 +1,30 @@
-/**
- * Litmus Tests: Selection Persistence
- *
- * Verifies that selection survives tree updates (structural changes).
- * Critical for maintaining user context during dynamic tree updates.
- */
-import { describe, expect, it, beforeEach } from "bun:test";
-import { createStore, produce } from "solid-js/store";
-import type {
-  PtyInfo,
-  SessionNode,
-  FlattenedTreeItem,
-  AggregateViewState,
-} from "../../../src/contexts/aggregate-view-types";
-import { initialState } from "../../../src/contexts/aggregate-view-types";
-import { buildPtyIndex, buildSessionTree, flattenTreeForNavigation } from "../../../src/contexts/aggregate-view-helpers";
-import { createAggregateViewActions } from "../../../src/contexts/aggregate-view-actions";
+import { describe, expect, it } from 'bun:test';
+import { createStore, produce, type SetStoreFunction } from 'solid-js/store';
+import type { AggregateViewState, PtyInfo } from '../../../src/contexts/aggregate-view-types';
+import { initialState } from '../../../src/contexts/aggregate-view-types';
+import type { SessionMetadata } from '../../../src/effect/models';
+import {
+  buildPtyIndex,
+  recomputeMatches,
+  recomputeTree,
+} from '../../../src/contexts/aggregate-view-helpers';
+import { createAggregateViewActions } from '../../../src/contexts/aggregate-view-actions';
 
-// TODO: Update when RedBear's types are finalized
-
-function createMockSession(overrides: Partial<SessionNode> = {}): SessionNode {
+function createMockSession(id: string, name = id): SessionMetadata {
   return {
-    sessionId: `session-${overrides.sessionId ?? Math.random().toString(36).substr(2, 9)}`,
-    name: `Session ${overrides.sessionId ?? "default"}`,
-    isActive: false,
-    isLoaded: true,
-    ptyCount: 0,
-    ...overrides,
+    id,
+    name,
+    createdAt: 1,
+    lastSwitchedAt: 1,
+    autoNamed: false,
   };
 }
 
-function createMockPty(overrides: Partial<PtyInfo> = {}): PtyInfo {
+function createMockPty(overrides: Partial<PtyInfo> & { ptyId: string; sessionId: string }): PtyInfo {
   return {
-    ptyId: `pty-${overrides.ptyId ?? Math.random().toString(36).substr(2, 9)}`,
-    cwd: "/home/user/project",
-    gitBranch: "main",
+    ptyId: overrides.ptyId,
+    cwd: '/home/user/project',
+    gitBranch: 'main',
     gitDiffStats: undefined,
     gitDirty: false,
     gitStaged: 0,
@@ -46,307 +37,264 @@ function createMockPty(overrides: Partial<PtyInfo> = {}): PtyInfo {
     gitState: undefined,
     gitDetached: false,
     gitRepoKey: undefined,
-    foregroundProcess: "bash",
-    shell: "/bin/bash",
+    foregroundProcess: 'bash',
+    shell: '/bin/bash',
     title: undefined,
     workspaceId: 1,
-    paneId: "pane-1",
-    sessionId: overrides.sessionId ?? "session-1",
+    paneId: `pane-${overrides.ptyId}`,
+    sessionId: overrides.sessionId,
+    sessionMetadata: undefined,
     ...overrides,
   };
 }
 
-describe("Selection Persistence - Litmus Tests", () => {
-  describe("Selection survives tree updates (structural changes)", () => {
-    it("should maintain selection when new session is added", () => {
-      const sessionA = createMockSession({ sessionId: "session-a" });
-      const pty1 = createMockPty({ ptyId: "pty-1", sessionId: "session-a" });
+function paneOrders(ptys: PtyInfo[]): Map<string, Map<string, number>> {
+  const bySession = new Map<string, PtyInfo[]>();
+  for (const pty of ptys) {
+    const existing = bySession.get(pty.sessionId) ?? [];
+    existing.push(pty);
+    bySession.set(pty.sessionId, existing);
+  }
 
-      const [state, setState] = createStore<AggregateViewState>({
-        ...initialState,
-        allPtys: [pty1],
-        allPtysIndex: buildPtyIndex([pty1]),
-        matchedPtys: [pty1],
-        matchedPtysIndex: buildPtyIndex([pty1]),
-        treeNodes: [
-          { type: "session", id: "session-a", depth: 0 },
-          { type: "pty", id: "pty-1", depth: 1, parentId: "session-a", ptyId: "pty-1" },
-        ] as FlattenedTreeItem[],
-        selectedIndex: 1,
-        selectedNodeId: "pty-1",
-      });
+  return new Map(
+    [...bySession.entries()].map(([sessionId, sessionPtys]) => [
+      sessionId,
+      new Map(sessionPtys.map((pty, index) => [pty.paneId ?? pty.ptyId, index] as const)),
+    ])
+  );
+}
 
-      const actions = createAggregateViewActions(state, setState);
+function loadStates(sessions: SessionMetadata[], ptys: PtyInfo[], unloadedIds: string[] = []) {
+  const unloaded = new Set(unloadedIds);
+  return new Map(
+    sessions.map((session) => [
+      session.id,
+      unloaded.has(session.id)
+        ? { status: 'unloaded' as const, paneCount: ptys.filter((pty) => pty.sessionId === session.id).length }
+        : { status: 'loaded' as const, paneCount: ptys.filter((pty) => pty.sessionId === session.id).length },
+    ])
+  );
+}
 
-      // Add new session with PTYs
-      const sessionB = createMockSession({ sessionId: "session-b" });
-      const pty2 = createMockPty({ ptyId: "pty-2", sessionId: "session-b" });
+function createAggregateState(params: {
+  sessions: SessionMetadata[];
+  ptys: PtyInfo[];
+  selectedPtyId?: string;
+  selectedSessionId?: string;
+  unloadedSessionIds?: string[];
+}) {
+  const { sessions, ptys, selectedPtyId, selectedSessionId, unloadedSessionIds = [] } = params;
 
-      setState(produce((s) => {
-        s.allPtys = [...s.allPtys, pty2];
-        s.allPtysIndex = buildPtyIndex(s.allPtys);
-        s.treeNodes = [
-          { type: "session", id: "session-a", depth: 0 },
-          { type: "pty", id: "pty-1", depth: 1, parentId: "session-a", ptyId: "pty-1" },
-          { type: "session", id: "session-b", depth: 0 },
-          { type: "pty", id: "pty-2", depth: 1, parentId: "session-b", ptyId: "pty-2" },
-        ] as FlattenedTreeItem[];
-      }));
-
-      // Selection should still be on pty-1
-      expect(state.selectedNodeId).toBe("pty-1");
-      expect(state.selectedIndex).toBe(1);
-    });
-
-    it("should maintain selection when session is removed (if selection not in that session)", () => {
-      const sessionA = createMockSession({ sessionId: "session-a" });
-      const sessionB = createMockSession({ sessionId: "session-b" });
-      const pty1 = createMockPty({ ptyId: "pty-1", sessionId: "session-a" });
-      const pty2 = createMockPty({ ptyId: "pty-2", sessionId: "session-b" });
-
-      const [state, setState] = createStore<AggregateViewState>({
-        ...initialState,
-        allPtys: [pty1, pty2],
-        allPtysIndex: buildPtyIndex([pty1, pty2]),
-        treeNodes: [
-          { type: "session", id: "session-a", depth: 0 },
-          { type: "pty", id: "pty-1", depth: 1, parentId: "session-a", ptyId: "pty-1" },
-          { type: "session", id: "session-b", depth: 0 },
-          { type: "pty", id: "pty-2", depth: 1, parentId: "session-b", ptyId: "pty-2" },
-        ] as FlattenedTreeItem[],
-        selectedIndex: 3,
-        selectedNodeId: "pty-2",
-      });
-
-      // Remove session-a (pty-1)
-      setState(produce((s) => {
-        s.allPtys = s.allPtys.filter((p) => p.sessionId !== "session-a");
-        s.allPtysIndex = buildPtyIndex(s.allPtys);
-        s.treeNodes = [
-          { type: "session", id: "session-b", depth: 0 },
-          { type: "pty", id: "pty-2", depth: 1, parentId: "session-b", ptyId: "pty-2" },
-        ] as FlattenedTreeItem[];
-      }));
-
-      // Selection should still be on pty-2, but index should update to 1
-      expect(state.selectedNodeId).toBe("pty-2");
-      expect(state.selectedIndex).toBe(1);
-    });
-
-    it("should move to adjacent selection when selected PTY is removed", () => {
-      const sessionA = createMockSession({ sessionId: "session-a" });
-      const pty1 = createMockPty({ ptyId: "pty-1", sessionId: "session-a" });
-      const pty2 = createMockPty({ ptyId: "pty-2", sessionId: "session-a" });
-      const pty3 = createMockPty({ ptyId: "pty-3", sessionId: "session-a" });
-
-      const [state, setState] = createStore<AggregateViewState>({
-        ...initialState,
-        allPtys: [pty1, pty2, pty3],
-        allPtysIndex: buildPtyIndex([pty1, pty2, pty3]),
-        treeNodes: [
-          { type: "session", id: "session-a", depth: 0 },
-          { type: "pty", id: "pty-1", depth: 1, parentId: "session-a", ptyId: "pty-1" },
-          { type: "pty", id: "pty-2", depth: 1, parentId: "session-a", ptyId: "pty-2" },
-          { type: "pty", id: "pty-3", depth: 1, parentId: "session-a", ptyId: "pty-3" },
-        ] as FlattenedTreeItem[],
-        selectedIndex: 2, // pty-2
-        selectedNodeId: "pty-2",
-      });
-
-      const actions = createAggregateViewActions(state, setState);
-
-      // Remove pty-2 (middle)
-      setState(produce((s) => {
-        s.allPtys = s.allPtys.filter((p) => p.ptyId !== "pty-2");
-        s.allPtysIndex = buildPtyIndex(s.allPtys);
-        s.treeNodes = [
-          { type: "session", id: "session-a", depth: 0 },
-          { type: "pty", id: "pty-1", depth: 1, parentId: "session-a", ptyId: "pty-1" },
-          { type: "pty", id: "pty-3", depth: 1, parentId: "session-a", ptyId: "pty-3" },
-        ] as FlattenedTreeItem[];
-      }));
-
-      // Should smart-select: move to pty-3 (next) or pty-1 (previous)
-      // Implementation detail: typically moves to next if available
-      expect(state.selectedNodeId).toBe("pty-3");
-      expect(state.selectedIndex).toBe(2);
-    });
-
-    it("should move to previous when last PTY is removed", () => {
-      const sessionA = createMockSession({ sessionId: "session-a" });
-      const pty1 = createMockPty({ ptyId: "pty-1", sessionId: "session-a" });
-      const pty2 = createMockPty({ ptyId: "pty-2", sessionId: "session-a" });
-
-      const [state, setState] = createStore<AggregateViewState>({
-        ...initialState,
-        allPtys: [pty1, pty2],
-        allPtysIndex: buildPtyIndex([pty1, pty2]),
-        treeNodes: [
-          { type: "session", id: "session-a", depth: 0 },
-          { type: "pty", id: "pty-1", depth: 1, parentId: "session-a", ptyId: "pty-1" },
-          { type: "pty", id: "pty-2", depth: 1, parentId: "session-a", ptyId: "pty-2" },
-        ] as FlattenedTreeItem[],
-        selectedIndex: 2, // pty-2 (last)
-        selectedNodeId: "pty-2",
-      });
-
-      // Remove pty-2
-      setState(produce((s) => {
-        s.allPtys = s.allPtys.filter((p) => p.ptyId !== "pty-2");
-        s.allPtysIndex = buildPtyIndex(s.allPtys);
-        s.treeNodes = [
-          { type: "session", id: "session-a", depth: 0 },
-          { type: "pty", id: "pty-1", depth: 1, parentId: "session-a", ptyId: "pty-1" },
-        ] as FlattenedTreeItem[];
-      }));
-
-      // Should move to pty-1
-      expect(state.selectedNodeId).toBe("pty-1");
-      expect(state.selectedIndex).toBe(1);
-    });
-
-    it("should handle removal of all PTYs gracefully", () => {
-      const sessionA = createMockSession({ sessionId: "session-a" });
-      const pty1 = createMockPty({ ptyId: "pty-1", sessionId: "session-a" });
-
-      const [state, setState] = createStore<AggregateViewState>({
-        ...initialState,
-        allPtys: [pty1],
-        allPtysIndex: buildPtyIndex([pty1]),
-        treeNodes: [
-          { type: "session", id: "session-a", depth: 0 },
-          { type: "pty", id: "pty-1", depth: 1, parentId: "session-a", ptyId: "pty-1" },
-        ] as FlattenedTreeItem[],
-        selectedIndex: 1,
-        selectedNodeId: "pty-1",
-      });
-
-      // Remove all PTYs
-      setState(produce((s) => {
-        s.allPtys = [];
-        s.allPtysIndex = new Map();
-        s.treeNodes = [
-          { type: "session", id: "session-a", depth: 0 },
-        ] as FlattenedTreeItem[];
-      }));
-
-      // Should clear selection
-      expect(state.selectedNodeId).toBeNull();
-      expect(state.selectedIndex).toBe(0);
-    });
-
-    it("should persist selection across filter changes", () => {
-      const sessionA = createMockSession({ sessionId: "session-a" });
-      const pty1 = createMockPty({ ptyId: "pty-1", sessionId: "session-a", foregroundProcess: "nvim" });
-      const pty2 = createMockPty({ ptyId: "pty-2", sessionId: "session-a", foregroundProcess: "bash" });
-
-      const [state, setState] = createStore<AggregateViewState>({
-        ...initialState,
-        allPtys: [pty1, pty2],
-        allPtysIndex: buildPtyIndex([pty1, pty2]),
-        matchedPtys: [pty1, pty2],
-        matchedPtysIndex: buildPtyIndex([pty1, pty2]),
-        showInactive: true,
-        selectedIndex: 1,
-        selectedNodeId: "pty-1",
-      });
-
-      const actions = createAggregateViewActions(state, setState);
-
-      // Toggle to show only active (hides pty-2 bash, keeps pty-1 nvim)
-      actions.toggleShowInactive();
-
-      // Selection should remain on pty-1 (still visible)
-      expect(state.selectedNodeId).toBe("pty-1");
-
-      // Filter to only bash (hides pty-1 nvim)
-      actions.setFilterQuery("bash");
-
-      // Selection should move since pty-1 is filtered out
-      expect(state.selectedNodeId).toBe("pty-2");
-    });
-
-    it("should persist selection when session expands/collapses", () => {
-      const sessionA = createMockSession({ sessionId: "session-a", expanded: true });
-      const pty1 = createMockPty({ ptyId: "pty-1", sessionId: "session-a" });
-      const pty2 = createMockPty({ ptyId: "pty-2", sessionId: "session-a" });
-
-      const [state, setState] = createStore<AggregateViewState>({
-        ...initialState,
-        allPtys: [pty1, pty2],
-        expandedSessionIds: new Set(["session-a"]),
-        treeNodes: [
-          { type: "session", id: "session-a", depth: 0, expanded: true },
-          { type: "pty", id: "pty-1", depth: 1, parentId: "session-a", ptyId: "pty-1" },
-          { type: "pty", id: "pty-2", depth: 1, parentId: "session-a", ptyId: "pty-2" },
-        ] as FlattenedTreeItem[],
-        selectedIndex: 2,
-        selectedNodeId: "pty-2",
-      });
-
-      const actions = createAggregateViewActions(state, setState);
-
-      // Collapse session-a
-      setState(produce((s) => {
-        s.expandedSessionIds.delete("session-a");
-        if (s.treeNodes[0] && s.treeNodes[0].type === "session") {
-          s.treeNodes[0].expanded = false;
-        }
-        // Hide children in tree
-        s.treeNodes = [
-          { type: "session", id: "session-a", depth: 0, expanded: false },
-        ] as FlattenedTreeItem[];
-      }));
-
-      // Selection should move to session-a since children are hidden
-      expect(state.selectedNodeId).toBe("session-a");
-      expect(state.selectedIndex).toBe(0);
-    });
+  const [state, setState] = createStore<AggregateViewState>({
+    ...initialState,
+    allSessions: new Map(sessions.map((session) => [session.id, session] as const)),
+    allPtys: ptys,
+    allPtysIndex: buildPtyIndex(ptys),
+    matchedPtys: ptys,
+    matchedPtysIndex: buildPtyIndex(ptys),
+    expandedSessionIds: new Set(sessions.map((session) => session.id)),
+    sessionLoadStates: loadStates(sessions, ptys, unloadedSessionIds),
+    sessionPaneOrders: paneOrders(ptys),
   });
 
-  describe("Selection state by ID not index", () => {
-    it("should use ptyId as source of truth, not array index", () => {
-      const sessionA = createMockSession({ sessionId: "session-a" });
-      const pty1 = createMockPty({ ptyId: "pty-1", sessionId: "session-a" });
-      const pty2 = createMockPty({ ptyId: "pty-2", sessionId: "session-a" });
+  setState(
+    produce((s) => {
+      s.selectedPtyId = selectedPtyId ?? null;
+      s.selectedSessionId = selectedSessionId ?? (selectedPtyId ? ptys.find((pty) => pty.ptyId === selectedPtyId)?.sessionId ?? null : null);
+      recomputeMatches(s);
+      recomputeTree(s);
+    })
+  );
 
-      const [state, setState] = createStore<AggregateViewState>({
-        ...initialState,
-        allPtys: [pty1, pty2],
-        allPtysIndex: buildPtyIndex([pty1, pty2]),
-        selectedIndex: 2,
-        selectedNodeId: "pty-2",
-      });
+  return { state, setState };
+}
 
-      // Reorder PTYs (simulating sort change)
-      setState(produce((s) => {
-        s.allPtys = [pty2, pty1]; // Swap order
+function createActions(state: AggregateViewState, setState: SetStoreFunction<AggregateViewState>) {
+  return createAggregateViewActions({
+    state,
+    setState,
+    refreshPtys: async () => {},
+  });
+}
+
+describe('Selection Persistence - current tree behavior', () => {
+  it('preserves selected PTY when a new session is added', () => {
+    const sessionA = createMockSession('session-a', 'A');
+    const pty1 = createMockPty({ ptyId: 'pty-1', sessionId: 'session-a' });
+    const { state, setState } = createAggregateState({
+      sessions: [sessionA],
+      ptys: [pty1],
+      selectedPtyId: 'pty-1',
+    });
+
+    const sessionB = createMockSession('session-b', 'B');
+    const pty2 = createMockPty({ ptyId: 'pty-2', sessionId: 'session-b' });
+
+    setState(
+      produce((s) => {
+        s.allSessions.set(sessionB.id, sessionB);
+        s.allPtys = [...s.allPtys, pty2];
         s.allPtysIndex = buildPtyIndex(s.allPtys);
-      }));
+        s.sessionLoadStates.set(sessionB.id, { status: 'loaded', paneCount: 1 });
+        s.sessionPaneOrders = paneOrders(s.allPtys);
+        recomputeMatches(s);
+        recomputeTree(s);
+      })
+    );
 
-      // selectedNodeId should still be pty-2
-      expect(state.selectedNodeId).toBe("pty-2");
-      // Index should update to new position
-      expect(state.selectedIndex).toBe(0);
+    expect(state.selectedPtyId).toBe('pty-1');
+    expect(state.selectedIndex).toBe(state.flattenedTreeIndex.get('pty-1'));
+  });
+
+  it('preserves selected PTY when an unrelated session is removed', () => {
+    const sessions = [
+      createMockSession('session-a', 'A'),
+      createMockSession('session-b', 'B'),
+    ];
+    const ptys = [
+      createMockPty({ ptyId: 'pty-1', sessionId: 'session-a' }),
+      createMockPty({ ptyId: 'pty-2', sessionId: 'session-b' }),
+    ];
+    const { state, setState } = createAggregateState({
+      sessions,
+      ptys,
+      selectedPtyId: 'pty-2',
     });
 
-    it("should handle ptyId lookup when index is stale", () => {
-      const pty1 = createMockPty({ ptyId: "pty-1" });
-      const pty2 = createMockPty({ ptyId: "pty-2" });
+    setState(
+      produce((s) => {
+        s.allSessions.delete('session-a');
+        s.allPtys = s.allPtys.filter((pty) => pty.sessionId !== 'session-a');
+        s.allPtysIndex = buildPtyIndex(s.allPtys);
+        s.sessionLoadStates.delete('session-a');
+        s.sessionPaneOrders.delete('session-a');
+        s.expandedSessionIds.delete('session-a');
+        recomputeMatches(s);
+        recomputeTree(s);
+      })
+    );
 
-      const [state, setState] = createStore<AggregateViewState>({
-        ...initialState,
-        allPtys: [pty1, pty2],
-        allPtysIndex: buildPtyIndex([pty1, pty2]),
-        selectedIndex: 5, // Stale index (out of bounds)
-        selectedNodeId: "pty-1",
-      });
+    expect(state.selectedPtyId).toBe('pty-2');
+    expect(state.selectedIndex).toBe(state.flattenedTreeIndex.get('pty-2'));
+  });
 
-      const actions = createAggregateViewActions(state, setState);
-      const selectedPty = actions.getSelectedPty();
-
-      // Should find by ID despite stale index
-      expect(selectedPty?.ptyId).toBe("pty-1");
+  it('moves smart selection to the next PTY in the same session after removal', () => {
+    const sessions = [createMockSession('session-a', 'A')];
+    const ptys = [
+      createMockPty({ ptyId: 'pty-1', sessionId: 'session-a' }),
+      createMockPty({ ptyId: 'pty-2', sessionId: 'session-a' }),
+      createMockPty({ ptyId: 'pty-3', sessionId: 'session-a' }),
+    ];
+    const { state, setState } = createAggregateState({
+      sessions,
+      ptys,
+      selectedPtyId: 'pty-2',
     });
+    const actions = createActions(state, setState);
+
+    actions.selectAfterPtyRemoval('pty-2');
+
+    expect(state.selectedPtyId).toBe('pty-3');
+    expect(actions.getSelectedPty()?.ptyId).toBe('pty-3');
+  });
+
+  it('moves smart selection to the previous PTY when the last PTY is removed', () => {
+    const sessions = [createMockSession('session-a', 'A')];
+    const ptys = [
+      createMockPty({ ptyId: 'pty-1', sessionId: 'session-a' }),
+      createMockPty({ ptyId: 'pty-2', sessionId: 'session-a' }),
+    ];
+    const { state, setState } = createAggregateState({
+      sessions,
+      ptys,
+      selectedPtyId: 'pty-2',
+    });
+    const actions = createActions(state, setState);
+
+    actions.selectAfterPtyRemoval('pty-2');
+
+    expect(state.selectedPtyId).toBe('pty-1');
+    expect(actions.getSelectedPty()?.ptyId).toBe('pty-1');
+  });
+
+  it('falls back to the session header when the only PTY is removed from view', () => {
+    const sessions = [createMockSession('session-a', 'A')];
+    const ptys = [createMockPty({ ptyId: 'pty-1', sessionId: 'session-a' })];
+    const { state, setState } = createAggregateState({
+      sessions,
+      ptys,
+      selectedPtyId: 'pty-1',
+    });
+
+    setState(
+      produce((s) => {
+        s.allPtys = [];
+        s.allPtysIndex = new Map();
+        s.sessionPaneOrders = new Map();
+        recomputeMatches(s);
+        recomputeTree(s);
+      })
+    );
+
+    expect(state.selectedPtyId).toBeNull();
+    expect(state.selectedSessionId).toBe('session-a');
+    expect(state.flattenedTree[state.selectedIndex]?.node.type).toBe('session');
+    expect(state.previewMode).toBe(false);
+  });
+
+  it('falls back to the session header when the selected PTY is filtered out', () => {
+    const sessions = [createMockSession('session-a', 'A')];
+    const ptys = [
+      createMockPty({ ptyId: 'pty-1', sessionId: 'session-a', foregroundProcess: 'nvim' }),
+      createMockPty({ ptyId: 'pty-2', sessionId: 'session-a', foregroundProcess: 'bash' }),
+    ];
+    const { state, setState } = createAggregateState({
+      sessions,
+      ptys,
+      selectedPtyId: 'pty-1',
+    });
+    const actions = createActions(state, setState);
+
+    actions.setFilterQuery('bash');
+
+    expect(state.selectedPtyId).toBeNull();
+    expect(state.selectedSessionId).toBe('session-a');
+    expect(state.flattenedTree[state.selectedIndex]?.node.type).toBe('session');
+  });
+
+  it('falls back to the session header when a selected PTY becomes hidden by collapse', () => {
+    const sessions = [createMockSession('session-a', 'A')];
+    const ptys = [
+      createMockPty({ ptyId: 'pty-1', sessionId: 'session-a' }),
+      createMockPty({ ptyId: 'pty-2', sessionId: 'session-a' }),
+    ];
+    const { state, setState } = createAggregateState({
+      sessions,
+      ptys,
+      selectedPtyId: 'pty-2',
+    });
+    const actions = createActions(state, setState);
+
+    actions.toggleSessionExpanded('session-a');
+
+    expect(state.selectedPtyId).toBeNull();
+    expect(state.selectedSessionId).toBe('session-a');
+    expect(state.flattenedTree[state.selectedIndex]?.node.type).toBe('session');
+  });
+
+  it('returns null from getSelectedPty when the selected row is a session header', () => {
+    const sessions = [createMockSession('session-a', 'A')];
+    const ptys = [createMockPty({ ptyId: 'pty-1', sessionId: 'session-a' })];
+    const { state, setState } = createAggregateState({
+      sessions,
+      ptys,
+      selectedSessionId: 'session-a',
+    });
+    const actions = createActions(state, setState);
+
+    actions.setSelectedIndex(0);
+
+    expect(state.flattenedTree[state.selectedIndex]?.node.type).toBe('session');
+    expect(actions.getSelectedPty()).toBeNull();
   });
 });

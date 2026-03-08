@@ -14,7 +14,7 @@ export { borderStyleMap } from '../Pane';
 export interface LayoutConfig {
   width: number;
   height: number;
-  listPaneRatio?: number; // Default: 0.35 (35%)
+  listPaneRatio?: number; // Default: 0.25 (25%)
   footerHeight?: number; // Default: 1
 }
 
@@ -46,7 +46,7 @@ export interface LayoutDimensions {
  * Calculate layout dimensions from config
  */
 export function calculateLayoutDimensions(config: LayoutConfig): LayoutDimensions {
-  const { width, height, listPaneRatio = 0.35, footerHeight = 1 } = config;
+  const { width, height, listPaneRatio = 0.25, footerHeight = 1 } = config;
 
   const contentHeight = height - footerHeight;
   const listPaneWidth = Math.floor(width * listPaneRatio);

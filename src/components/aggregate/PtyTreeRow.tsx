@@ -2,8 +2,8 @@
  * PTY Tree Row - Single line PTY display with shimmer for active PTYs
  * 
  * Format:   [label] [git metadata]
- * - Left: indent + label (dirname/process or title)
- * - Right: git metadata (branch dirty* @detached ~state +added -removed *binary)
+ * - Left: indent + truncated folder label
+ * - Right: git metadata (@detached ~state +added -removed *binary ↑ahead ↓behind)
  */
 
 import { createMemo, createSignal, onCleanup } from 'solid-js';
@@ -69,16 +69,6 @@ function formatGitStats(pty: PtyInfo): string | null {
 function buildGitMetadata(pty: PtyInfo): string {
   const parts: string[] = [];
 
-  // Branch name
-  if (pty.gitBranch) {
-    parts.push(pty.gitBranch);
-  }
-
-  // Dirty indicator
-  if (pty.gitDirty) {
-    parts.push('*');
-  }
-
   // Detached HEAD indicator
   if (pty.gitDetached) {
     parts.push('@');
@@ -113,8 +103,8 @@ export function PtyTreeRow(props: PtyTreeRowProps) {
   // Shimmer animation version - increments on each tick
   const [shimmerVersion, setShimmerVersion] = createSignal(0);
 
-  // Subscribe to shimmer updates only if this PTY is active
-  const isActive = createMemo(() => hasMeaningfulActivity(props.pty));
+  // Evaluate activity dynamically so runtime stdout activity can start/stop shimmer.
+  const isActive = () => hasMeaningfulActivity(props.pty);
 
   // Subscribe to global shimmer tick when active and shimmer is enabled
   const shimmerUnsub = subscribeToShimmer(() => {
@@ -144,18 +134,8 @@ export function PtyTreeRow(props: PtyTreeRowProps) {
   const subtleColor = () =>
     props.isSelected ? selectionColors().dim : props.textColors.subtle;
 
-  // Build label: dirname (process) or title if available
-  const label = createMemo(() => {
-    const dirName = getDirectoryName(props.pty.cwd);
-    const process = props.pty.foregroundProcess ?? 'shell';
-    const title = props.pty.title;
-
-    // Use title if it's different from process name (indicates active program)
-    if (title && title !== process && title !== 'shell') {
-      return `${dirName} (${title})`;
-    }
-    return `${dirName} (${process})`;
-  });
+  // Use the folder name as the primary PTY label.
+  const label = createMemo(() => getDirectoryName(props.pty.cwd));
 
   // Git metadata
   const gitMeta = createMemo(() => buildGitMetadata(props.pty));
@@ -164,19 +144,25 @@ export function PtyTreeRow(props: PtyTreeRowProps) {
   const indentWidth = () => props.indent.length;
   const spacing = 2; // Double space for cleaner look
 
-  // Available width for content
+  // Available width for content.
+  // Keep the left indent, but do not reserve any trailing right gutter.
   const availableWidth = () =>
-    props.maxWidth - indentWidth() - spacing;
+    props.maxWidth - indentWidth();
 
-  // Reserve space for git metadata on the right
+  // Reserve space for git metadata on the right and favor metadata over the label.
   const gitMetaWidth = () => gitMeta().length;
-  const labelMaxWidth = () => availableWidth() - gitMetaWidth() - spacing;
+  const labelMaxWidth = () => {
+    const reservedForMeta = gitMetaWidth() > 0 ? gitMetaWidth() + spacing : 0;
+    return Math.max(0, availableWidth() - reservedForMeta);
+  };
 
-  // Truncate label if needed
+  // Truncate the folder label aggressively so git metadata stays visible.
   const displayLabel = createMemo(() => {
     const text = label();
     const maxWidth = labelMaxWidth();
+    if (maxWidth <= 0) return '';
     if (text.length <= maxWidth) return text;
+    if (maxWidth === 1) return '…';
     return text.slice(0, maxWidth - 1) + '…';
   });
 
@@ -184,12 +170,13 @@ export function PtyTreeRow(props: PtyTreeRowProps) {
   const padding = createMemo(() => {
     const labelLen = displayLabel().length;
     const metaLen = gitMetaWidth();
-    const totalContent = labelLen + spacing + metaLen;
+    const gap = labelLen > 0 && metaLen > 0 ? spacing : 0;
+    const totalContent = labelLen + gap + metaLen;
     const avail = availableWidth();
     if (totalContent < avail) {
       return ' '.repeat(avail - totalContent);
     }
-    return ' ';
+    return gap > 0 ? ' '.repeat(gap) : '';
   });
 
   // Apply shimmer to label characters if active
@@ -264,7 +251,6 @@ export function PtyTreeRow(props: PtyTreeRowProps) {
       } else if (token === '*' || token === '@' || token === '~') {
         parts.push(<text fg={subtleColor()} selectable={false}>{token}</text>);
       } else {
-        // Branch name or other text
         parts.push(<text fg={mutedColor()} selectable={false}>{token}</text>);
       }
     }
@@ -279,7 +265,7 @@ export function PtyTreeRow(props: PtyTreeRowProps) {
 
   return (
     <box
-      style={{ height: 1, flexDirection: 'row' }}
+      style={{ height: 1, width: props.maxWidth, flexDirection: 'row' }}
       backgroundColor={bgColor()}
       onMouseDown={handleClick}
     >

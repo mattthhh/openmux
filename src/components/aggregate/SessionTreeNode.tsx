@@ -99,7 +99,7 @@ export function SessionTreeNode(props: SessionTreeNodeProps) {
 
   return (
     <box
-      style={{ height: 1, flexDirection: 'row' }}
+      style={{ height: 1, width: props.maxWidth, flexDirection: 'row' }}
       backgroundColor={bgColor()}
       onMouseDown={handleMouseDown}
       onMouseUp={handleMouseUp}

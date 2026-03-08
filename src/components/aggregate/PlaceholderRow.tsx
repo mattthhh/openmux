@@ -48,7 +48,7 @@ export function PlaceholderRow(props: PlaceholderRowProps) {
 
   return (
     <box
-      style={{ height: 1, flexDirection: 'row' }}
+      style={{ height: 1, width: props.maxWidth, flexDirection: 'row' }}
       backgroundColor={bgColor()}
       onMouseDown={handleClick}
     >

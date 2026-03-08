@@ -20,7 +20,7 @@ import { useSelection } from '../contexts/SelectionContext';
 import { useSearch } from '../contexts/SearchContext';
 import { useCopyMode } from '../contexts/CopyModeContext';
 import type { ITerminalEmulator } from '../terminal/emulator-interface';
-import { getEmulator, getHostBackgroundColor, loadSessionData } from '../effect/bridge';
+import { getEmulator, getHostBackgroundColor, loadSessionData, subscribeUnifiedToPty } from '../effect/bridge';
 import { useOverlayKeyboardHandler } from '../contexts/keyboard/use-overlay-keyboard-handler';
 import { useOverlayColors } from './overlay-colors';
 import { createCopyModeVimState } from './app/copy-mode-vim';
@@ -44,7 +44,7 @@ import {
 import type { FlattenedTreeItem, TreeNode } from '../contexts/aggregate-view-types';
 import { truncateHint } from './overlay-hints';
 import { createVimSequenceHandler, type VimInputMode } from '../core/vim-sequences';
-import { setShimmerEnabled } from '../core/shimmer';
+import { setShimmerEnabled, recordPtyStdoutActivity, clearPtyStdoutActivity } from '../core/shimmer';
 import type { Workspace, WorkspaceId } from '../core/types';
 import { collectPanes } from '../core/layout-tree';
 
@@ -146,9 +146,6 @@ export function AggregateView(props: AggregateViewProps) {
   const [prefixActive, setPrefixActive] = createSignal(false);
   let prefixTimeout: ReturnType<typeof setTimeout> | null = null;
 
-  // Track pending navigation after session switch
-  let pendingPaneNavigation: string | null = null;
-
   // Track if we're in search mode within aggregate view
   const [inSearchMode, setInSearchMode] = createSignal(false);
 
@@ -160,6 +157,7 @@ export function AggregateView(props: AggregateViewProps) {
 
   // Cache emulators for selected PTYs so input works across sessions.
   const aggregateEmulators = new Map<string, ITerminalEmulator>();
+  const activitySubscriptions = new Map<string, () => void>();
   const pendingEmulators = new Set<string>();
   let emulatorEpoch = 0;
 
@@ -181,6 +179,53 @@ export function AggregateView(props: AggregateViewProps) {
       .finally(() => {
         pendingEmulators.delete(ptyId);
       });
+  };
+
+  const syncActivitySubscriptions = () => {
+    if (!state.showAggregateView) {
+      for (const [ptyId, unsubscribe] of activitySubscriptions) {
+        unsubscribe();
+        clearPtyStdoutActivity(ptyId);
+      }
+      activitySubscriptions.clear();
+      return;
+    }
+
+    const nextPtyIds = new Set(state.allPtys.map((pty) => pty.ptyId));
+
+    for (const [ptyId, unsubscribe] of activitySubscriptions) {
+      if (!nextPtyIds.has(ptyId)) {
+        unsubscribe();
+        activitySubscriptions.delete(ptyId);
+        clearPtyStdoutActivity(ptyId);
+      }
+    }
+
+    for (const ptyId of nextPtyIds) {
+      if (activitySubscriptions.has(ptyId)) continue;
+
+      let seenInitialUpdate = false;
+      void subscribeUnifiedToPty(ptyId, (update) => {
+        if (!seenInitialUpdate) {
+          seenInitialUpdate = true;
+          return;
+        }
+
+        const hasStdoutActivity = update.terminalUpdate.dirtyRows.size > 0;
+        if (hasStdoutActivity) {
+          recordPtyStdoutActivity(ptyId);
+        }
+      }).then((unsubscribe) => {
+        if (!state.showAggregateView || !nextPtyIds.has(ptyId)) {
+          unsubscribe();
+          clearPtyStdoutActivity(ptyId);
+          return;
+        }
+        activitySubscriptions.set(ptyId, unsubscribe);
+      }).catch(() => {
+        clearPtyStdoutActivity(ptyId);
+      });
+    }
   };
 
   // Layout dimensions (memoized)
@@ -271,6 +316,11 @@ export function AggregateView(props: AggregateViewProps) {
     }
     clearSessionDrag();
     setSuppressSessionToggle(false);
+    for (const [ptyId, unsubscribe] of activitySubscriptions) {
+      unsubscribe();
+      clearPtyStdoutActivity(ptyId);
+    }
+    activitySubscriptions.clear();
   });
 
   createEffect(() => {
@@ -331,12 +381,14 @@ export function AggregateView(props: AggregateViewProps) {
   createEffect(() => {
     if (!state.showAggregateView) {
       resetAggregateEmulators();
+      syncActivitySubscriptions();
       setShimmerEnabled(false);
       return;
     }
 
     // Enable shimmer when aggregate view opens
     setShimmerEnabled(true);
+    syncActivitySubscriptions();
 
     if (state.selectedPtyId) {
       preloadEmulator(state.selectedPtyId);
@@ -367,58 +419,72 @@ export function AggregateView(props: AggregateViewProps) {
     }
   });
 
-  // Handle pending navigation after session switch
-  createEffect(() => {
-    // Track session ID to detect changes
-    sessionState.activeSessionId;
-
-    if (!pendingPaneNavigation) return;
-    const pendingPaneId = pendingPaneNavigation;
-
-    // Clear the pending navigation
-    pendingPaneNavigation = null;
-
-    // Find the workspace containing this pane in the current (newly loaded) workspaces
-    const paneLocation = findPaneLocation(pendingPaneId, layoutState.workspaces);
-    if (paneLocation) {
-      switchWorkspace(paneLocation.workspaceId);
-    }
-    focusPane(pendingPaneId);
-  });
-
-  // Jump to the selected PTY's workspace and pane (supports cross-session jumps)
-  const handleJumpToPty = async () => {
-    const selectedPtyId = state.selectedPtyId;
-    if (!selectedPtyId) return false;
-
-    // Close aggregate view first
+  const closeAggregateOverlay = () => {
     closeAggregateView();
     exitAggregateMode();
+  };
 
-    // First, check if PTY is in the current session
-    const location = findPtyLocation(selectedPtyId, layoutState.workspaces);
-    if (location) {
-      // PTY is in current session - navigate to it
-      if (layoutState.activeWorkspaceId !== location.workspaceId) {
-        switchWorkspace(location.workspaceId);
+  // Jump to the selected PTY's workspace and pane (supports PTY rows, session headers, and placeholders)
+  const handleJumpToPty = async () => {
+    const selectedPtyId = state.selectedPtyId;
+    const selectedSessionId = state.selectedSessionId;
+
+    if (selectedPtyId) {
+      const location = findPtyLocation(selectedPtyId, layoutState.workspaces);
+      if (location) {
+        closeAggregateOverlay();
+        if (layoutState.activeWorkspaceId !== location.workspaceId) {
+          switchWorkspace(location.workspaceId);
+        }
+        focusPane(location.paneId);
+        return true;
       }
-      focusPane(location.paneId);
+
+      const sessionLocation = findSessionForPty(selectedPtyId);
+      if (sessionLocation && sessionLocation.sessionId !== sessionState.activeSessionId) {
+        closeAggregateOverlay();
+        await switchSession(sessionLocation.sessionId);
+
+        const nextLocation = findPaneLocation(sessionLocation.paneId, layoutState.workspaces);
+        if (nextLocation) {
+          switchWorkspace(nextLocation.workspaceId);
+          focusPane(sessionLocation.paneId);
+          return true;
+        }
+
+        const fallbackPaneId = getPreferredPaneIdForWorkspace(
+          layoutState.workspaces[layoutState.activeWorkspaceId]
+        );
+        if (fallbackPaneId) {
+          focusPane(fallbackPaneId);
+        }
+        return true;
+      }
+    }
+
+    if (!selectedSessionId) return false;
+
+    if (selectedSessionId === sessionState.activeSessionId) {
+      const workspaceId = layoutState.activeWorkspaceId;
+      const paneId = getPreferredPaneIdForWorkspace(layoutState.workspaces[workspaceId]);
+      closeAggregateOverlay();
+      if (paneId) {
+        switchWorkspace(workspaceId);
+        focusPane(paneId);
+      }
       return true;
     }
 
-    // PTY not in current session - check if it's in another session
-    const sessionLocation = findSessionForPty(selectedPtyId);
-    if (sessionLocation && sessionLocation.sessionId !== sessionState.activeSessionId) {
-      // Store the target pane ID for navigation after session loads
-      pendingPaneNavigation = sessionLocation.paneId;
+    const target = await resolveStoredSessionJumpTarget(selectedSessionId);
+    if (!target) return false;
 
-      // Switch to the other session - the effect will handle navigation after load
-      await switchSession(sessionLocation.sessionId);
-
-      return true;
+    closeAggregateOverlay();
+    await switchSession(selectedSessionId);
+    switchWorkspace(target.workspaceId);
+    if (target.paneId) {
+      focusPane(target.paneId);
     }
-
-    return false;
+    return true;
   };
 
   const getLastPaneIdForWorkspace = (workspace: Workspace | undefined): string | null => {
@@ -437,6 +503,25 @@ export function AggregateView(props: AggregateViewProps) {
     }
 
     return paneIds[paneIds.length - 1] ?? workspace.focusedPaneId ?? null;
+  };
+
+  const getPreferredPaneIdForWorkspace = (workspace: Workspace | undefined): string | null => {
+    if (!workspace) return null;
+    return workspace.focusedPaneId ?? getLastPaneIdForWorkspace(workspace);
+  };
+
+  const resolveStoredSessionJumpTarget = async (
+    sessionId: string
+  ): Promise<{ workspaceId: WorkspaceId; paneId: string | null } | null> => {
+    const sessionData = await loadSessionData(sessionId);
+    if (sessionData instanceof Error) {
+      console.error('Failed to load session:', sessionData.message);
+      return null;
+    }
+
+    const workspaceId = sessionData.activeWorkspaceId as WorkspaceId;
+    const paneId = getPreferredPaneIdForWorkspace(sessionData.workspaces[workspaceId]);
+    return { workspaceId, paneId };
   };
 
   const resolveCurrentSessionPaneCwd = async (): Promise<string | undefined> => {
@@ -900,14 +985,26 @@ export function AggregateView(props: AggregateViewProps) {
           </box>
         </box>
 
-        {/* Footer status bar - search on left, hints on right */}
+        {/* Footer status bar - hide filter area while previewing, but keep hints anchored on the right */}
         <box style={{ height: 1, flexDirection: 'row' }}>
-          <box style={{ width: footerWidths().filterWidth }}>
-            <text fg={overlayFg()}>{filterText().slice(0, footerWidths().filterWidth)}</text>
-          </box>
-          <box style={{ width: footerWidths().hintsWidth + 2, flexDirection: 'row', justifyContent: 'flex-end' }}>
-            <text fg={overlaySubtle()}>{truncateHint(hintsText(), footerWidths().hintsWidth)}</text>
-          </box>
+          <Show
+            when={!state.previewMode}
+            fallback={
+              <>
+                <box style={{ width: footerWidths().filterWidth }} />
+                <box style={{ width: footerWidths().hintsWidth + 2, flexDirection: 'row', justifyContent: 'flex-end' }}>
+                  <text fg={overlaySubtle()}>{truncateHint(hintsText(), footerWidths().hintsWidth)}</text>
+                </box>
+              </>
+            }
+          >
+            <box style={{ width: footerWidths().filterWidth }}>
+              <text fg={overlayFg()}>{filterText().slice(0, footerWidths().filterWidth)}</text>
+            </box>
+            <box style={{ width: footerWidths().hintsWidth + 2, flexDirection: 'row', justifyContent: 'flex-end' }}>
+              <text fg={overlaySubtle()}>{truncateHint(hintsText(), footerWidths().hintsWidth)}</text>
+            </box>
+          </Show>
         </box>
       </box>
     </Show>
