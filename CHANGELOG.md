@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.9](https://github.com/monotykamary/openmux/compare/v0.3.8...v0.3.9) (2026-03-08)
+
+
+### Bug Fixes
+
+* **aggregate:** log errors for PTY metadata failures ([c409f4b](https://github.com/monotykamary/openmux/commit/c409f4b9b19eae5f74c523b94a35ef98bbfece40))
+* log all silently swallowed promise rejections ([482f62a](https://github.com/monotykamary/openmux/commit/482f62a7de78a72b071d932b25a6fce7b6248ac6))
+
+
+### Refactoring
+
+* **error-handling:** align errore patterns with library standards ([d674e39](https://github.com/monotykamary/openmux/commit/d674e395450f5ae256cd79064059e453982b2233))
+
 ### [0.3.8](https://github.com/monotykamary/openmux/compare/v0.3.7...v0.3.8) (2026-03-08)
 
 
