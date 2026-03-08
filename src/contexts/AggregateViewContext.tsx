@@ -169,6 +169,19 @@ interface AggregateViewProviderProps extends ParentProps {}
 
   createEffect(() => {
     if (!state.showAggregateView) return;
+
+    const activeSessionId = session.state.activeSessionId;
+    const sessionSignature = session.state.sessions
+      .map((sessionMetadata) => `${sessionMetadata.id}:${sessionMetadata.name}:${sessionMetadata.lastSwitchedAt}`)
+      .join('|');
+
+    void activeSessionId;
+    void sessionSignature;
+    void refreshPtys();
+  });
+
+  createEffect(() => {
+    if (!state.showAggregateView) return;
     const selectedPtyId = state.selectedPtyId;
     if (!selectedPtyId) return;
     refreshSelectedDiffStats(selectedPtyId);

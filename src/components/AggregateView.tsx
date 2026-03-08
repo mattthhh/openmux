@@ -84,7 +84,7 @@ export function AggregateView(props: AggregateViewProps) {
     exitCopyMode: keyboardExitCopyMode,
   } = keyboard;
   const { state: layoutState, switchWorkspace, focusPane, setLayoutMode } = useLayout();
-  const { state: sessionState, switchSession } = useSession();
+  const { state: sessionState, switchSession, togglePicker } = useSession();
   const terminal = useTerminal();
   const {
     findSessionForPty,
@@ -735,6 +735,7 @@ export function AggregateView(props: AggregateViewProps) {
     handleCopyModeKeys,
     handleJumpToPty,
     handleNewPaneInSession,
+    onToggleSessionPicker: togglePicker,
     onRequestQuit: props.onRequestQuit,
     onDetach: props.onDetach,
     onRequestKillPty: props.onRequestKillPty,

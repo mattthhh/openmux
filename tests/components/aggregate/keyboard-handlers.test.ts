@@ -34,6 +34,7 @@ function createDeps(overrides: Partial<AggregateKeyboardDeps> = {}) {
   const clearPrefixTimeout = vi.fn();
   const startPrefixTimeout = vi.fn();
   const exitPreviewMode = vi.fn();
+  const onToggleSessionPicker = vi.fn();
 
   const deps: AggregateKeyboardDeps = {
     getPreviewMode: () => previewMode,
@@ -83,6 +84,7 @@ function createDeps(overrides: Partial<AggregateKeyboardDeps> = {}) {
     handleEnterCopyMode,
     handleCopyModeKeys,
     handleJumpToPty: async () => false,
+    onToggleSessionPicker,
     onRequestQuit: vi.fn(),
     onDetach: vi.fn(),
     onRequestKillPty: vi.fn(),
@@ -101,6 +103,7 @@ function createDeps(overrides: Partial<AggregateKeyboardDeps> = {}) {
     handleCopyModeKeys,
     clearPrefixTimeout,
     exitPreviewMode,
+    onToggleSessionPicker,
   };
 }
 
@@ -126,5 +129,27 @@ describe("createAggregateKeyboardHandler", () => {
     expect(handler.handleKeyDown({ key: "q", eventType: "press" })).toBe(true);
     expect(setup.handleCopyModeKeys).toHaveBeenCalledWith({ key: "q", eventType: "press" });
     expect(setup.exitPreviewMode).not.toHaveBeenCalled();
+  });
+
+  it("opens the shared session picker from aggregate list mode via the normal binding", () => {
+    const setup = createDeps({
+      getPreviewMode: () => false,
+    });
+    const handler = createAggregateKeyboardHandler(setup.deps);
+
+    expect(handler.handleKeyDown({ key: "s", alt: true, eventType: "press" })).toBe(true);
+    expect(setup.onToggleSessionPicker).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens the shared session picker from aggregate mode via the prefix binding", () => {
+    const setup = createDeps({
+      getPreviewMode: () => false,
+    });
+    const handler = createAggregateKeyboardHandler(setup.deps);
+
+    expect(handler.handleKeyDown({ key: "b", ctrl: true, eventType: "press" })).toBe(true);
+    expect(handler.handleKeyDown({ key: "s", eventType: "press" })).toBe(true);
+    expect(setup.onToggleSessionPicker).toHaveBeenCalledTimes(1);
+    expect(setup.getPrefixActive()).toBe(false);
   });
 });

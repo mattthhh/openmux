@@ -43,6 +43,15 @@ export function AppOverlays(props: AppOverlaysProps) {
         updateLabel={overlays.updateLabel()}
       />
 
+      <AggregateView
+        width={props.width}
+        height={props.height}
+        onRequestQuit={overlays.confirmationHandlers.handleRequestQuit}
+        onDetach={overlays.handleDetach}
+        onRequestKillPty={overlays.confirmationHandlers.handleRequestKillPty}
+        onVimModeChange={overlays.setAggregateVimMode}
+      />
+
       <SessionPicker
         width={props.width}
         height={props.height}
@@ -86,15 +95,6 @@ export function AppOverlays(props: AppOverlaysProps) {
       />
 
       <SearchOverlay width={props.width} height={props.height} />
-
-      <AggregateView
-        width={props.width}
-        height={props.height}
-        onRequestQuit={overlays.confirmationHandlers.handleRequestQuit}
-        onDetach={overlays.handleDetach}
-        onRequestKillPty={overlays.confirmationHandlers.handleRequestKillPty}
-        onVimModeChange={overlays.setAggregateVimMode}
-      />
 
       <ConfirmationDialog
         visible={overlays.confirmationState().visible}

@@ -2,7 +2,7 @@
  * PTY Tree Row - Single line PTY display with shimmer for active PTYs
  * 
  * Format:   [label] [git metadata]
- * - Left: indent + truncated folder label
+ * - Left: indent + truncated folder/process label
  * - Right: git metadata (@detached ~state +added -removed *binary ↑ahead ↓behind)
  */
 
@@ -61,6 +61,12 @@ function formatGitStats(pty: PtyInfo): string | null {
   if (stats.binary > 0) parts.push(`*${stats.binary}`);
 
   return parts.join(' ');
+}
+
+function getProcessDisplayName(pty: PtyInfo): string {
+  const rawProcess = pty.foregroundProcess?.trim() || pty.shell?.trim() || 'shell';
+  const parts = rawProcess.split('/').filter(Boolean);
+  return parts[parts.length - 1] ?? rawProcess;
 }
 
 /**
@@ -134,8 +140,12 @@ export function PtyTreeRow(props: PtyTreeRowProps) {
   const subtleColor = () =>
     props.isSelected ? selectionColors().dim : props.textColors.subtle;
 
-  // Use the folder name as the primary PTY label.
-  const label = createMemo(() => getDirectoryName(props.pty.cwd));
+  // Show folder + active process, while still letting the label truncate before git metadata.
+  const label = createMemo(() => {
+    const directoryName = getDirectoryName(props.pty.cwd);
+    const processName = getProcessDisplayName(props.pty);
+    return `${directoryName} (${processName})`;
+  });
 
   // Git metadata
   const gitMeta = createMemo(() => buildGitMetadata(props.pty));

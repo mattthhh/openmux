@@ -33,6 +33,7 @@ export function createAggregateKeyboardHandler(deps: AggregateKeyboardDeps) {
     handleEnterSearch,
     handleEnterCopyMode,
     handleCopyModeKeys,
+    onToggleSessionPicker,
   } = deps;
 
   const { handleSearchModeKeys } = createAggregateSearchHandler(deps);
@@ -77,6 +78,12 @@ export function createAggregateKeyboardHandler(deps: AggregateKeyboardDeps) {
       return true;
     }
 
+    const globalAction = matchKeybinding(keybindings.normal, keyEvent);
+    if (globalAction === 'session.picker.toggle') {
+      onToggleSessionPicker?.();
+      return true;
+    }
+
     // Prefix commands (work in both list and preview mode)
     if (getPrefixActive()) {
       const prefixAction = matchKeybinding(keybindings.aggregate.prefix, keyEvent);
@@ -112,10 +119,18 @@ export function createAggregateKeyboardHandler(deps: AggregateKeyboardDeps) {
           }
       }
 
-      if (matchKeybinding(keybindings.prefix, keyEvent) === 'copy.mode' && getPreviewMode()) {
+      const globalPrefixAction = matchKeybinding(keybindings.prefix, keyEvent);
+      if (globalPrefixAction === 'copy.mode' && getPreviewMode()) {
         setPrefixActive(false);
         clearPrefixTimeout();
         handleEnterCopyMode();
+        return true;
+      }
+
+      if (globalPrefixAction === 'session.picker.toggle') {
+        setPrefixActive(false);
+        clearPrefixTimeout();
+        onToggleSessionPicker?.();
         return true;
       }
 

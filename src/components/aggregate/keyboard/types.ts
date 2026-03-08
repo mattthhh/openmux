@@ -54,6 +54,7 @@ export interface AggregateKeyboardDeps {
 
   handleJumpToPty: () => Promise<boolean>;
   handleNewPaneInSession: () => Promise<void>;
+  onToggleSessionPicker?: () => void;
 
   onRequestQuit?: () => void;
   onDetach?: () => void;
