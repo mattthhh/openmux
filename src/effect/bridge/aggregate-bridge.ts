@@ -12,7 +12,7 @@ import type { PtyId, SessionId, Cols, Rows } from "../types"
 import type { SessionMetadata, SerializedSession, SerializedLayoutNode } from "../models"
 import type { GitDiffStats, GitInfo } from "../services/pty/helpers"
 import type { SessionError } from "../errors"
-import { AggregateBridgeError, ServicesNotInitializedError } from "../errors"
+import { AggregateBridgeError, ServicesNotInitializedError, PtyMetadataError } from "../errors"
 import { getSessionPtyMapping, registerPtyPane, type SessionPtyMapping } from "./shim-bridge"
 import { getPtyService, getSessionManager, hasServices } from "./services-instance"
 
@@ -305,8 +305,14 @@ async function fetchPtyMetadata(
     // Fetch cwd, git info, foregroundProcess in parallel
     const [cwdResult, gitInfoResult, foregroundProcessResult] = await Promise.all([
       pty.getCwd(ptyId),
-      pty.getGitInfo(ptyId).catch(() => undefined),
-      pty.getForegroundProcess(ptyId).catch(() => undefined),
+      pty.getGitInfo(ptyId).catch((e) => {
+        console.warn(`Failed to get git info for PTY ${ptyId}:`, e)
+        return undefined
+      }),
+      pty.getForegroundProcess(ptyId).catch((e) => {
+        console.warn(`Failed to get foreground process for PTY ${ptyId}:`, e)
+        return undefined
+      }),
     ])
 
     const cwd = cwdResult instanceof Error ? process.cwd() : cwdResult
@@ -321,7 +327,10 @@ async function fetchPtyMetadata(
     // Fetch git diff stats (only if we have a cwd and not skipped)
     const gitDiffStats = options.skipGitDiffStats
       ? undefined
-      : await pty.getGitDiffStats(ptyId).catch(() => undefined)
+      : await pty.getGitDiffStats(ptyId).catch((e) => {
+          console.warn(`Failed to get git diff stats for PTY ${ptyId}:`, e)
+          return undefined
+        })
 
     const gitInfoValue = gitInfo as GitInfo | undefined
 
@@ -836,7 +845,9 @@ export async function loadSessionPtysOnDemand(
       const ptyId = String(created)
       nextMapping.set(paneId, ptyId)
       setStoredSessionPtyMapping(sessionId, nextMapping)
-      await registerPtyPane(sessionId, paneId, ptyId).catch(() => {})
+      await registerPtyPane(sessionId, paneId, ptyId).catch((e) => {
+        console.warn(`Failed to register PTY pane mapping for session ${sessionId}:`, e)
+      })
     }
 
     ptys = await loadSessionPtysWithService(

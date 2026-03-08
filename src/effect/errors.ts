@@ -138,3 +138,9 @@ export class PtyTraceError extends createTaggedError({
   name: "PtyTraceError",
   message: "PTY trace $operation failed: $reason",
 }) {}
+
+/** PTY metadata fetch error (non-fatal, for graceful degradation) */
+export class PtyMetadataError extends createTaggedError({
+  name: "PtyMetadataError",
+  message: "PTY metadata $operation failed for $ptyId: $reason",
+}) {}
