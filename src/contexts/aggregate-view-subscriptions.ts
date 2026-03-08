@@ -8,7 +8,6 @@ import type { SessionMetadata, SerializedLayoutNode, SerializedSession } from '.
 import {
   buildPtyIndex,
   recomputeMatches,
-  isActivePty,
   recomputeTree,
 } from './aggregate-view-helpers';
 import { runStream, streamFromSubscription, debounce, tap, repeatWithInterval } from '../effect/stream-utils';
@@ -39,14 +38,12 @@ import type { GitInfo } from '../effect/services/pty/helpers';
 export interface SubscriptionManager {
   lifecycle: (() => void) | null;
   titleChange: (() => void) | null;
-  pollingActive: (() => void) | null;
-  pollingInactive: (() => void) | null;
+  polling: (() => void) | null;
 }
 
 export interface RefreshState {
   refreshInProgress: boolean;
   subsetRefreshInProgress: boolean;
-  selectedDiffRefreshInProgress: boolean;
 }
 
 /** AsyncDisposable guard for refresh state flags */
@@ -67,8 +64,7 @@ export function createSubscriptionManager(): SubscriptionManager {
   return {
     lifecycle: null,
     titleChange: null,
-    pollingActive: null,
-    pollingInactive: null,
+    polling: null,
   };
 }
 
@@ -76,7 +72,6 @@ export function createRefreshState(): RefreshState {
   return {
     refreshInProgress: false,
     subsetRefreshInProgress: false,
-    selectedDiffRefreshInProgress: false,
   };
 }
 
@@ -224,9 +219,8 @@ export function createAggregateViewRefreshers(
 ) {
   // Initialize git metadata cache with 500ms debounce for diff stats
   const gitCache = getGlobalGitMetadataCache({
-    fetchGitInfo: getGitInfo,
+    fetchGitInfo: (cwd) => getGitInfo(cwd, { force: true }),
     fetchDiffStats: getGitDiffStats,
-    diffDebounceMs: 500,
   });
 
   const refreshPtys = async () => {
@@ -307,7 +301,7 @@ export function createAggregateViewRefreshers(
     }
 
     const cwds = [...new Set(resolvedPtys.map(({ metadata }) => metadata.cwd))];
-    const gitMetadataMap = await gitCache.getMetadataBatch(cwds, { skipDiffStats: true });
+    const gitMetadataMap = await gitCache.getMetadataBatch(cwds, { forceRefresh: true });
     const liveSessionIds = new Set(resolvedPtys.map(({ ownership }) => ownership.sessionId));
 
     setState(produce((s) => {
@@ -411,7 +405,7 @@ export function createAggregateViewRefreshers(
 
     // Get unique CWDs for batch git metadata fetch
     const cwds = [...new Set(updates.map(u => u.cwd))];
-    const gitMetadataMap = await gitCache.getMetadataBatch(cwds, { skipDiffStats: true });
+    const gitMetadataMap = await gitCache.getMetadataBatch(cwds, { forceRefresh: true });
 
     // Group updates by repo key for atomic batched updates
     const updatesByRepo = new Map<string | undefined, Array<{ index: number; update: PtyMetadata; metadata: GitRepoMetadata | undefined }>>();
@@ -488,63 +482,7 @@ export function createAggregateViewRefreshers(
     }));
   };
 
-  const refreshSelectedDiffStats = async (ptyId: string) => {
-    if (refreshState.selectedDiffRefreshInProgress) return;
-
-    // Find the PTY to get its CWD
-    const ptyIndex = state.allPtysIndex.get(ptyId);
-    if (ptyIndex === undefined) return;
-
-    const pty = state.allPtys[ptyIndex];
-    if (!pty?.gitRepoKey) return; // No git repo
-
-    await using _guardDiff = new RefreshGuard(refreshState, 'selectedDiffRefreshInProgress');
-    void _guardDiff;
-
-    // Fetch metadata with diff stats (this will trigger debounced diff fetch)
-    const metadata = await gitCache.getMetadata(pty.cwd, { skipDiffStats: false });
-    if (!metadata) return;
-
-    // The cache may still be loading diff stats (debounced)
-    // If diffStats is undefined, schedule a follow-up
-    if (metadata.diffStats === undefined) {
-      // Wait for debounce period + small buffer, then check again
-      await new Promise(resolve => setTimeout(resolve, 600));
-      const updatedMetadata = gitCache.getRepoKey(pty.cwd)
-        ? await gitCache.getMetadata(pty.cwd, { skipDiffStats: false })
-        : undefined;
-      if (!updatedMetadata) return;
-    }
-
-    // Get fresh metadata after potential debounced update
-    const finalMetadata = await gitCache.getMetadata(pty.cwd, { skipDiffStats: false });
-    if (!finalMetadata) return;
-
-    setState(produce((s) => {
-      // Update ALL PTYs in the same repo atomically
-      const repoKey = finalMetadata.repoKey;
-
-      for (let i = 0; i < s.allPtys.length; i++) {
-        const p = s.allPtys[i];
-        if (p.gitRepoKey === repoKey) {
-          // Only update if diffStats actually changed (reference equality)
-          if (p.gitDiffStats !== finalMetadata.diffStats) {
-            s.allPtys[i] = { ...p, gitDiffStats: finalMetadata.diffStats };
-          }
-        }
-      }
-
-      // Also update matchedPtys
-      for (let i = 0; i < s.matchedPtys.length; i++) {
-        const p = s.matchedPtys[i];
-        if (p.gitRepoKey === repoKey && p.gitDiffStats !== finalMetadata.diffStats) {
-          s.matchedPtys[i] = { ...p, gitDiffStats: finalMetadata.diffStats };
-        }
-      }
-    }));
-  };
-
-  return { refreshPtys, refreshPtysSubset, refreshSelectedDiffStats };
+  return { refreshPtys, refreshPtysSubset };
 }
 
 export function createTitleChangeHandler(
@@ -611,31 +549,17 @@ export async function setupSubscriptions(
   }
   subscriptions.titleChange = titleUnsub;
 
-  // Dynamic polling: active PTYs update faster, inactive slower.
+  // Predictable polling: refresh visible git metadata on one cadence.
   if (epoch !== subscriptionsEpoch.value || !state.showAggregateView) {
     return;
   }
-  const activePollMs = 2000;
-  const inactivePollMs = 10000;
 
-  const activePollStream = repeatWithInterval(async () => {
+  const pollMs = 2000;
+  const pollStream = repeatWithInterval(async () => {
     if (!state.showAggregateView || state.allPtys.length === 0) return;
-    const activeIds = new Set(state.allPtys.filter(isActivePty).map((pty) => pty.ptyId));
-    if (state.selectedPtyId) activeIds.add(state.selectedPtyId);
-    await refreshPtysSubset(Array.from(activeIds));
-  }, activePollMs);
-  subscriptions.pollingActive = runStream(activePollStream, { label: 'aggregate-view-poll-active' });
-
-  const inactivePollStream = repeatWithInterval(async () => {
-    if (!state.showAggregateView || state.allPtys.length === 0) return;
-    const activeIds = new Set(state.allPtys.filter(isActivePty).map((pty) => pty.ptyId));
-    if (state.selectedPtyId) activeIds.add(state.selectedPtyId);
-    const inactiveIds = state.allPtys
-      .filter((pty) => !activeIds.has(pty.ptyId))
-      .map((pty) => pty.ptyId);
-    await refreshPtysSubset(inactiveIds);
-  }, inactivePollMs);
-  subscriptions.pollingInactive = runStream(inactivePollStream, { label: 'aggregate-view-poll-inactive' });
+    await refreshPtysSubset(state.allPtys.map((pty) => pty.ptyId));
+  }, pollMs);
+  subscriptions.polling = runStream(pollStream, { label: 'aggregate-view-poll' });
 }
 
 export function cleanupSubscriptions(
@@ -645,10 +569,8 @@ export function cleanupSubscriptions(
   subscriptionsEpoch.value += 1;
   subscriptions.lifecycle?.();
   subscriptions.titleChange?.();
-  subscriptions.pollingActive?.();
-  subscriptions.pollingInactive?.();
+  subscriptions.polling?.();
   subscriptions.lifecycle = null;
   subscriptions.titleChange = null;
-  subscriptions.pollingActive = null;
-  subscriptions.pollingInactive = null;
+  subscriptions.polling = null;
 }

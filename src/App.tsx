@@ -82,7 +82,7 @@ function AppContent() {
   const search = useSearch();
   const { enterSearchMode, exitSearchMode, setSearchQuery, nextMatch, prevMatch } = search;
   const copyMode = useCopyMode();
-  const { state: aggregateState, openAggregateView } = useAggregateView();
+  const { state: aggregateState, openAggregateView, togglePreviewZoom } = useAggregateView();
   const keyboardState = useKeyboardState();
   const { exitSearchMode: keyboardExitSearchMode, exitCopyMode: keyboardExitCopyMode } = keyboardState;
   const renderer = useRenderer();
@@ -285,6 +285,11 @@ function AppContent() {
   });
 
   const executeCommandAction = (action: string) => {
+    if (aggregateState.showAggregateView && aggregateState.previewMode && action === 'pane.zoom') {
+      togglePreviewZoom();
+      return;
+    }
+
     handleNormalModeAction(
       action,
       keyboardState,

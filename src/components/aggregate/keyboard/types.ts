@@ -41,6 +41,7 @@ export interface AggregateKeyboardDeps {
   navigateDown: () => void;
   enterPreviewMode: () => void;
   exitPreviewMode: () => void;
+  togglePreviewZoom: () => void;
 
   exitAggregateMode: () => void;
 
@@ -54,7 +55,9 @@ export interface AggregateKeyboardDeps {
 
   handleJumpToPty: () => Promise<boolean>;
   handleNewPaneInSession: () => Promise<void>;
+  handleListEnter: () => boolean;
   onToggleSessionPicker?: () => void;
+  onToggleCommandPalette?: () => void;
 
   onRequestQuit?: () => void;
   onDetach?: () => void;

@@ -1,407 +1,272 @@
 /**
- * Centralized git metadata cache for stable, batched updates.
+ * Centralized git metadata cache for aggregate view.
  *
- * Key features:
- * - Repo-level caching: All PTYs in the same repo share one metadata object
- * - Reference equality: Unchanged repos return the same object reference
- * - Batched updates: All PTYs in a repo update together atomically
- * - Debounced diff stats: Expensive git diff operations are debounced
- * - No flickering: Metadata is never cleared, only updated with new values
+ * The cache keeps repo-level object sharing and explicit refresh control:
+ * - All PTYs in the same repo share one metadata object
+ * - Callers choose when to force a refresh
+ * - Full metadata (including diff stats) is fetched synchronously when requested
+ * - No background debounce path for correctness-critical updates
  */
 
 import type { GitInfo, GitDiffStats } from '../effect/services/pty/helpers';
 
-/** Git metadata for a repository - shared by all PTYs in that repo */
 export interface GitRepoMetadata {
-  /** Unique key for the repo (workDir or gitDir) */
   repoKey: string;
-  /** Current branch name */
   branch: string | undefined;
-  /** Whether working directory has changes */
   dirty: boolean;
-  /** Number of staged files */
   staged: number;
-  /** Number of unstaged files */
   unstaged: number;
-  /** Number of untracked files */
   untracked: number;
-  /** Number of conflicted files */
   conflicted: number;
-  /** Commits ahead of upstream */
   ahead: number | undefined;
-  /** Commits behind upstream */
   behind: number | undefined;
-  /** Number of stashes */
   stashCount: number | undefined;
-  /** Repository state (rebasing, merging, etc.) */
   state: GitInfo['state'] | undefined;
-  /** Whether HEAD is detached */
   detached: boolean;
-  /** Diff statistics (debounced, may be undefined while loading) */
   diffStats: GitDiffStats | undefined;
-  /** When this metadata was last updated */
   lastUpdated: number;
 }
 
-/** Pending diff stats request for debouncing */
-interface PendingDiffRequest {
-  promise: Promise<GitDiffStats | undefined>;
-  timeout: ReturnType<typeof setTimeout>;
-}
-
-/** In-flight request for deduplication */
-interface InFlightRequest {
-  promise: Promise<GitRepoMetadata | undefined>;
-}
-
-/** Cache entry with metadata and watchers */
 interface CacheEntry {
   metadata: GitRepoMetadata;
-  pendingDiff: PendingDiffRequest | undefined;
 }
 
-/** Options for getting/setting metadata */
 interface GetMetadataOptions {
-  /** Skip fetching diff stats (useful for polling) */
   skipDiffStats?: boolean;
+  forceRefresh?: boolean;
 }
 
-/** Function type for fetching git info */
 type FetchGitInfoFn = (cwd: string) => Promise<GitInfo | undefined>;
-
-/** Function type for fetching git diff stats */
 type FetchDiffStatsFn = (cwd: string) => Promise<GitDiffStats | undefined>;
 
-/**
- * Centralized cache for git metadata.
- *
- * Ensures that:
- * 1. All PTYs in the same repo share identical metadata objects (reference equality)
- * 2. Updates are atomic - all PTYs in a repo see changes at the same time
- * 3. No flickering - metadata is never cleared, only replaced with new values
- * 4. Efficient diff stats - debounced and shared across PTYs
- */
+function areDiffStatsEqual(
+  a: GitDiffStats | undefined,
+  b: GitDiffStats | undefined
+): boolean {
+  if (!a && !b) return true;
+  if (!a || !b) return false;
+  return a.added === b.added && a.removed === b.removed && a.binary === b.binary;
+}
+
+function areMetadataEqual(a: GitRepoMetadata, b: GitRepoMetadata): boolean {
+  return (
+    a.repoKey === b.repoKey &&
+    a.branch === b.branch &&
+    a.dirty === b.dirty &&
+    a.staged === b.staged &&
+    a.unstaged === b.unstaged &&
+    a.untracked === b.untracked &&
+    a.conflicted === b.conflicted &&
+    a.ahead === b.ahead &&
+    a.behind === b.behind &&
+    a.stashCount === b.stashCount &&
+    a.state === b.state &&
+    a.detached === b.detached &&
+    areDiffStatsEqual(a.diffStats, b.diffStats)
+  );
+}
+
 export class GitMetadataCache {
   private cache = new Map<string, CacheEntry>();
   private cwdToRepoKey = new Map<string, string>();
-  private inFlight = new Map<string, InFlightRequest>();
+  private inFlight = new Map<string, Promise<GitRepoMetadata | undefined>>();
   private fetchGitInfo: FetchGitInfoFn;
   private fetchDiffStats: FetchDiffStatsFn;
-  private diffDebounceMs: number;
 
   constructor(options: {
     fetchGitInfo: FetchGitInfoFn;
     fetchDiffStats: FetchDiffStatsFn;
-    diffDebounceMs?: number;
   }) {
     this.fetchGitInfo = options.fetchGitInfo;
     this.fetchDiffStats = options.fetchDiffStats;
-    this.diffDebounceMs = options.diffDebounceMs ?? 300;
   }
 
-  /**
-   * Get metadata for a PTY's working directory.
-   * Returns cached metadata if available and fresh, fetches new data if needed.
-   *
-   * Uses reference equality: if repo hasn't changed, returns the exact same object.
-   */
   async getMetadata(
     cwd: string,
     options: GetMetadataOptions = {}
   ): Promise<GitRepoMetadata | undefined> {
-    const cachedKey = this.cwdToRepoKey.get(cwd);
-    const cachedEntry = cachedKey ? this.cache.get(cachedKey) : undefined;
-
-    // If we have cached metadata and aren't forcing refresh, return it
-    if (cachedEntry && !this.isStale(cachedEntry)) {
-      // Trigger background diff stats update if needed
-      if (!options.skipDiffStats && cachedEntry.metadata.diffStats === undefined) {
-        this.scheduleDiffStatsUpdate(cwd, cachedKey!);
-      }
-      return cachedEntry.metadata;
+    const cached = this.getCachedMetadata(cwd, options);
+    if (cached) {
+      return cached;
     }
 
-    // Check for in-flight request to dedupe
-    const inFlight = this.inFlight.get(cwd);
+    const requestKey = `${cwd}|skip:${options.skipDiffStats ? '1' : '0'}|force:${options.forceRefresh ? '1' : '0'}`;
+    const inFlight = this.inFlight.get(requestKey);
     if (inFlight) {
-      return inFlight.promise;
+      return inFlight;
     }
 
-    // Fetch fresh metadata
-    const promise = this.fetchMetadata(cwd, options);
-    this.inFlight.set(cwd, { promise });
+    const promise = this.getMetadataBatch([cwd], options).then((results) => results.get(cwd));
+    this.inFlight.set(requestKey, promise);
 
     try {
-      const result = await promise;
-      return result;
+      return await promise;
     } finally {
-      this.inFlight.delete(cwd);
+      this.inFlight.delete(requestKey);
     }
   }
 
-  /**
-   * Get metadata for multiple PTYs in a single batch operation.
-   * Groups by repo key to minimize git operations.
-   *
-   * Returns a map of cwd -> metadata for each PTY.
-   */
   async getMetadataBatch(
     cwds: string[],
     options: GetMetadataOptions = {}
   ): Promise<Map<string, GitRepoMetadata>> {
     const results = new Map<string, GitRepoMetadata>();
-
-    // Deduplicate CWDs
     const uniqueCwds = [...new Set(cwds)];
+    if (uniqueCwds.length === 0) {
+      return results;
+    }
 
-    // First pass: resolve all CWDs to repo keys and group
-    const repoKeyToCwds = new Map<string, string[]>();
-    const unresolvedCwds: string[] = [];
-
-    for (const cwd of uniqueCwds) {
-      const repoKey = this.cwdToRepoKey.get(cwd);
-      if (repoKey) {
-        // We know this CWD's repo - add to group
-        const group = repoKeyToCwds.get(repoKey);
-        if (group) {
-          group.push(cwd);
-        } else {
-          repoKeyToCwds.set(repoKey, [cwd]);
+    if (!options.forceRefresh) {
+      let allSatisfiedFromCache = true;
+      for (const cwd of uniqueCwds) {
+        const cached = this.getCachedMetadata(cwd, options);
+        if (!cached) {
+          allSatisfiedFromCache = false;
+          break;
         }
-      } else {
-        // Unknown CWD - need to resolve
-        unresolvedCwds.push(cwd);
+        results.set(cwd, cached);
+      }
+
+      if (allSatisfiedFromCache) {
+        return results;
+      }
+
+      results.clear();
+    }
+
+    const gitInfoEntries: Array<readonly [string, GitInfo | undefined]> = [];
+    for (const cwd of uniqueCwds) {
+      gitInfoEntries.push([cwd, await this.fetchGitInfo(cwd)] as const);
+    }
+
+    const repoGroups = new Map<string, { representativeCwd: string; gitInfo: GitInfo; cwds: string[] }>();
+
+    for (const [cwd, gitInfo] of gitInfoEntries) {
+      if (!gitInfo) {
+        this.cwdToRepoKey.delete(cwd);
+        continue;
+      }
+
+      const existingGroup = repoGroups.get(gitInfo.repoKey);
+      if (existingGroup) {
+        existingGroup.cwds.push(cwd);
+        continue;
+      }
+
+      repoGroups.set(gitInfo.repoKey, {
+        representativeCwd: cwd,
+        gitInfo,
+        cwds: [cwd],
+      });
+    }
+
+    const diffStatsByRepo = new Map<string, GitDiffStats | undefined>();
+    if (!options.skipDiffStats) {
+      for (const group of repoGroups.values()) {
+        const diffStats = await this.fetchDiffStats(group.representativeCwd);
+        diffStatsByRepo.set(group.gitInfo.repoKey, diffStats);
       }
     }
 
-    // Second pass: fetch for unresolved CWDs (this populates cwdToRepoKey)
-    // Process in parallel but each will update the mappings
-    await Promise.all(
-      unresolvedCwds.map(async (cwd) => {
-        const metadata = await this.getMetadata(cwd, options);
-        if (metadata) {
-          results.set(cwd, metadata);
-          // Now add to the appropriate group for result distribution
-          const repoKey = metadata.repoKey;
-          const group = repoKeyToCwds.get(repoKey);
-          if (group) {
-            group.push(cwd);
-          } else {
-            repoKeyToCwds.set(repoKey, [cwd]);
-          }
-        }
-      })
-    );
+    for (const [repoKey, group] of repoGroups) {
+      const existing = this.cache.get(repoKey)?.metadata;
+      const now = Date.now();
+      const nextMetadata: GitRepoMetadata = {
+        repoKey,
+        branch: group.gitInfo.branch,
+        dirty: group.gitInfo.dirty,
+        staged: group.gitInfo.staged,
+        unstaged: group.gitInfo.unstaged,
+        untracked: group.gitInfo.untracked,
+        conflicted: group.gitInfo.conflicted,
+        ahead: group.gitInfo.ahead,
+        behind: group.gitInfo.behind,
+        stashCount: group.gitInfo.stashCount,
+        state: group.gitInfo.state,
+        detached: group.gitInfo.detached,
+        diffStats: options.skipDiffStats
+          ? existing?.diffStats
+          : diffStatsByRepo.get(repoKey),
+        lastUpdated: now,
+      };
 
-    // Third pass: distribute results to all CWDs in each repo group
-    for (const [repoKey, groupCwds] of repoKeyToCwds) {
-      const entry = this.cache.get(repoKey);
-      if (entry) {
-        for (const cwd of groupCwds) {
-          results.set(cwd, entry.metadata);
-        }
+      const stableMetadata = existing && areMetadataEqual(existing, nextMetadata)
+        ? existing
+        : nextMetadata;
+
+      this.cache.set(repoKey, { metadata: stableMetadata });
+
+      for (const cwd of group.cwds) {
+        this.cwdToRepoKey.set(cwd, repoKey);
+        results.set(cwd, stableMetadata);
       }
     }
 
     return results;
   }
 
-  /**
-   * Force refresh metadata for a specific repo.
-   * Called when file watchers detect changes.
-   */
   async refreshRepo(repoKey: string): Promise<GitRepoMetadata | undefined> {
-    const entry = this.cache.get(repoKey);
-    if (!entry) return undefined;
-
-    // Find a CWD for this repo
     let cwd: string | undefined;
-    for (const [c, key] of this.cwdToRepoKey) {
-      if (key === repoKey) {
-        cwd = c;
+    for (const [candidateCwd, candidateRepoKey] of this.cwdToRepoKey) {
+      if (candidateRepoKey === repoKey) {
+        cwd = candidateCwd;
         break;
       }
     }
-    if (!cwd) return entry.metadata;
 
-    return this.fetchMetadata(cwd, { skipDiffStats: false });
+    if (!cwd) {
+      return this.cache.get(repoKey)?.metadata;
+    }
+
+    return this.getMetadata(cwd, { forceRefresh: true });
   }
 
-  /**
-   * Get the repo key for a CWD.
-   */
   getRepoKey(cwd: string): string | undefined {
     return this.cwdToRepoKey.get(cwd);
   }
 
-  /**
-   * Check if a CWD is in a known repo.
-   */
   hasRepo(cwd: string): boolean {
-    const key = this.cwdToRepoKey.get(cwd);
-    return key ? this.cache.has(key) : false;
+    const repoKey = this.cwdToRepoKey.get(cwd);
+    return repoKey ? this.cache.has(repoKey) : false;
   }
 
-  /**
-   * Clear all cached data.
-   */
   clear(): void {
     this.cache.clear();
     this.cwdToRepoKey.clear();
     this.inFlight.clear();
   }
 
-  /**
-   * Check if cached entry is stale and should be refreshed.
-   */
-  private isStale(entry: CacheEntry): boolean {
-    // Consider stale after 2 seconds (matches original TTL)
-    const STALE_MS = 2000;
-    return Date.now() - entry.metadata.lastUpdated > STALE_MS;
-  }
-
-  /**
-   * Fetch fresh metadata for a CWD.
-   */
-  private async fetchMetadata(
+  private getCachedMetadata(
     cwd: string,
     options: GetMetadataOptions
-  ): Promise<GitRepoMetadata | undefined> {
-    const gitInfo = await this.fetchGitInfo(cwd);
-    if (!gitInfo) {
-      // Not a git repo - clear any cached mapping
-      const oldKey = this.cwdToRepoKey.get(cwd);
-      if (oldKey) {
-        this.cwdToRepoKey.delete(cwd);
-      }
+  ): GitRepoMetadata | undefined {
+    const repoKey = this.cwdToRepoKey.get(cwd);
+    if (!repoKey) {
       return undefined;
     }
 
-    const repoKey = gitInfo.repoKey;
-    const now = Date.now();
-
-    // Build new metadata object
-    const newMetadata: GitRepoMetadata = {
-      repoKey,
-      branch: gitInfo.branch,
-      dirty: gitInfo.dirty,
-      staged: gitInfo.staged,
-      unstaged: gitInfo.unstaged,
-      untracked: gitInfo.untracked,
-      conflicted: gitInfo.conflicted,
-      ahead: gitInfo.ahead,
-      behind: gitInfo.behind,
-      stashCount: gitInfo.stashCount,
-      state: gitInfo.state,
-      detached: gitInfo.detached,
-      diffStats: undefined, // Will be populated separately
-      lastUpdated: now,
-    };
-
-    // Check if we can preserve existing diff stats
-    const existingEntry = this.cache.get(repoKey);
-    if (existingEntry) {
-      // Preserve existing diff stats if repo hasn't changed
-      const existing = existingEntry.metadata;
-      const repoUnchanged =
-        existing.branch === newMetadata.branch &&
-        existing.dirty === newMetadata.dirty &&
-        existing.staged === newMetadata.staged &&
-        existing.unstaged === newMetadata.unstaged &&
-        existing.untracked === newMetadata.untracked &&
-        existing.conflicted === newMetadata.conflicted;
-
-      if (repoUnchanged) {
-        newMetadata.diffStats = existing.diffStats;
-      }
-    }
-
-    // Update cache
-    const entry: CacheEntry = {
-      metadata: newMetadata,
-      pendingDiff: existingEntry?.pendingDiff,
-    };
-    this.cache.set(repoKey, entry);
-    this.cwdToRepoKey.set(cwd, repoKey);
-
-    // Schedule diff stats fetch if needed
-    if (!options.skipDiffStats && newMetadata.diffStats === undefined) {
-      this.scheduleDiffStatsUpdate(cwd, repoKey);
-    }
-
-    return newMetadata;
-  }
-
-  /**
-   * Schedule a debounced diff stats update.
-   */
-  private scheduleDiffStatsUpdate(cwd: string, repoKey: string): void {
     const entry = this.cache.get(repoKey);
-    if (!entry) return;
-
-    // Cancel existing pending request
-    if (entry.pendingDiff) {
-      clearTimeout(entry.pendingDiff.timeout);
+    if (!entry) {
+      return undefined;
     }
 
-    // Schedule new request
-    const timeout = setTimeout(() => {
-      void this.executeDiffStatsUpdate(cwd, repoKey);
-    }, this.diffDebounceMs);
-
-    entry.pendingDiff = {
-      promise: Promise.resolve(undefined),
-      timeout,
-    };
-  }
-
-  /**
-   * Execute the actual diff stats fetch.
-   */
-  private async executeDiffStatsUpdate(
-    cwd: string,
-    repoKey: string
-  ): Promise<void> {
-    const entry = this.cache.get(repoKey);
-    if (!entry) return;
-
-    // Create in-flight promise
-    const fetchPromise = this.fetchDiffStats(cwd);
-    entry.pendingDiff = {
-      promise: fetchPromise,
-      timeout: entry.pendingDiff?.timeout ?? setTimeout(() => {}, 0),
-    };
-
-    try {
-      const diffStats = await fetchPromise;
-
-      // Only update if entry still exists
-      const currentEntry = this.cache.get(repoKey);
-      if (currentEntry) {
-        currentEntry.metadata = {
-          ...currentEntry.metadata,
-          diffStats,
-        };
-        currentEntry.pendingDiff = undefined;
-      }
-    } catch {
-      // Clear pending state on error
-      const currentEntry = this.cache.get(repoKey);
-      if (currentEntry) {
-        currentEntry.pendingDiff = undefined;
-      }
+    if (options.forceRefresh) {
+      return undefined;
     }
+
+    if (!options.skipDiffStats && entry.metadata.diffStats === undefined) {
+      return undefined;
+    }
+
+    return entry.metadata;
   }
 }
 
-/** Singleton cache instance (initialized lazily) */
 let globalCache: GitMetadataCache | undefined;
 
-/** Get or create the global metadata cache */
 export function getGlobalGitMetadataCache(options: {
   fetchGitInfo: FetchGitInfoFn;
   fetchDiffStats: FetchDiffStatsFn;
-  diffDebounceMs?: number;
 }): GitMetadataCache {
   if (!globalCache) {
     globalCache = new GitMetadataCache(options);
@@ -409,7 +274,6 @@ export function getGlobalGitMetadataCache(options: {
   return globalCache;
 }
 
-/** Clear the global cache (useful for testing) */
 export function clearGlobalGitMetadataCache(): void {
   globalCache?.clear();
   globalCache = undefined;

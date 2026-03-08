@@ -30,10 +30,12 @@ export function createAggregateKeyboardHandler(deps: AggregateKeyboardDeps) {
     closeAggregateView,
     exitAggregateMode,
     exitPreviewMode,
+    togglePreviewZoom,
     handleEnterSearch,
     handleEnterCopyMode,
     handleCopyModeKeys,
     onToggleSessionPicker,
+    onToggleCommandPalette,
   } = deps;
 
   const { handleSearchModeKeys } = createAggregateSearchHandler(deps);
@@ -81,6 +83,14 @@ export function createAggregateKeyboardHandler(deps: AggregateKeyboardDeps) {
     const globalAction = matchKeybinding(keybindings.normal, keyEvent);
     if (globalAction === 'session.picker.toggle') {
       onToggleSessionPicker?.();
+      return true;
+    }
+    if (globalAction === 'command.palette.toggle') {
+      onToggleCommandPalette?.();
+      return true;
+    }
+    if (globalAction === 'pane.zoom' && getPreviewMode()) {
+      togglePreviewZoom();
       return true;
     }
 
@@ -131,6 +141,20 @@ export function createAggregateKeyboardHandler(deps: AggregateKeyboardDeps) {
         setPrefixActive(false);
         clearPrefixTimeout();
         onToggleSessionPicker?.();
+        return true;
+      }
+
+      if (globalPrefixAction === 'command.palette.toggle') {
+        setPrefixActive(false);
+        clearPrefixTimeout();
+        onToggleCommandPalette?.();
+        return true;
+      }
+
+      if (globalPrefixAction === 'pane.zoom' && getPreviewMode()) {
+        setPrefixActive(false);
+        clearPrefixTimeout();
+        togglePreviewZoom();
         return true;
       }
 

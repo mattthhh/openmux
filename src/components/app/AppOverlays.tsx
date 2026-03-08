@@ -49,6 +49,7 @@ export function AppOverlays(props: AppOverlaysProps) {
         onRequestQuit={overlays.confirmationHandlers.handleRequestQuit}
         onDetach={overlays.handleDetach}
         onRequestKillPty={overlays.confirmationHandlers.handleRequestKillPty}
+        onToggleCommandPalette={overlays.toggleCommandPalette}
         onVimModeChange={overlays.setAggregateVimMode}
       />
 
@@ -113,7 +114,11 @@ export function AppOverlays(props: AppOverlaysProps) {
           if (!ptyId) return null;
 
           if (aggregateState.showAggregateView && aggregateState.selectedPtyId === ptyId) {
-            const aggLayout = calculateLayoutDimensions({ width: props.width, height: props.height });
+            const aggLayout = calculateLayoutDimensions({
+              width: props.width,
+              height: props.height,
+              listPaneRatio: aggregateState.previewZoomed ? 0 : undefined,
+            });
             return {
               x: aggLayout.listPaneWidth,
               y: 0,

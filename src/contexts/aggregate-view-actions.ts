@@ -58,6 +58,7 @@ export function createAggregateViewActions(
       s.selectedPtyId = null;
       s.selectedSessionId = null;
       s.previewMode = false;
+      s.previewZoomed = false;
       return;
     }
 
@@ -67,6 +68,7 @@ export function createAggregateViewActions(
     s.selectedSessionId = getSessionIdForItem(item);
     if (s.selectedPtyId === null) {
       s.previewMode = false;
+      s.previewZoomed = false;
     }
   };
 
@@ -75,6 +77,7 @@ export function createAggregateViewActions(
       s.showAggregateView = true;
       s.filterQuery = '';
       s.previewMode = false;
+      s.previewZoomed = false;
       recomputeMatches(s);
       recomputeTree(s);
     }));
@@ -88,6 +91,7 @@ export function createAggregateViewActions(
       s.selectedPtyId = null;
       s.selectedSessionId = null;
       s.previewMode = false;
+      s.previewZoomed = false;
     }));
   };
 
@@ -175,7 +179,17 @@ export function createAggregateViewActions(
   };
 
   const exitPreviewMode = () => {
-    setState('previewMode', false);
+    setState(produce((s) => {
+      s.previewMode = false;
+      s.previewZoomed = false;
+    }));
+  };
+
+  const togglePreviewZoom = () => {
+    setState(produce((s) => {
+      if (!s.previewMode || !s.selectedPtyId) return;
+      s.previewZoomed = !s.previewZoomed;
+    }));
   };
 
   // ============================================================================
@@ -523,6 +537,7 @@ export function createAggregateViewActions(
     createNewPaneInSelectedSession,
     enterPreviewMode,
     exitPreviewMode,
+    togglePreviewZoom,
     reorderSessions,
     // Lazy loading
     loadSessionPtys,

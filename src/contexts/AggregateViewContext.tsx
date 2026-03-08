@@ -110,7 +110,7 @@ interface AggregateViewProviderProps extends ParentProps {}
     return new Map(paneIds.map((paneId, index) => [paneId, index] as const));
   };
 
-  const { refreshPtys, refreshPtysSubset, refreshSelectedDiffStats } =
+  const { refreshPtys, refreshPtysSubset } =
     createAggregateViewRefreshers(
       state,
       setState,
@@ -178,13 +178,6 @@ interface AggregateViewProviderProps extends ParentProps {}
     void activeSessionId;
     void sessionSignature;
     void refreshPtys();
-  });
-
-  createEffect(() => {
-    if (!state.showAggregateView) return;
-    const selectedPtyId = state.selectedPtyId;
-    if (!selectedPtyId) return;
-    refreshSelectedDiffStats(selectedPtyId);
   });
 
   // Enable shimmer when aggregate view is open, disable when closed

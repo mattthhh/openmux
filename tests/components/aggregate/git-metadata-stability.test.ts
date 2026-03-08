@@ -5,16 +5,16 @@ import {
   getGlobalGitMetadataCache,
 } from '../../../src/contexts/git-metadata-cache';
 
-describe('Git metadata stability - current cache behavior', () => {
+describe('Git metadata stability - synchronous aggregate behavior', () => {
   beforeEach(() => {
     clearGlobalGitMetadataCache();
   });
 
   it('shares one metadata object across PTYs in the same repo', async () => {
     const cache = new GitMetadataCache({
-      fetchGitInfo: async (cwd) => ({
+      fetchGitInfo: async () => ({
         repoKey: 'repo-1',
-        branch: cwd.includes('a') ? 'main' : 'main',
+        branch: 'main',
         dirty: true,
         staged: 1,
         unstaged: 2,
@@ -27,15 +27,17 @@ describe('Git metadata stability - current cache behavior', () => {
         detached: false,
       }),
       fetchDiffStats: async () => ({ added: 5, removed: 3, binary: 0 }),
-      diffDebounceMs: 10,
     });
 
-    const metadata = await cache.getMetadataBatch(['/project/a', '/project/b']);
+    const metadata = await cache.getMetadataBatch(['/project/a', '/project/b'], {
+      skipDiffStats: false,
+    });
 
     expect(metadata.get('/project/a')).toBe(metadata.get('/project/b'));
+    expect(metadata.get('/project/a')?.diffStats).toEqual({ added: 5, removed: 3, binary: 0 });
   });
 
-  it('preserves diff stats while serving fresh cached metadata', async () => {
+  it('returns full diff stats immediately on a full fetch', async () => {
     const fetchGitInfo = vi.fn(async () => ({
       repoKey: 'repo-1',
       branch: 'main',
@@ -50,20 +52,18 @@ describe('Git metadata stability - current cache behavior', () => {
       state: 'none',
       detached: false,
     }));
+    const fetchDiffStats = vi.fn(async () => ({ added: 9, removed: 4, binary: 1 }));
 
     const cache = new GitMetadataCache({
       fetchGitInfo,
-      fetchDiffStats: async () => ({ added: 9, removed: 4, binary: 1 }),
-      diffDebounceMs: 5,
+      fetchDiffStats,
     });
 
-    const first = await cache.getMetadata('/project/a', { skipDiffStats: false });
-    await new Promise((resolve) => setTimeout(resolve, 10));
-    const withDiff = await cache.getMetadata('/project/a', { skipDiffStats: true });
+    const metadata = await cache.getMetadata('/project/a', { skipDiffStats: false });
 
-    expect(withDiff?.diffStats).toEqual({ added: 9, removed: 4, binary: 1 });
-    expect(first?.repoKey).toBe('repo-1');
+    expect(metadata?.diffStats).toEqual({ added: 9, removed: 4, binary: 1 });
     expect(fetchGitInfo).toHaveBeenCalledTimes(1);
+    expect(fetchDiffStats).toHaveBeenCalledTimes(1);
   });
 
   it('does not reuse metadata across different repos', async () => {
@@ -85,17 +85,15 @@ describe('Git metadata stability - current cache behavior', () => {
       fetchDiffStats: async () => ({ added: 1, removed: 0, binary: 0 }),
     });
 
-    const repoA = await cache.getMetadata('/repo-a/worktree');
-    const repoB = await cache.getMetadata('/repo-b/worktree');
+    const repoA = await cache.getMetadata('/repo-a/worktree', { skipDiffStats: false });
+    const repoB = await cache.getMetadata('/repo-b/worktree', { skipDiffStats: false });
 
     expect(repoA?.repoKey).toBe('repo-a');
     expect(repoB?.repoKey).toBe('repo-b');
     expect(repoA).not.toBe(repoB);
   });
 
-  it('debounces diff-stat fetches so the last request wins without flicker', async () => {
-    vi.useFakeTimers();
-
+  it('force refreshes repo metadata immediately when the repo changes', async () => {
     let diffValue = { added: 1, removed: 0, binary: 0 };
     const cache = getGlobalGitMetadataCache({
       fetchGitInfo: async () => ({
@@ -113,19 +111,18 @@ describe('Git metadata stability - current cache behavior', () => {
         detached: false,
       }),
       fetchDiffStats: async () => diffValue,
-      diffDebounceMs: 50,
     });
 
-    await cache.getMetadata('/repo', { skipDiffStats: false });
+    const first = await cache.getMetadata('/repo', { skipDiffStats: false });
     diffValue = { added: 7, removed: 2, binary: 0 };
-    await cache.getMetadata('/repo', { skipDiffStats: false });
-    vi.advanceTimersByTime(60);
-    await Promise.resolve();
-    await Promise.resolve();
 
-    const metadata = await cache.getMetadata('/repo', { skipDiffStats: true });
-    expect(metadata?.diffStats).toEqual({ added: 7, removed: 2, binary: 0 });
+    const refreshed = await cache.getMetadata('/repo', {
+      skipDiffStats: false,
+      forceRefresh: true,
+    });
 
-    vi.useRealTimers();
+    expect(first?.diffStats).toEqual({ added: 1, removed: 0, binary: 0 });
+    expect(refreshed?.diffStats).toEqual({ added: 7, removed: 2, binary: 0 });
+    expect(refreshed).not.toBe(first);
   });
 });

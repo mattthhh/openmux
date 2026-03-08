@@ -23,10 +23,7 @@ export function createAggregateListHandler(deps: AggregateKeyboardDeps) {
         return true;
       }
       case 'aggregate.list.preview':
-        if (deps.getSelectedPtyId()) {
-          deps.enterPreviewMode();
-        }
-        return true;
+        return deps.handleListEnter();
       case 'aggregate.list.jump':
         deps.handleJumpToPty();
         return true;

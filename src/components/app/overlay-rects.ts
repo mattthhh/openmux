@@ -15,6 +15,7 @@ type CopyNotificationState = {
 type AggregateState = {
   showAggregateView: boolean;
   selectedPtyId: string | null;
+  previewZoomed: boolean;
 };
 
 type PaneLike = {
@@ -169,7 +170,11 @@ export function getCopyNotificationRect(
 
   let paneRect: Rectangle | null = null;
   if (aggregateState.showAggregateView && aggregateState.selectedPtyId === notification.ptyId) {
-    const aggLayout = calculateLayoutDimensions({ width, height });
+    const aggLayout = calculateLayoutDimensions({
+      width,
+      height,
+      listPaneRatio: aggregateState.previewZoomed ? 0 : undefined,
+    });
     paneRect = {
       x: aggLayout.listPaneWidth,
       y: 0,

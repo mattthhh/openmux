@@ -140,6 +140,8 @@ export interface AggregateViewState {
   isLoading: boolean;
   /** Whether in interactive preview mode (vs list mode) */
   previewMode: boolean;
+  /** Whether preview is zoomed to hide the session list pane */
+  previewZoomed: boolean;
   /** Map from ptyId to index in allPtys for O(1) lookup */
   allPtysIndex: Map<string, number>;
   /** Map from ptyId to index in matchedPtys for O(1) lookup */
@@ -178,6 +180,7 @@ export const initialState: AggregateViewState = {
   selectedPtyId: null,
   isLoading: false,
   previewMode: false,
+  previewZoomed: false,
   allPtysIndex: new Map(),
   matchedPtysIndex: new Map(),
   treeRoot: [],
@@ -207,6 +210,7 @@ export interface AggregateViewContextValue {
   refreshPtys: () => Promise<void>;
   enterPreviewMode: () => void;
   exitPreviewMode: () => void;
+  togglePreviewZoom: () => void;
   /** Toggle session expansion (collapse/expand PTYs under a session) */
   toggleSessionExpanded: (sessionId: string) => void;
   /** Expand all sessions */

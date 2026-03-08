@@ -3,7 +3,7 @@
  * Provides dimension calculations for the aggregate layout
  */
 
-import { formatComboSet, type ResolvedKeybindingMap, type ResolvedKeybindings } from '../../core/keybindings';
+import { formatComboSet, formatKeyCombo, type ResolvedKeybindingMap, type ResolvedKeybindings } from '../../core/keybindings';
 import type { VimInputMode } from '../../core/vim-sequences';
 
 export { borderStyleMap } from '../Pane';
@@ -86,9 +86,18 @@ function formatHintComboSet(combos: string[]): string {
   return formatComboSet(combos).replace(/ctrl\+([a-z])/gi, '^$1');
 }
 
+function formatGlobalActionHint(keybindings: ResolvedKeybindings, action: string): string {
+  const direct = getCombos(keybindings.normal, action).map(formatKeyCombo);
+  const prefixed = getCombos(keybindings.prefix, action).map(
+    (combo) => `${formatKeyCombo(keybindings.prefixKey)} ${formatKeyCombo(combo)}`
+  );
+  return [...direct, ...prefixed].join('/') || '--';
+}
+
 export function getHintsText(
   inSearchMode: boolean,
   previewMode: boolean,
+  previewZoomed: boolean,
   copyModeActive: boolean,
   keybindings: ResolvedKeybindings,
   showInactive: boolean,
@@ -116,8 +125,10 @@ export function getHintsText(
   if (previewMode) {
     const back = formatHintComboSet(getCombos(aggregateBindings.preview, 'aggregate.preview.exit'));
     const search = formatHintComboSet(getCombos(aggregateBindings.preview, 'aggregate.preview.search'));
+    const zoom = formatGlobalActionHint(keybindings, 'pane.zoom');
     const kill = formatHintComboSet(getCombos(aggregateBindings.preview, 'aggregate.kill'));
-    return `${back}:back ${search}:search ${kill}:kill`;
+    const zoomLabel = previewZoomed ? 'unzoom' : 'zoom';
+    return `${back}:back ${search}:search ${zoom}:${zoomLabel} ${kill}:kill`;
   }
 
   if (vimEnabled) {
@@ -127,7 +138,7 @@ export function getHintsText(
     const kill = formatHintComboSet(getCombos(aggregateBindings.list, 'aggregate.kill'));
     const scopeLabel = showInactive ? 'all' : 'active';
     const modeHint = vimMode === 'insert' ? 'esc:normal' : 'i:filter';
-    return `j/k:nav gg/G:jump enter:preview ${newPane}:new ${jump}:jump ${toggleScope}:scope(${scopeLabel}) ${kill}:kill q:close ${modeHint}`;
+    return `j/k:nav gg/G:jump enter:open/toggle ${newPane}:new ${jump}:jump ${toggleScope}:scope(${scopeLabel}) ${kill}:kill q:close ${modeHint}`;
   }
 
   const navCombos = [
@@ -142,7 +153,7 @@ export function getHintsText(
   const kill = formatHintComboSet(getCombos(aggregateBindings.list, 'aggregate.kill'));
   const close = formatHintComboSet(getCombos(aggregateBindings.list, 'aggregate.list.close'));
   const scopeLabel = showInactive ? 'all' : 'active';
-  return `${navigate}:nav ${interact}:preview ${newPane}:new ${jump}:jump ${toggleScope}:scope(${scopeLabel}) ${kill}:kill ${close}:close`;
+  return `${navigate}:nav ${interact}:open/toggle ${newPane}:new ${jump}:jump ${toggleScope}:scope(${scopeLabel}) ${kill}:kill ${close}:close`;
 }
 
 /**

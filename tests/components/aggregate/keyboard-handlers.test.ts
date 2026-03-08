@@ -35,6 +35,9 @@ function createDeps(overrides: Partial<AggregateKeyboardDeps> = {}) {
   const startPrefixTimeout = vi.fn();
   const exitPreviewMode = vi.fn();
   const onToggleSessionPicker = vi.fn();
+  const onToggleCommandPalette = vi.fn();
+  const handleListEnter = vi.fn(() => true);
+  const togglePreviewZoom = vi.fn();
 
   const deps: AggregateKeyboardDeps = {
     getPreviewMode: () => previewMode,
@@ -75,6 +78,7 @@ function createDeps(overrides: Partial<AggregateKeyboardDeps> = {}) {
       previewMode = true;
     }),
     exitPreviewMode,
+    togglePreviewZoom,
     exitAggregateMode: vi.fn(),
     exitSearchMode: vi.fn(),
     setSearchQuery: vi.fn(),
@@ -84,7 +88,9 @@ function createDeps(overrides: Partial<AggregateKeyboardDeps> = {}) {
     handleEnterCopyMode,
     handleCopyModeKeys,
     handleJumpToPty: async () => false,
+    handleListEnter,
     onToggleSessionPicker,
+    onToggleCommandPalette,
     onRequestQuit: vi.fn(),
     onDetach: vi.fn(),
     onRequestKillPty: vi.fn(),
@@ -104,6 +110,9 @@ function createDeps(overrides: Partial<AggregateKeyboardDeps> = {}) {
     clearPrefixTimeout,
     exitPreviewMode,
     onToggleSessionPicker,
+    onToggleCommandPalette,
+    handleListEnter,
+    togglePreviewZoom,
   };
 }
 
@@ -131,6 +140,16 @@ describe("createAggregateKeyboardHandler", () => {
     expect(setup.exitPreviewMode).not.toHaveBeenCalled();
   });
 
+  it("routes Enter in aggregate list mode through the selected-row handler", () => {
+    const setup = createDeps({
+      getPreviewMode: () => false,
+    });
+    const handler = createAggregateKeyboardHandler(setup.deps);
+
+    expect(handler.handleKeyDown({ key: "enter", eventType: "press" })).toBe(true);
+    expect(setup.handleListEnter).toHaveBeenCalledTimes(1);
+  });
+
   it("opens the shared session picker from aggregate list mode via the normal binding", () => {
     const setup = createDeps({
       getPreviewMode: () => false,
@@ -150,6 +169,46 @@ describe("createAggregateKeyboardHandler", () => {
     expect(handler.handleKeyDown({ key: "b", ctrl: true, eventType: "press" })).toBe(true);
     expect(handler.handleKeyDown({ key: "s", eventType: "press" })).toBe(true);
     expect(setup.onToggleSessionPicker).toHaveBeenCalledTimes(1);
+    expect(setup.getPrefixActive()).toBe(false);
+  });
+
+  it("opens the shared command palette from aggregate list mode via the normal binding", () => {
+    const setup = createDeps({
+      getPreviewMode: () => false,
+    });
+    const handler = createAggregateKeyboardHandler(setup.deps);
+
+    expect(handler.handleKeyDown({ key: "p", alt: true, eventType: "press" })).toBe(true);
+    expect(setup.onToggleCommandPalette).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens the shared command palette from aggregate mode via the prefix binding", () => {
+    const setup = createDeps({
+      getPreviewMode: () => false,
+    });
+    const handler = createAggregateKeyboardHandler(setup.deps);
+
+    expect(handler.handleKeyDown({ key: "b", ctrl: true, eventType: "press" })).toBe(true);
+    expect(handler.handleKeyDown({ key: ":", shift: true, eventType: "press" })).toBe(true);
+    expect(setup.onToggleCommandPalette).toHaveBeenCalledTimes(1);
+    expect(setup.getPrefixActive()).toBe(false);
+  });
+
+  it("toggles aggregate preview zoom from the normal zoom binding while previewing", () => {
+    const setup = createDeps();
+    const handler = createAggregateKeyboardHandler(setup.deps);
+
+    expect(handler.handleKeyDown({ key: "z", alt: true, eventType: "press" })).toBe(true);
+    expect(setup.togglePreviewZoom).toHaveBeenCalledTimes(1);
+  });
+
+  it("toggles aggregate preview zoom from the prefix zoom binding while previewing", () => {
+    const setup = createDeps();
+    const handler = createAggregateKeyboardHandler(setup.deps);
+
+    expect(handler.handleKeyDown({ key: "b", ctrl: true, eventType: "press" })).toBe(true);
+    expect(handler.handleKeyDown({ key: "z", eventType: "press" })).toBe(true);
+    expect(setup.togglePreviewZoom).toHaveBeenCalledTimes(1);
     expect(setup.getPrefixActive()).toBe(false);
   });
 });

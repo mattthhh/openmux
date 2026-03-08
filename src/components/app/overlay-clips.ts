@@ -28,7 +28,7 @@ export function setupOverlayClipRects(params: {
   };
   search: SearchContextValue;
   selection: { copyNotification: { visible: boolean; ptyId: string | null } };
-  aggregateState: { showAggregateView: boolean; selectedPtyId: string | null };
+  aggregateState: { showAggregateView: boolean; selectedPtyId: string | null; previewZoomed: boolean };
   commandPaletteState: CommandPaletteState;
   commandPaletteCommands: CommandPaletteCommand[];
   paneRenameState: PaneRenameState;

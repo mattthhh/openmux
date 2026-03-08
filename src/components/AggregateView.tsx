@@ -54,6 +54,7 @@ interface AggregateViewProps {
   onRequestQuit?: () => void;
   onDetach?: () => void;
   onRequestKillPty?: (ptyId: string) => void;
+  onToggleCommandPalette?: () => void;
   onVimModeChange?: (mode: VimInputMode) => void;
 }
 
@@ -73,6 +74,7 @@ export function AggregateView(props: AggregateViewProps) {
     selectPty,
     loadSessionPtys,
     toggleSessionExpanded,
+    togglePreviewZoom,
     reorderSessions,
   } = useAggregateView();
   const {
@@ -230,7 +232,11 @@ export function AggregateView(props: AggregateViewProps) {
 
   // Layout dimensions (memoized)
   const layout = createMemo(() =>
-    calculateLayoutDimensions({ width: props.width, height: props.height })
+    calculateLayoutDimensions({
+      width: props.width,
+      height: props.height,
+      listPaneRatio: state.previewZoomed ? 0 : undefined,
+    })
   );
 
   const visibleListStart = createMemo(() => {
@@ -673,6 +679,23 @@ export function AggregateView(props: AggregateViewProps) {
     }
   };
 
+  const handleListEnter = () => {
+    const selectedItem = state.flattenedTree[state.selectedIndex];
+    if (!selectedItem) return true;
+
+    if (selectedItem.node.type === 'pty') {
+      enterPreviewMode();
+      return true;
+    }
+
+    if (selectedItem.node.type === 'session' && selectedItem.node.loadState.status === 'loaded') {
+      toggleSessionExpanded(selectedItem.node.session.id);
+      return true;
+    }
+
+    return true;
+  };
+
   const startPrefixTimeout = () => {
     prefixTimeout = setTimeout(() => {
       setPrefixActive(false);
@@ -725,6 +748,7 @@ export function AggregateView(props: AggregateViewProps) {
     navigateDown,
     enterPreviewMode,
     exitPreviewMode,
+    togglePreviewZoom,
     exitAggregateMode,
     exitSearchMode,
     setSearchQuery,
@@ -735,7 +759,9 @@ export function AggregateView(props: AggregateViewProps) {
     handleCopyModeKeys,
     handleJumpToPty,
     handleNewPaneInSession,
+    handleListEnter,
     onToggleSessionPicker: togglePicker,
+    onToggleCommandPalette: props.onToggleCommandPalette,
     onRequestQuit: props.onRequestQuit,
     onDetach: props.onDetach,
     onRequestKillPty: props.onRequestKillPty,
@@ -784,6 +810,7 @@ export function AggregateView(props: AggregateViewProps) {
   const hintsText = () => getHintsText(
     inSearchMode(),
     state.previewMode,
+    state.previewZoomed,
     state.previewMode && !!state.selectedPtyId && copyMode.isActive(state.selectedPtyId),
     config.keybindings(),
     state.showInactive,
@@ -820,137 +847,137 @@ export function AggregateView(props: AggregateViewProps) {
       >
         {/* Main content - two panes side by side */}
         <box style={{ flexDirection: 'row', height: layout().contentHeight }}>
-          {/* Left pane - PTY list (bordered, highlighted when in list mode) */}
-          <box
-            style={{
-              width: layout().listPaneWidth,
-              height: layout().contentHeight,
-              border: true,
-              borderStyle: borderStyleMap[theme.pane.borderStyle] ?? 'single',
-              borderColor: state.previewMode ? theme.pane.borderColor : theme.pane.focusedBorderColor,
-            }}
-            title={` Sessions (${state.allSessions.size}) `}
-            titleAlignment="left"
-            onMouseDown={(e: { preventDefault: () => void }) => {
-              e.preventDefault();
-              if (state.previewMode) {
-                exitPreviewMode();
-              }
-            }}
-            onMouseDrag={(e: OpenTUIMouseEvent) => {
-              e.preventDefault();
-              updateSessionDragTarget(e);
-            }}
-            onMouseUp={(e: OpenTUIMouseEvent) => {
-              e.preventDefault();
-              void commitSessionDrag();
-            }}
-          >
-            <box style={{ flexDirection: 'column' }}>
-              <Show
-                when={state.flattenedTree.length > 0}
-                fallback={
-                  <box style={{ height: layout().listInnerHeight, justifyContent: 'center', alignItems: 'center' }}>
-                    <text fg={overlaySubtle()}>No sessions match filter</text>
-                  </box>
+          <Show when={!state.previewZoomed}>
+            {/* Left pane - PTY list (bordered, highlighted when in list mode) */}
+            <box
+              style={{
+                width: layout().listPaneWidth,
+                height: layout().contentHeight,
+                border: true,
+                borderStyle: borderStyleMap[theme.pane.borderStyle] ?? 'single',
+                borderColor: state.previewMode ? theme.pane.borderColor : theme.pane.focusedBorderColor,
+              }}
+              onMouseDown={(e: { preventDefault: () => void }) => {
+                e.preventDefault();
+                if (state.previewMode) {
+                  exitPreviewMode();
                 }
-              >
-                <For each={visibleItems()}>
-                  {(item) => {
-                    const node = () => item.node;
-                    const isSelected = () => item.index === state.selectedIndex;
-                    const textColors = {
-                      foreground: overlayFg(),
-                      muted: overlayMuted(),
-                      subtle: overlaySubtle(),
-                    };
+              }}
+              onMouseDrag={(e: OpenTUIMouseEvent) => {
+                e.preventDefault();
+                updateSessionDragTarget(e);
+              }}
+              onMouseUp={(e: OpenTUIMouseEvent) => {
+                e.preventDefault();
+                void commitSessionDrag();
+              }}
+            >
+              <box style={{ flexDirection: 'column' }}>
+                <Show
+                  when={state.flattenedTree.length > 0}
+                  fallback={
+                    <box style={{ height: layout().listInnerHeight, justifyContent: 'center', alignItems: 'center' }}>
+                      <text fg={overlaySubtle()}>No sessions match filter</text>
+                    </box>
+                  }
+                >
+                  <For each={visibleItems()}>
+                    {(item) => {
+                      const node = () => item.node;
+                      const isSelected = () => item.index === state.selectedIndex;
+                      const textColors = {
+                        foreground: overlayFg(),
+                        muted: overlayMuted(),
+                        subtle: overlaySubtle(),
+                      };
 
-                    const sessionIndent = () => '';
-                    const ptyIndent = () => '    ';
-                    const ptyTreePrefix = () => '•';
+                      const sessionIndent = () => '';
+                      const ptyIndent = () => '    ';
+                      const ptyTreePrefix = () => '•';
 
-                    if (node().type === 'spacer') {
-                      return <box style={{ height: 1 }} />;
-                    }
+                      if (node().type === 'spacer') {
+                        return <box style={{ height: 1 }} />;
+                      }
 
-                    return (
-                      <Show
-                        when={node().type === 'session'}
-                        fallback={
-                          <Show
-                            when={node().type === 'pty'}
-                            fallback={
-                              <PlaceholderRow
-                                treePrefix=""
-                                indent={ptyIndent()}
-                                maxWidth={layout().listInnerWidth}
-                                aggregateTheme={theme.ui.aggregate}
-                                textColors={textColors}
+                      return (
+                        <Show
+                          when={node().type === 'session'}
+                          fallback={
+                            <Show
+                              when={node().type === 'pty'}
+                              fallback={
+                                <PlaceholderRow
+                                  treePrefix=""
+                                  indent={ptyIndent()}
+                                  maxWidth={layout().listInnerWidth}
+                                  aggregateTheme={theme.ui.aggregate}
+                                  textColors={textColors}
+                                  isSelected={isSelected()}
+                                  label={(node() as import('../contexts/aggregate-view-types').PlaceholderTreeNode).message}
+                                  onClick={() => {
+                                    setSelectedIndex(item.index);
+                                    const placeholderNode = node() as import('../contexts/aggregate-view-types').PlaceholderTreeNode;
+                                    const sessionId = placeholderNode.parentSessionId;
+                                    if (sessionId) {
+                                      loadSessionPtys(sessionId);
+                                    }
+                                  }}
+                                />
+                              }
+                            >
+                              <PtyTreeRow
+                                pty={(node() as import('../contexts/aggregate-view-types').PtyTreeNode).ptyInfo}
                                 isSelected={isSelected()}
-                                label={(node() as import('../contexts/aggregate-view-types').PlaceholderTreeNode).message}
+                                maxWidth={layout().listInnerWidth}
+                                treePrefix={ptyTreePrefix()}
+                                indent={ptyIndent()}
+                                aggregateTheme={theme.ui.aggregate}
+                                shimmerTargetColor={hostBgColor()}
+                                textColors={textColors}
                                 onClick={() => {
-                                  setSelectedIndex(item.index);
-                                  const placeholderNode = node() as import('../contexts/aggregate-view-types').PlaceholderTreeNode;
-                                  const sessionId = placeholderNode.parentSessionId;
-                                  if (sessionId) {
-                                    loadSessionPtys(sessionId);
+                                  const ptyNode = node() as import('../contexts/aggregate-view-types').PtyTreeNode;
+                                  selectPty(ptyNode.ptyInfo.ptyId);
+                                  if (state.previewMode) {
+                                    exitPreviewMode();
                                   }
                                 }}
                               />
-                            }
-                          >
-                            <PtyTreeRow
-                              pty={(node() as import('../contexts/aggregate-view-types').PtyTreeNode).ptyInfo}
-                              isSelected={isSelected()}
-                              maxWidth={layout().listInnerWidth}
-                              treePrefix={ptyTreePrefix()}
-                              indent={ptyIndent()}
-                              aggregateTheme={theme.ui.aggregate}
-                              shimmerTargetColor={hostBgColor()}
-                              textColors={textColors}
-                              onClick={() => {
-                                const ptyNode = node() as import('../contexts/aggregate-view-types').PtyTreeNode;
-                                selectPty(ptyNode.ptyInfo.ptyId);
-                                if (state.previewMode) {
-                                  exitPreviewMode();
-                                }
-                              }}
-                            />
-                          </Show>
-                        }
-                      >
-                        <SessionTreeNode
-                          sessionName={(node() as import('../contexts/aggregate-view-types').SessionTreeNode).session.name}
-                          paneCount={(node() as import('../contexts/aggregate-view-types').SessionTreeNode).ptyCount}
-                          treePrefix=""
-                          indent={sessionIndent()}
-                          isSelected={isSelected()}
-                          isExpanded={(node() as import('../contexts/aggregate-view-types').SessionTreeNode).isExpanded}
-                          isActive={(node() as import('../contexts/aggregate-view-types').SessionTreeNode).session.id === sessionState.activeSessionId}
-                          isDropTarget={dragTargetSessionId() === (node() as import('../contexts/aggregate-view-types').SessionTreeNode).session.id && draggingSessionId() !== null}
-                          isDragging={draggingSessionId() === (node() as import('../contexts/aggregate-view-types').SessionTreeNode).session.id}
-                          maxWidth={layout().listInnerWidth}
-                          aggregateTheme={theme.ui.aggregate}
-                          textColors={textColors}
-                          onMouseDown={() => {
-                            setSelectedIndex(item.index);
-                            const sessionNode = node() as import('../contexts/aggregate-view-types').SessionTreeNode;
-                            beginSessionDrag(sessionNode.session.id);
-                          }}
-                          onMouseUp={() => {
-                            const sessionNode = node() as import('../contexts/aggregate-view-types').SessionTreeNode;
-                            if (!suppressSessionToggle() && !didDragSession() && sessionNode.loadState.status === 'loaded') {
-                              toggleSessionExpanded(sessionNode.session.id);
-                            }
-                          }}
-                        />
-                      </Show>
-                    );
-                  }}
-                </For>
-              </Show>
+                            </Show>
+                          }
+                        >
+                          <SessionTreeNode
+                            sessionName={(node() as import('../contexts/aggregate-view-types').SessionTreeNode).session.name}
+                            paneCount={(node() as import('../contexts/aggregate-view-types').SessionTreeNode).ptyCount}
+                            treePrefix=""
+                            indent={sessionIndent()}
+                            isSelected={isSelected()}
+                            isExpanded={(node() as import('../contexts/aggregate-view-types').SessionTreeNode).isExpanded}
+                            isActive={(node() as import('../contexts/aggregate-view-types').SessionTreeNode).session.id === sessionState.activeSessionId}
+                            isDropTarget={dragTargetSessionId() === (node() as import('../contexts/aggregate-view-types').SessionTreeNode).session.id && draggingSessionId() !== null}
+                            isDragging={draggingSessionId() === (node() as import('../contexts/aggregate-view-types').SessionTreeNode).session.id}
+                            maxWidth={layout().listInnerWidth}
+                            aggregateTheme={theme.ui.aggregate}
+                            textColors={textColors}
+                            onMouseDown={() => {
+                              setSelectedIndex(item.index);
+                              const sessionNode = node() as import('../contexts/aggregate-view-types').SessionTreeNode;
+                              beginSessionDrag(sessionNode.session.id);
+                            }}
+                            onMouseUp={() => {
+                              const sessionNode = node() as import('../contexts/aggregate-view-types').SessionTreeNode;
+                              if (!suppressSessionToggle() && !didDragSession() && sessionNode.loadState.status === 'loaded') {
+                                toggleSessionExpanded(sessionNode.session.id);
+                              }
+                            }}
+                          />
+                        </Show>
+                      );
+                    }}
+                  </For>
+                </Show>
+              </box>
             </box>
-          </box>
+          </Show>
 
           {/* Right pane - Terminal preview (bordered, with mouse support) */}
           <box

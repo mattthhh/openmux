@@ -63,10 +63,45 @@ function formatGitStats(pty: PtyInfo): string | null {
   return parts.join(' ');
 }
 
-function getProcessDisplayName(pty: PtyInfo): string {
-  const rawProcess = pty.foregroundProcess?.trim() || pty.shell?.trim() || 'shell';
-  const parts = rawProcess.split('/').filter(Boolean);
-  return parts[parts.length - 1] ?? rawProcess;
+const KNOWN_SHELLS = new Set([
+  'sh',
+  'bash',
+  'zsh',
+  'fish',
+  'dash',
+  'ksh',
+  'tcsh',
+  'csh',
+  'nu',
+  'pwsh',
+  'powershell',
+]);
+
+function getProcessBaseName(name: string | undefined): string {
+  const raw = name?.trim();
+  if (!raw) return '';
+  const parts = raw.split('/').filter(Boolean);
+  return parts[parts.length - 1] ?? raw;
+}
+
+function normalizeProcessName(name: string | undefined): string {
+  return getProcessBaseName(name).toLowerCase();
+}
+
+function getProcessDisplayName(pty: PtyInfo): string | null {
+  const processName = getProcessBaseName(pty.foregroundProcess);
+  const normalizedProcessName = processName.toLowerCase();
+  const shellName = normalizeProcessName(pty.shell);
+
+  if (!processName) {
+    return null;
+  }
+
+  if (KNOWN_SHELLS.has(normalizedProcessName) || (shellName && normalizedProcessName === shellName)) {
+    return null;
+  }
+
+  return processName;
 }
 
 /**
@@ -144,7 +179,7 @@ export function PtyTreeRow(props: PtyTreeRowProps) {
   const label = createMemo(() => {
     const directoryName = getDirectoryName(props.pty.cwd);
     const processName = getProcessDisplayName(props.pty);
-    return `${directoryName} (${processName})`;
+    return processName ? `${directoryName} (${processName})` : directoryName;
   });
 
   // Git metadata
