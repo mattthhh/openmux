@@ -49,6 +49,18 @@ export type SessionError =
   | SessionCorruptedError
   | SessionStorageError
 
+/** Required services were accessed before initialization */
+export class ServicesNotInitializedError extends createTaggedError({
+  name: "ServicesNotInitializedError",
+  message: "Services not initialized for $operation",
+}) {}
+
+/** Aggregate bridge operation failed */
+export class AggregateBridgeError extends createTaggedError({
+  name: "AggregateBridgeError",
+  message: "Aggregate bridge $operation failed for $target: $reason",
+}) {}
+
 /** Clipboard operation failed */
 export class ClipboardError extends createTaggedError({
   name: "ClipboardError",

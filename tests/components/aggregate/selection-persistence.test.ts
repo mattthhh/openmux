@@ -228,6 +228,8 @@ describe('Selection Persistence - current tree behavior', () => {
 
     setState(
       produce((s) => {
+        s.previewMode = true;
+        s.previewZoomed = true;
         s.allPtys = [];
         s.allPtysIndex = new Map();
         s.sessionPaneOrders = new Map();
@@ -240,6 +242,7 @@ describe('Selection Persistence - current tree behavior', () => {
     expect(state.selectedSessionId).toBe('session-a');
     expect(state.flattenedTree[state.selectedIndex]?.node.type).toBe('session');
     expect(state.previewMode).toBe(false);
+    expect(state.previewZoomed).toBe(false);
   });
 
   it('falls back to the session header when the selected PTY is filtered out', () => {
@@ -255,11 +258,20 @@ describe('Selection Persistence - current tree behavior', () => {
     });
     const actions = createActions(state, setState);
 
+    setState(
+      produce((s) => {
+        s.previewMode = true;
+        s.previewZoomed = true;
+      })
+    );
+
     actions.setFilterQuery('bash');
 
     expect(state.selectedPtyId).toBeNull();
     expect(state.selectedSessionId).toBe('session-a');
     expect(state.flattenedTree[state.selectedIndex]?.node.type).toBe('session');
+    expect(state.previewMode).toBe(false);
+    expect(state.previewZoomed).toBe(false);
   });
 
   it('falls back to the session header when a selected PTY becomes hidden by collapse', () => {

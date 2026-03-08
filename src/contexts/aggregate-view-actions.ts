@@ -5,6 +5,7 @@
 import { produce, type SetStoreFunction } from 'solid-js/store';
 import type { PtyInfo, AggregateViewState, SessionLoadState, FlattenedTreeItem, SessionTreeNode } from './aggregate-view-types';
 import {
+  clearPreviewState,
   recomputeMatches,
   recomputeTree,
 } from './aggregate-view-helpers';
@@ -57,8 +58,7 @@ export function createAggregateViewActions(
       s.selectedIndex = 0;
       s.selectedPtyId = null;
       s.selectedSessionId = null;
-      s.previewMode = false;
-      s.previewZoomed = false;
+      clearPreviewState(s);
       return;
     }
 
@@ -67,8 +67,7 @@ export function createAggregateViewActions(
     s.selectedPtyId = item?.node.type === 'pty' ? item.node.ptyInfo.ptyId : null;
     s.selectedSessionId = getSessionIdForItem(item);
     if (s.selectedPtyId === null) {
-      s.previewMode = false;
-      s.previewZoomed = false;
+      clearPreviewState(s);
     }
   };
 
@@ -76,8 +75,7 @@ export function createAggregateViewActions(
     setState(produce((s) => {
       s.showAggregateView = true;
       s.filterQuery = '';
-      s.previewMode = false;
-      s.previewZoomed = false;
+      clearPreviewState(s);
       recomputeMatches(s);
       recomputeTree(s);
     }));
@@ -90,8 +88,7 @@ export function createAggregateViewActions(
       s.selectedIndex = 0;
       s.selectedPtyId = null;
       s.selectedSessionId = null;
-      s.previewMode = false;
-      s.previewZoomed = false;
+      clearPreviewState(s);
     }));
   };
 
@@ -180,8 +177,7 @@ export function createAggregateViewActions(
 
   const exitPreviewMode = () => {
     setState(produce((s) => {
-      s.previewMode = false;
-      s.previewZoomed = false;
+      clearPreviewState(s);
     }));
   };
 
@@ -225,80 +221,70 @@ export function createAggregateViewActions(
       recomputeTree(s);
     }));
 
-    try {
-      const result = await loadSessionPtysOnDemand(sessionId);
+    const result = await loadSessionPtysOnDemand(sessionId);
 
-      setState(produce((s) => {
-        s.loadingSessionIds.delete(sessionId);
+    setState(produce((s) => {
+      s.loadingSessionIds.delete(sessionId);
 
-        const sessionMetadata = s.allSessions.get(sessionId);
-        const existingIndex = new Map(s.allPtys.map((pty, index) => [pty.ptyId, index] as const));
-
-        for (const pty of result.ptys) {
-          const nextPty: PtyInfo = {
-            ...pty,
-            sessionId,
-            sessionMetadata,
-          };
-
-          const index = existingIndex.get(pty.ptyId);
-          if (index === undefined) {
-            existingIndex.set(pty.ptyId, s.allPtys.length);
-            s.allPtys.push(nextPty);
-          } else {
-            s.allPtys[index] = {
-              ...s.allPtys[index],
-              ...nextPty,
-            };
-          }
-        }
-
-        s.allPtysIndex = new Map(s.allPtys.map((pty, index) => [pty.ptyId, index] as const));
-
-        const paneCount = result.ptys.length > 0
-          ? result.ptys.length
-          : (previousPaneCount ?? s.sessionLoadStates.get(sessionId)?.paneCount);
-
-        if (result.error) {
-          s.sessionLoadStates.set(sessionId, {
-            status: 'error',
-            error: result.error,
-            lastActiveWorkspaceId: result.lastActiveWorkspaceId ?? previousWorkspaceId,
-            focusedPaneId: previousFocusedPaneId,
-            paneCount,
-          });
-        } else if (result.ptys.length > 0) {
-          s.sessionLoadStates.set(sessionId, {
-            status: 'loaded',
-            lastActiveWorkspaceId: result.lastActiveWorkspaceId ?? previousWorkspaceId,
-            focusedPaneId: previousFocusedPaneId,
-            paneCount,
-          });
-        } else {
-          s.sessionLoadStates.set(sessionId, {
-            status: 'unloaded',
-            lastActiveWorkspaceId: result.lastActiveWorkspaceId ?? previousWorkspaceId,
-            focusedPaneId: previousFocusedPaneId,
-            paneCount,
-          });
-        }
-
-        recomputeMatches(s);
-        recomputeTree(s);
-      }));
-    } catch (err) {
-      setState(produce((s) => {
-        s.loadingSessionIds.delete(sessionId);
+      if (result instanceof Error) {
         s.sessionLoadStates.set(sessionId, {
           status: 'error',
-          error: err instanceof Error ? err.message : 'Unknown error',
+          error: result.message,
           lastActiveWorkspaceId: previousWorkspaceId,
           focusedPaneId: previousFocusedPaneId,
           paneCount: previousPaneCount,
         });
         recomputeTree(s);
-      }));
-    }
+        return;
+      }
+
+      const sessionMetadata = s.allSessions.get(sessionId);
+      const existingIndex = new Map(s.allPtys.map((pty, index) => [pty.ptyId, index] as const));
+
+      for (const pty of result.ptys) {
+        const nextPty: PtyInfo = {
+          ...pty,
+          sessionId,
+          sessionMetadata,
+        };
+
+        const index = existingIndex.get(pty.ptyId);
+        if (index === undefined) {
+          existingIndex.set(pty.ptyId, s.allPtys.length);
+          s.allPtys.push(nextPty);
+        } else {
+          s.allPtys[index] = {
+            ...s.allPtys[index],
+            ...nextPty,
+          };
+        }
+      }
+
+      s.allPtysIndex = new Map(s.allPtys.map((pty, index) => [pty.ptyId, index] as const));
+
+      const paneCount = result.ptys.length > 0
+        ? result.ptys.length
+        : (previousPaneCount ?? s.sessionLoadStates.get(sessionId)?.paneCount);
+
+      if (result.ptys.length > 0) {
+        s.sessionLoadStates.set(sessionId, {
+          status: 'loaded',
+          lastActiveWorkspaceId: result.lastActiveWorkspaceId ?? previousWorkspaceId,
+          focusedPaneId: previousFocusedPaneId,
+          paneCount,
+        });
+      } else {
+        s.sessionLoadStates.set(sessionId, {
+          status: 'unloaded',
+          lastActiveWorkspaceId: result.lastActiveWorkspaceId ?? previousWorkspaceId,
+          focusedPaneId: previousFocusedPaneId,
+          paneCount,
+        });
+      }
+
+      recomputeMatches(s);
+      recomputeTree(s);
+    }));
   };
 
   /** Get the loading state for a session */
@@ -466,7 +452,7 @@ export function createAggregateViewActions(
           s.selectedIndex = 0;
           s.selectedPtyId = null;
           s.selectedSessionId = null;
-          s.previewMode = false;
+          clearPreviewState(s);
         }
       })
     );

@@ -11,6 +11,8 @@ import type { SessionManager } from "../services/SessionManager"
 import type { PtyId, SessionId, Cols, Rows } from "../types"
 import type { SessionMetadata, SerializedSession, SerializedLayoutNode } from "../models"
 import type { GitDiffStats, GitInfo } from "../services/pty/helpers"
+import type { SessionError } from "../errors"
+import { AggregateBridgeError, ServicesNotInitializedError } from "../errors"
 import { getSessionPtyMapping, registerPtyPane, type SessionPtyMapping } from "./shim-bridge"
 import { getPtyService, getSessionManager, hasServices } from "./services-instance"
 
@@ -417,13 +419,9 @@ export async function listSessionsWithPtysWithService(
   const result: SessionWithPtys[] = []
   const pendingLoads: Promise<void>[] = []
 
-  console.log(`[listSessionsWithPtys] Starting loop for ${sessions.length} sessions, active: ${activeSessionId}, activePTYs: ${allActivePtyIds.length}`)
-  
   for (const session of sessions) {
     const isActive = session.id === activeSessionId
     const cached = sessionPtyCache.get(session.id)
-    
-    console.log(`[listSessionsWithPtys] Session: ${session.name} (${session.id}), isActive: ${isActive}, cached: ${cached ? `loaded=${cached.isLoaded}, ptys=${cached.ptyIds.size}` : 'null'}`)
 
     // If we have cached data, use it
     if (cached && cached.isLoaded) {
@@ -481,8 +479,7 @@ export async function listSessionsWithPtysWithService(
       // For active session, use all active PTY IDs
       // (The active session owns all currently running PTYs)
       const activeSessionPtyIds = [...activePtyIdSet]
-      console.log(`[listSessionsWithPtys] Active session ${session.id} using ${activeSessionPtyIds.length} active PTYs:`, activeSessionPtyIds)
-      
+
       // Fetch metadata for all active PTYs
       const loadPromise = (async () => {
         try {
@@ -497,8 +494,7 @@ export async function listSessionsWithPtysWithService(
             ;(metadata as unknown as Record<string, unknown>).sessionMetadata = session
             ptys.push(metadata)
           }
-          console.log(`[listSessionsWithPtys] Loaded ${ptys.length} PTYs for active session ${session.id}`)
-          
+
           // Update cache with actual PTY IDs (not pane IDs)
           sessionPtyCache.set(session.id, activeSessionPtyIds.map(id => asPtyId(id)), true)
         } catch (e) {
@@ -704,10 +700,9 @@ export function invalidateSessionCache(sessionId: string): void {
 export async function getPtyMetadata(
   ptyId: string,
   options: ListAllPtysOptions = {}
-): Promise<PtyMetadata | null> {
+): Promise<PtyMetadata | null | ServicesNotInitializedError> {
   if (!hasServices()) {
-    console.warn("Services not initialized, cannot fetch PTY metadata")
-    return null
+    return new ServicesNotInitializedError({ operation: 'aggregate PTY metadata fetch' })
   }
   return getPtyMetadataWithService(getPtyService(), ptyId, options)
 }
@@ -722,10 +717,9 @@ export async function getPtyMetadata(
  */
 export async function listAllPtysWithMetadata(
   options: ListAllPtysOptions = {}
-): Promise<PtyMetadata[]> {
+): Promise<PtyMetadata[] | AggregateBridgeError | ServicesNotInitializedError> {
   if (!hasServices()) {
-    console.warn("Services not initialized, cannot list PTYs")
-    return []
+    return new ServicesNotInitializedError({ operation: 'aggregate PTY list' })
   }
   return listAllPtysWithMetadataWithService(getPtyService(), options)
 }
@@ -759,19 +753,21 @@ export async function getPtyMetadataWithService(
 export async function listAllPtysWithMetadataWithService(
   pty: PtyService,
   options: ListAllPtysOptions = {}
-): Promise<PtyMetadata[]> {
+): Promise<PtyMetadata[] | AggregateBridgeError> {
   try {
     const ptyIds = await pty.listAll()
 
-    // Fetch all PTY metadata in parallel
     const results = await Promise.all(
       ptyIds.map((id) => fetchPtyMetadata(pty, id, { skipGitDiffStats: options.skipGitDiffStats }))
     )
 
-    // Filter out null values
     return results.filter((meta): meta is PtyMetadata => meta !== null)
-  } catch {
-    return []
+  } catch (error) {
+    return new AggregateBridgeError({
+      operation: 'list PTYs with metadata',
+      target: 'all-ptys',
+      reason: error instanceof Error ? error.message : String(error),
+    })
   }
 }
 
@@ -783,10 +779,8 @@ export async function listAllPtysWithMetadataWithService(
 export interface LoadSessionPtysResult {
   /** Session ID that was loaded */
   sessionId: string
-  /** PTYs in the session (empty if error) */
+  /** PTYs in the session */
   ptys: PtyMetadata[]
-  /** Error message if loading failed */
-  error: string | null
   /** Last active workspace ID from session data */
   lastActiveWorkspaceId: number | undefined
 }
@@ -800,18 +794,17 @@ export interface LoadSessionPtysResult {
  */
 export async function loadSessionPtysOnDemand(
   sessionId: string
-): Promise<LoadSessionPtysResult> {
+): Promise<LoadSessionPtysResult | SessionError | AggregateBridgeError | ServicesNotInitializedError> {
+  if (!hasServices()) {
+    return new ServicesNotInitializedError({ operation: 'aggregate session PTY load' })
+  }
+
   const ptyService = getPtyService()
   const sessionManager = getSessionManager()
 
   const sessionResult = await sessionManager.loadSession(sessionId as SessionId)
   if (sessionResult instanceof Error) {
-    return {
-      sessionId,
-      ptys: [],
-      error: 'Failed to load session',
-      lastActiveWorkspaceId: undefined,
-    }
+    return sessionResult
   }
 
   let ptys = await loadSessionPtysWithService(
@@ -854,10 +847,17 @@ export async function loadSessionPtysOnDemand(
     )
   }
 
+  if (ptys === null) {
+    return new AggregateBridgeError({
+      operation: 'load session PTYs on demand',
+      target: sessionId,
+      reason: 'session PTY mapping could not be resolved',
+    })
+  }
+
   return {
     sessionId,
-    ptys: ptys ?? [],
-    error: ptys === null ? 'Failed to load session' : null,
+    ptys,
     lastActiveWorkspaceId: sessionResult.activeWorkspaceId,
   }
 }

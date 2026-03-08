@@ -36,6 +36,11 @@ export async function listSessions(): Promise<readonly SessionMetadata[]> {
   return listSessionsWithService(getSessionManager())
 }
 
+/** List all sessions without collapsing errors to an empty array */
+export async function listSessionsResult(): Promise<readonly SessionMetadata[] | SessionStorageError> {
+  return listSessionsResultWithService(getSessionManager())
+}
+
 /** Create a new session */
 export async function createSession(name: string): Promise<string | SessionStorageError> {
   return createSessionWithService(getSessionManager(), name)
@@ -93,9 +98,21 @@ export async function getSessionSummary(
   return getSessionSummaryWithService(getSessionManager(), id)
 }
 
+/** Get session summary without collapsing errors to null */
+export async function getSessionSummaryResult(
+  id: string
+): Promise<{ workspaceCount: number; paneCount: number } | null | SessionError> {
+  return getSessionSummaryResultWithService(getSessionManager(), id)
+}
+
 /** Get persisted aggregate session ordering */
 export async function getAggregateSessionOrder(): Promise<string[]> {
   return getAggregateSessionOrderWithService(getSessionManager())
+}
+
+/** Get persisted aggregate session ordering without collapsing errors to an empty array */
+export async function getAggregateSessionOrderResult(): Promise<string[] | SessionStorageError> {
+  return getAggregateSessionOrderResultWithService(getSessionManager())
 }
 
 /** Persist aggregate session ordering */
@@ -156,9 +173,16 @@ export async function loadSessionData(
 
 /** List sessions with a specific service */
 export async function listSessionsWithService(manager: SessionManager): Promise<readonly SessionMetadata[]> {
-  const result = await manager.listSessions()
+  const result = await listSessionsResultWithService(manager)
   if (result instanceof Error) return []
   return result
+}
+
+/** List sessions with a specific service without collapsing errors */
+export async function listSessionsResultWithService(
+  manager: SessionManager
+): Promise<readonly SessionMetadata[] | SessionStorageError> {
+  return manager.listSessions()
 }
 
 /** Create session with a specific service */
@@ -235,18 +259,33 @@ export async function getSessionSummaryWithService(
   manager: SessionManager,
   id: string
 ): Promise<{ workspaceCount: number; paneCount: number } | null> {
-  const result = await manager.getSessionSummary(id as SessionId)
+  const result = await getSessionSummaryResultWithService(manager, id)
   if (result instanceof Error) return null
   return result
+}
+
+/** Get session summary with a specific service without collapsing errors */
+export async function getSessionSummaryResultWithService(
+  manager: SessionManager,
+  id: string
+): Promise<{ workspaceCount: number; paneCount: number } | null | SessionError> {
+  return manager.getSessionSummary(id as SessionId)
 }
 
 /** Get persisted aggregate session ordering with a specific service */
 export async function getAggregateSessionOrderWithService(
   manager: SessionManager
 ): Promise<string[]> {
-  const result = await manager.getAggregateSessionOrder()
+  const result = await getAggregateSessionOrderResultWithService(manager)
   if (result instanceof Error) return []
   return result
+}
+
+/** Get persisted aggregate session ordering with a specific service without collapsing errors */
+export async function getAggregateSessionOrderResultWithService(
+  manager: SessionManager
+): Promise<string[] | SessionStorageError> {
+  return manager.getAggregateSessionOrder()
 }
 
 /** Persist aggregate session ordering with a specific service */

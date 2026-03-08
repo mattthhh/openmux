@@ -42,7 +42,7 @@ import { useSession } from './SessionContext';
 import { useTerminal } from './TerminalContext';
 import { findPaneLocation, findPtyLocation } from '../components/aggregate/utils';
 import { collectPanes } from '../core/layout-tree';
-import { getAggregateSessionOrder, setAggregateSessionOrder } from '../effect/bridge/session-bridge';
+import { getAggregateSessionOrderResult, setAggregateSessionOrder } from '../effect/bridge/session-bridge';
 
 const AggregateViewContext = createContext<AggregateViewContextValue | null>(null);
 
@@ -123,7 +123,12 @@ interface AggregateViewProviderProps extends ParentProps {}
   const handleTitleChange = createTitleChangeHandler(setState);
 
   const loadPersistedSessionOrder = async (): Promise<void> => {
-    const persistedOrder = await getAggregateSessionOrder();
+    const persistedOrder = await getAggregateSessionOrderResult();
+    if (persistedOrder instanceof Error) {
+      console.error('Failed to load aggregate session order:', persistedOrder.message);
+      return;
+    }
+
     setState(produce((s) => {
       s.manualSessionOrder = persistedOrder;
       recomputeTree(s);

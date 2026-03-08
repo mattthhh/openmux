@@ -86,6 +86,14 @@ export function getDefaultLoadState(): SessionLoadState {
   return { status: 'unloaded' };
 }
 
+/** Reset aggregate preview state consistently */
+export function clearPreviewState(
+  state: Pick<AggregateViewState, 'previewMode' | 'previewZoomed'>
+): void {
+  state.previewMode = false;
+  state.previewZoomed = false;
+}
+
 function sortPtysForSession(
   ptys: PtyInfo[],
   paneOrder: Map<string, number> | undefined
@@ -363,7 +371,7 @@ export function recomputeMatches(state: AggregateViewState): void {
 
   if (state.selectedPtyId && !matchedPtysIndex.has(state.selectedPtyId)) {
     state.selectedPtyId = null;
-    state.previewMode = false;
+    clearPreviewState(state);
   }
 }
 
@@ -431,7 +439,7 @@ export function recomputeTree(state: AggregateViewState): void {
     state.selectedIndex = 0;
     state.selectedPtyId = null;
     state.selectedSessionId = null;
-    state.previewMode = false;
+    clearPreviewState(state);
     return;
   }
 
@@ -444,7 +452,7 @@ export function recomputeTree(state: AggregateViewState): void {
     }
 
     state.selectedPtyId = null;
-    state.previewMode = false;
+    clearPreviewState(state);
   }
 
   if (previousSelectedSessionId) {
