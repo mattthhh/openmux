@@ -30,6 +30,8 @@ export interface PtyTreeRowProps {
   indent: string;
   /** Theme colors */
   aggregateTheme: AggregateTheme;
+  /** Host/background color used for codex-style dark shimmer */
+  shimmerTargetColor: string;
   /** Base text colors */
   textColors: {
     foreground: string;
@@ -206,7 +208,9 @@ export function PtyTreeRow(props: PtyTreeRowProps) {
     let currentColor = baseColor;
 
     for (let i = 0; i < text.length; i++) {
-      const nextColor = getShimmerColor(baseColor, i, text.length) ?? baseColor;
+      const nextColor = getShimmerColor(baseColor, i, text.length, {
+        targetColor: props.shimmerTargetColor,
+      }) ?? baseColor;
 
       if (nextColor !== currentColor) {
         if (currentRun) {

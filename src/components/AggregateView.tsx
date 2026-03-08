@@ -820,6 +820,7 @@ export function AggregateView(props: AggregateViewProps) {
                               treePrefix={ptyTreePrefix()}
                               indent={ptyIndent()}
                               aggregateTheme={theme.ui.aggregate}
+                              shimmerTargetColor={hostBgColor()}
                               textColors={textColors}
                               onClick={() => {
                                 const ptyNode = node() as import('../contexts/aggregate-view-types').PtyTreeNode;

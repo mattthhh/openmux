@@ -46,12 +46,14 @@ type RGB = [r: number, g: number, b: number];
 interface ShimmerConfig {
   /** Sweep duration in seconds */
   sweepDuration: number;
-  /** Half-width of the bright band in characters */
+  /** Half-width of the shimmer band in characters */
   bandHalfWidth: number;
   /** Padding before/after text for smooth entry/exit */
   padding: number;
   /** Maximum blend strength (0-1) */
   maxBlend: number;
+  /** Color the band blends toward (codex-style: terminal background) */
+  targetColor: string;
   /** Update throttle in ms */
   throttleMs: number;
 }
@@ -62,6 +64,7 @@ const DEFAULT_CONFIG: ShimmerConfig = {
   bandHalfWidth: 5,
   padding: 10,
   maxBlend: 0.9,
+  targetColor: '#000000',
   throttleMs: 100,
 };
 
@@ -145,7 +148,7 @@ function calculateShimmerColor(
   config: ShimmerConfig
 ): string {
   const baseRgb = hexToRgb(baseColor);
-  const highlightRgb: RGB = [255, 255, 255];
+  const targetRgb = hexToRgb(config.targetColor);
 
   const bandHalfWidth = Math.max(1, config.bandHalfWidth);
   const distance = Math.abs(position - sweepPosition);
@@ -155,7 +158,7 @@ function calculateShimmerColor(
     return baseColor;
   }
 
-  const [r, g, b] = blendRgb(highlightRgb, baseRgb, intensity * config.maxBlend);
+  const [r, g, b] = blendRgb(targetRgb, baseRgb, intensity * config.maxBlend);
   return rgbToHex(r, g, b);
 }
 
