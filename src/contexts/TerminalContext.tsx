@@ -326,8 +326,8 @@ export function TerminalProvider(props: TerminalProviderProps) {
       return undefined;
     }
 
-    // Resubscribe to each PTY
-    for (const [paneId, ptyId] of savedMapping) {
+    // Resubscribe to all PTYs in parallel for faster session switching
+    const subscriptionPromises = Array.from(savedMapping.entries()).map(async ([paneId, ptyId]) => {
       try {
         // Subscribe to PTY with unified caches
         const unsub = await subscribeToPtyWithCaches(
@@ -338,16 +338,28 @@ export function TerminalProvider(props: TerminalProviderProps) {
           { cacheScrollState: shouldCacheScrollState }
         );
 
+        return { paneId, ptyId, unsub, success: true };
+      } catch {
+        // PTY may have exited while suspended
+        return { paneId, ptyId, unsub: null, success: false };
+      }
+    });
+
+    const results = await Promise.all(subscriptionPromises);
+
+    // Apply results after all subscriptions complete
+    for (const result of results) {
+      if (result.success && result.unsub) {
         // Store unsubscribe function
-        unsubscribeFns.set(ptyId, unsub);
+        unsubscribeFns.set(result.ptyId, result.unsub);
 
         // Restore pty→pane mapping
-        ptyToPaneMap.set(ptyId, paneId);
-        ptyToSessionMap.set(ptyId, { sessionId, paneId });
-      } catch {
-        // PTY may have exited while suspended - remove from mapping
-        savedMapping.delete(paneId);
-        missingPaneIds.add(paneId);
+        ptyToPaneMap.set(result.ptyId, result.paneId);
+        ptyToSessionMap.set(result.ptyId, { sessionId, paneId: result.paneId });
+      } else {
+        // PTY exited while suspended - remove from mapping
+        savedMapping.delete(result.paneId);
+        missingPaneIds.add(result.paneId);
       }
     }
 

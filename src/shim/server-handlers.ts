@@ -178,12 +178,15 @@ export function createServerHandlers(state: ShimServerState, options?: ShimServe
     });
     if (ptyIdsResult instanceof ShimConnectionError) return ptyIdsResult;
 
-    for (const id of ptyIdsResult) {
-      const result = await subscribeToPty(String(id));
-      if (result instanceof ShimConnectionError) {
-        console.warn(`Failed to subscribe to PTY ${id}:`, result.message);
-      }
-    }
+    // Subscribe to all PTYs in parallel for faster client attachment
+    await Promise.all(
+      ptyIdsResult.map(async (id) => {
+        const result = await subscribeToPty(String(id));
+        if (result instanceof ShimConnectionError) {
+          console.warn(`Failed to subscribe to PTY ${id}:`, result.message);
+        }
+      })
+    );
     return ptyIdsResult;
   }
 

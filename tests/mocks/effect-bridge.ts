@@ -9,6 +9,7 @@ export const effectBridgeMocks = {
   loadSessionData: vi.fn(),
   switchToSession: vi.fn(),
   createPtySession: vi.fn(),
+  writeToPty: vi.fn(),
   destroyPty: vi.fn(),
   destroyAllPtys: vi.fn(),
   getActiveSessionIdForShim: vi.fn(),
