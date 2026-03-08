@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.8](https://github.com/monotykamary/openmux/compare/v0.3.7...v0.3.8) (2026-03-08)
+
+
+### Features
+
+* **aggregate:** add session picker overlay support ([6ee8d38](https://github.com/monotykamary/openmux/commit/6ee8d38ba5eb05beb2d7bd4e4ef8022e83f2646b))
+* **aggregate:** darken activity shimmer band ([f8cb323](https://github.com/monotykamary/openmux/commit/f8cb323222fa4d8249c4c7735ae79a32d961eba5))
+* **aggregate:** enable copy mode in preview ([d564605](https://github.com/monotykamary/openmux/commit/d564605f036faed76dcff60188f976ab31313617))
+* **aggregate:** redesign session tree and stabilize session workflows ([cd617de](https://github.com/monotykamary/openmux/commit/cd617defaebeb09aab65a9f5d5b03f239854416e))
+* **aggregate:** simplify preview and git metadata refresh ([3378d6e](https://github.com/monotykamary/openmux/commit/3378d6ed27ae9813a1e21a64d4b55c6055504106))
+* **aggregate:** tighten layout and refresh tests ([6d72e8d](https://github.com/monotykamary/openmux/commit/6d72e8da1ce5452b6fc7cb3ed3a4cfabb989a599))
+
+
+### Bug Fixes
+
+* **aggregate:** harden refresh and preview state ([61b4451](https://github.com/monotykamary/openmux/commit/61b445109888adc43fa0ce6900dc2a73ffb9751a))
+
+
+### Performance
+
+* **session:** parallelize PTY subscriptions during session switch ([80e8da2](https://github.com/monotykamary/openmux/commit/80e8da2837d69a9dd1602774aefb472638bf3507))
+
 ### [0.3.7](https://github.com/monotykamary/openmux/compare/v0.3.6...v0.3.7) (2026-03-05)
 
 ### [0.3.6](https://github.com/monotykamary/openmux/compare/v0.3.5...v0.3.6) (2026-02-24)
