@@ -85,6 +85,7 @@ function getCombos(bindings: ResolvedKeybindingMap, action: string): string[] {
 export function getHintsText(
   inSearchMode: boolean,
   previewMode: boolean,
+  copyModeActive: boolean,
   keybindings: ResolvedKeybindings,
   showInactive: boolean,
   vimEnabled: boolean,
@@ -102,6 +103,10 @@ export function getHintsText(
     const next = formatComboSet(getCombos(aggregateBindings.search, 'aggregate.search.next'));
     const prev = formatComboSet(getCombos(aggregateBindings.search, 'aggregate.search.prev'));
     return `${confirm}:confirm ${cancel}:cancel ${next}/${prev}:next/prev`;
+  }
+
+  if (copyModeActive) {
+    return 'esc/q:exit enter/y:copy v/V/C-v:select';
   }
 
   if (previewMode) {

@@ -69,6 +69,12 @@ export function createAggregatePreviewHandler(deps: AggregateKeyboardDeps) {
 
     const action = matchKeybinding(keybindings.aggregate.preview, keyEvent);
     if (handlePreviewAction(action)) return true;
+
+    if (matchKeybinding(keybindings.normal, keyEvent) === 'copy.mode') {
+      deps.handleEnterCopyMode();
+      return true;
+    }
+
     return forwardToPreviewPty(event);
   };
 

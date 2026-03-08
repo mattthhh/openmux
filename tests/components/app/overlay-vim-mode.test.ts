@@ -151,4 +151,31 @@ describe('createOverlayVimMode', () => {
     deps.search.vimMode = 'insert';
     expect(overlayVimMode()).toBe('insert');
   });
+
+  it('aggregate copy mode hides aggregate vim badge', () => {
+    const deps = createDeps('overlays');
+    deps.aggregateState.showAggregateView = true;
+    deps.keyboardState.state.mode = 'copy';
+
+    const overlayVimMode = createOverlayVimMode({
+      config: deps.config,
+      confirmationVisible: () => deps.confirmation.value,
+      commandPaletteState: deps.commandPaletteState,
+      paneRenameState: deps.paneRenameState,
+      workspaceLabelState: deps.workspaceLabelState,
+      session: deps.session,
+      sessionState: deps.sessionState,
+      aggregateState: deps.aggregateState,
+      keyboardState: deps.keyboardState,
+      search: deps.search,
+      commandPaletteVimMode: deps.commandPaletteVimMode,
+      paneRenameVimMode: deps.paneRenameVimMode,
+      workspaceLabelVimMode: deps.workspaceLabelVimMode,
+      sessionPickerVimMode: deps.sessionPickerVimMode,
+      templateOverlayVimMode: deps.templateOverlayVimMode,
+      aggregateVimMode: deps.aggregateVimMode,
+    });
+
+    expect(overlayVimMode()).toBeNull();
+  });
 });

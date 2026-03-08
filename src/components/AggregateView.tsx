@@ -17,10 +17,13 @@ import { useTerminal } from '../contexts/TerminalContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useSelection } from '../contexts/SelectionContext';
 import { useSearch } from '../contexts/SearchContext';
+import { useCopyMode } from '../contexts/CopyModeContext';
 import type { ITerminalEmulator } from '../terminal/emulator-interface';
 import { getEmulator, getHostBackgroundColor } from '../effect/bridge';
 import { useOverlayKeyboardHandler } from '../contexts/keyboard/use-overlay-keyboard-handler';
 import { useOverlayColors } from './overlay-colors';
+import { createCopyModeVimState } from './app/copy-mode-vim';
+import { createCopyModeKeyHandler } from './app/copy-mode-keyboard';
 import {
   PtyCard,
   InteractivePreview,
@@ -48,6 +51,7 @@ interface AggregateViewProps {
 
 export function AggregateView(props: AggregateViewProps) {
   const config = useConfig();
+  const keyboard = useKeyboardState();
   const {
     state,
     closeAggregateView,
@@ -60,7 +64,14 @@ export function AggregateView(props: AggregateViewProps) {
     exitPreviewMode,
     selectPty,
   } = useAggregateView();
-  const { exitAggregateMode, enterSearchMode: keyboardEnterSearchMode } = useKeyboardState();
+  const {
+    state: keyboardState,
+    enterAggregateMode,
+    exitAggregateMode,
+    enterSearchMode: keyboardEnterSearchMode,
+    enterCopyMode: keyboardEnterCopyMode,
+    exitCopyMode: keyboardExitCopyMode,
+  } = keyboard;
   const { state: layoutState, switchWorkspace, focusPane } = useLayout();
   const { state: sessionState, switchSession } = useSession();
   const terminal = useTerminal();
@@ -68,11 +79,13 @@ export function AggregateView(props: AggregateViewProps) {
   const theme = useTheme();
   const { foreground: overlayFg, muted: overlayMuted, subtle: overlaySubtle } = useOverlayColors();
   const { clearAllSelections, startSelection, updateSelection, completeSelection, clearSelection, getSelection } = useSelection();
+  const copyMode = useCopyMode();
   // Keep search context to access searchState reactively (it's a getter)
   const search = useSearch();
   const { enterSearchMode, exitSearchMode, setSearchQuery, nextMatch, prevMatch } = search;
   const vimEnabled = () => config.config().keyboard.vimMode === 'overlays';
   const [vimMode, setVimMode] = createSignal<VimInputMode>('normal');
+  const [aggregateCopyModeActive, setAggregateCopyModeActive] = createSignal(false);
   const buildVimHandlers = (timeoutMs: number) => ({
     list: createVimSequenceHandler({
       timeoutMs,
@@ -103,6 +116,10 @@ export function AggregateView(props: AggregateViewProps) {
   });
   let vimHandlers = buildVimHandlers(config.config().keyboard.vimSequenceTimeoutMs);
   const getVimHandlers = () => vimHandlers;
+  const copyModeVimState = createCopyModeVimState({
+    config,
+    isCopyModeActive: () => state.showAggregateView && keyboardState.mode === 'copy',
+  });
 
   // Track prefix mode for prefix+esc to exit interactive mode
   const [prefixActive, setPrefixActive] = createSignal(false);
@@ -174,6 +191,32 @@ export function AggregateView(props: AggregateViewProps) {
     if (inSearchMode() || state.previewMode) {
       setVimMode('normal');
     }
+  });
+
+  createEffect(() => {
+    if (
+      state.showAggregateView &&
+      state.previewMode &&
+      keyboardState.mode === 'copy' &&
+      state.selectedPtyId &&
+      copyMode.isActive(state.selectedPtyId)
+    ) {
+      setAggregateCopyModeActive(true);
+    }
+  });
+
+  createEffect(() => {
+    if (!aggregateCopyModeActive()) return;
+
+    const activeCopyPtyId = copyMode.getActivePtyId();
+    const shouldKeepCopyMode =
+      state.showAggregateView &&
+      state.previewMode &&
+      !!activeCopyPtyId &&
+      activeCopyPtyId === state.selectedPtyId;
+
+    if (shouldKeepCopyMode) return;
+    exitAggregateCopyMode();
   });
 
   createEffect(() => {
@@ -259,6 +302,32 @@ export function AggregateView(props: AggregateViewProps) {
     setInSearchMode(true);
   };
 
+  const exitAggregateCopyMode = () => {
+    copyMode.exitCopyMode();
+    setAggregateCopyModeActive(false);
+    if (keyboardState.mode === 'copy') {
+      keyboardExitCopyMode();
+      if (state.showAggregateView) {
+        enterAggregateMode();
+      }
+    }
+  };
+
+  const handleEnterCopyMode = () => {
+    const selectedPtyId = state.selectedPtyId;
+    if (!state.previewMode || !selectedPtyId) return;
+    clearAllSelections();
+    keyboardEnterCopyMode();
+    copyMode.enterCopyMode(selectedPtyId);
+    setAggregateCopyModeActive(true);
+  };
+
+  const handleCopyModeKeys = createCopyModeKeyHandler({
+    copyMode,
+    exitCopyMode: exitAggregateCopyMode,
+    getVimHandler: copyModeVimState.getCopyVimHandler,
+  });
+
   // Prefix timeout management
   const clearPrefixTimeout = () => {
     if (prefixTimeout) {
@@ -293,6 +362,12 @@ export function AggregateView(props: AggregateViewProps) {
     getFilterQuery: () => state.filterQuery,
     getSearchState: () => search.searchState,
     getInSearchMode: inSearchMode,
+    getCopyModeActive: () => (
+      state.previewMode &&
+      keyboardState.mode === 'copy' &&
+      !!state.selectedPtyId &&
+      copyMode.isActive(state.selectedPtyId)
+    ),
     getPrefixActive: prefixActive,
     getKeybindings: () => config.keybindings(),
     getMatchedCount: () => state.matchedPtys.length,
@@ -319,6 +394,8 @@ export function AggregateView(props: AggregateViewProps) {
     nextMatch,
     prevMatch,
     handleEnterSearch,
+    handleEnterCopyMode,
+    handleCopyModeKeys,
     handleJumpToPty,
     onRequestQuit: props.onRequestQuit,
     onDetach: props.onDetach,
@@ -368,6 +445,7 @@ export function AggregateView(props: AggregateViewProps) {
   const hintsText = () => getHintsText(
     inSearchMode(),
     state.previewMode,
+    state.previewMode && !!state.selectedPtyId && copyMode.isActive(state.selectedPtyId),
     config.keybindings(),
     state.showInactive,
     vimEnabled(),
@@ -379,6 +457,13 @@ export function AggregateView(props: AggregateViewProps) {
 
   // Calculate footer widths
   const footerWidths = () => calculateFooterWidths(props.width, filterText(), hintsText());
+  const previewBorderColor = () => {
+    if (!state.previewMode) return theme.pane.borderColor;
+    if (state.selectedPtyId && copyMode.isActive(state.selectedPtyId)) {
+      return theme.pane.copyModeBorderColor;
+    }
+    return theme.pane.focusedBorderColor;
+  };
 
   return (
     <Show when={state.showAggregateView}>
@@ -459,7 +544,7 @@ export function AggregateView(props: AggregateViewProps) {
               height: layout().contentHeight,
               border: true,
               borderStyle: borderStyleMap[theme.pane.borderStyle] ?? 'single',
-              borderColor: state.previewMode ? theme.pane.focusedBorderColor : theme.pane.borderColor,
+              borderColor: previewBorderColor(),
             }}
             onMouseDown={(e: Parameters<typeof mouseHandlers.handlePreviewMouseDown>[0]) => {
               // Click on preview enters preview mode if not already in it

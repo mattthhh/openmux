@@ -54,7 +54,10 @@ export function createOverlayVimMode(params: {
     if (workspaceLabelState.show) return workspaceLabelVimMode();
     if (session.showTemplateOverlay) return templateOverlayVimMode();
     if (sessionState.showSessionPicker) return sessionPickerVimMode();
-    if (aggregateState.showAggregateView) return aggregateVimMode();
+    if (aggregateState.showAggregateView) {
+      if (keyboardState.state.mode === 'copy') return null;
+      return aggregateVimMode();
+    }
     if (keyboardState.state.mode === 'search' && search.searchState) {
       return search.vimMode;
     }

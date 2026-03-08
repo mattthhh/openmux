@@ -1,3 +1,4 @@
+import type { KeyboardEvent } from '../../../core/keyboard-event';
 import type { ITerminalEmulator } from '../../../terminal/emulator-interface';
 import type { ResolvedKeybindings } from '../../../core/keybindings';
 import type { VimInputMode } from '../../../core/vim-sequences';
@@ -13,6 +14,7 @@ export interface AggregateKeyboardDeps {
   getFilterQuery: () => string;
   getSearchState: () => { query: string } | null;
   getInSearchMode: () => boolean;
+  getCopyModeActive: () => boolean;
   getPrefixActive: () => boolean;
   getKeybindings: () => ResolvedKeybindings;
   getMatchedCount: () => number;
@@ -47,6 +49,8 @@ export interface AggregateKeyboardDeps {
   nextMatch: () => void;
   prevMatch: () => void;
   handleEnterSearch: () => Promise<void>;
+  handleEnterCopyMode: () => void;
+  handleCopyModeKeys: (event: KeyboardEvent) => boolean;
 
   handleJumpToPty: () => Promise<boolean>;
 

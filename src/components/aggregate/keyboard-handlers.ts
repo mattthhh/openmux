@@ -19,6 +19,7 @@ export function createAggregateKeyboardHandler(deps: AggregateKeyboardDeps) {
   const {
     getPreviewMode,
     getInSearchMode,
+    getCopyModeActive,
     getPrefixActive,
     getKeybindings,
     setPrefixActive,
@@ -30,6 +31,8 @@ export function createAggregateKeyboardHandler(deps: AggregateKeyboardDeps) {
     exitAggregateMode,
     exitPreviewMode,
     handleEnterSearch,
+    handleEnterCopyMode,
+    handleCopyModeKeys,
   } = deps;
 
   const { handleSearchModeKeys } = createAggregateSearchHandler(deps);
@@ -41,13 +44,18 @@ export function createAggregateKeyboardHandler(deps: AggregateKeyboardDeps) {
    */
   const handleKeyDown = (event: KeyboardEvent): boolean => {
     const keybindings = getKeybindings();
-    const combo = eventToCombo({
+    const keyEvent = {
       key: event.key,
       ctrl: event.ctrl,
       alt: event.alt,
       shift: event.shift,
       meta: event.meta,
-    });
+    };
+    const combo = eventToCombo(keyEvent);
+
+    if (getCopyModeActive()) {
+      return handleCopyModeKeys(event);
+    }
 
     // Handle search mode first (when active in preview)
     if (getInSearchMode() && getPreviewMode()) {
@@ -71,13 +79,7 @@ export function createAggregateKeyboardHandler(deps: AggregateKeyboardDeps) {
 
     // Prefix commands (work in both list and preview mode)
     if (getPrefixActive()) {
-      const prefixAction = matchKeybinding(keybindings.aggregate.prefix, {
-        key: event.key,
-        ctrl: event.ctrl,
-        alt: event.alt,
-        shift: event.shift,
-        meta: event.meta,
-      });
+      const prefixAction = matchKeybinding(keybindings.aggregate.prefix, keyEvent);
 
       if (prefixAction) {
         setPrefixActive(false);
@@ -108,9 +110,17 @@ export function createAggregateKeyboardHandler(deps: AggregateKeyboardDeps) {
           if (prefixAction) {
             return true;
           }
-          setPrefixActive(false);
-          clearPrefixTimeout();
       }
+
+      if (matchKeybinding(keybindings.prefix, keyEvent) === 'copy.mode' && getPreviewMode()) {
+        setPrefixActive(false);
+        clearPrefixTimeout();
+        handleEnterCopyMode();
+        return true;
+      }
+
+      setPrefixActive(false);
+      clearPrefixTimeout();
     }
 
     // In preview mode, most keys go to the PTY

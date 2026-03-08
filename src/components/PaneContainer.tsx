@@ -79,6 +79,13 @@ export function PaneContainer() {
   createEffect(() => {
     const activeCopyPty = copyMode.getActivePtyId();
     if (!activeCopyPty) return;
+    if (
+      aggregateState.showAggregateView &&
+      aggregateState.previewMode &&
+      aggregateState.selectedPtyId === activeCopyPty
+    ) {
+      return;
+    }
     const focusedId = focusedPaneId();
     const focusedPtyId = focusedId ? resolvePaneById(focusedId)?.ptyId ?? null : null;
     if (focusedPtyId !== activeCopyPty) {
