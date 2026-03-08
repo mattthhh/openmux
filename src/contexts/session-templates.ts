@@ -141,19 +141,22 @@ export async function buildTemplateFromWorkspaces(params: {
     if (pane.ptyId) {
       try {
         cwd = await params.getCwd(pane.ptyId);
-      } catch {
+      } catch (e) {
+        console.warn('[session-templates] Failed to get CWD:', e);
         cwd = params.fallbackCwd;
       }
       let lastCommand: string | undefined;
       let processName: string | undefined;
       try {
         lastCommand = await params.getLastCommand(pane.ptyId);
-      } catch {
+      } catch (e) {
+        console.warn('[session-templates] Failed to get last command:', e);
         lastCommand = undefined;
       }
       try {
         processName = await params.getForegroundProcess(pane.ptyId);
-      } catch {
+      } catch (e) {
+        console.warn('[session-templates] Failed to get foreground process:', e);
         processName = undefined;
       }
       const normalizedLast = normalizeCommand(lastCommand, shellPath, shellName);

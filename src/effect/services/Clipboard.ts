@@ -2,7 +2,7 @@
  * Clipboard service for cross-platform clipboard operations.
  * Migrated from Effect to errore - uses plain promises instead of Effect.Effect.
  */
-import { tryAsync } from "errore"
+import * as errore from "errore"
 import { ClipboardError } from "../errors"
 
 export interface Clipboard {
@@ -17,7 +17,7 @@ export async function createClipboard(): Promise<Clipboard> {
   const platform = process.platform
 
   const write = async (text: string): Promise<ClipboardError | void> => {
-    const result = await tryAsync<void, ClipboardError>({
+    const result = await errore.tryAsync<void, ClipboardError>({
       try: async () => {
         if (platform === "darwin") {
           const proc = Bun.spawn(["pbcopy"], { stdin: "pipe" })
@@ -48,7 +48,7 @@ export async function createClipboard(): Promise<Clipboard> {
           await proc.exited
         }
       },
-      catch: (e) => new ClipboardError({ operation: "write", reason: String(e) }),
+      catch: (e) => new ClipboardError({ operation: "write", reason: String(e), cause: e }),
     })
 
     // Add timeout handling
@@ -70,7 +70,7 @@ export async function createClipboard(): Promise<Clipboard> {
   }
 
   const read = async (): Promise<ClipboardError | string> => {
-    const result = await tryAsync<string, ClipboardError>({
+    const result = await errore.tryAsync<string, ClipboardError>({
       try: async () => {
         if (platform === "darwin") {
           const result = await Bun.$`pbpaste`.quiet()
@@ -89,7 +89,7 @@ export async function createClipboard(): Promise<Clipboard> {
         }
         return ""
       },
-      catch: (e) => new ClipboardError({ operation: "read", reason: String(e) }),
+      catch: (e) => new ClipboardError({ operation: "read", reason: String(e), cause: e }),
     })
 
     // Add timeout handling

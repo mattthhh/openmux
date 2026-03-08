@@ -24,7 +24,7 @@ import {
   getPtyTitle,
   waitForShimClient,
 } from '../effect/bridge';
-import { tryAsync } from 'errore';
+import * as errore from 'errore';
 
 interface SessionBridgeProps extends ParentProps {}
 
@@ -91,9 +91,9 @@ export function SessionBridge(props: SessionBridgeProps) {
       }
     }
 
-    const waitResult = await tryAsync<void, Error>({
+    const waitResult = await errore.tryAsync<void, Error>({
       try: () => waitForShimClient(),
-      catch: () => new Error('Detach/attach race'),
+      catch: (e) => new Error('Detach/attach race', { cause: e }),
     });
     if (waitResult instanceof Error) return;
 

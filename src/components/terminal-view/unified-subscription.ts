@@ -3,7 +3,7 @@ import type { TerminalCell, UnifiedTerminalUpdate } from '../../core/types';
 import { subscribeUnifiedToPty, getEmulator } from '../../effect/bridge';
 import { deferMacrotask } from '../../core/scheduling';
 import { getKittyGraphicsRenderer } from '../../terminal/kitty-graphics';
-import { tryAsync } from 'errore';
+import * as errore from 'errore';
 import {
   attachVisibleEmulator,
   clearVisiblePty,
@@ -67,10 +67,10 @@ export function setupUnifiedSubscription(deps: UnifiedSubscriptionDeps): void {
 
           const currentEmulator = viewState.emulator;
           if (currentEmulator && 'prefetchScrollbackLines' in currentEmulator) {
-            await tryAsync<void, Error>({
+            await errore.tryAsync<void, Error>({
               try: () => (currentEmulator as { prefetchScrollbackLines: (start: number, count: number) => Promise<void> })
                 .prefetchScrollbackLines(start, count),
-              catch: () => new Error('Prefetch failed'),
+              catch: (e) => new Error('Prefetch failed', { cause: e }),
             });
           }
 
@@ -95,7 +95,7 @@ export function setupUnifiedSubscription(deps: UnifiedSubscriptionDeps): void {
           viewState.emulator = em;
           attachVisibleEmulator(ptyId, em);
 
-          const unsubResult = await tryAsync<() => void, Error>({
+          const unsubResult = await errore.tryAsync<() => void, Error>({
             try: () => subscribeUnifiedToPty(ptyId, (update: UnifiedTerminalUpdate) => {
               if (!mounted) return;
 
@@ -135,7 +135,7 @@ export function setupUnifiedSubscription(deps: UnifiedSubscriptionDeps): void {
 
               requestRenderFrame();
             }),
-            catch: () => new Error('Failed to subscribe to PTY'),
+            catch: (e) => new Error('Failed to subscribe to PTY', { cause: e }),
           });
           if (unsubResult instanceof Error) return;
 

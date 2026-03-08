@@ -3,7 +3,7 @@
  * Migrated from Effect to errore - uses plain promises and Zod schemas.
  */
 import type { z } from "zod"
-import { tryAsync } from "errore"
+import * as errore from "errore"
 import { FileSystemError } from "../errors"
 
 export interface FileSystem {
@@ -41,9 +41,9 @@ export const createFileSystem = (): FileSystem => {
     const file = Bun.file(path)
 
     // Check if file exists
-    const existsResult = await tryAsync<boolean, FileSystemError>({
+    const existsResult = await errore.tryAsync<boolean, FileSystemError>({
       try: () => file.exists(),
-      catch: (e) => new FileSystemError({ operation: "read", path, reason: String(e) }),
+      catch: (e) => new FileSystemError({ operation: "read", path, reason: String(e), cause: e }),
     })
     if (existsResult instanceof FileSystemError) return existsResult
     if (!existsResult) {
@@ -55,26 +55,27 @@ export const createFileSystem = (): FileSystem => {
     }
 
     // Read file text
-    const textResult = await tryAsync<string, FileSystemError>({
+    const textResult = await errore.tryAsync<string, FileSystemError>({
       try: () => file.text(),
-      catch: (e) => new FileSystemError({ operation: "read", path, reason: String(e) }),
+      catch: (e) => new FileSystemError({ operation: "read", path, reason: String(e), cause: e }),
     })
     if (textResult instanceof FileSystemError) return textResult
 
     // Parse JSON
-    const parseResult = await tryAsync<unknown, FileSystemError>({
+    const parseResult = await errore.tryAsync<unknown, FileSystemError>({
       try: async () => JSON.parse(textResult),
-      catch: (e) => new FileSystemError({ operation: "read", path, reason: String(e) }),
+      catch: (e) => new FileSystemError({ operation: "read", path, reason: String(e), cause: e }),
     })
     if (parseResult instanceof FileSystemError) return parseResult
 
     // Validate with schema
-    const validationResult = await tryAsync<A, FileSystemError>({
+    const validationResult = await errore.tryAsync<A, FileSystemError>({
       try: async () => schema.parse(parseResult),
       catch: (e: Error) => new FileSystemError({
         operation: "read",
         path,
         reason: e.message,
+        cause: e,
       }),
     })
 
@@ -87,20 +88,21 @@ export const createFileSystem = (): FileSystem => {
     data: A
   ): Promise<FileSystemError | void> => {
     // Validate data with schema first
-    const validationResult = await tryAsync<A, FileSystemError>({
+    const validationResult = await errore.tryAsync<A, FileSystemError>({
       try: async () => schema.parse(data),
       catch: (e: Error) => new FileSystemError({
         operation: "write",
         path,
         reason: e.message,
+        cause: e,
       }),
     })
     if (validationResult instanceof FileSystemError) return validationResult
 
     // Write to file
-    const writeResult = await tryAsync<number, FileSystemError>({
+    const writeResult = await errore.tryAsync<number, FileSystemError>({
       try: () => Bun.write(path, JSON.stringify(validationResult, null, 2)),
-      catch: (e) => new FileSystemError({ operation: "write", path, reason: String(e) }),
+      catch: (e) => new FileSystemError({ operation: "write", path, reason: String(e), cause: e }),
     })
     if (writeResult instanceof FileSystemError) return writeResult
 
@@ -108,25 +110,25 @@ export const createFileSystem = (): FileSystem => {
   }
 
   const exists = async (path: string): Promise<FileSystemError | boolean> => {
-    const result = await tryAsync<boolean, FileSystemError>({
+    const result = await errore.tryAsync<boolean, FileSystemError>({
       try: () => Bun.file(path).exists(),
-      catch: (e) => new FileSystemError({ operation: "read", path, reason: String(e) }),
+      catch: (e) => new FileSystemError({ operation: "read", path, reason: String(e), cause: e }),
     })
     return result
   }
 
   const ensureDir = async (path: string): Promise<FileSystemError | void> => {
-    const result = await tryAsync<void, FileSystemError>({
+    const result = await errore.tryAsync<void, FileSystemError>({
       try: async () => {
         await Bun.$`mkdir -p ${path}`.quiet()
       },
-      catch: (e) => new FileSystemError({ operation: "write", path, reason: String(e) }),
+      catch: (e) => new FileSystemError({ operation: "write", path, reason: String(e), cause: e }),
     })
     return result
   }
 
   const remove = async (path: string): Promise<FileSystemError | void> => {
-    const result = await tryAsync<void, FileSystemError>({
+    const result = await errore.tryAsync<void, FileSystemError>({
       try: async () => {
         const file = Bun.file(path)
         const fileExists = await file.exists()
@@ -134,13 +136,13 @@ export const createFileSystem = (): FileSystem => {
           await Bun.$`rm -rf ${path}`.quiet()
         }
       },
-      catch: (e) => new FileSystemError({ operation: "delete", path, reason: String(e) }),
+      catch: (e) => new FileSystemError({ operation: "delete", path, reason: String(e), cause: e }),
     })
     return result
   }
 
   const list = async (path: string): Promise<FileSystemError | string[]> => {
-    const result = await tryAsync<string[], FileSystemError>({
+    const result = await errore.tryAsync<string[], FileSystemError>({
       try: async () => {
         const glob = new Bun.Glob("*")
         const files: string[] = []
@@ -149,7 +151,7 @@ export const createFileSystem = (): FileSystem => {
         }
         return files
       },
-      catch: (e) => new FileSystemError({ operation: "read", path, reason: String(e) }),
+      catch: (e) => new FileSystemError({ operation: "read", path, reason: String(e), cause: e }),
     })
     return result
   }
@@ -158,9 +160,9 @@ export const createFileSystem = (): FileSystem => {
     const file = Bun.file(path)
 
     // Check if file exists
-    const existsResult = await tryAsync<boolean, FileSystemError>({
+    const existsResult = await errore.tryAsync<boolean, FileSystemError>({
       try: () => file.exists(),
-      catch: (e) => new FileSystemError({ operation: "read", path, reason: String(e) }),
+      catch: (e) => new FileSystemError({ operation: "read", path, reason: String(e), cause: e }),
     })
     if (existsResult instanceof FileSystemError) return existsResult
     if (!existsResult) {
@@ -171,17 +173,17 @@ export const createFileSystem = (): FileSystem => {
       })
     }
 
-    const result = await tryAsync<string, FileSystemError>({
+    const result = await errore.tryAsync<string, FileSystemError>({
       try: () => file.text(),
-      catch: (e) => new FileSystemError({ operation: "read", path, reason: String(e) }),
+      catch: (e) => new FileSystemError({ operation: "read", path, reason: String(e), cause: e }),
     })
     return result
   }
 
   const writeText = async (path: string, content: string): Promise<FileSystemError | void> => {
-    const result = await tryAsync<number, FileSystemError>({
+    const result = await errore.tryAsync<number, FileSystemError>({
       try: () => Bun.write(path, content),
-      catch: (e) => new FileSystemError({ operation: "write", path, reason: String(e) }),
+      catch: (e) => new FileSystemError({ operation: "write", path, reason: String(e), cause: e }),
     })
     if (result instanceof FileSystemError) return result
     return undefined
@@ -231,19 +233,20 @@ export const createTestFileSystem = (): InMemoryFileSystem => {
     }
 
     // Parse JSON
-    const parseResult = await tryAsync<unknown, FileSystemError>({
+    const parseResult = await errore.tryAsync<unknown, FileSystemError>({
       try: async () => JSON.parse(content),
-      catch: (e) => new FileSystemError({ operation: "read", path, reason: String(e) }),
+      catch: (e) => new FileSystemError({ operation: "read", path, reason: String(e), cause: e }),
     })
     if (parseResult instanceof FileSystemError) return parseResult
 
     // Validate with schema
-    const validationResult = await tryAsync<A, FileSystemError>({
+    const validationResult = await errore.tryAsync<A, FileSystemError>({
       try: async () => schema.parse(parseResult),
       catch: (e: Error) => new FileSystemError({
         operation: "read",
         path,
         reason: e.message,
+        cause: e,
       }),
     })
 
@@ -256,12 +259,13 @@ export const createTestFileSystem = (): InMemoryFileSystem => {
     data: A
   ): Promise<FileSystemError | void> => {
     // Validate data with schema first
-    const validationResult = await tryAsync<A, FileSystemError>({
+    const validationResult = await errore.tryAsync<A, FileSystemError>({
       try: async () => schema.parse(data),
       catch: (e: Error) => new FileSystemError({
         operation: "write",
         path,
         reason: e.message,
+        cause: e,
       }),
     })
     if (validationResult instanceof FileSystemError) return validationResult

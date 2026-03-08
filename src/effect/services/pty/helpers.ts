@@ -4,24 +4,23 @@
  */
 
 import { watch } from "fs"
-import { tryAsync } from "errore"
+import * as errore from "errore"
 import {
   getRepoStatusAsync,
   getDiffStatsAsync,
   type GitDiffStats as NativeGitDiffStats,
   type GitRepoState,
 } from "../../../../native/zig-git/ts/index"
-import { createTaggedError } from "errore"
 
 /** Git watcher setup error - kept for future use
-class GitWatcherError extends createTaggedError({
+class GitWatcherError extends errore.createTaggedError({
   name: "GitWatcherError",
   message: "Git watcher setup failed for $gitDir: $reason",
 }) {}
 */
 
 /** Git info fetch error */
-class GitInfoError extends createTaggedError({
+class GitInfoError extends errore.createTaggedError({
   name: "GitInfoError",
   message: "Git info fetch failed for $cwd: $reason",
 }) {}
@@ -317,9 +316,9 @@ export async function getGitInfo(
   cwd: string,
   options?: { force?: boolean; maxAgeMs?: number }
 ): Promise<GitInfo | undefined> {
-  const entryResult = await tryAsync<RepoEntry | null, GitInfoError>({
+  const entryResult = await errore.tryAsync<RepoEntry | null, GitInfoError>({
     try: () => getRepoEntry(cwd, options),
-    catch: (e) => new GitInfoError({ cwd, reason: String(e) }),
+    catch: (e) => new GitInfoError({ cwd, reason: String(e), cause: e }),
   })
 
   if (entryResult instanceof GitInfoError) return undefined
@@ -354,9 +353,9 @@ export async function getGitBranch(cwd: string): Promise<string | undefined> {
  * Includes untracked changes and binary file count.
  */
 export async function getGitDiffStats(cwd: string): Promise<GitDiffStats | undefined> {
-  const entryResult = await tryAsync<RepoEntry | null, GitInfoError>({
+  const entryResult = await errore.tryAsync<RepoEntry | null, GitInfoError>({
     try: () => getRepoEntry(cwd),
-    catch: (e) => new GitInfoError({ cwd, reason: String(e) }),
+    catch: (e) => new GitInfoError({ cwd, reason: String(e), cause: e }),
   })
 
   if (entryResult instanceof GitInfoError) return undefined

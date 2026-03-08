@@ -203,7 +203,7 @@ export function codepointToChar(codepoint: number, isInvisible: boolean = false)
 function tryFromCodePoint(codepoint: number): string {
   const result = tryAsyncSync<string, ValidationError>({
     try: () => String.fromCodePoint(codepoint),
-    catch: (e) => new ValidationError({ reason: `Invalid codepoint ${codepoint}: ${String(e)}` }),
+    catch: (e) => new ValidationError({ reason: `Invalid codepoint ${codepoint}: ${String(e)}`, cause: e }),
   });
   
   if (result instanceof ValidationError) {

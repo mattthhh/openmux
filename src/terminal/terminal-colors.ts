@@ -8,7 +8,7 @@
  * fall back to environment detection to avoid interfering with stdin.
  */
 
-import { tryAsync } from "errore";
+import * as errore from "errore";
 import { writeHostSequence } from './host-output';
 import { TerminalColorError } from '../effect/errors';
 
@@ -90,12 +90,12 @@ async function queryOscColors(
         clearTimeout(timer);
         timer = null;
       }
-      void tryAsync<void, TerminalColorError>({
+      void errore.tryAsync<void, TerminalColorError>({
         try: () => {
           stdin.setRawMode?.(originalRaw);
           return Promise.resolve();
         },
-        catch: () => new TerminalColorError({ operation: 'cleanup', reason: 'setRawMode failed' }),
+        catch: (e) => new TerminalColorError({ operation: 'cleanup', reason: 'setRawMode failed', cause: e }),
       });
     };
 
@@ -165,17 +165,17 @@ async function queryOscColors(
       }
     }, timeoutMs);
 
-    void tryAsync<void, TerminalColorError>({
+    void errore.tryAsync<void, TerminalColorError>({
       try: () => {
         stdin.setRawMode?.(true);
         return Promise.resolve();
       },
-      catch: () => {
+      catch: (e) => {
         if (timer) {
           clearTimeout(timer);
           timer = null;
         }
-        return new TerminalColorError({ operation: 'setRawMode', reason: 'Failed to set raw mode' });
+        return new TerminalColorError({ operation: 'setRawMode', reason: 'Failed to set raw mode', cause: e });
       },
     }).then((result) => {
       if (result instanceof TerminalColorError) {
@@ -185,7 +185,7 @@ async function queryOscColors(
 
       stdin.on('data', onData);
 
-      void tryAsync<boolean, TerminalColorError>({
+      void errore.tryAsync<boolean, TerminalColorError>({
         try: () => {
           // Query default foreground/background (OSC 10/11) and base 0-15 (OSC 4)
           let osc = '\x1b]10;?\x07\x1b]11;?\x07';
@@ -198,13 +198,13 @@ async function queryOscColors(
           }
           return Promise.resolve(true);
         },
-        catch: () => {
+        catch: (e) => {
           if (timer) {
             clearTimeout(timer);
             timer = null;
           }
           finish(null);
-          return new TerminalColorError({ operation: 'query', reason: 'Failed to write OSC query' });
+          return new TerminalColorError({ operation: 'query', reason: 'Failed to write OSC query', cause: e });
         },
       }).then((writeResult) => {
         if (writeResult instanceof TerminalColorError) {
@@ -305,14 +305,14 @@ export async function queryHostColors(
   const fallbackColors = getHostColors() ?? null;
 
   // First, try OSC queries (best-effort, only if TTY + raw mode available)
-  const oscResult = await tryAsync<OscColorsResult | null, TerminalColorError>({
+  const oscResult = await errore.tryAsync<OscColorsResult | null, TerminalColorError>({
     try: () => queryOscColors(
       _timeoutMs,
       options?.oscMode === 'fast'
         ? { requirePalette: false, requireFgBg: true }
         : { requirePalette: true, requireFgBg: true }
     ).then(r => r instanceof TerminalColorError ? null : r),
-    catch: (e) => new TerminalColorError({ operation: 'query', reason: String(e) }),
+    catch: (e) => new TerminalColorError({ operation: 'query', reason: String(e), cause: e }),
   });
 
   if (!(oscResult instanceof TerminalColorError) && oscResult && (oscResult.foreground !== undefined || oscResult.background !== undefined || oscResult.paletteOverrides)) {

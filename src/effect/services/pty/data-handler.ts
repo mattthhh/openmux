@@ -7,10 +7,10 @@ import type { InternalPtySession } from "./types"
 import { deferMacrotask } from "../../../core/scheduling"
 import { tracePtyChunk, tracePtyEvent } from "../../../terminal/pty-trace"
 import { copyToClipboard } from "../../bridge"
-import { createTaggedError } from "errore"
+import * as errore from "errore"
 
 /** Base64 decode error for clipboard operations */
-class ClipboardDecodeError extends createTaggedError({
+class ClipboardDecodeError extends errore.createTaggedError({
   name: "ClipboardDecodeError",
   message: "Clipboard base64 decode failed: $reason",
 }) {}

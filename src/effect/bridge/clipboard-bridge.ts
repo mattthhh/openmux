@@ -29,7 +29,8 @@ export async function copyToClipboardWithService(clipboard: Clipboard, text: str
   try {
     const result = await clipboard.write(text)
     return !(result instanceof Error)
-  } catch {
+  } catch (e) {
+    console.warn('[clipboard] Write failed:', e)
     return false
   }
 }
@@ -42,7 +43,8 @@ export async function readFromClipboardWithService(clipboard: Clipboard): Promis
     const result = await clipboard.read()
     if (result instanceof Error) return null
     return result
-  } catch {
+  } catch (e) {
+    console.warn('[clipboard] Read failed:', e)
     return null
   }
 }

@@ -2,7 +2,7 @@ import net from 'net';
 import fs from 'fs/promises';
 import { spawn } from 'child_process';
 import type { Buffer } from 'buffer';
-import { tryAsync } from 'errore';
+import * as errore from 'errore';
 
 import { getHostColors } from '../../terminal/terminal-colors';
 import { encodeFrame, FrameReader, SHIM_SOCKET_DIR, SHIM_SOCKET_PATH, type ShimHeader } from '../protocol';
@@ -56,13 +56,13 @@ const handleFrame = createFrameHandler({
 } satisfies FrameHandlerDeps);
 
 async function connectSocket(): Promise<void | ShimConnectionError> {
-  const mkdirResult = await tryAsync<string | undefined, ShimConnectionError>({
+  const mkdirResult = await errore.tryAsync<string | undefined, ShimConnectionError>({
     try: () => fs.mkdir(SHIM_SOCKET_DIR, { recursive: true }),
-    catch: (e) => new ShimConnectionError({ reason: `Failed to create socket directory: ${e}` }),
+    catch: (e) => new ShimConnectionError({ reason: `Failed to create socket directory: ${e}`, cause: e }),
   });
   if (mkdirResult instanceof ShimConnectionError) return mkdirResult;
 
-  const connectResult = await tryAsync<void, ShimConnectionError>({
+  const connectResult = await errore.tryAsync<void, ShimConnectionError>({
     try: () => new Promise<void>((resolve, reject) => {
       const client = net.createConnection(SHIM_SOCKET_PATH);
       const handleError = (error: Error) => {
@@ -90,11 +90,11 @@ async function connectSocket(): Promise<void | ShimConnectionError> {
       client.once('error', handleError);
       client.once('connect', handleConnect);
     }),
-    catch: (e) => new ShimConnectionError({ reason: `Failed to connect to socket: ${e}` }),
+    catch: (e) => new ShimConnectionError({ reason: `Failed to connect to socket: ${e}`, cause: e }),
   });
   if (connectResult instanceof ShimConnectionError) return connectResult;
 
-  const helloResult = await tryAsync<{ header: ShimHeader; payloads: Buffer[] }, ShimConnectionError>({
+  const helloResult = await errore.tryAsync<{ header: ShimHeader; payloads: Buffer[] }, ShimConnectionError>({
     try: () => sendRequest('hello', { clientId: CLIENT_ID, version: CLIENT_VERSION }),
     catch: (e) => {
       if (e instanceof Error && e.message.toLowerCase().includes('detached')) {

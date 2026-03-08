@@ -1,6 +1,6 @@
 import type net from 'net';
 import { dirname } from 'path';
-import { tryAsync } from 'errore';
+import * as errore from 'errore';
 
 import { asPtyId } from '../effect/types';
 import { ResourceStack } from '../effect/resources.js';
@@ -44,9 +44,9 @@ export function createServerHandlers(state: ShimServerState, options?: ShimServe
 
   const applyHostColors = async (colors: TerminalColors): Promise<void> => {
     setHostColors(colors);
-    const result = await tryAsync<void, ShimConnectionError>({
+    const result = await errore.tryAsync<void, ShimConnectionError>({
       try: () => withPty((pty) => pty.setHostColors(colors)),
-      catch: (e) => new ShimConnectionError({ reason: `Failed to apply host colors: ${e}` }),
+      catch: (e) => new ShimConnectionError({ reason: `Failed to apply host colors: ${e}`, cause: e }),
     });
     if (result instanceof ShimConnectionError) {
       console.warn('Failed to apply host colors:', result.message);
@@ -83,15 +83,15 @@ export function createServerHandlers(state: ShimServerState, options?: ShimServe
   async function subscribeToPty(ptyId: string): Promise<void | ShimConnectionError> {
     if (state.ptySubscriptions.has(ptyId)) return;
 
-    const emulatorResult = await tryAsync<ITerminalEmulator, ShimConnectionError>({
+    const emulatorResult = await errore.tryAsync<ITerminalEmulator, ShimConnectionError>({
       try: () => withPty((pty) => pty.getEmulator(asPtyId(ptyId))) as Promise<ITerminalEmulator>,
-      catch: (e) => new ShimConnectionError({ reason: `Failed to get emulator for PTY ${ptyId}: ${e}` }),
+      catch: (e) => new ShimConnectionError({ reason: `Failed to get emulator for PTY ${ptyId}: ${e}`, cause: e }),
     });
     if (emulatorResult instanceof ShimConnectionError) return emulatorResult;
     
     state.ptyEmulators.set(ptyId, emulatorResult);
 
-    const unifiedUnsubResult = await tryAsync<() => void, ShimConnectionError>({
+    const unifiedUnsubResult = await errore.tryAsync<() => void, ShimConnectionError>({
       try: () => withPty((pty) =>
         pty.subscribeUnified(asPtyId(ptyId), (update: UnifiedTerminalUpdate) => {
           const packed = packDirtyUpdate(update.terminalUpdate);
@@ -130,18 +130,18 @@ export function createServerHandlers(state: ShimServerState, options?: ShimServe
           }
         })
       ),
-      catch: (e) => new ShimConnectionError({ reason: `Failed to subscribe to unified updates: ${e}` }),
+      catch: (e) => new ShimConnectionError({ reason: `Failed to subscribe to unified updates: ${e}`, cause: e }),
     });
     if (unifiedUnsubResult instanceof ShimConnectionError) return unifiedUnsubResult;
 
-    const exitUnsubResult = await tryAsync<() => void, ShimConnectionError>({
+    const exitUnsubResult = await errore.tryAsync<() => void, ShimConnectionError>({
       try: () => withPty((pty) =>
         pty.onExit(asPtyId(ptyId), (exitCode: number) => {
           removeMappingForPty(ptyId);
           sendEvent({ type: 'ptyExit', ptyId, exitCode });
         })
       ),
-      catch: (e) => new ShimConnectionError({ reason: `Failed to subscribe to exit events: ${e}` }),
+      catch: (e) => new ShimConnectionError({ reason: `Failed to subscribe to exit events: ${e}`, cause: e }),
     });
     if (exitUnsubResult instanceof ShimConnectionError) return exitUnsubResult;
 
@@ -172,9 +172,9 @@ export function createServerHandlers(state: ShimServerState, options?: ShimServe
   }
 
   async function subscribeAllPtys(): Promise<string[] | ShimConnectionError> {
-    const ptyIdsResult = await tryAsync<string[], ShimConnectionError>({
+    const ptyIdsResult = await errore.tryAsync<string[], ShimConnectionError>({
       try: () => withPty((pty) => pty.listAll()) as Promise<string[]>,
-      catch: (e) => new ShimConnectionError({ reason: `Failed to list PTYs: ${e}` }),
+      catch: (e) => new ShimConnectionError({ reason: `Failed to list PTYs: ${e}`, cause: e }),
     });
     if (ptyIdsResult instanceof ShimConnectionError) return ptyIdsResult;
 
@@ -191,7 +191,7 @@ export function createServerHandlers(state: ShimServerState, options?: ShimServe
   }
 
   async function handleLifecycle(): Promise<void | ShimConnectionError> {
-    const result = await tryAsync<() => void, ShimConnectionError>({
+    const result = await errore.tryAsync<() => void, ShimConnectionError>({
       try: () => withPty((pty) =>
         pty.subscribeToLifecycle((event: { type: 'created' | 'destroyed'; ptyId: string }) => {
           const ptyId = String(event.ptyId);
@@ -208,20 +208,20 @@ export function createServerHandlers(state: ShimServerState, options?: ShimServe
           sendEvent({ type: 'ptyLifecycle', ptyId, event: event.type });
         })
       ),
-      catch: (e) => new ShimConnectionError({ reason: `Failed to subscribe to lifecycle events: ${e}` }),
+      catch: (e) => new ShimConnectionError({ reason: `Failed to subscribe to lifecycle events: ${e}`, cause: e }),
     });
     if (result instanceof ShimConnectionError) return result;
     state.lifecycleUnsub = result;
   }
 
   async function handleTitles(): Promise<void | ShimConnectionError> {
-    const result = await tryAsync<() => void, ShimConnectionError>({
+    const result = await errore.tryAsync<() => void, ShimConnectionError>({
       try: () => withPty((pty) =>
         pty.subscribeToAllTitleChanges((event: { ptyId: string; title: string }) => {
           sendEvent({ type: 'ptyTitle', ptyId: String(event.ptyId), title: event.title });
         })
       ),
-      catch: (e) => new ShimConnectionError({ reason: `Failed to subscribe to title changes: ${e}` }),
+      catch: (e) => new ShimConnectionError({ reason: `Failed to subscribe to title changes: ${e}`, cause: e }),
     });
     if (result instanceof ShimConnectionError) return result;
     state.titleUnsub = result;
@@ -230,7 +230,7 @@ export function createServerHandlers(state: ShimServerState, options?: ShimServe
   async function sendSnapshot(ptyId: string): Promise<void | ShimConnectionError> {
     if (!state.activeClient) return;
 
-    const stateResult = await tryAsync<{
+    const stateResult = await errore.tryAsync<{
       state: TerminalState;
       scrollState: TerminalScrollState;
     }, ShimConnectionError>({
@@ -241,7 +241,7 @@ export function createServerHandlers(state: ShimServerState, options?: ShimServe
           return { state: s, scrollState };
         }) as { state: TerminalState; scrollState: TerminalScrollState };
       },
-      catch: (e) => new ShimConnectionError({ reason: `Failed to get terminal state: ${e}` }),
+      catch: (e) => new ShimConnectionError({ reason: `Failed to get terminal state: ${e}`, cause: e }),
     });
     if (stateResult instanceof ShimConnectionError) return stateResult;
 
@@ -291,9 +291,9 @@ export function createServerHandlers(state: ShimServerState, options?: ShimServe
 
     let emulator = state.ptyEmulators.get(ptyId);
     if (!emulator) {
-      const emulatorResult = await tryAsync<ITerminalEmulator, ShimConnectionError>({
+      const emulatorResult = await errore.tryAsync<ITerminalEmulator, ShimConnectionError>({
         try: () => withPty((pty) => pty.getEmulator(asPtyId(ptyId))) as Promise<ITerminalEmulator>,
-        catch: (e) => new ShimConnectionError({ reason: `Failed to get emulator: ${e}` }),
+        catch: (e) => new ShimConnectionError({ reason: `Failed to get emulator: ${e}`, cause: e }),
       });
       if (emulatorResult instanceof ShimConnectionError) return emulatorResult;
       emulator = emulatorResult;

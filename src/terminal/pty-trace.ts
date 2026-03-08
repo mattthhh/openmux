@@ -1,6 +1,6 @@
 import { appendFileSync, mkdirSync } from "fs";
 import { dirname } from "path";
-import { tryAsync } from "errore";
+import * as errore from "errore";
 import { PtyTraceError } from "../effect/errors";
 
 type TraceMeta = Record<string, unknown>;
@@ -11,12 +11,12 @@ const enabled = tracePath.length > 0;
 
 async function ensureTraceDir(): Promise<void> {
   if (!enabled) return;
-  const result = await tryAsync<void, PtyTraceError>({
+  const result = await errore.tryAsync<void, PtyTraceError>({
     try: () => {
       mkdirSync(dirname(tracePath), { recursive: true });
       return Promise.resolve();
     },
-    catch: (e) => new PtyTraceError({ operation: 'mkdir', reason: String(e) }),
+    catch: (e) => new PtyTraceError({ operation: 'mkdir', reason: String(e), cause: e }),
   });
   if (result instanceof PtyTraceError) {
     return;
@@ -48,7 +48,7 @@ function escapeForLog(data: string): string {
 
 async function writeLine(entry: Record<string, unknown>): Promise<void> {
   if (!enabled) return;
-  const result = await tryAsync<void, PtyTraceError>({
+  const result = await errore.tryAsync<void, PtyTraceError>({
     try: () => {
       appendFileSync(
         tracePath,
@@ -61,7 +61,7 @@ async function writeLine(entry: Record<string, unknown>): Promise<void> {
       );
       return Promise.resolve();
     },
-    catch: (e) => new PtyTraceError({ operation: 'write', reason: String(e) }),
+    catch: (e) => new PtyTraceError({ operation: 'write', reason: String(e), cause: e }),
   });
   if (result instanceof PtyTraceError) {
     return;

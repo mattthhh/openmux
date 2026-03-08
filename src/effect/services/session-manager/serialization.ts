@@ -3,7 +3,7 @@
  * Migrated from Effect to errore - uses plain functions
  */
 
-import { tryAsync } from "errore"
+import * as errore from "errore"
 import type { WorkspaceLayoutNode, WorkspaceState } from "./types"
 import type { SessionMetadata } from "../../models"
 import type {
@@ -98,9 +98,9 @@ export async function collectCwdMap(
 
     for (const pane of panes) {
       if (!pane.ptyId) continue
-      const cwdResult = await tryAsync<string, PtyCwdError>({
+      const cwdResult = await errore.tryAsync<string, PtyCwdError>({
         try: () => getCwd(pane.ptyId!),
-        catch: (e) => new PtyCwdError({ ptyId: pane.ptyId!, reason: String(e) }),
+        catch: (e) => new PtyCwdError({ ptyId: pane.ptyId!, reason: String(e), cause: e }),
       })
       const cwd = cwdResult instanceof PtyCwdError ? fallbackCwd : cwdResult
       cwdMap.set(pane.ptyId, cwd)

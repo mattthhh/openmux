@@ -8,7 +8,7 @@
  * Where <encoded> is percent-encoded to avoid control characters.
  */
 
-import { tryAsync } from "errore";
+import * as errore from "errore";
 import { ValidationError } from "../effect/errors";
 
 const ESC = '\x1b';
@@ -34,9 +34,9 @@ export interface CommandParserOptions {
 
 async function decodeOscText(encoded: string): Promise<ValidationError | string> {
   if (!encoded) return '';
-  const result = await tryAsync<string, ValidationError>({
+  const result = await errore.tryAsync<string, ValidationError>({
     try: () => Promise.resolve(decodeURIComponent(encoded)),
-    catch: (e) => new ValidationError({ reason: `Failed to decode OSC text: ${String(e)}` }),
+    catch: (e) => new ValidationError({ reason: `Failed to decode OSC text: ${String(e)}`, cause: e }),
   });
   if (result instanceof ValidationError) {
     return encoded;

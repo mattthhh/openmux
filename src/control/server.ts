@@ -1,7 +1,6 @@
 import net from 'net';
 import fs from 'fs/promises';
-import { tryAsync } from 'errore';
-import { createTaggedError } from 'errore';
+import * as errore from 'errore';
 
 import type { TerminalScrollState, TerminalState, Workspace, WorkspaceId } from '../core/types';
 import type { LayoutState } from '../core/operations/layout-actions';
@@ -36,7 +35,7 @@ export type ControlServer = {
 type ControlErrorCode = 'invalid_request' | 'not_found' | 'ambiguous' | 'internal' | 'session_creation_failed';
 
 /** Error processing control request */
-export class ControlRequestError extends createTaggedError({
+export class ControlRequestError extends errore.createTaggedError({
   name: 'ControlRequestError',
   message: 'Control request failed: $reason',
 }) {
@@ -228,7 +227,7 @@ async function handlePaneCapture(
   }
 
   if (deps.capturePty) {
-    const captureResult = await tryAsync<string, ControlRequestError>({
+    const captureResult = await errore.tryAsync<string, ControlRequestError>({
       try: async () => {
         const result = await deps.capturePty!(ptyId, { lines, format, raw });
         if (result === null) {
@@ -236,7 +235,7 @@ async function handlePaneCapture(
         }
         return result;
       },
-      catch: (e: unknown) => new ControlRequestError({ reason: String(e) }),
+      catch: (e: unknown) => new ControlRequestError({ reason: String(e), cause: e }),
     });
     if (!(captureResult instanceof ControlRequestError)) {
       sendResponse(requestId, { text: captureResult, format, lines });
@@ -321,7 +320,7 @@ export async function startControlServer(deps: ControlServerDeps): Promise<Contr
       const method = header.method as string | undefined;
       const params = (header.params as Record<string, unknown>) ?? {};
 
-      const result = await tryAsync<void, ControlRequestError>({
+      const result = await errore.tryAsync<void, ControlRequestError>({
         try: async () => {
           switch (method) {
             case 'hello':
@@ -343,7 +342,7 @@ export async function startControlServer(deps: ControlServerDeps): Promise<Contr
               sendError(requestId, `Unknown method: ${method}`, 'invalid_request');
           }
         },
-        catch: (e: unknown) => new ControlRequestError({ reason: e instanceof Error ? e.message : 'Request failed' }),
+        catch: (e: unknown) => new ControlRequestError({ reason: e instanceof Error ? e.message : 'Request failed', cause: e }),
       });
 
       if (result instanceof ControlRequestError) {

@@ -6,7 +6,7 @@ import type { SessionId, SessionMetadata } from '../core/types';
 import type { SessionAction, SessionSummary } from '../core/operations/session-actions';
 import type { TemplateSession } from '../effect/models';
 import { deferNextTick } from '../core/scheduling';
-import { tryAsync } from 'errore';
+import * as errore from 'errore';
 
 const SUMMARY_BATCH_SIZE = 3;
 
@@ -36,9 +36,9 @@ export function createSessionRefreshers(params: {
 
         Promise.all(
           batch.map(async (session) => {
-            const summaryResult = await tryAsync<SessionSummary | null, Error>({
+            const summaryResult = await errore.tryAsync<SessionSummary | null, Error>({
               try: () => params.getSessionSummary(session.id),
-              catch: () => new Error('Failed to load summary'),
+              catch: (e) => new Error('Failed to load summary', { cause: e }),
             });
             if (summaryResult instanceof Error) return;
             if (summaryResult) {

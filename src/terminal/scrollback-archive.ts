@@ -4,7 +4,7 @@
 
 import fs from "node:fs"
 import fsp from "node:fs/promises"
-import { tryAsync } from "errore"
+import * as errore from "errore"
 import path from "node:path"
 import type { TerminalCell } from "../core/types"
 import { ScrollbackArchiveError } from "../effect/errors"
@@ -168,9 +168,9 @@ export class ScrollbackArchive {
     }
 
     const packed = packPlacements(placements)
-    const result = await tryAsync<void, ScrollbackArchiveError>({
+    const result = await errore.tryAsync<void, ScrollbackArchiveError>({
       try: () => fsp.appendFile(currentChunk.placementPath!, packed),
-      catch: (e) => new ScrollbackArchiveError({ operation: 'write', reason: String(e) }),
+      catch: (e) => new ScrollbackArchiveError({ operation: 'write', reason: String(e), cause: e }),
     })
 
     if (result instanceof ScrollbackArchiveError) {
@@ -282,9 +282,9 @@ export class ScrollbackArchive {
     void this.enqueue(async () => {
       for (const chunk of chunksToDelete) {
         // Delete cell data file
-        const result = await tryAsync<void, ScrollbackArchiveError>({
+        const result = await errore.tryAsync<void, ScrollbackArchiveError>({
           try: () => fsp.unlink(chunk.path),
-          catch: (e) => new ScrollbackArchiveError({ operation: 'delete', reason: String(e) }),
+          catch: (e) => new ScrollbackArchiveError({ operation: 'delete', reason: String(e), cause: e }),
         });
         if (result instanceof ScrollbackArchiveError) {
           // Continue to try deleting placement file
@@ -292,9 +292,9 @@ export class ScrollbackArchive {
         
         // Delete placement data file if it exists
         if (chunk.placementPath) {
-          const placementResult = await tryAsync<void, ScrollbackArchiveError>({
+          const placementResult = await errore.tryAsync<void, ScrollbackArchiveError>({
             try: () => fsp.unlink(chunk.placementPath!),
-            catch: (e) => new ScrollbackArchiveError({ operation: 'delete', reason: String(e) }),
+            catch: (e) => new ScrollbackArchiveError({ operation: 'delete', reason: String(e), cause: e }),
           });
           if (placementResult instanceof ScrollbackArchiveError) {
             // Ignore errors for placement file
@@ -330,9 +330,9 @@ export class ScrollbackArchive {
     const flushBuffer = async (): Promise<boolean> => {
       if (!currentChunk || buffered.length === 0) return true
       const payload = buffered.length === 1 ? buffered[0] : Buffer.concat(buffered, bufferedBytes)
-      const result = await tryAsync<void, ScrollbackArchiveError>({
+      const result = await errore.tryAsync<void, ScrollbackArchiveError>({
         try: () => fsp.appendFile(currentChunk!.path, payload),
-        catch: (e) => new ScrollbackArchiveError({ operation: 'write', reason: String(e) }),
+        catch: (e) => new ScrollbackArchiveError({ operation: 'write', reason: String(e), cause: e }),
       });
       if (result instanceof ScrollbackArchiveError) {
         return false;
@@ -416,9 +416,9 @@ export class ScrollbackArchive {
     this.revision += 1
     void this.enqueue(async () => {
       // Delete cell data file
-      const result = await tryAsync<void, ScrollbackArchiveError>({
+      const result = await errore.tryAsync<void, ScrollbackArchiveError>({
         try: () => fsp.unlink(chunk.path),
-        catch: (e) => new ScrollbackArchiveError({ operation: 'delete', reason: String(e) }),
+        catch: (e) => new ScrollbackArchiveError({ operation: 'delete', reason: String(e), cause: e }),
       });
       if (result instanceof ScrollbackArchiveError) {
         // Continue to try deleting placement file even if cell delete fails
@@ -426,9 +426,9 @@ export class ScrollbackArchive {
       
       // Delete placement data file if it exists
       if (chunk.placementPath) {
-        const placementResult = await tryAsync<void, ScrollbackArchiveError>({
+        const placementResult = await errore.tryAsync<void, ScrollbackArchiveError>({
           try: () => fsp.unlink(chunk.placementPath!),
-          catch: (e) => new ScrollbackArchiveError({ operation: 'delete', reason: String(e) }),
+          catch: (e) => new ScrollbackArchiveError({ operation: 'delete', reason: String(e), cause: e }),
         });
         if (placementResult instanceof ScrollbackArchiveError) {
           // Ignore errors for placement file - it may not exist
@@ -618,9 +618,9 @@ export class ScrollbackArchive {
         placementBytes: chunk.placementBytes,
       })),
     }
-    const result = await tryAsync<void, ScrollbackArchiveError>({
+    const result = await errore.tryAsync<void, ScrollbackArchiveError>({
       try: () => fsp.writeFile(this.metaPath, JSON.stringify(meta), "utf8"),
-      catch: (e) => new ScrollbackArchiveError({ operation: 'write', reason: String(e) }),
+      catch: (e) => new ScrollbackArchiveError({ operation: 'write', reason: String(e), cause: e }),
     });
     if (result instanceof ScrollbackArchiveError) {
       return;

@@ -29,7 +29,7 @@ import {
   SessionCorruptedError,
   SessionNotFoundError,
 } from "../errors"
-import { tryAsync } from "errore"
+import * as errore from "errore"
 
 /** List all sessions */
 export async function listSessions(): Promise<readonly SessionMetadata[]> {
@@ -436,39 +436,17 @@ export async function loadSessionDataWithService(
   | SessionCorruptedError
   | SessionNotFoundError
 > {
-  const sessionResult = await tryAsync<
-    SerializedSession,
-    SessionCorruptedError | SessionNotFoundError
-  >({
-    // Note: throw inside tryAsync try block is caught by catch block - this is the expected pattern
-    // eslint-disable-next-line @typescript-eslint/no-throw-literal
-    try: async () => {
-      const session = await manager.loadSession(sessionId as SessionId)
-      if (session instanceof Error) {
-        if (session._tag === 'SessionNotFoundError') {
-          throw new SessionNotFoundError({ sessionId })
-        }
-        throw new SessionCorruptedError({
-          sessionId,
-          reason: session.message,
-        })
-      }
-      return session
-    },
-    catch: (e) =>
-      e instanceof SessionNotFoundError || e instanceof SessionCorruptedError
-        ? e
-        : new SessionCorruptedError({
-            sessionId,
-            reason: e instanceof Error ? e.message : String(e),
-          }),
-  })
-
-  if (sessionResult instanceof Error) {
-    return sessionResult
+  const session = await manager.loadSession(sessionId as SessionId)
+  if (session instanceof Error) {
+    if (session._tag === 'SessionNotFoundError') {
+      return new SessionNotFoundError({ sessionId, cause: session })
+    }
+    return new SessionCorruptedError({
+      sessionId,
+      reason: session.message,
+      cause: session,
+    })
   }
-
-  const session = sessionResult
 
   const metadata: LegacySessionMetadata = {
     id: session.metadata.id,

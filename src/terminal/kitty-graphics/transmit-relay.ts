@@ -1,6 +1,6 @@
 import { Buffer } from 'buffer';
 import fs from 'fs';
-import { tryAsync } from 'errore';
+import * as errore from 'errore';
 import { KittyOffloadError } from '../../effect/errors';
 import { tracePtyEvent } from '../pty-trace';
 import {
@@ -397,47 +397,47 @@ export class KittyTransmitRelay {
   }
 
   private async abortOffload(offload: OffloadState): Promise<KittyOffloadError | void> {
-    const closeResult = await tryAsync<void, KittyOffloadError>({
+    const closeResult = await errore.tryAsync<void, KittyOffloadError>({
       try: () => {
         fs.closeSync(offload.fd);
         return Promise.resolve();
       },
-      catch: (e) => new KittyOffloadError({ operation: 'close', reason: String(e) }),
+      catch: (e) => new KittyOffloadError({ operation: 'close', reason: String(e), cause: e }),
     });
     if (closeResult instanceof KittyOffloadError) {
       return closeResult;
     }
 
-    const unlinkResult = await tryAsync<void, KittyOffloadError>({
+    const unlinkResult = await errore.tryAsync<void, KittyOffloadError>({
       try: () => {
         fs.unlinkSync(offload.filePath);
         return Promise.resolve();
       },
-      catch: (e) => new KittyOffloadError({ operation: 'unlink', reason: String(e) }),
+      catch: (e) => new KittyOffloadError({ operation: 'unlink', reason: String(e), cause: e }),
     });
     return unlinkResult;
   }
 
   private async scheduleCleanup(filePath: string): Promise<KittyOffloadError | void> {
     if (this.offloadCleanupDelayMs <= 0) {
-      const result = await tryAsync<void, KittyOffloadError>({
+      const result = await errore.tryAsync<void, KittyOffloadError>({
         try: () => {
           fs.unlinkSync(filePath);
           return Promise.resolve();
         },
-        catch: (e) => new KittyOffloadError({ operation: 'cleanup', reason: String(e) }),
+        catch: (e) => new KittyOffloadError({ operation: 'cleanup', reason: String(e), cause: e }),
       });
       return result;
     }
 
     const timer = setTimeout(() => {
       this.cleanupTimers.delete(timer);
-      void tryAsync<void, KittyOffloadError>({
+      void errore.tryAsync<void, KittyOffloadError>({
         try: () => {
           fs.unlinkSync(filePath);
           return Promise.resolve();
         },
-        catch: (e) => new KittyOffloadError({ operation: 'cleanup', reason: String(e) }),
+        catch: (e) => new KittyOffloadError({ operation: 'cleanup', reason: String(e), cause: e }),
       });
     }, this.offloadCleanupDelayMs);
     this.cleanupTimers.add(timer);

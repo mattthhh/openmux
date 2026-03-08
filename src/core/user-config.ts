@@ -5,14 +5,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import * as TOML from '@iarna/toml';
-import { tryFn as trySync } from 'errore';
-import { createTaggedError } from 'errore';
+import * as errore from 'errore';
 import type { LayoutMode, Padding, Theme } from './types';
 import { DEFAULT_CONFIG, DEFAULT_THEME } from './config';
 import { DEFAULT_KEYBINDINGS, type KeybindingMap, type KeybindingsConfig } from './keybindings';
 
 /** Error parsing user configuration */
-export class ConfigParseError extends createTaggedError({
+export class ConfigParseError extends errore.createTaggedError({
   name: 'ConfigParseError',
   message: 'Failed to parse config at $path: $reason',
 }) {}
@@ -249,9 +248,9 @@ export function loadUserConfigSync(options?: { createIfMissing?: boolean }): Use
     return DEFAULT_USER_CONFIG;
   }
 
-  const rawResult = trySync<Partial<UserConfig>, ConfigParseError>({
+  const rawResult = errore.try<Partial<UserConfig>, ConfigParseError>({
     try: () => TOML.parse(fs.readFileSync(configPath, 'utf8')) as Partial<UserConfig>,
-    catch: (e) => new ConfigParseError({ path: configPath, reason: String(e) }),
+    catch: (e) => new ConfigParseError({ path: configPath, reason: String(e), cause: e }),
   });
 
   if (rawResult instanceof ConfigParseError) {

@@ -20,15 +20,15 @@
  * ```
  */
 
-import { AsyncDisposableStack } from "errore"
+import * as errore from "errore"
 
-export { AsyncDisposableStack } from "errore"
+export const AsyncDisposableStack = errore.AsyncDisposableStack
 
 /**
  * Resource stack with typed error handling.
  * Wraps AsyncDisposableStack with our error patterns.
  */
-export class ResourceStack extends AsyncDisposableStack {
+export class ResourceStack extends errore.AsyncDisposableStack {
   /**
    * Defer cleanup with error logging on failure.
    * Unlike defer(), cleanup errors are logged but don't stop other cleanups.
@@ -114,10 +114,9 @@ export class ResourceStack extends AsyncDisposableStack {
 
 /**
  * Helper to check if an error is an AbortError (from AbortController).
+ * Re-exported from errore for convenience.
  */
-export function isAbortError(error: unknown): error is Error {
-  return error instanceof Error && error.name === "AbortError"
-}
+export const isAbortError = errore.isAbortError
 
 /**
  * Helper to create a cleanup function that only runs once.

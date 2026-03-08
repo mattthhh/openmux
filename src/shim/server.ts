@@ -1,6 +1,6 @@
 import net from 'net';
 import fs from 'fs/promises';
-import { tryAsync } from 'errore';
+import * as errore from 'errore';
 
 import { FrameReader } from './protocol';
 import { createServerHandlers, type ShimServerOptions } from './server-handlers';
@@ -10,9 +10,9 @@ import { ShimConnectionError } from '../effect/errors';
 const shimState = createShimServerState();
 
 async function ensureSocketDir(socketDir: string): Promise<void | ShimConnectionError> {
-  const result = await tryAsync<string | undefined, ShimConnectionError>({
+  const result = await errore.tryAsync<string | undefined, ShimConnectionError>({
     try: () => fs.mkdir(socketDir, { recursive: true }),
-    catch: (e) => new ShimConnectionError({ reason: `Failed to create socket directory: ${e}` }),
+    catch: (e) => new ShimConnectionError({ reason: `Failed to create socket directory: ${e}`, cause: e }),
   });
   if (result instanceof ShimConnectionError) return result;
 }
@@ -62,12 +62,12 @@ export async function startShimServer(options?: ShimServerOptions): Promise<net.
     });
   });
 
-  const listenResult = await tryAsync<void, ShimConnectionError>({
+  const listenResult = await errore.tryAsync<void, ShimConnectionError>({
     try: () => new Promise((resolve, reject) => {
       server.listen(handlers.socketPath, () => resolve());
       server.once('error', reject);
     }),
-    catch: (e) => new ShimConnectionError({ reason: `Failed to start server: ${e}` }),
+    catch: (e) => new ShimConnectionError({ reason: `Failed to start server: ${e}`, cause: e }),
   });
   
   if (listenResult instanceof ShimConnectionError) return listenResult;

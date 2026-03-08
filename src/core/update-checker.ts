@@ -1,15 +1,14 @@
 import { compareSemver } from './update-check';
-import { tryAsync } from 'errore';
-import { createTaggedError } from 'errore';
+import * as errore from 'errore';
 
 /** Error reading local version */
-export class VersionReadError extends createTaggedError({
+export class VersionReadError extends errore.createTaggedError({
   name: 'VersionReadError',
   message: 'Failed to read local version: $reason',
 }) {}
 
 /** Error fetching latest version */
-export class VersionFetchError extends createTaggedError({
+export class VersionFetchError extends errore.createTaggedError({
   name: 'VersionFetchError',
   message: 'Failed to fetch latest version: $reason',
 }) {}
@@ -27,15 +26,15 @@ export async function readLocalVersion(): Promise<string | null> {
   const here = dirname(fileURLToPath(import.meta.url));
   const pkgPath = resolve(here, '..', 'package.json');
 
-  const result = await tryAsync<string, VersionReadError>({
+  const result = await errore.tryAsync<string, VersionReadError>({
     try: async () => readFileSync(pkgPath, 'utf8'),
-    catch: (e) => new VersionReadError({ reason: String(e) }),
+    catch: (e) => new VersionReadError({ reason: String(e), cause: e }),
   });
   if (result instanceof VersionReadError) return null;
 
-  const parseResult = await tryAsync<unknown, VersionReadError>({
+  const parseResult = await errore.tryAsync<unknown, VersionReadError>({
     try: async () => JSON.parse(result),
-    catch: (e) => new VersionReadError({ reason: String(e) }),
+    catch: (e) => new VersionReadError({ reason: String(e), cause: e }),
   });
   if (parseResult instanceof VersionReadError) return null;
 
@@ -44,17 +43,17 @@ export async function readLocalVersion(): Promise<string | null> {
 }
 
 export async function fetchLatestVersion(signal?: AbortSignal): Promise<string | null> {
-  const responseResult = await tryAsync<Response, VersionFetchError>({
+  const responseResult = await errore.tryAsync<Response, VersionFetchError>({
     try: async () => fetch('https://registry.npmjs.org/openmux/latest', { signal }),
-    catch: (e) => new VersionFetchError({ reason: String(e) }),
+    catch: (e) => new VersionFetchError({ reason: String(e), cause: e }),
   });
   if (responseResult instanceof VersionFetchError) return null;
 
   if (!responseResult.ok) return null;
 
-  const dataResult = await tryAsync<unknown, VersionFetchError>({
+  const dataResult = await errore.tryAsync<unknown, VersionFetchError>({
     try: async () => responseResult.json(),
-    catch: (e) => new VersionFetchError({ reason: String(e) }),
+    catch: (e) => new VersionFetchError({ reason: String(e), cause: e }),
   });
   if (dataResult instanceof VersionFetchError) return null;
 

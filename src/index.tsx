@@ -2,18 +2,17 @@
  * Terminal multiplexer with master-stack layout
  */
 
-import { tryAsync, tryFn as trySync } from 'errore';
-import { createTaggedError } from 'errore';
+import * as errore from 'errore';
 import { getCliVersion } from './cli/version';
 
 /** Error during application startup */
-export class StartupError extends createTaggedError({
+export class StartupError extends errore.createTaggedError({
   name: 'StartupError',
   message: 'Failed to start openmux: $reason',
 }) {}
 
 /** Error writing startup error log */
-export class StartupLogError extends createTaggedError({
+export class StartupLogError extends errore.createTaggedError({
   name: 'StartupLogError',
   message: 'Failed to write startup error log: $reason',
 }) {}
@@ -102,7 +101,7 @@ async function initializeAndRender(): Promise<StartupError | void> {
     }
   );
 
-  const renderResult = await tryAsync<void, StartupError>({
+  const renderResult = await errore.tryAsync<void, StartupError>({
     try: async () => {
       await render(() => <AppWithSetup />, {
         stdin: interceptingStdin,
@@ -123,7 +122,7 @@ async function initializeAndRender(): Promise<StartupError | void> {
         },
       });
     },
-    catch: (e) => new StartupError({ reason: e instanceof Error ? e.message : String(e) }),
+    catch: (e) => new StartupError({ reason: e instanceof Error ? e.message : String(e), cause: e }),
   });
 
   return renderResult instanceof StartupError ? renderResult : undefined;
@@ -138,15 +137,15 @@ async function writeStartupErrorLog(error: unknown): Promise<void> {
   const logPath = path.join(dir, 'startup-error.log');
   const message = error instanceof Error ? (error.stack ?? error.message) : String(error);
 
-  const mkdirResult = trySync<void, StartupLogError>({
+  const mkdirResult = errore.try<void, StartupLogError>({
     try: () => fs.mkdirSync(dir, { recursive: true }),
-    catch: (e: unknown) => new StartupLogError({ reason: String(e) }),
+    catch: (e: unknown) => new StartupLogError({ reason: String(e), cause: e }),
   });
   if (mkdirResult instanceof StartupLogError) return;
 
-  trySync<void, StartupLogError>({
+  errore.try<void, StartupLogError>({
     try: () => fs.writeFileSync(logPath, `${message}\n`, 'utf8'),
-    catch: () => new StartupLogError({ reason: 'Write failed' }),
+    catch: (e: unknown) => new StartupLogError({ reason: 'Write failed', cause: e }),
   });
 }
 
