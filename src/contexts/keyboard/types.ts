@@ -35,6 +35,7 @@ export interface KeyboardHandlerOptions {
   onEnterSearch?: () => void;
   onEnterCopyMode?: () => void;
   onToggleConsole?: () => void;
+  onDumpConsoleLogs?: () => void;
   onToggleAggregateView?: () => void;
   onToggleCommandPalette?: () => void;
   onToggleVimMode?: () => void;

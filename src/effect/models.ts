@@ -133,6 +133,7 @@ export type SerializedSession = z.infer<typeof SerializedSessionSchema>
 export const SessionIndexSchema = z.object({
   sessions: z.array(SessionMetadataSchema),
   activeSessionId: SessionIdSchema.nullable(),
+  aggregateSessionOrder: z.array(SessionIdSchema).optional(),
 })
 
 export type SessionIndex = z.infer<typeof SessionIndexSchema>
@@ -141,6 +142,7 @@ export type SessionIndex = z.infer<typeof SessionIndexSchema>
 export const createEmptySessionIndex = (): SessionIndex => ({
   sessions: [],
   activeSessionId: null,
+  aggregateSessionOrder: [],
 })
 
 /** Template pane definition for layout templates */

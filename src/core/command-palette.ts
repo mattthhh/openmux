@@ -176,6 +176,13 @@ const BASE_COMMANDS: CommandPaletteCommand[] = [
     keywords: ['console', 'debug'],
   },
   {
+    id: 'console.dump',
+    title: 'Dump console logs to temp directory',
+    description: 'Save all console logs to a file in the system temp directory',
+    action: 'console.dump',
+    keywords: ['console', 'logs', 'dump', 'save', 'tmp', 'temp', 'debug'],
+  },
+  {
     id: 'keyboard.vim.toggle',
     title: 'Toggle overlay vim mode',
     description: 'Enable or disable vim keybindings in overlays',

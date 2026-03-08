@@ -8,6 +8,7 @@
  */
 
 import { Show, For, createSignal, createEffect, onCleanup, createMemo } from 'solid-js';
+import { type MouseEvent as OpenTUIMouseEvent } from '@opentui/core';
 import { useAggregateView } from '../contexts/AggregateViewContext';
 import { useKeyboardState } from '../contexts/KeyboardContext';
 import { useConfig } from '../contexts/ConfigContext';
@@ -19,13 +20,16 @@ import { useSelection } from '../contexts/SelectionContext';
 import { useSearch } from '../contexts/SearchContext';
 import { useCopyMode } from '../contexts/CopyModeContext';
 import type { ITerminalEmulator } from '../terminal/emulator-interface';
-import { getEmulator, getHostBackgroundColor } from '../effect/bridge';
+import { getEmulator, getHostBackgroundColor, loadSessionData } from '../effect/bridge';
 import { useOverlayKeyboardHandler } from '../contexts/keyboard/use-overlay-keyboard-handler';
 import { useOverlayColors } from './overlay-colors';
 import { createCopyModeVimState } from './app/copy-mode-vim';
 import { createCopyModeKeyHandler } from './app/copy-mode-keyboard';
 import {
   PtyCard,
+  SessionTreeNode,
+  PtyTreeRow,
+  PlaceholderRow,
   InteractivePreview,
   findPtyLocation,
   findPaneLocation,
@@ -37,8 +41,12 @@ import {
   getFilterText,
   calculateFooterWidths,
 } from './aggregate';
+import type { FlattenedTreeItem, TreeNode } from '../contexts/aggregate-view-types';
 import { truncateHint } from './overlay-hints';
 import { createVimSequenceHandler, type VimInputMode } from '../core/vim-sequences';
+import { setShimmerEnabled } from '../core/shimmer';
+import type { Workspace, WorkspaceId } from '../core/types';
+import { collectPanes } from '../core/layout-tree';
 
 interface AggregateViewProps {
   width: number;
@@ -63,6 +71,9 @@ export function AggregateView(props: AggregateViewProps) {
     enterPreviewMode,
     exitPreviewMode,
     selectPty,
+    loadSessionPtys,
+    toggleSessionExpanded,
+    reorderSessions,
   } = useAggregateView();
   const {
     state: keyboardState,
@@ -72,10 +83,19 @@ export function AggregateView(props: AggregateViewProps) {
     enterCopyMode: keyboardEnterCopyMode,
     exitCopyMode: keyboardExitCopyMode,
   } = keyboard;
-  const { state: layoutState, switchWorkspace, focusPane } = useLayout();
+  const { state: layoutState, switchWorkspace, focusPane, setLayoutMode } = useLayout();
   const { state: sessionState, switchSession } = useSession();
   const terminal = useTerminal();
-  const { findSessionForPty, scrollTerminal, isMouseTrackingEnabled, getScrollState, getEmulatorSync, getTerminalStateSync } = terminal;
+  const {
+    findSessionForPty,
+    scrollTerminal,
+    isMouseTrackingEnabled,
+    getScrollState,
+    getEmulatorSync,
+    getTerminalStateSync,
+    createPaneWithPTY,
+    getSessionCwd,
+  } = terminal;
   const theme = useTheme();
   const { foreground: overlayFg, muted: overlayMuted, subtle: overlaySubtle } = useOverlayColors();
   const { clearAllSelections, startSelection, updateSelection, completeSelection, clearSelection, getSelection } = useSelection();
@@ -96,6 +116,7 @@ export function AggregateView(props: AggregateViewProps) {
         { keys: ['shift+g'], action: 'aggregate.list.bottom' },
         { keys: ['enter'], action: 'aggregate.list.preview' },
         { keys: ['q'], action: 'aggregate.list.close' },
+        { keys: ['n'], action: 'aggregate.list.new.pane' },
       ],
     }),
     preview: createVimSequenceHandler({
@@ -131,6 +152,12 @@ export function AggregateView(props: AggregateViewProps) {
   // Track if we're in search mode within aggregate view
   const [inSearchMode, setInSearchMode] = createSignal(false);
 
+  // Session drag-and-drop ordering state
+  const [draggingSessionId, setDraggingSessionId] = createSignal<string | null>(null);
+  const [dragTargetSessionId, setDragTargetSessionId] = createSignal<string | null>(null);
+  const [didDragSession, setDidDragSession] = createSignal(false);
+  const [suppressSessionToggle, setSuppressSessionToggle] = createSignal(false);
+
   // Cache emulators for selected PTYs so input works across sessions.
   const aggregateEmulators = new Map<string, ITerminalEmulator>();
   const pendingEmulators = new Set<string>();
@@ -161,11 +188,89 @@ export function AggregateView(props: AggregateViewProps) {
     calculateLayoutDimensions({ width: props.width, height: props.height })
   );
 
+  const visibleListStart = createMemo(() => {
+    const maxRows = layout().maxVisibleCards;
+    const totalRows = state.flattenedTree.length;
+
+    if (maxRows <= 0 || totalRows <= maxRows) {
+      return 0;
+    }
+
+    const centeredStart = state.selectedIndex - Math.floor(maxRows / 2);
+    return Math.max(0, Math.min(centeredStart, totalRows - maxRows));
+  });
+
+  const visibleItems = createMemo(() => {
+    const start = visibleListStart();
+    const end = start + layout().maxVisibleCards;
+    return state.flattenedTree.slice(start, end);
+  });
+
+  const getSessionIdForItem = (item: FlattenedTreeItem | undefined): string | null => {
+    if (!item) return null;
+    if (item.node.type === 'session') return item.node.session.id;
+    if (item.node.type === 'pty') return item.node.ptyInfo.sessionId;
+    if (item.node.type === 'placeholder') return item.node.parentSessionId;
+    return null;
+  };
+
+  const getItemAtListMouse = (event: OpenTUIMouseEvent): FlattenedTreeItem | undefined => {
+    const relY = event.y - 1;
+    if (relY < 0) return undefined;
+    return visibleItems()[relY];
+  };
+
+  const beginSessionDrag = (sessionId: string) => {
+    setDraggingSessionId(sessionId);
+    setDragTargetSessionId(sessionId);
+    setDidDragSession(false);
+    setSuppressSessionToggle(false);
+  };
+
+  const clearSessionDrag = () => {
+    setDraggingSessionId(null);
+    setDragTargetSessionId(null);
+    setDidDragSession(false);
+  };
+
+  const updateSessionDragTarget = (event: OpenTUIMouseEvent) => {
+    const sourceSessionId = draggingSessionId();
+    if (!sourceSessionId) return;
+
+    const item = getItemAtListMouse(event);
+    const targetSessionId = getSessionIdForItem(item);
+    if (!targetSessionId) return;
+
+    setDragTargetSessionId(targetSessionId);
+    if (targetSessionId !== sourceSessionId) {
+      setDidDragSession(true);
+      setSuppressSessionToggle(true);
+    }
+  };
+
+  const commitSessionDrag = async () => {
+    const sourceSessionId = draggingSessionId();
+    const targetSessionId = dragTargetSessionId();
+    const dragged = didDragSession();
+    const shouldReorder = dragged && sourceSessionId && targetSessionId && sourceSessionId !== targetSessionId;
+    clearSessionDrag();
+    if (dragged) {
+      setTimeout(() => {
+        setSuppressSessionToggle(false);
+      }, 0);
+    }
+    if (shouldReorder) {
+      await reorderSessions(sourceSessionId, targetSessionId);
+    }
+  };
+
   // Clear prefix timeout on unmount
   onCleanup(() => {
     if (prefixTimeout) {
       clearTimeout(prefixTimeout);
     }
+    clearSessionDrag();
+    setSuppressSessionToggle(false);
   });
 
   createEffect(() => {
@@ -226,11 +331,39 @@ export function AggregateView(props: AggregateViewProps) {
   createEffect(() => {
     if (!state.showAggregateView) {
       resetAggregateEmulators();
+      setShimmerEnabled(false);
       return;
     }
 
+    // Enable shimmer when aggregate view opens
+    setShimmerEnabled(true);
+
     if (state.selectedPtyId) {
       preloadEmulator(state.selectedPtyId);
+    }
+  });
+
+  // Auto-load session PTYs when selecting a placeholder ("...") row
+  createEffect(() => {
+    if (!state.showAggregateView) return;
+
+    const selectedItem = state.flattenedTree[state.selectedIndex];
+    if (!selectedItem) return;
+
+    if (
+      selectedItem.node.type === 'placeholder' &&
+      selectedItem.node.message === '...' &&
+      selectedItem.parentSessionId
+    ) {
+      const sessionId = selectedItem.parentSessionId;
+      const loadState = state.sessionLoadStates.get(sessionId);
+
+      if (
+        loadState?.status === 'unloaded' &&
+        !state.loadAttemptedSessionIds.has(sessionId)
+      ) {
+        loadSessionPtys(sessionId);
+      }
     }
   });
 
@@ -286,6 +419,125 @@ export function AggregateView(props: AggregateViewProps) {
     }
 
     return false;
+  };
+
+  const getLastPaneIdForWorkspace = (workspace: Workspace | undefined): string | null => {
+    if (!workspace) return null;
+
+    const paneIds: string[] = [];
+    if (workspace.mainPane) {
+      for (const pane of collectPanes(workspace.mainPane)) {
+        paneIds.push(pane.id);
+      }
+    }
+    for (const stackPane of workspace.stackPanes) {
+      for (const pane of collectPanes(stackPane)) {
+        paneIds.push(pane.id);
+      }
+    }
+
+    return paneIds[paneIds.length - 1] ?? workspace.focusedPaneId ?? null;
+  };
+
+  const resolveCurrentSessionPaneCwd = async (): Promise<string | undefined> => {
+    const workspace = layoutState.workspaces[layoutState.activeWorkspaceId];
+    if (!workspace) return undefined;
+
+    const livePanes: Array<{ id: string; ptyId?: string }> = [];
+    if (workspace.mainPane) {
+      livePanes.push(...collectPanes(workspace.mainPane));
+    }
+    for (const stackPane of workspace.stackPanes) {
+      livePanes.push(...collectPanes(stackPane));
+    }
+
+    const candidatePane = [...livePanes].reverse().find((pane) => !!pane.ptyId) ?? null;
+    if (!candidatePane?.ptyId) return undefined;
+
+    const cwd = await getSessionCwd(candidatePane.ptyId).catch(() => undefined);
+    return cwd || undefined;
+  };
+
+  const resolveStoredSessionPaneCwd = (
+    sessionData: Exclude<Awaited<ReturnType<typeof loadSessionData>>, Error>
+  ): string | undefined => {
+    const activeWorkspace = sessionData.workspaces[sessionData.activeWorkspaceId];
+    const lastPaneId = getLastPaneIdForWorkspace(activeWorkspace);
+    if (!lastPaneId) return undefined;
+    return sessionData.cwdMap.get(lastPaneId);
+  };
+
+  // Create a new pane in the selected session's active workspace
+  const handleNewPaneInSession = async () => {
+    const selectedSessionId = state.selectedSessionId;
+    const selectedPtyId = state.selectedPtyId;
+
+    if (!selectedSessionId && !selectedPtyId) return;
+
+    const targetSessionId = selectedSessionId ?? findSessionForPty(selectedPtyId!)?.sessionId ?? sessionState.activeSessionId;
+    if (!targetSessionId) return;
+
+    let targetWorkspaceId: WorkspaceId = layoutState.activeWorkspaceId;
+    let targetCwd: string | undefined;
+
+    if (targetSessionId === sessionState.activeSessionId) {
+      targetCwd = await resolveCurrentSessionPaneCwd();
+
+      if (selectedPtyId) {
+        const location = findPtyLocation(selectedPtyId, layoutState.workspaces);
+        if (location) {
+          targetWorkspaceId = location.workspaceId;
+        }
+      }
+    } else {
+      const sessionData = await loadSessionData(targetSessionId);
+      if (sessionData instanceof Error) {
+        console.error('Failed to load session:', sessionData.message);
+        return;
+      }
+
+      targetWorkspaceId = sessionData.activeWorkspaceId as WorkspaceId;
+      targetCwd = resolveStoredSessionPaneCwd(sessionData);
+
+      if (selectedPtyId) {
+        const sessionLocation = findSessionForPty(selectedPtyId);
+        if (sessionLocation && sessionLocation.sessionId === targetSessionId) {
+          for (const [wsId, workspace] of Object.entries(sessionData.workspaces)) {
+            if (!workspace) continue;
+
+            const checkNode = (node: unknown): boolean => {
+              if (!node) return false;
+              const n = node as { type?: string; id?: string; first?: unknown; second?: unknown };
+              if (n.type === 'split') {
+                return checkNode(n.first) || checkNode(n.second);
+              }
+              return n.id === sessionLocation.paneId;
+            };
+
+            if (workspace.mainPane && checkNode(workspace.mainPane)) {
+              targetWorkspaceId = Number(wsId) as WorkspaceId;
+              break;
+            }
+
+            for (const pane of workspace.stackPanes) {
+              if (checkNode(pane)) {
+                targetWorkspaceId = Number(wsId) as WorkspaceId;
+                break;
+              }
+            }
+          }
+        }
+      }
+
+      await switchSession(targetSessionId);
+    }
+
+    switchWorkspace(targetWorkspaceId);
+    setLayoutMode('stacked');
+    const paneId = await createPaneWithPTY(targetCwd, 'shell');
+    if (!paneId) {
+      console.error('Failed to create pane in aggregate view');
+    }
   };
 
   // Helper to enter search mode for the selected PTY
@@ -370,7 +622,7 @@ export function AggregateView(props: AggregateViewProps) {
     ),
     getPrefixActive: prefixActive,
     getKeybindings: () => config.keybindings(),
-    getMatchedCount: () => state.matchedPtys.length,
+    getMatchedCount: () => state.flattenedTree.length,
     getVimEnabled: vimEnabled,
     getVimMode: vimMode,
     setVimMode,
@@ -397,6 +649,7 @@ export function AggregateView(props: AggregateViewProps) {
     handleEnterCopyMode,
     handleCopyModeKeys,
     handleJumpToPty,
+    handleNewPaneInSession,
     onRequestQuit: props.onRequestQuit,
     onDetach: props.onDetach,
     onRequestKillPty: props.onRequestKillPty,
@@ -490,48 +743,123 @@ export function AggregateView(props: AggregateViewProps) {
               borderStyle: borderStyleMap[theme.pane.borderStyle] ?? 'single',
               borderColor: state.previewMode ? theme.pane.borderColor : theme.pane.focusedBorderColor,
             }}
-            title={` PTYs (${state.matchedPtys.length}) `}
+            title={` Sessions (${state.allSessions.size}) `}
             titleAlignment="left"
             onMouseDown={(e: { preventDefault: () => void }) => {
               e.preventDefault();
-              // Clicking on list pane exits preview mode
               if (state.previewMode) {
                 exitPreviewMode();
               }
             }}
+            onMouseDrag={(e: OpenTUIMouseEvent) => {
+              e.preventDefault();
+              updateSessionDragTarget(e);
+            }}
+            onMouseUp={(e: OpenTUIMouseEvent) => {
+              e.preventDefault();
+              void commitSessionDrag();
+            }}
           >
             <box style={{ flexDirection: 'column' }}>
               <Show
-                when={state.matchedPtys.length > 0}
+                when={state.flattenedTree.length > 0}
                 fallback={
                   <box style={{ height: layout().listInnerHeight, justifyContent: 'center', alignItems: 'center' }}>
-                    <text fg={overlaySubtle()}>No PTYs match filter</text>
+                    <text fg={overlaySubtle()}>No sessions match filter</text>
                   </box>
                 }
               >
-                <For each={state.matchedPtys.slice(0, layout().maxVisibleCards)}>
-                  {(pty, index) => (
-                    <PtyCard
-                      pty={pty}
-                      isSelected={index() === state.selectedIndex}
-                      maxWidth={layout().listInnerWidth}
-                      index={index()}
-                      totalCount={state.matchedPtys.length}
-                      aggregateTheme={theme.ui.aggregate}
-                      textColors={{
-                        foreground: overlayFg(),
-                        muted: overlayMuted(),
-                        subtle: overlaySubtle(),
-                      }}
-                      onClick={() => {
-                        // Select this PTY and exit preview mode if active
-                        selectPty(pty.ptyId);
-                        if (state.previewMode) {
-                          exitPreviewMode();
+                <For each={visibleItems()}>
+                  {(item) => {
+                    const node = () => item.node;
+                    const isSelected = () => item.index === state.selectedIndex;
+                    const textColors = {
+                      foreground: overlayFg(),
+                      muted: overlayMuted(),
+                      subtle: overlaySubtle(),
+                    };
+
+                    const sessionIndent = () => '';
+                    const ptyIndent = () => '    ';
+                    const ptyTreePrefix = () => '•';
+
+                    if (node().type === 'spacer') {
+                      return <box style={{ height: 1 }} />;
+                    }
+
+                    return (
+                      <Show
+                        when={node().type === 'session'}
+                        fallback={
+                          <Show
+                            when={node().type === 'pty'}
+                            fallback={
+                              <PlaceholderRow
+                                treePrefix=""
+                                indent={ptyIndent()}
+                                maxWidth={layout().listInnerWidth}
+                                aggregateTheme={theme.ui.aggregate}
+                                textColors={textColors}
+                                isSelected={isSelected()}
+                                label={(node() as import('../contexts/aggregate-view-types').PlaceholderTreeNode).message}
+                                onClick={() => {
+                                  setSelectedIndex(item.index);
+                                  const placeholderNode = node() as import('../contexts/aggregate-view-types').PlaceholderTreeNode;
+                                  const sessionId = placeholderNode.parentSessionId;
+                                  if (sessionId) {
+                                    loadSessionPtys(sessionId);
+                                  }
+                                }}
+                              />
+                            }
+                          >
+                            <PtyTreeRow
+                              pty={(node() as import('../contexts/aggregate-view-types').PtyTreeNode).ptyInfo}
+                              isSelected={isSelected()}
+                              maxWidth={layout().listInnerWidth}
+                              treePrefix={ptyTreePrefix()}
+                              indent={ptyIndent()}
+                              aggregateTheme={theme.ui.aggregate}
+                              textColors={textColors}
+                              onClick={() => {
+                                const ptyNode = node() as import('../contexts/aggregate-view-types').PtyTreeNode;
+                                selectPty(ptyNode.ptyInfo.ptyId);
+                                if (state.previewMode) {
+                                  exitPreviewMode();
+                                }
+                              }}
+                            />
+                          </Show>
                         }
-                      }}
-                    />
-                  )}
+                      >
+                        <SessionTreeNode
+                          sessionName={(node() as import('../contexts/aggregate-view-types').SessionTreeNode).session.name}
+                          paneCount={(node() as import('../contexts/aggregate-view-types').SessionTreeNode).ptyCount}
+                          treePrefix=""
+                          indent={sessionIndent()}
+                          isSelected={isSelected()}
+                          isExpanded={(node() as import('../contexts/aggregate-view-types').SessionTreeNode).isExpanded}
+                          isActive={(node() as import('../contexts/aggregate-view-types').SessionTreeNode).session.id === sessionState.activeSessionId}
+                          isDropTarget={dragTargetSessionId() === (node() as import('../contexts/aggregate-view-types').SessionTreeNode).session.id && draggingSessionId() !== null}
+                          isDragging={draggingSessionId() === (node() as import('../contexts/aggregate-view-types').SessionTreeNode).session.id}
+                          maxWidth={layout().listInnerWidth}
+                          aggregateTheme={theme.ui.aggregate}
+                          textColors={textColors}
+                          onMouseDown={() => {
+                            setSelectedIndex(item.index);
+                            const sessionNode = node() as import('../contexts/aggregate-view-types').SessionTreeNode;
+                            beginSessionDrag(sessionNode.session.id);
+                          }}
+                          onMouseUp={() => {
+                            const sessionNode = node() as import('../contexts/aggregate-view-types').SessionTreeNode;
+                            if (!suppressSessionToggle() && !didDragSession() && sessionNode.loadState.status === 'loaded') {
+                              toggleSessionExpanded(sessionNode.session.id);
+                            }
+                          }}
+                        />
+                      </Show>
+                    );
+                  }}
                 </For>
               </Show>
             </box>

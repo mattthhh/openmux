@@ -93,6 +93,16 @@ export async function getSessionSummary(
   return getSessionSummaryWithService(getSessionManager(), id)
 }
 
+/** Get persisted aggregate session ordering */
+export async function getAggregateSessionOrder(): Promise<string[]> {
+  return getAggregateSessionOrderWithService(getSessionManager())
+}
+
+/** Persist aggregate session ordering */
+export async function setAggregateSessionOrder(order: string[]): Promise<void | SessionStorageError> {
+  return setAggregateSessionOrderWithService(getSessionManager(), order)
+}
+
 /** Create a new session (legacy compatibility) */
 export async function createSessionLegacy(name?: string): Promise<LegacySessionMetadata | SessionStorageError> {
   return createSessionLegacyWithService(getSessionManager(), name)
@@ -228,6 +238,24 @@ export async function getSessionSummaryWithService(
   const result = await manager.getSessionSummary(id as SessionId)
   if (result instanceof Error) return null
   return result
+}
+
+/** Get persisted aggregate session ordering with a specific service */
+export async function getAggregateSessionOrderWithService(
+  manager: SessionManager
+): Promise<string[]> {
+  const result = await manager.getAggregateSessionOrder()
+  if (result instanceof Error) return []
+  return result
+}
+
+/** Persist aggregate session ordering with a specific service */
+export async function setAggregateSessionOrderWithService(
+  manager: SessionManager,
+  order: string[]
+): Promise<void | SessionStorageError> {
+  const result = await manager.setAggregateSessionOrder(order)
+  if (result instanceof Error) return result
 }
 
 /** Create session (legacy) with a specific service */

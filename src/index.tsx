@@ -55,6 +55,7 @@ async function initializeAndRender(): Promise<StartupError | void> {
   const { createPasteInterceptingStdin } = await import('./terminal/paste-intercepting-stdin');
   const { triggerClipboardPaste } = await import('./terminal/focused-pty-registry');
   const { setHostSequenceWriter, writeHostSequence } = await import('./terminal/host-output');
+  const { copyToClipboard } = await import('./effect/bridge');
 
   function AppWithSetup() {
     const renderer = useRenderer();
@@ -115,6 +116,10 @@ async function initializeAndRender(): Promise<StartupError | void> {
         consoleOptions: {
           position: ConsolePosition.BOTTOM,
           sizePercent: 30,
+          // Enable copying from console using our clipboard service
+          onCopySelection: async (text: string) => {
+            await copyToClipboard(text);
+          },
         },
       });
     },

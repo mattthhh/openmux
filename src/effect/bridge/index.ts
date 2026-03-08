@@ -59,6 +59,8 @@ export {
   getSessionMetadata,
   updateAutoName,
   getSessionSummary,
+  getAggregateSessionOrder,
+  setAggregateSessionOrder,
   createSessionLegacy,
   listSessionsLegacy,
   getActiveSessionIdLegacy,
@@ -78,7 +80,16 @@ export {
 } from "./template-bridge"
 
 // Aggregate bridge
-export { listAllPtysWithMetadata, getPtyMetadata, type ListAllPtysOptions, type PtyMetadata } from "./aggregate-bridge"
+export {
+  listAllPtysWithMetadata,
+  getPtyMetadata,
+  listSessionsWithPtys,
+  loadSessionPtysOnDemand,
+  type ListAllPtysOptions,
+  type PtyMetadata,
+  type SessionWithPtys,
+  type VisualTreeNode,
+} from "./aggregate-bridge"
 
 // Color bridge
 export { getHostBackgroundColor, getHostForegroundColor } from "./color-bridge"

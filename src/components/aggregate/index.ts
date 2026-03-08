@@ -24,3 +24,11 @@ export {
 } from './layout-utils';
 
 export { truncateHint } from '../overlay-hints';
+
+// Tree-based rendering components
+export { SessionTreeNode } from './SessionTreeNode';
+export { PtyTreeRow } from './PtyTreeRow';
+export { PlaceholderRow } from './PlaceholderRow';
+export type { SessionTreeNodeProps } from './SessionTreeNode';
+export type { PtyTreeRowProps } from './PtyTreeRow';
+export type { PlaceholderRowProps } from './PlaceholderRow';

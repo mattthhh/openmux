@@ -36,7 +36,7 @@ export interface LayoutDimensions {
   previewInnerWidth: number;
   /** Inner height of preview pane (minus borders) */
   previewInnerHeight: number;
-  /** Maximum number of visible cards in list */
+  /** Maximum number of visible rows in list */
   maxVisibleCards: number;
   /** Footer height */
   footerHeight: number;
@@ -58,8 +58,8 @@ export function calculateLayoutDimensions(config: LayoutConfig): LayoutDimension
   const previewInnerWidth = Math.max(1, previewPaneWidth - 2);
   const previewInnerHeight = Math.max(1, contentHeight - 2);
 
-  // Each card is 2 lines, calculate max visible cards
-  const maxVisibleCards = Math.floor(listInnerHeight / 2);
+  // Aggregate rows are single-line entries
+  const maxVisibleCards = listInnerHeight;
 
   return {
     contentHeight,
@@ -80,6 +80,10 @@ export function calculateLayoutDimensions(config: LayoutConfig): LayoutDimension
 
 function getCombos(bindings: ResolvedKeybindingMap, action: string): string[] {
   return bindings.byAction.get(action) ?? [];
+}
+
+function formatHintComboSet(combos: string[]): string {
+  return formatComboSet(combos).replace(/ctrl\+([a-z])/gi, '^$1');
 }
 
 export function getHintsText(
@@ -110,33 +114,35 @@ export function getHintsText(
   }
 
   if (previewMode) {
-    const back = formatComboSet(getCombos(aggregateBindings.preview, 'aggregate.preview.exit'));
-    const search = formatComboSet(getCombos(aggregateBindings.preview, 'aggregate.preview.search'));
-    const kill = formatComboSet(getCombos(aggregateBindings.preview, 'aggregate.kill'));
+    const back = formatHintComboSet(getCombos(aggregateBindings.preview, 'aggregate.preview.exit'));
+    const search = formatHintComboSet(getCombos(aggregateBindings.preview, 'aggregate.preview.search'));
+    const kill = formatHintComboSet(getCombos(aggregateBindings.preview, 'aggregate.kill'));
     return `${back}:back ${search}:search ${kill}:kill`;
   }
 
   if (vimEnabled) {
-    const jump = formatComboSet(getCombos(aggregateBindings.list, 'aggregate.list.jump'));
-    const toggleScope = formatComboSet(getCombos(aggregateBindings.list, 'aggregate.list.toggle.scope'));
-    const kill = formatComboSet(getCombos(aggregateBindings.list, 'aggregate.kill'));
+    const jump = formatHintComboSet(getCombos(aggregateBindings.list, 'aggregate.list.jump'));
+    const newPane = formatHintComboSet(getCombos(aggregateBindings.list, 'aggregate.list.new.pane'));
+    const toggleScope = formatHintComboSet(getCombos(aggregateBindings.list, 'aggregate.list.toggle.scope'));
+    const kill = formatHintComboSet(getCombos(aggregateBindings.list, 'aggregate.kill'));
     const scopeLabel = showInactive ? 'all' : 'active';
     const modeHint = vimMode === 'insert' ? 'esc:normal' : 'i:filter';
-    return `j/k:nav gg/G:jump enter:preview ${jump}:jump ${toggleScope}:scope(${scopeLabel}) ${kill}:kill q:close ${modeHint}`;
+    return `j/k:nav gg/G:jump enter:preview ${newPane}:new ${jump}:jump ${toggleScope}:scope(${scopeLabel}) ${kill}:kill q:close ${modeHint}`;
   }
 
   const navCombos = [
     ...getCombos(aggregateBindings.list, 'aggregate.list.up'),
     ...getCombos(aggregateBindings.list, 'aggregate.list.down'),
   ];
-  const navigate = formatComboSet(navCombos);
-  const interact = formatComboSet(getCombos(aggregateBindings.list, 'aggregate.list.preview'));
-  const jump = formatComboSet(getCombos(aggregateBindings.list, 'aggregate.list.jump'));
-  const toggleScope = formatComboSet(getCombos(aggregateBindings.list, 'aggregate.list.toggle.scope'));
-  const kill = formatComboSet(getCombos(aggregateBindings.list, 'aggregate.kill'));
-  const close = formatComboSet(getCombos(aggregateBindings.list, 'aggregate.list.close'));
+  const navigate = formatHintComboSet(navCombos);
+  const interact = formatHintComboSet(getCombos(aggregateBindings.list, 'aggregate.list.preview'));
+  const jump = formatHintComboSet(getCombos(aggregateBindings.list, 'aggregate.list.jump'));
+  const newPane = formatHintComboSet(getCombos(aggregateBindings.list, 'aggregate.list.new.pane'));
+  const toggleScope = formatHintComboSet(getCombos(aggregateBindings.list, 'aggregate.list.toggle.scope'));
+  const kill = formatHintComboSet(getCombos(aggregateBindings.list, 'aggregate.kill'));
+  const close = formatHintComboSet(getCombos(aggregateBindings.list, 'aggregate.list.close'));
   const scopeLabel = showInactive ? 'all' : 'active';
-  return `${navigate}:nav ${interact}:preview ${jump}:jump ${toggleScope}:scope(${scopeLabel}) ${kill}:kill ${close}:close`;
+  return `${navigate}:nav ${interact}:preview ${newPane}:new ${jump}:jump ${toggleScope}:scope(${scopeLabel}) ${kill}:kill ${close}:close`;
 }
 
 /**

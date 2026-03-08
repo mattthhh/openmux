@@ -145,6 +145,9 @@ export function handleNormalModeAction(
     case 'console.toggle':
       options.onToggleConsole?.();
       return true;
+    case 'console.dump':
+      options.onDumpConsoleLogs?.();
+      return true;
     case 'clipboard.paste':
       options.onPaste?.();
       return true;

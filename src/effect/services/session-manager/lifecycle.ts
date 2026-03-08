@@ -69,6 +69,7 @@ export async function createSession(
   const saveIndexResult = await storage.saveIndex({
     sessions: updatedSessions,
     activeSessionId: id,
+    aggregateSessionOrder: currentIndex.aggregateSessionOrder,
   })
   if (saveIndexResult instanceof SessionStorageError) {
     return saveIndexResult
@@ -122,6 +123,7 @@ export async function saveSession(
   return await storage.saveIndex({
     sessions,
     activeSessionId: currentIndex.activeSessionId,
+    aggregateSessionOrder: currentIndex.aggregateSessionOrder,
   })
 }
 
@@ -162,9 +164,14 @@ export async function deleteSession(
       ? filteredSessions[0]?.id ?? null
       : currentIndex.activeSessionId
 
+  const filteredAggregateOrder = (currentIndex.aggregateSessionOrder ?? []).filter(
+    (sessionId) => sessionId !== id
+  )
+
   const saveIndexResult = await storage.saveIndex({
     sessions: filteredSessions,
     activeSessionId: newActiveId,
+    aggregateSessionOrder: filteredAggregateOrder,
   })
   if (saveIndexResult instanceof SessionStorageError) {
     return saveIndexResult

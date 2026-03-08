@@ -28,6 +28,9 @@ import {
 } from './components/app';
 import { setClipboardPasteHandler } from './terminal/focused-pty-registry';
 import { readFromClipboard } from './effect/bridge';
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
 import { handleNormalModeAction } from './contexts/keyboard/handlers';
 import { setupKeyboardRouting } from './components/app/keyboard-routing';
 import { usePtyCreation } from './components/app/pty-creation';
@@ -209,6 +212,20 @@ function AppContent() {
     renderer.console.toggle();
   };
 
+  // Dump console logs to /tmp
+  const handleDumpConsoleLogs = () => {
+    try {
+      const logs = renderer.console.getCachedLogs();
+      const timestamp = Date.now();
+      const filename = `openmux-console-${timestamp}.log`;
+      const filepath = path.join(os.tmpdir(), filename);
+      fs.writeFileSync(filepath, logs, 'utf8');
+      console.info(`Console logs dumped to: ${filepath}`);
+    } catch (error) {
+      console.error('Failed to dump console logs:', error);
+    }
+  };
+
   const handleToggleVimMode = () => {
     const current = config.config().keyboard.vimMode;
     const next: KeyboardVimMode = current === 'overlays' ? 'off' : 'overlays';
@@ -286,6 +303,7 @@ function AppContent() {
         onEnterSearch: handleEnterSearch,
         onEnterCopyMode: handleEnterCopyMode,
         onToggleConsole: handleToggleConsole,
+        onDumpConsoleLogs: handleDumpConsoleLogs,
         onToggleAggregateView: openAggregateView,
         onToggleCommandPalette: toggleCommandPalette,
         onToggleVimMode: handleToggleVimMode,
@@ -314,6 +332,7 @@ function AppContent() {
     onEnterSearch: handleEnterSearch,
     onEnterCopyMode: handleEnterCopyMode,
     onToggleConsole: handleToggleConsole,
+    onDumpConsoleLogs: handleDumpConsoleLogs,
     onToggleAggregateView: openAggregateView,
     onToggleCommandPalette: toggleCommandPalette,
     onToggleVimMode: handleToggleVimMode,

@@ -30,6 +30,9 @@ export function createAggregateListHandler(deps: AggregateKeyboardDeps) {
       case 'aggregate.list.jump':
         deps.handleJumpToPty();
         return true;
+      case 'aggregate.list.new.pane':
+        deps.handleNewPaneInSession();
+        return true;
       case 'aggregate.list.toggle.scope':
         deps.toggleShowInactive();
         return true;

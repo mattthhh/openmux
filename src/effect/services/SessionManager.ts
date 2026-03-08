@@ -30,6 +30,8 @@ import {
   getSessionMetadata as metadataGetSessionMetadata,
   updateAutoName as metadataUpdateAutoName,
   getSessionSummary as metadataGetSessionSummary,
+  getAggregateSessionOrder as metadataGetAggregateSessionOrder,
+  setAggregateSessionOrder as metadataSetAggregateSessionOrder,
 } from "./session-manager/metadata"
 
 import {
@@ -57,6 +59,8 @@ export interface SessionManager {
   getSessionMetadata(id: SessionId): Promise<SessionStorageError | SessionMetadata | null>
   updateAutoName(id: SessionId, cwd: string): Promise<SessionError | void>
   getSessionSummary(id: SessionId): Promise<SessionError | { workspaceCount: number; paneCount: number } | null>
+  getAggregateSessionOrder(): Promise<SessionStorageError | string[]>
+  setAggregateSessionOrder(order: string[]): Promise<SessionStorageError | void>
   serializeWorkspaces(
     metadata: SessionMetadata,
     workspaces: ReadonlyMap<number, WorkspaceState>,
@@ -140,6 +144,10 @@ export async function createSessionManager(
       metadataUpdateAutoName(metadataDeps, id, cwd),
     getSessionSummary: (id: SessionId) =>
       metadataGetSessionSummary(storage, id),
+    getAggregateSessionOrder: () =>
+      metadataGetAggregateSessionOrder(storage),
+    setAggregateSessionOrder: (order: string[]) =>
+      metadataSetAggregateSessionOrder(storage, order),
     serializeWorkspaces: (
       metadata: SessionMetadata,
       workspaces: ReadonlyMap<number, WorkspaceState>,
@@ -161,6 +169,7 @@ export async function createSessionManager(
 export function createTestSessionManager(): SessionManager {
   const sessions = new Map<SessionId, SerializedSession>()
   let activeId: SessionId | null = null
+  let aggregateSessionOrder: string[] = []
 
   const getActiveSessionId = (): SessionId | null => activeId
 
@@ -279,6 +288,15 @@ export function createTestSessionManager(): SessionManager {
       const session = sessions.get(id)
       if (!session) return null
       return { workspaceCount: session.workspaces.length, paneCount: 0 }
+    },
+
+    getAggregateSessionOrder: async () => aggregateSessionOrder,
+
+    setAggregateSessionOrder: async (order: string[]) => {
+      const existingIds = new Set(Array.from(sessions.keys()))
+      const nextOrder = order.filter((id, index) => order.indexOf(id) === index && existingIds.has(id as SessionId))
+      const missing = Array.from(sessions.keys()).filter((id) => !nextOrder.includes(id))
+      aggregateSessionOrder = [...nextOrder, ...missing]
     },
 
     serializeWorkspaces: async (

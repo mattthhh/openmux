@@ -105,6 +105,8 @@ export const DEFAULT_KEYBINDINGS: KeybindingsConfig = {
       'up': 'aggregate.list.up',
       'enter': 'aggregate.list.preview',
       'tab': 'aggregate.list.jump',
+      'n': 'aggregate.list.new.pane',
+      'ctrl+n': 'aggregate.list.new.pane',
       'alt+escape': 'aggregate.list.close',
       'alt+a': 'aggregate.list.toggle.scope',
       'alt+x': 'aggregate.kill',

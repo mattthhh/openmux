@@ -53,6 +53,7 @@ export interface AggregateKeyboardDeps {
   handleCopyModeKeys: (event: KeyboardEvent) => boolean;
 
   handleJumpToPty: () => Promise<boolean>;
+  handleNewPaneInSession: () => Promise<void>;
 
   onRequestQuit?: () => void;
   onDetach?: () => void;

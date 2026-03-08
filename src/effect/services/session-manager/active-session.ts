@@ -49,6 +49,7 @@ export async function setActiveSessionId(
   return await storage.saveIndex({
     sessions: currentIndex.sessions,
     activeSessionId: id,
+    aggregateSessionOrder: currentIndex.aggregateSessionOrder,
   })
 }
 
@@ -86,6 +87,7 @@ export async function switchToSession(
   const saveIndexResult = await storage.saveIndex({
     sessions: updatedSessions,
     activeSessionId: id,
+    aggregateSessionOrder: currentIndex.aggregateSessionOrder,
   })
   if (saveIndexResult instanceof SessionStorageError) {
     return saveIndexResult

@@ -72,6 +72,7 @@ export async function renameSession(
   return await storage.saveIndex({
     sessions: updatedSessions,
     activeSessionId: currentIndex.activeSessionId,
+    aggregateSessionOrder: currentIndex.aggregateSessionOrder,
   })
 }
 
@@ -117,6 +118,7 @@ export async function updateAutoName(
       return await storage.saveIndex({
         sessions: updatedSessions,
         activeSessionId: index.activeSessionId,
+        aggregateSessionOrder: index.aggregateSessionOrder,
       })
     }
   }
@@ -125,6 +127,38 @@ export async function updateAutoName(
 /**
  * Get session summary (workspace/pane counts)
  */
+export async function getAggregateSessionOrder(
+  storage: SessionStorage
+): Promise<SessionStorageError | string[]> {
+  const index = await storage.loadIndex()
+  if (index instanceof SessionStorageError) {
+    return index
+  }
+  return [...(index.aggregateSessionOrder ?? [])].map((id) => String(id))
+}
+
+export async function setAggregateSessionOrder(
+  storage: SessionStorage,
+  order: string[]
+): Promise<SessionStorageError | void> {
+  const index = await storage.loadIndex()
+  if (index instanceof SessionStorageError) {
+    return index
+  }
+
+  const existingIds = new Set(index.sessions.map((session) => String(session.id)))
+  const nextOrder = order.filter((id, index) => order.indexOf(id) === index && existingIds.has(id))
+  const missingIds = index.sessions
+    .map((session) => String(session.id))
+    .filter((id) => !nextOrder.includes(id))
+
+  return await storage.saveIndex({
+    sessions: index.sessions,
+    activeSessionId: index.activeSessionId,
+    aggregateSessionOrder: [...nextOrder, ...missingIds].map((id) => id as SessionId),
+  })
+}
+
 export async function getSessionSummary(
   storage: SessionStorage,
   id: SessionId
