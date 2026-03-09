@@ -147,9 +147,10 @@ export function PtyTreeRow(props: PtyTreeRowProps) {
   // Evaluate activity dynamically so runtime stdout activity can start/stop shimmer.
   const isActive = () => hasMeaningfulActivity(props.pty);
 
-  // Subscribe to global shimmer tick when active and shimmer is enabled
+  // Subscribe to global shimmer tick - always update version so the memo
+  // re-evaluates and can transition back to non-shimmered state when inactive
   const shimmerUnsub = subscribeToShimmer(() => {
-    if (isActive() && isShimmerEnabled()) {
+    if (isShimmerEnabled()) {
       setShimmerVersion((v) => v + 1);
     }
   });
