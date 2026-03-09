@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.10](https://github.com/monotykamary/openmux/compare/v0.3.9...v0.3.10) (2026-03-09)
+
+
+### Bug Fixes
+
+* **aggregate:** prevent shimmer animation from getting stuck ([99e62b4](https://github.com/monotykamary/openmux/commit/99e62b47de0638e3a9c3d8ad9733fb9bbbac9e6b))
+
 ### [0.3.9](https://github.com/monotykamary/openmux/compare/v0.3.8...v0.3.9) (2026-03-08)
 
 
