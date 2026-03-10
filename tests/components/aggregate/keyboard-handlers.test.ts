@@ -140,6 +140,25 @@ describe("createAggregateKeyboardHandler", () => {
     expect(setup.exitPreviewMode).not.toHaveBeenCalled();
   });
 
+  it("enters copy mode via prefix+[ while in preview mode", () => {
+    const setup = createDeps({
+      getPreviewMode: () => true,
+    });
+    const handler = createAggregateKeyboardHandler(setup.deps);
+
+    // Step 1: Press prefix key (ctrl+b)
+    const prefixResult = handler.handleKeyDown({ key: "b", ctrl: true, eventType: "press" });
+    expect(prefixResult).toBe(true);
+    expect(setup.getPrefixActive()).toBe(true);
+
+    // Step 2: Press [ (while prefix is active)
+    const copyResult = handler.handleKeyDown({ key: "[", eventType: "press" });
+    expect(copyResult).toBe(true);
+    expect(setup.handleEnterCopyMode).toHaveBeenCalledTimes(1);
+    expect(setup.getPrefixActive()).toBe(false);
+    expect(setup.clearPrefixTimeout).toHaveBeenCalled();
+  });
+
   it("routes Enter in aggregate list mode through the selected-row handler", () => {
     const setup = createDeps({
       getPreviewMode: () => false,

@@ -10,7 +10,7 @@ import {
   createSignal,
   type ParentProps,
 } from 'solid-js';
-import type { TerminalCell } from '../core/types';
+import type { TerminalCell, TerminalState } from '../core/types';
 import { isCellInRange, extractSelectedText } from '../core/coordinates';
 import { copyToClipboard } from '../effect/bridge';
 import { useTerminal } from './TerminalContext';
@@ -79,8 +79,8 @@ export function CopyModeProvider(props: CopyModeProviderProps) {
     return current.cursor;
   };
 
-  const getScrollMeta = (ptyId: string) => {
-    const terminalState = getTerminalStateSync(ptyId);
+  const getScrollMeta = (ptyId: string, overrideGetTerminalState?: (ptyId: string) => TerminalState | null) => {
+    const terminalState = overrideGetTerminalState?.(ptyId) ?? getTerminalStateSync(ptyId);
     const emulator = getEmulatorSync(ptyId);
     const scrollState = getScrollState(ptyId);
     const scrollbackLength =
@@ -141,16 +141,19 @@ export function CopyModeProvider(props: CopyModeProviderProps) {
     notifyChange();
   };
 
-  const enterCopyMode = (ptyId: string) => {
-    const meta = getScrollMeta(ptyId);
+  const enterCopyMode = (ptyId: string, overrideGetTerminalState?: (ptyId: string) => TerminalState | null) => {
+    const meta = getScrollMeta(ptyId, overrideGetTerminalState);
     if (!meta.terminalState || meta.rows <= 0 || meta.cols <= 0) return;
     const cursorY = meta.terminalState.cursor.y ?? 0;
     const cursorX = meta.terminalState.cursor.x ?? 0;
     const absY = meta.viewportOffset > 0
       ? meta.scrollbackLength - meta.viewportOffset
       : meta.scrollbackLength + cursorY;
-    const clamped = clampCursor(ptyId, { x: cursorX, absY });
-    if (!clamped) return;
+    const maxAbsY = Math.max(0, meta.scrollbackLength + meta.rows - 1);
+    const clamped = {
+      x: clamp(cursorX, 0, Math.max(0, meta.cols - 1)),
+      absY: clamp(absY, 0, maxAbsY),
+    };
 
     updateState({
       ptyId,

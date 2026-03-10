@@ -705,7 +705,8 @@ export function AggregateView(props: AggregateViewProps) {
     if (!state.previewMode || !selectedPtyId) return;
     clearAllSelections();
     keyboardEnterCopyMode();
-    copyMode.enterCopyMode(selectedPtyId);
+    // Pass aggregate terminal state getter so copy mode works for PTYs from other sessions
+    copyMode.enterCopyMode(selectedPtyId, getAggregateTerminalStateSync);
     setAggregateCopyModeActive(true);
   };
 
