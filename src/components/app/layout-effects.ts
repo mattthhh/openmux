@@ -60,8 +60,10 @@ export function setupAppLayoutEffects(params: {
   );
 
   // Resize PTYs and update positions when pane geometry or terminal size changes
+  // Skip when aggregate view is open - InteractivePreview handles preview sizing
   createEffect(() => {
     if (!terminal.isInitialized) return;
+    if (aggregateState.showAggregateView) return;
     layout.layoutGeometryVersion;
     const w = width();
     const h = height();
