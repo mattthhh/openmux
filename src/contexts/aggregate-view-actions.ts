@@ -75,6 +75,7 @@ export function createAggregateViewActions(
     setState(produce((s) => {
       s.showAggregateView = true;
       s.filterQuery = '';
+      s.listScrollOffset = 0;
       clearPreviewState(s);
       recomputeMatches(s);
       recomputeTree(s);
@@ -88,6 +89,7 @@ export function createAggregateViewActions(
       s.selectedIndex = 0;
       s.selectedPtyId = null;
       s.selectedSessionId = null;
+      s.listScrollOffset = 0;
       clearPreviewState(s);
     }));
   };
@@ -473,6 +475,29 @@ export function createAggregateViewActions(
     return null;
   };
 
+  // ============================================================================
+  // List Scrolling
+  // ============================================================================
+
+  /** Scroll the list up by a specified amount (default: 3 lines) */
+  const scrollListUp = (amount: number = 3) => {
+    setState('listScrollOffset', (current) => Math.max(0, current - amount));
+  };
+
+  /** Scroll the list down by a specified amount (default: 3 lines) */
+  const scrollListDown = (amount: number = 3) => {
+    setState('listScrollOffset', (current) => {
+      const maxOffset = Math.max(0, state.flattenedTree.length - 1);
+      return Math.min(maxOffset, current + amount);
+    });
+  };
+
+  /** Set the list scroll offset directly */
+  const setListScrollOffset = (offset: number) => {
+    const maxOffset = Math.max(0, state.flattenedTree.length - 1);
+    setState('listScrollOffset', Math.max(0, Math.min(maxOffset, offset)));
+  };
+
   /** Create a new pane in the currently selected session */
   const createNewPaneInSelectedSession = (): boolean => {
     const sessionId = getSelectedSessionId();
@@ -537,5 +562,9 @@ export function createAggregateViewActions(
     getSelectedItem,
     // Smart selection on close/kill
     selectAfterPtyRemoval,
+    // List scrolling
+    scrollListUp,
+    scrollListDown,
+    setListScrollOffset,
   };
 }

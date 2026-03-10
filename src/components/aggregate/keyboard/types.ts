@@ -66,4 +66,7 @@ export interface AggregateKeyboardDeps {
 
   clearPrefixTimeout: () => void;
   startPrefixTimeout: () => void;
+  scrollListUp?: (amount?: number) => void;
+  scrollListDown?: (amount?: number) => void;
+  setListScrollOffset?: (offset: number) => void;
 }

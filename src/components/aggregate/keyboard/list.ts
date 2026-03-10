@@ -12,8 +12,15 @@ export function createAggregateListHandler(deps: AggregateKeyboardDeps) {
       case 'aggregate.list.up':
         deps.navigateUp();
         return true;
+      case 'aggregate.list.pageUp':
+        deps.scrollListUp?.(5);
+        return true;
+      case 'aggregate.list.pageDown':
+        deps.scrollListDown?.(5);
+        return true;
       case 'aggregate.list.top':
         deps.setSelectedIndex(0);
+        deps.setListScrollOffset?.(0);
         return true;
       case 'aggregate.list.bottom': {
         const count = deps.getMatchedCount();

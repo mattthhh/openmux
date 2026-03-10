@@ -77,6 +77,9 @@ export function AggregateView(props: AggregateViewProps) {
     toggleSessionExpanded,
     togglePreviewZoom,
     reorderSessions,
+    scrollListUp,
+    scrollListDown,
+    setListScrollOffset,
   } = useAggregateView();
   const {
     state: keyboardState,
@@ -241,6 +244,8 @@ export function AggregateView(props: AggregateViewProps) {
     })
   );
 
+  // Scroll-aware visibility calculation
+  // We reserve 1 row for top indicator (if not at start) and 1 row for bottom indicator (if not at end)
   const visibleListStart = createMemo(() => {
     const maxRows = layout().maxVisibleCards;
     const totalRows = state.flattenedTree.length;
@@ -249,14 +254,36 @@ export function AggregateView(props: AggregateViewProps) {
       return 0;
     }
 
-    const centeredStart = state.selectedIndex - Math.floor(maxRows / 2);
-    return Math.max(0, Math.min(centeredStart, totalRows - maxRows));
+    // Use explicit scroll offset - allow scrolling independently of selection
+    const scrollOffset = state.listScrollOffset;
+
+    // Calculate effective rows (reserve 1 for top indicator if scrolled, 1 for bottom if needed)
+    const showTopIndicator = scrollOffset > 0;
+    const effectiveMaxRows = Math.max(1, maxRows - (showTopIndicator ? 1 : 0));
+
+    return Math.max(0, Math.min(scrollOffset, totalRows - effectiveMaxRows));
+  });
+
+  const showTopIndicator = createMemo(() => visibleListStart() > 0);
+
+  const effectiveMaxVisible = createMemo(() => {
+    const maxRows = layout().maxVisibleCards;
+    return Math.max(1, maxRows - (showTopIndicator() ? 1 : 0));
   });
 
   const visibleItems = createMemo(() => {
     const start = visibleListStart();
-    const end = start + layout().maxVisibleCards;
-    return state.flattenedTree.slice(start, end);
+    const maxVisible = effectiveMaxVisible();
+    // Reserve 1 row for bottom indicator if there are more items
+    const showBottom = start + maxVisible < state.flattenedTree.length;
+    const count = Math.max(1, maxVisible - (showBottom ? 1 : 0));
+    return state.flattenedTree.slice(start, start + count);
+  });
+
+  const showBottomIndicator = createMemo(() => {
+    const start = visibleListStart();
+    const maxVisible = effectiveMaxVisible();
+    return start + maxVisible < state.flattenedTree.length;
   });
 
   const getSessionIdForItem = (item: FlattenedTreeItem | undefined): string | null => {
@@ -354,6 +381,44 @@ export function AggregateView(props: AggregateViewProps) {
     if (inSearchMode() || state.previewMode) {
       setVimMode('normal');
     }
+  });
+
+  // Ensure selected item is visible when selection changes (keyboard navigation)
+  // Only reacts to selection changes, not scroll offset changes
+  createEffect((prevSelectedIndex?: number) => {
+    if (!state.showAggregateView) return state.selectedIndex;
+
+    const selectedIndex = state.selectedIndex;
+
+    // Only run when selection actually changes
+    if (prevSelectedIndex === selectedIndex) return selectedIndex;
+
+    const scrollOffset = state.listScrollOffset;
+    const maxRows = layout().maxVisibleCards;
+    const totalRows = state.flattenedTree.length;
+
+    // If selection is above current view, scroll up
+    if (selectedIndex < scrollOffset) {
+      setListScrollOffset(selectedIndex);
+      return selectedIndex;
+    }
+
+    // Calculate the last visible row index (0-based within the pane)
+    // We need to reserve 1 row for bottom indicator if there are more items below
+    const hasMoreBelow = selectedIndex < totalRows - 1;
+    const reservedForBottom = hasMoreBelow ? 1 : 0;
+    const lastVisibleRow = maxRows - 1 - reservedForBottom;
+
+    // If selection would be at or beyond last visible row, scroll down
+    const relativeIndex = selectedIndex - scrollOffset;
+    if (relativeIndex >= lastVisibleRow) {
+      // Scroll so selection appears at lastVisibleRow - 1 (one row above bottom indicator)
+      const targetOffset = selectedIndex - (lastVisibleRow - 1);
+      setListScrollOffset(Math.max(0, targetOffset));
+      return selectedIndex;
+    }
+
+    return selectedIndex;
   });
 
   createEffect(() => {
@@ -789,6 +854,9 @@ export function AggregateView(props: AggregateViewProps) {
     onRequestKillPty: props.onRequestKillPty,
     clearPrefixTimeout,
     startPrefixTimeout,
+    scrollListUp,
+    scrollListDown,
+    setListScrollOffset,
   });
 
   // Create mouse handlers using factory (uses shared terminal-mouse-handler)
@@ -893,8 +961,24 @@ export function AggregateView(props: AggregateViewProps) {
                 e.preventDefault();
                 void commitSessionDrag();
               }}
+              onMouseScroll={(e: OpenTUIMouseEvent) => {
+                e.preventDefault();
+                const direction = e.scroll?.direction;
+                if (!direction) return;
+                if (direction === 'up') {
+                  scrollListUp(3);
+                } else if (direction === 'down') {
+                  scrollListDown(3);
+                }
+              }}
             >
               <box style={{ flexDirection: 'column' }}>
+                {/* Scroll up indicator */}
+                <Show when={showTopIndicator()}>
+                  <box style={{ height: 1, justifyContent: 'center' }}>
+                    <text fg={overlaySubtle()}>▲ {visibleListStart()} more</text>
+                  </box>
+                </Show>
                 <Show
                   when={state.flattenedTree.length > 0}
                   fallback={
@@ -996,6 +1080,12 @@ export function AggregateView(props: AggregateViewProps) {
                       );
                     }}
                   </For>
+                </Show>
+                {/* Scroll down indicator */}
+                <Show when={showBottomIndicator()}>
+                  <box style={{ height: 1, justifyContent: 'center' }}>
+                    <text fg={overlaySubtle()}>▼ {state.flattenedTree.length - visibleListStart() - visibleItems().length} more</text>
+                  </box>
                 </Show>
               </box>
             </box>

@@ -103,6 +103,8 @@ export const DEFAULT_KEYBINDINGS: KeybindingsConfig = {
     list: {
       'down': 'aggregate.list.down',
       'up': 'aggregate.list.up',
+      'pageup': 'aggregate.list.pageUp',
+      'pagedown': 'aggregate.list.pageDown',
       'enter': 'aggregate.list.preview',
       'tab': 'aggregate.list.jump',
       'n': 'aggregate.list.new.pane',

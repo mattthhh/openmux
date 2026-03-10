@@ -174,6 +174,8 @@ export interface AggregateViewState {
   recentlyAddedPtyIds: Set<string>;
   /** Set of PTY IDs recently deleted (prevent background refresh from adding them back) */
   deletedPtyIds: Set<string>;
+  /** Scroll offset for the session/PTY list (0 = top) */
+  listScrollOffset: number;
 }
 
 export const initialState: AggregateViewState = {
@@ -203,6 +205,7 @@ export const initialState: AggregateViewState = {
   pendingPtyIds: new Set(),
   recentlyAddedPtyIds: new Set(),
   deletedPtyIds: new Set(),
+  listScrollOffset: 0,
 };
 
 export interface AggregateViewContextValue {
@@ -238,4 +241,10 @@ export interface AggregateViewContextValue {
   isSessionLoading: (sessionId: string) => boolean;
   /** Reorder sessions for aggregate view */
   reorderSessions: (sourceSessionId: string, targetSessionId: string) => Promise<void>;
+  /** Scroll the list up by one page/screen */
+  scrollListUp: (pageSize?: number) => void;
+  /** Scroll the list down by one page/screen */
+  scrollListDown: (pageSize?: number) => void;
+  /** Scroll the list to a specific offset */
+  setListScrollOffset: (offset: number) => void;
 }
