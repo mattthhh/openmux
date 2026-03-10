@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.12](https://github.com/monotykamary/openmux/compare/v0.3.11...v0.3.12) (2026-03-10)
+
+
+### Features
+
+* **aggregate-view:** add scrolling support for session/pty list ([09a1cf3](https://github.com/monotykamary/openmux/commit/09a1cf34989a218ef22e425f39631d5556ac1ea9))
+
+
+### Bug Fixes
+
+* **aggregate-view:** remove stale git diff stats preservation logic ([548fe18](https://github.com/monotykamary/openmux/commit/548fe18fa4d38ca6cfbae5817dc8700b30dd0561))
+* **aggregate:** correct list viewport scroll thresholds ([c3be55e](https://github.com/monotykamary/openmux/commit/c3be55ea19efded336020e37a447f6292d10800d))
+* **shim:** speed up PTY attach replay ([403a642](https://github.com/monotykamary/openmux/commit/403a6425be0114b6c9e0eafcd5c8f74e36096c87))
+
 ### [0.3.11](https://github.com/monotykamary/openmux/compare/v0.3.10...v0.3.11) (2026-03-10)
 
 
