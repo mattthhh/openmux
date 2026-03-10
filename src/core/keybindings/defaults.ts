@@ -118,6 +118,7 @@ export const DEFAULT_KEYBINDINGS: KeybindingsConfig = {
       'alt+escape': 'aggregate.preview.exit',
       'alt+f': 'aggregate.preview.search',
       'alt+x': 'aggregate.kill',
+      '[': 'aggregate.preview.copy',
     },
     search: {
       'enter': 'aggregate.search.confirm',

@@ -140,6 +140,14 @@ describe("createAggregateKeyboardHandler", () => {
     expect(setup.exitPreviewMode).not.toHaveBeenCalled();
   });
 
+  it("enters copy mode from preview mode via direct [ keybinding", () => {
+    const setup = createDeps();
+    const handler = createAggregateKeyboardHandler(setup.deps);
+
+    expect(handler.handleKeyDown({ key: "[", eventType: "press" })).toBe(true);
+    expect(setup.handleEnterCopyMode).toHaveBeenCalledTimes(1);
+  });
+
   it("routes Enter in aggregate list mode through the selected-row handler", () => {
     const setup = createDeps({
       getPreviewMode: () => false,
