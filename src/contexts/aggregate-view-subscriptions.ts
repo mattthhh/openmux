@@ -691,11 +691,6 @@ export function createAggregateViewRefreshers(
         for (const { index, update, metadata } of group) {
           const prev = s.allPtys[index];
           const gitFields = extractGitMetadata(metadata);
-          const repoKeyChanged = prev.gitRepoKey !== gitFields.gitRepoKey;
-
-          if (!repoKeyChanged && prev.gitDiffStats !== undefined && gitFields.gitDiffStats === undefined) {
-            gitFields.gitDiffStats = prev.gitDiffStats;
-          }
 
           const updated: PtyInfo = {
             ...prev,
