@@ -51,7 +51,7 @@ describe('buildSessionTreeNodes (smoke)', () => {
     
     const nodes = buildSessionTreeNodes(sessions)
     
-    expect(nodes).toHaveLength(6) // 3 sessions + 1 + 1 + 2 PTYs
+    expect(nodes).toHaveLength(7) // 3 sessions + 1 + 1 + 2 PTYs = 7 nodes
     
     // Session 1
     expect(nodes[0]).toMatchObject({ type: 'session', sessionId: 's1', isLast: false, isActive: true })

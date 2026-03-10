@@ -69,9 +69,10 @@ describe('fetchPtyMetadata (smoke)', () => {
     expect(result!.foregroundProcess).toBeUndefined()
   })
 
-  it('should catch unexpected errors and return null', async () => {
+  it('should return null when getSession returns an Error', async () => {
+    const { PtyNotFoundError } = await import('../../../errors')
     const pty = createMockPtyService({
-      getSession: vi.fn().mockRejectedValue(new Error('Unexpected error')),
+      getSession: vi.fn().mockResolvedValue(new PtyNotFoundError({ ptyId: 'pty-1' })),
     })
     
     const result = await fetchPtyMetadata(pty, 'pty-1' as PtyId)

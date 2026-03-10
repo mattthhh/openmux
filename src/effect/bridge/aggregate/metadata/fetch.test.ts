@@ -173,11 +173,10 @@ describe('fetchPtyMetadata', () => {
   })
 
   describe('error handling', () => {
-    it('should catch any unexpected error and return null', async () => {
+    it('should return null when getSession returns an Error', async () => {
+      const { PtyNotFoundError } = await import('../../../errors')
       const pty = createMockPtyService({
-        getSession: vi.fn().mockImplementation(() => {
-          throw new Error('Unexpected crash')
-        }),
+        getSession: vi.fn().mockResolvedValue(new PtyNotFoundError({ ptyId: 'pty-1' })),
       })
       
       const result = await fetchPtyMetadata(pty, 'pty-1' as PtyId)

@@ -8,14 +8,15 @@
 
 import * as errore from 'errore';
 import { produce, type SetStoreFunction } from 'solid-js/store';
-import { PtyMetadataError } from '../../effect/errors';
+import { PtyMetadataError } from '../../../effect/errors';
 
 import type { AggregateViewState, PtyInfo } from '../aggregate-view-types';
 import type { PtyOwnership, CurrentSessionHints } from './types';
-import { getPtyMetadata } from '../../effect/bridge/aggregate-bridge';
+import { getPtyMetadata } from '../../../effect/bridge/aggregate-bridge';
 import { getGlobalGitMetadataCache } from '../../git-metadata-cache';
-import { getGitInfo, getGitDiffStats } from '../../effect/services/pty/helpers';
-import { buildPtyIndex, recomputeMatches, recomputeTree } from '../aggregate-view-helpers';
+import { getGitInfo, getGitDiffStats } from '../../../effect/services/pty/helpers';
+import { recomputeMatches, recomputeTree } from '../session/operations';
+import { buildPtyIndex } from '../filter/operations';
 import { extractGitMetadata } from '../git/metadata';
 
 /** Dependencies for lifecycle handlers */

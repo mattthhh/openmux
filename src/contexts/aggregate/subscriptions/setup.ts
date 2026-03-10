@@ -19,12 +19,12 @@ import {
   streamFromSubscription, 
   tap, 
   repeatWithInterval 
-} from '../../effect/stream-utils';
+} from '../../../effect/stream-utils';
 import { 
   subscribeToPtyLifecycle, 
   subscribeToAllTitleChanges,
   type PtyTitleChangeEvent 
-} from '../../effect/bridge/pty-bridge';
+} from '../../../effect/bridge/pty-bridge';
 
 /** Dependencies for subscription setup */
 export interface SubscriptionSetupDeps {

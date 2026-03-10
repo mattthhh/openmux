@@ -3,31 +3,13 @@
  */
 
 import type { FlattenedTreeItem } from '../types';
-import { isSelectableItem } from './flatten';
+import { isSelectableItem, findNearestSelectableIndex } from './flatten';
 import { TreeOperationError } from '../errors';
 
 /** Navigation result */
 export interface NavigationResult {
   index: number;
   item: FlattenedTreeItem | undefined;
-}
-
-/** Find nearest selectable index from a starting point */
-export function findNearestSelectableIndex(
-  items: FlattenedTreeItem[],
-  index: number
-): number | null {
-  if (items.length === 0) return null;
-  if (isSelectableItem(items[index])) return index;
-
-  for (let distance = 1; distance < items.length; distance++) {
-    const lower = index - distance;
-    if (lower >= 0 && isSelectableItem(items[lower])) return lower;
-    const upper = index + distance;
-    if (upper < items.length && isSelectableItem(items[upper])) return upper;
-  }
-
-  return null;
 }
 
 /** Navigate up in the tree */

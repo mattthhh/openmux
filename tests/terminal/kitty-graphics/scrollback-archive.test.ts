@@ -1,4 +1,4 @@
-import { afterEach, beforeAll, describe, expect, it, vi } from "bun:test";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "bun:test";
 import type { ITerminalEmulator, KittyGraphicsPlacement } from '../../../src/terminal/emulator-interface';
 import type { TerminalCell } from '../../../src/core/types';
 import type { ArchivePlacement } from '../../../src/terminal/kitty-graphics/archive-placement';
@@ -36,7 +36,14 @@ beforeAll(async () => {
 });
 
 describe('Kitty Graphics Scrollback Archive', () => {
-  const testDir = '/tmp/openmux-test-scrollback-kitty';
+  let testDir: string;
+  let testDirCounter = 0;
+
+  beforeEach(() => {
+    // Use unique test directory for each test to avoid isolation issues
+    testDirCounter++;
+    testDir = `/tmp/openmux-test-scrollback-kitty-${testDirCounter}-${Date.now()}`;
+  });
 
   afterEach(() => {
     setKittyTransmitBroker(null);

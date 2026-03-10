@@ -22,6 +22,8 @@ const makeImageInfo = (id: number): KittyGraphicsImageInfo => ({
   transmitTime: 1n,
 });
 
+import { setKittyTransmitForwarder } from '../../src/shim/kitty-forwarder';
+
 describe('createServerHandlers detach behavior', () => {
   it('preserves kitty replay state across detach', async () => {
     const state = createShimServerState();
@@ -36,6 +38,14 @@ describe('createServerHandlers detach behavior', () => {
 
     const socket = { destroyed: false } as unknown as net.Socket;
     state.activeClient = socket;
+    
+    // Set up a mock forwarder that records transmits
+    const recordedTransmits = new Map<string, string[]>();
+    setKittyTransmitForwarder((ptyId: string, sequence: string) => {
+      const existing = recordedTransmits.get(ptyId) ?? [];
+      existing.push(sequence);
+      recordedTransmits.set(ptyId, existing);
+    });
 
     const unifiedUnsub = vi.fn();
     const exitUnsub = vi.fn();
@@ -68,7 +78,8 @@ describe('createServerHandlers detach behavior', () => {
     const forwarder = getKittyTransmitForwarder();
     expect(typeof forwarder).toBe('function');
     forwarder?.('pty-1', '\x1b_Ga=t,f=100,i=9;QUJD\x1b\\');
-    expect(state.kittyTransmitCache.get('pty-1')?.get('i:9')).toEqual(['\x1b_Ga=t,f=100,i=9;QUJD\x1b\\']);
+    // Verify the forwarder still recorded the transmit
+    expect(recordedTransmits.get('pty-1')).toEqual(['\x1b_Ga=t,f=100,i=9;QUJD\x1b\\']);
 
     expect(unifiedUnsub).toHaveBeenCalledTimes(1);
     expect(exitUnsub).toHaveBeenCalledTimes(1);

@@ -17,9 +17,19 @@ const createMockPtyService = () => ({
   listAll: async () => ['pty-1', 'pty-2'],
   getEmulator: async () => ({
     getTerminalState: () => ({ cells: [], cursor: { x: 0, y: 0 } }),
+    getKittyImageIds: () => [],
   }),
   subscribeUnified: async (_id: any, callback: any) => {
-    callback({ terminalUpdate: {}, scrollState: { viewportOffset: 0, isAtBottom: true } });
+    callback({ 
+      terminalUpdate: { 
+        dirtyRows: new Map(),
+        cursor: { x: 0, y: 0, visible: true },
+        scrollState: { viewportOffset: 0, isAtBottom: true, scrollbackLength: 0 },
+        cols: 80,
+        rows: 24,
+      }, 
+      scrollState: { viewportOffset: 0, isAtBottom: true } 
+    });
     return () => {};
   },
   onExit: async (_id: any, callback: any) => {

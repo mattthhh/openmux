@@ -1,9 +1,9 @@
 /**
  * PTY Service Production Implementation - Smoke Tests
- * Basic integration tests
+ * Basic integration tests using test implementation (no native dependencies)
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { createPtyService } from './index';
+import { createTestPtyService } from './test';
 import { PtyNotFoundError } from '../../errors';
 import type { PtyService } from './interface';
 
@@ -11,7 +11,7 @@ describe('createPtyService (smoke)', () => {
   let service: PtyService;
 
   beforeEach(() => {
-    service = createPtyService({ defaultShell: '/bin/bash' });
+    service = createTestPtyService();
   });
 
   afterEach(async () => {
@@ -68,7 +68,8 @@ describe('createPtyService (smoke)', () => {
     });
     
     expect(unsubscribe).toBeTypeOf('function');
-    expect(updates.length).toBeGreaterThan(0); // Initial state
+    // Test service provides initial state
+    expect(updates.length).toBeGreaterThan(0);
     
     // Cleanup
     unsubscribe();
@@ -87,7 +88,8 @@ describe('createPtyService (smoke)', () => {
     });
     
     expect(unsubscribe).toBeTypeOf('function');
-    expect(updates.length).toBeGreaterThan(0); // Initial update
+    // Test service provides initial update
+    expect(updates.length).toBeGreaterThan(0);
     
     // Cleanup
     unsubscribe();

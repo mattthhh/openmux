@@ -9,14 +9,15 @@
 
 import * as errore from 'errore';
 import { produce, type SetStoreFunction } from 'solid-js/store';
-import { PtyMetadataError, ServicesNotInitializedError } from '../../effect/errors';
+import { PtyMetadataError, ServicesNotInitializedError } from '../../../effect/errors';
 
 import type { AggregateViewState } from '../aggregate-view-types';
-import type { PtyMetadata } from '../../effect/bridge/aggregate-bridge';
-import { getPtyMetadata } from '../../effect/bridge/aggregate-bridge';
+import type { PtyMetadata } from '../../../effect/bridge/aggregate/types';
+import { getPtyMetadata } from '../../../effect/bridge/aggregate';
 import { getGlobalGitMetadataCache, type GitRepoMetadata } from '../../git-metadata-cache';
-import { getGitInfo, getGitDiffStats } from '../../effect/services/pty/helpers';
-import { recomputeMatches, recomputeTree } from '../aggregate-view-helpers';
+import { getGitInfo, getGitDiffStats } from '../../../effect/services/pty/helpers';
+import { recomputeMatches, recomputeTree } from '../session/operations';
+import { buildPtyIndex } from '../filter/operations';
 import { extractGitMetadata } from '../git/metadata';
 import { RefreshGuard } from './guard';
 import type { RefreshState } from '../subscriptions/types';

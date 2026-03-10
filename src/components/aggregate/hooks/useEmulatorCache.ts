@@ -21,8 +21,16 @@ export class EmulatorCacheError extends Error {
 export interface UseEmulatorCacheResult {
   /** Get cached emulator for a PTY, or undefined if not cached */
   get: (ptyId: string) => ITerminalEmulator | undefined;
+  /** Get all cached PTY IDs */
+  getCachedPtyIds: () => string[];
+  /** Check if a PTY is currently being fetched */
+  isPending: (ptyId: string) => boolean;
+  /** Get current epoch value (for testing) */
+  getEpoch: () => number;
   /** Preload emulator for a PTY into the cache */
   preload: (ptyId: string) => void;
+  /** Reset the cache (alias for clear) */
+  reset: () => void;
   /** Clear all cached emulators */
   clear: () => void;
 }
@@ -87,12 +95,40 @@ export function useEmulatorCache(options: {
   };
 
   /**
+   * Get all cached PTY IDs.
+   */
+  const getCachedPtyIds = (): string[] => {
+    return Array.from(cache.keys());
+  };
+
+  /**
+   * Check if a PTY is currently being fetched.
+   */
+  const isPending = (ptyId: string): boolean => {
+    return pending.has(ptyId);
+  };
+
+  /**
+   * Get current epoch value (for testing).
+   */
+  const getEpoch = (): number => {
+    return epoch;
+  };
+
+  /**
    * Clear all cached emulators.
    */
   const clear = (): void => {
     epoch += 1;
     cache.clear();
     pending.clear();
+  };
+
+  /**
+   * Reset the cache (alias for clear).
+   */
+  const reset = (): void => {
+    clear();
   };
 
   // Clear cache when component unmounts or becomes inactive
@@ -108,7 +144,11 @@ export function useEmulatorCache(options: {
 
   return {
     get,
+    getCachedPtyIds,
+    isPending,
+    getEpoch,
     preload,
+    reset,
     clear,
   };
 }

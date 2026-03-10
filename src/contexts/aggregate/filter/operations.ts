@@ -10,7 +10,9 @@ export function normalizeProcessName(name: string | undefined): string {
   if (!name) return '';
   const trimmed = name.trim();
   if (!trimmed) return '';
-  const base = trimmed.split('/').pop() ?? trimmed;
+  // Handle both Unix (/) and Windows (\) path separators
+  const withUnixSeparators = trimmed.replace(/\\/g, '/');
+  const base = withUnixSeparators.split('/').pop() ?? trimmed;
   return base.toLowerCase();
 }
 

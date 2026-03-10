@@ -3,7 +3,8 @@
  * Fast, focused tests for core functionality
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { createPtyService, PtyState } from './index';
+import { PtyState } from './state';
+import { createTestPtyService } from './test';
 import type { PtyService } from './interface';
 
 describe('PtyState (litmus)', () => {
@@ -86,7 +87,7 @@ describe('createPtyService (litmus)', () => {
   let service: PtyService;
 
   beforeEach(() => {
-    service = createPtyService({ defaultShell: '/bin/bash' });
+    service = createTestPtyService();
   });
 
   afterEach(() => {

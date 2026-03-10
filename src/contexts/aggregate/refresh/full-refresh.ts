@@ -16,7 +16,8 @@ import { listSessionsResult, getSessionSummaryResult, loadSession } from '../../
 import { listAllPtysWithMetadata, getAggregateSessionPtyMapping, type PtyMetadata } from '../../../effect/bridge/aggregate-bridge';
 import { getGlobalGitMetadataCache, type GitRepoMetadata } from '../../git-metadata-cache';
 import { getGitInfo, getGitDiffStats } from '../../../effect/services/pty/helpers';
-import { buildPtyIndex, recomputeMatches, recomputeTree } from '../tree';
+import { recomputeMatches, recomputeTree } from '../session/operations';
+import { buildPtyIndex } from '../filter/operations';
 import { extractGitMetadata } from '../git/metadata';
 import { RefreshGuard } from './guard';
 import { buildSessionPaneOrder, findWorkspaceIdForPane } from './session-utils';

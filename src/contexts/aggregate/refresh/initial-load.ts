@@ -11,9 +11,10 @@ import { produce, type SetStoreFunction } from 'solid-js/store';
 import type { AggregateViewState, PtyInfo } from '../aggregate-view-types';
 import type { SessionMetadata } from '../../effect/models';
 import type { CurrentSessionPty, CurrentSessionHints } from '../subscriptions/types';
-import { listSessionsResult, getSessionSummaryResult } from '../../effect/bridge/session-bridge';
-import { buildPtyIndex, recomputeMatches, recomputeTree } from '../aggregate-view-helpers';
-import { AggregateBridgeError, SessionStorageError } from '../../effect/errors';
+import { listSessionsResult, getSessionSummaryResult } from '../../../effect/bridge/session-bridge';
+import { recomputeMatches, recomputeTree } from '../session/operations';
+import { buildPtyIndex } from '../filter/operations';
+import { AggregateBridgeError, SessionStorageError } from '../../../effect/errors';
 
 /** Dependencies for initial load */
 export interface InitialLoadDeps {

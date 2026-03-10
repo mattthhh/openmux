@@ -40,12 +40,17 @@ describe('createTestPtyService (litmus)', () => {
   });
 
   it('should return test session', async () => {
-    const session = await service.getSession('test-pty' as any);
+    // First create a PTY to get a valid ID
+    const ptyId = await service.create({ cols: 80, rows: 24 });
+    expect(ptyId).not.toBeInstanceOf(Error);
+    if (ptyId instanceof Error) return;
+    
+    const session = await service.getSession(ptyId);
     
     expect(session).not.toBeInstanceOf(Error);
     if (session instanceof Error) return;
     
-    expect(session.id).toBe('test-pty');
+    expect(session.id).toBe(ptyId);
     expect(session.pid).toBe(12345);
     expect(session.cols).toBe(80);
     expect(session.rows).toBe(24);

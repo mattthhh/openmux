@@ -137,9 +137,9 @@ export async function detachClient(
   state.activeClientId = null;
   state.bootstrappingPtyIds.clear();
 
-  // Keep capturing kitty transmits while detached so replay cache stays fresh
-  // sendKittyTransmit short-circuits socket sends when no active client exists
-  setKittyTransmitForwarder(() => {});
+  // Keep the kitty transmit forwarder active so it continues caching transmits
+  // sendKittyTransmit will record to cache but skip socket sends when no active client
+  // setKittyUpdateForwarder and setNotificationForwarder are cleared as they need a client
   setKittyUpdateForwarder(null);
   setNotificationForwarder(null);
 
