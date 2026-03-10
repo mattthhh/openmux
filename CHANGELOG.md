@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.15](https://github.com/monotykamary/openmux/compare/v0.3.14...v0.3.15) (2026-03-10)
+
+
+### Bug Fixes
+
+* **aggregate:** prevent git metadata bleeding across sessions via shared references ([397a20d](https://github.com/monotykamary/openmux/commit/397a20d4d35aa7c79dfe5f8e49a16129c3c52a08))
+* **aggregate:** skip pane resize when aggregate view is open ([8da0a7f](https://github.com/monotykamary/openmux/commit/8da0a7fa0958032512e6e3fb57e8e6be849a5fe0))
+
 ### [0.3.14](https://github.com/monotykamary/openmux/compare/v0.3.13...v0.3.14) (2026-03-10)
 
 
