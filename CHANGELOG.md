@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.11](https://github.com/monotykamary/openmux/compare/v0.3.10...v0.3.11) (2026-03-10)
+
+
+### Features
+
+* **aggregate:** add debug console toggle keybinding ([d7cc5f4](https://github.com/monotykamary/openmux/commit/d7cc5f44a4b47ee3ea21f2d87679c5b896c17aa9))
+
+
+### Bug Fixes
+
+* **aggregate:** pane creation inherits selected PTY directory ([1a3c288](https://github.com/monotykamary/openmux/commit/1a3c2882cfa20825f8ecc1ba66c1d0c53dbbe82a))
+
 ### [0.3.10](https://github.com/monotykamary/openmux/compare/v0.3.9...v0.3.10) (2026-03-09)
 
 
