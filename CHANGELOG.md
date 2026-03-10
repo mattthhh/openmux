@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.13](https://github.com/monotykamary/openmux/compare/v0.3.12...v0.3.13) (2026-03-10)
+
+
+### Bug Fixes
+
+* **aggregate:** enable direct copy mode keybinding in preview ([5a7b1de](https://github.com/monotykamary/openmux/commit/5a7b1debacc90be6fa8536f55876f26950d3c634))
+* **copy-mode:** enable copy mode for aggregate preview PTYs from other sessions ([0b595a0](https://github.com/monotykamary/openmux/commit/0b595a0403f38febbd1c998b1f0bb5e11f3e3146))
+* **copy-mode:** use aggregate terminal state for all cursor operations ([43a9e89](https://github.com/monotykamary/openmux/commit/43a9e898355fb72a5d40a0b5301f953e1e93e876))
+
 ### [0.3.12](https://github.com/monotykamary/openmux/compare/v0.3.11...v0.3.12) (2026-03-10)
 
 
