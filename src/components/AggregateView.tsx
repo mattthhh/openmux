@@ -99,6 +99,7 @@ export function AggregateView(props: AggregateViewProps) {
   const {
     findSessionForPty,
     scrollTerminal,
+    setScrollOffset,
     isMouseTrackingEnabled,
     getScrollState,
     getEmulatorSync,
@@ -828,6 +829,7 @@ export function AggregateView(props: AggregateViewProps) {
     isMouseTrackingEnabled: isAggregateMouseTrackingEnabled,
     getScrollState,
     scrollTerminal,
+    setScrollOffset,
     startSelection,
     updateSelection,
     completeSelection,

@@ -15,6 +15,7 @@ export interface MouseHandlerDeps extends TerminalMouseDeps {
   getListPaneWidth: () => number;
   getPreviewInnerWidth: () => number;
   getPreviewInnerHeight: () => number;
+  setScrollOffset: (ptyId: string, offset: number) => void;
 }
 
 /**
@@ -29,9 +30,41 @@ export function createAggregateMouseHandlers(deps: MouseHandlerDeps) {
     getPreviewInnerHeight,
     getScrollState,
     scrollTerminal,
+    setScrollOffset,
   } = deps;
 
   const mouseHandler = createTerminalMouseHandler(deps);
+
+  // Track scrollbar drag state (preview pane specific)
+  let scrollbarDrag = {
+    isDragging: false,
+    startY: 0,
+    startOffset: 0,
+  };
+
+  /**
+   * Check if a position is on the scrollbar (rightmost column when scrolled)
+   */
+  const isOnScrollbar = (ptyId: string, relX: number, relY: number): boolean => {
+    const scrollState = getScrollState(ptyId);
+    // Scrollbar is shown when not at bottom
+    if (!scrollState || scrollState.isAtBottom) return false;
+    // Scrollbar is on the rightmost column
+    const innerWidth = getPreviewInnerWidth();
+    return relX === innerWidth - 1 && relY >= 0 && relY < getPreviewInnerHeight();
+  };
+
+  /**
+   * Convert Y position to scroll offset
+   */
+  const yToScrollOffset = (ptyId: string, relY: number): number => {
+    const scrollState = getScrollState(ptyId);
+    if (!scrollState || scrollState.scrollbackLength === 0) return 0;
+    const innerHeight = getPreviewInnerHeight();
+    // relY 0 = top = max offset, relY (innerHeight-1) = bottom = 0 offset
+    const ratio = 1 - (relY / Math.max(1, innerHeight - 1));
+    return Math.round(ratio * scrollState.scrollbackLength);
+  };
 
   type ScrollDirection = 'up' | 'down' | 'left' | 'right';
 
@@ -105,6 +138,19 @@ export function createAggregateMouseHandlers(deps: MouseHandlerDeps) {
     const { relX, relY } = getRelativeCoords(event);
     if (!isInsideContent(relX, relY)) return;
 
+    // Check if clicking on scrollbar
+    if (isOnScrollbar(ptyId, relX, relY)) {
+      const scrollState = getScrollState(ptyId);
+      scrollbarDrag = {
+        isDragging: true,
+        startY: relY,
+        startOffset: scrollState?.viewportOffset ?? 0,
+      };
+      // Jump to clicked position
+      setScrollOffset(ptyId, yToScrollOffset(ptyId, relY));
+      return;
+    }
+
     // Try selection first
     const handled = mouseHandler.handleSelectionMouseDown(
       ptyId, relX, relY, event.modifiers?.shift ?? false
@@ -122,6 +168,9 @@ export function createAggregateMouseHandlers(deps: MouseHandlerDeps) {
 
   const handlePreviewMouseUp = (event: OpenTUIMouseEvent) => {
     event.preventDefault();
+
+    // End scrollbar drag
+    scrollbarDrag.isDragging = false;
 
     const ptyId = getSelectedPtyId();
 
@@ -162,12 +211,19 @@ export function createAggregateMouseHandlers(deps: MouseHandlerDeps) {
 
   const handlePreviewMouseDrag = (event: OpenTUIMouseEvent) => {
     event.preventDefault();
-    if (!getPreviewMode()) return;
 
     const ptyId = getSelectedPtyId();
     if (!ptyId) return;
 
     const { relX, relY } = getRelativeCoords(event);
+
+    // Handle scrollbar dragging
+    if (scrollbarDrag.isDragging) {
+      setScrollOffset(ptyId, yToScrollOffset(ptyId, relY));
+      return;
+    }
+
+    if (!getPreviewMode()) return;
 
     // Try selection drag first
     const handled = mouseHandler.handleSelectionMouseDrag(

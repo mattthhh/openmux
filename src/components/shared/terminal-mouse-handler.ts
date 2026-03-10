@@ -20,6 +20,8 @@ export interface TerminalMouseDeps {
 
   scrollTerminal: (ptyId: string, delta: number) => void;
 
+  setScrollOffset?: (ptyId: string, offset: number) => void;
+
   startSelection: (ptyId: string, x: number, y: number, scrollbackLength: number, scrollOffset: number) => void;
   updateSelection: (ptyId: string, x: number, y: number, scrollbackLength: number, scrollOffset: number) => void;
   completeSelection: (ptyId: string, scrollbackLength: number, getLine: (absoluteY: number) => TerminalCell[] | null) => void;
