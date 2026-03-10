@@ -9,7 +9,7 @@ import { resizePty } from '../../effect/bridge';
 import { useOverlayColors } from '../overlay-colors';
 import { TerminalView } from '../TerminalView';
 
-interface InteractivePreviewProps {
+export interface InteractivePreviewProps {
   ptyId: string | null;
   width: number;
   height: number;

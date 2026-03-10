@@ -1,0 +1,16 @@
+/**
+ * Aggregate view hooks
+ *
+ * Custom hooks extracted from AggregateView.tsx for clean separation of concerns.
+ */
+
+export { useVimMode, type VimHandlers } from './useVimMode';
+export {
+  useEmulatorCache,
+  type EmulatorCacheError,
+} from './useEmulatorCache';
+export {
+  useActivitySubscriptions,
+  type ActivitySubscriptionError,
+} from './useActivitySubscriptions';
+export { useSessionDrag, type DragState } from './useSessionDrag';

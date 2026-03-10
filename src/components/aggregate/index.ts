@@ -32,3 +32,19 @@ export { PlaceholderRow } from './PlaceholderRow';
 export type { SessionTreeNodeProps } from './SessionTreeNode';
 export type { PtyTreeRowProps } from './PtyTreeRow';
 export type { PlaceholderRowProps } from './PlaceholderRow';
+
+// Pane components
+export { ListPane, type ListPaneProps, type ListLayout, type ListViewport } from './ListPane';
+export { PreviewPane, type PreviewPaneProps, type PreviewMouseHandlers } from './PreviewPane';
+
+// Hooks
+export {
+  useVimMode,
+  useEmulatorCache,
+  useActivitySubscriptions,
+  useSessionDrag,
+  type VimHandlers,
+  type EmulatorCacheError,
+  type ActivitySubscriptionError,
+  type DragState,
+} from './hooks';

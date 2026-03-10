@@ -5,6 +5,15 @@ export type LineAccessor = {
   getLine: (absY: number) => TerminalCell[] | null;
 };
 
+/** Create a line accessor from a getLine function and max Y bound */
+export const getLineAccessor = (
+  maxAbsY: number,
+  getLine: (absY: number) => TerminalCell[] | null
+): LineAccessor => ({
+  maxAbsY,
+  getLine,
+});
+
 export type SpanResult = {
   absY: number;
   start: number;

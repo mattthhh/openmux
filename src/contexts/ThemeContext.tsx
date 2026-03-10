@@ -48,3 +48,5 @@ export function useTheme(): Theme {
   }
   return theme;
 }
+
+export type { Theme } from '../core/types';
