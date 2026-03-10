@@ -31,6 +31,7 @@ import {
   createRefreshState,
   createAggregateViewRefreshers,
   createTitleChangeHandler,
+  createLifecycleHandlers,
   setupSubscriptions,
   cleanupSubscriptions,
 } from './aggregate-view-subscriptions';
@@ -110,17 +111,67 @@ interface AggregateViewProviderProps extends ParentProps {}
     return new Map(paneIds.map((paneId, index) => [paneId, index] as const));
   };
 
-  const { refreshPtys, refreshPtysSubset } =
+  /**
+   * Get PTYs from current session layout for instant aggregate view population.
+   * This avoids waiting for the expensive full refresh.
+   */
+  const getCurrentSessionPtys = () => {
+    const sessionId = session.state.activeSessionId;
+    if (!sessionId) return [];
+
+    const ptys: Array<{ ptyId: string; paneId: string; workspaceId: number; title?: string }> = [];
+
+    for (const [wsId, workspace] of Object.entries(layout.state.workspaces)) {
+      if (!workspace) continue;
+
+      const workspaceId = Number(wsId);
+      const collectPtys = (node: unknown) => {
+        if (!node) return;
+        const n = node as { type?: string; id?: string; ptyId?: string; first?: unknown; second?: unknown };
+        if (n.type === 'split') {
+          collectPtys(n.first);
+          collectPtys(n.second);
+        } else if (n.id && n.ptyId) {
+          ptys.push({
+            ptyId: n.ptyId,
+            paneId: n.id,
+            workspaceId,
+            title: undefined, // Can be fetched later
+          });
+        }
+      };
+
+      if (workspace.mainPane) {
+        collectPtys(workspace.mainPane);
+      }
+      for (const stackPane of workspace.stackPanes) {
+        collectPtys(stackPane);
+      }
+    }
+
+    return ptys;
+  };
+
+  const { refreshPtys, refreshPtysSubset, initialLoad } =
     createAggregateViewRefreshers(
       state,
       setState,
       refreshState,
       resolvePtyOwnership,
       getCurrentSessionHints,
-      getCurrentSessionPaneOrder
+      getCurrentSessionPaneOrder,
+      getCurrentSessionPtys
     );
 
   const handleTitleChange = createTitleChangeHandler(setState);
+
+  // Create instant lifecycle handlers for immediate UI updates
+  const lifecycleHandlers = createLifecycleHandlers(
+    state,
+    setState,
+    resolvePtyOwnership,
+    getCurrentSessionHints
+  );
 
   const loadPersistedSessionOrder = async (): Promise<void> => {
     const persistedOrder = await getAggregateSessionOrderResult();
@@ -158,15 +209,27 @@ interface AggregateViewProviderProps extends ParentProps {}
   createEffect(on(() => state.showAggregateView, (showAggregateView) => {
     if (showAggregateView) {
       void loadPersistedSessionOrder();
-      void refreshPtys();
-      void setupSubscriptions(
-        state,
-        subscriptions,
-        subscriptionsEpoch,
-        refreshPtys,
-        refreshPtysSubset,
-        handleTitleChange
-      );
+
+      // Initial load: instant with current session PTYs, then background full refresh
+      void (async () => {
+        // First, do instant initial load (shows current session immediately)
+        await initialLoad();
+
+        // Then set up subscriptions for live updates (before full refresh)
+        // This ensures lifecycle events are captured during the full refresh
+        await setupSubscriptions(
+          state,
+          subscriptions,
+          subscriptionsEpoch,
+          refreshPtys,
+          refreshPtysSubset,
+          handleTitleChange,
+          lifecycleHandlers
+        );
+
+        // Finally, do full refresh in background to populate other sessions
+        void refreshPtys();
+      })();
     } else {
       cleanupSubscriptions(subscriptions, subscriptionsEpoch);
     }

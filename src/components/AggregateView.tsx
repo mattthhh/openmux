@@ -543,7 +543,10 @@ export function AggregateView(props: AggregateViewProps) {
       livePanes.push(...collectPanes(stackPane));
     }
 
-    const candidatePane = [...livePanes].reverse().find((pane) => !!pane.ptyId) ?? null;
+    // Priority: focused pane with PTY > last pane with PTY
+    const candidatePane = livePanes.find((pane) => pane.id === workspace.focusedPaneId && !!pane.ptyId)
+      ?? [...livePanes].reverse().find((pane) => !!pane.ptyId)
+      ?? null;
     if (!candidatePane?.ptyId) return undefined;
 
     const cwd = await getSessionCwd(candidatePane.ptyId).catch((e) => {
@@ -573,10 +576,20 @@ export function AggregateView(props: AggregateViewProps) {
     if (!targetSessionId) return;
 
     let targetWorkspaceId: WorkspaceId = layoutState.activeWorkspaceId;
+    // Priority: selected PTY's CWD > current session's active pane CWD > stored session CWD
+    // CRITICAL: Get CWD BEFORE any async operations that might change state
     let targetCwd: string | undefined;
 
+    // First, try to get CWD from the selected PTY (works for both current and other sessions)
+    if (selectedPtyId) {
+      targetCwd = await getSessionCwd(selectedPtyId).catch(() => undefined);
+    }
+
     if (targetSessionId === sessionState.activeSessionId) {
-      targetCwd = await resolveCurrentSessionPaneCwd();
+      // Current session: if no selected PTY CWD, fallback to active pane
+      if (!targetCwd) {
+        targetCwd = await resolveCurrentSessionPaneCwd();
+      }
 
       if (selectedPtyId) {
         const location = findPtyLocation(selectedPtyId, layoutState.workspaces);
@@ -592,7 +605,10 @@ export function AggregateView(props: AggregateViewProps) {
       }
 
       targetWorkspaceId = sessionData.activeWorkspaceId as WorkspaceId;
-      targetCwd = resolveStoredSessionPaneCwd(sessionData);
+      // Only use stored session CWD if we don't have it from selected PTY
+      if (!targetCwd) {
+        targetCwd = resolveStoredSessionPaneCwd(sessionData);
+      }
 
       if (selectedPtyId) {
         const sessionLocation = findSessionForPty(selectedPtyId);

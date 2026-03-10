@@ -60,7 +60,7 @@ export interface SessionContextValue {
   /** Create a new session */
   createSession: (name?: string) => Promise<SessionMetadata | SessionStorageError>;
   /** Switch to a session */
-  switchSession: (id: string) => Promise<void>;
+  switchSession: (id: string, options?: { preloadedData?: Awaited<ReturnType<typeof loadSessionData>> }) => Promise<void>;
   /** Rename a session */
   renameSession: (id: string, name: string) => Promise<void>;
   /** Delete a session */

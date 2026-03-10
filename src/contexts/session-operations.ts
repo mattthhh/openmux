@@ -109,7 +109,7 @@ export function createSessionOperations(params: SessionOperationsParams) {
 
   const switchSessionInternal = async (
     id: SessionId,
-    options: { skipSave?: boolean; skipBeforeSwitch?: boolean } = {}
+    options: { skipSave?: boolean; skipBeforeSwitch?: boolean; preloadedData?: Awaited<ReturnType<typeof loadSessionData>> } = {}
   ): Promise<void> => {
     const state = getState();
     if (id === state.activeSessionId) return;
@@ -144,13 +144,19 @@ export function createSessionOperations(params: SessionOperationsParams) {
     await using _switchGuard = new SwitchingGuard(dispatch, true);
     void _switchGuard;
 
-    // Load new session
-    const switchResult = await switchToSession(id);
-    if (switchResult instanceof SessionNotFoundError || switchResult instanceof SessionCorruptedError || switchResult instanceof SessionStorageError) {
-      console.error('Failed to switch to session:', switchResult.message);
+    // Use preloaded data if available, otherwise load new session
+    const data = options.preloadedData ?? await (async () => {
+      const switchResult = await switchToSession(id);
+      if (switchResult instanceof SessionNotFoundError || switchResult instanceof SessionCorruptedError || switchResult instanceof SessionStorageError) {
+        console.error('Failed to switch to session:', switchResult.message);
+        return null;
+      }
+      return loadSessionData(id);
+    })();
+
+    if (data === null) {
       return;
     }
-    const data = await loadSessionData(id);
 
     if (data instanceof SessionNotFoundError || data instanceof SessionCorruptedError) {
       console.error('Failed to load session data:', data.message);
@@ -176,8 +182,10 @@ export function createSessionOperations(params: SessionOperationsParams) {
     await refreshSessions();
   };
 
-  const switchSession = async (id: SessionId): Promise<void> =>
-    switchSessionInternal(id);
+  const switchSession = async (
+    id: SessionId,
+    options?: { preloadedData?: Awaited<ReturnType<typeof loadSessionData>> }
+  ): Promise<void> => switchSessionInternal(id, options);
 
   const renameSession = async (id: SessionId, name: string): Promise<void> => {
     const result = await renameSessionOnDisk(id, name);

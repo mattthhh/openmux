@@ -168,6 +168,12 @@ export interface AggregateViewState {
   loadAttemptedSessionIds: Set<string>;
   /** Map of ALL session IDs to their metadata (including unloaded sessions) */
   allSessions: Map<string, SessionMetadata>;
+  /** Set of PTY IDs currently being created (to prevent flickering during creation) */
+  pendingPtyIds: Set<string>;
+  /** Set of PTY IDs recently added from initial load (protected from background refresh briefly) */
+  recentlyAddedPtyIds: Set<string>;
+  /** Set of PTY IDs recently deleted (prevent background refresh from adding them back) */
+  deletedPtyIds: Set<string>;
 }
 
 export const initialState: AggregateViewState = {
@@ -194,6 +200,9 @@ export const initialState: AggregateViewState = {
   loadingSessionIds: new Set(),
   loadAttemptedSessionIds: new Set(),
   allSessions: new Map(),
+  pendingPtyIds: new Set(),
+  recentlyAddedPtyIds: new Set(),
+  deletedPtyIds: new Set(),
 };
 
 export interface AggregateViewContextValue {
