@@ -1,4 +1,5 @@
 import type net from 'net';
+import type { TerminalScrollState } from '../core/types';
 import type { ITerminalEmulator, KittyGraphicsImageInfo } from '../terminal/emulator-interface';
 
 export type KittyScreenKey = 'main' | 'alt';
@@ -16,6 +17,7 @@ export type ShimServerState = {
   revokedClientIds: Set<string>;
   ptySubscriptions: PtySubscriptions;
   ptyEmulators: Map<string, ITerminalEmulator>;
+  ptyScrollStates: Map<string, TerminalScrollState>;
   kittyImages: Map<string, KittyScreenImages>;
   kittyTransmitCache: Map<string, Map<string, string[]>>;
   kittyTransmitPending: Map<string, Map<string, string[]>>;
@@ -24,6 +26,8 @@ export type ShimServerState = {
   titleUnsub: (() => void) | null;
   activeClient: net.Socket | null;
   activeClientId: string | null;
+  attachEpoch: number;
+  bootstrappingPtyIds: Set<string>;
   hostColorsSet: boolean;
 };
 
@@ -35,6 +39,7 @@ export function createShimServerState(): ShimServerState {
     revokedClientIds: new Set(),
     ptySubscriptions: new Map(),
     ptyEmulators: new Map(),
+    ptyScrollStates: new Map(),
     kittyImages: new Map(),
     kittyTransmitCache: new Map(),
     kittyTransmitPending: new Map(),
@@ -43,6 +48,8 @@ export function createShimServerState(): ShimServerState {
     titleUnsub: null,
     activeClient: null,
     activeClientId: null,
+    attachEpoch: 0,
+    bootstrappingPtyIds: new Set(),
     hostColorsSet: false,
   };
 }
@@ -54,6 +61,7 @@ export function resetShimServerState(state: ShimServerState): void {
   state.revokedClientIds.clear();
   state.ptySubscriptions.clear();
   state.ptyEmulators.clear();
+  state.ptyScrollStates.clear();
   state.kittyImages.clear();
   state.kittyTransmitCache.clear();
   state.kittyTransmitPending.clear();
@@ -62,5 +70,7 @@ export function resetShimServerState(state: ShimServerState): void {
   state.titleUnsub = null;
   state.activeClient = null;
   state.activeClientId = null;
+  state.attachEpoch = 0;
+  state.bootstrappingPtyIds.clear();
   state.hostColorsSet = false;
 }

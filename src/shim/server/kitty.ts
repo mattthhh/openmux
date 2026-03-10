@@ -17,14 +17,27 @@ export type KittyHandlers = {
   sendKittyTransmit: (
     ptyId: string,
     sequence: string,
-    options?: { fromReplay?: boolean; allowSharedMemoryReplay?: boolean }
+    options?: {
+      fromReplay?: boolean;
+      allowSharedMemoryReplay?: boolean;
+      allowWhileBootstrapping?: boolean;
+    }
   ) => void;
-  sendKittyUpdate: (ptyId: string, emulator: ITerminalEmulator, force?: boolean) => void;
+  sendKittyUpdate: (
+    ptyId: string,
+    emulator: ITerminalEmulator,
+    force?: boolean,
+    options?: { allowWhileBootstrapping?: boolean }
+  ) => void;
   queueKittyUpdate: (ptyId: string) => void;
   hasCachedTransmit: (ptyId: string, info: KittyGraphicsImageInfo) => boolean;
 };
 
-type SendEvent = (header: ShimHeader, payloads?: ArrayBuffer[]) => void;
+type SendEvent = (
+  header: ShimHeader,
+  payloads?: ArrayBuffer[],
+  options?: { allowWhileBootstrapping?: boolean }
+) => void;
 
 type KittyWireImage = ReturnType<typeof serializeKittyImage>;
 
@@ -271,7 +284,11 @@ export function createKittyHandlers(state: ShimServerState, sendEvent: SendEvent
   const sendKittyTransmit = (
     ptyId: string,
     sequence: string,
-    options?: { fromReplay?: boolean; allowSharedMemoryReplay?: boolean }
+    options?: {
+      fromReplay?: boolean;
+      allowSharedMemoryReplay?: boolean;
+      allowWhileBootstrapping?: boolean;
+    }
   ): void => {
     const fromReplay = options?.fromReplay ?? false;
     const allowSharedMemoryReplay = options?.allowSharedMemoryReplay ?? false;
@@ -297,13 +314,14 @@ export function createKittyHandlers(state: ShimServerState, sendEvent: SendEvent
       type: 'ptyKittyTransmit',
       ptyId,
       payloadLengths: [payload.byteLength],
-    }, [toArrayBuffer(payload)]);
+    }, [toArrayBuffer(payload)], { allowWhileBootstrapping: options?.allowWhileBootstrapping });
   };
 
   const sendKittyUpdate = (
     ptyId: string,
     emulator: ITerminalEmulator,
-    force: boolean = false
+    force: boolean = false,
+    options?: { allowWhileBootstrapping?: boolean }
   ): void => {
     if (!state.activeClient) return;
     if (!emulator.getKittyImageIds || !emulator.getKittyPlacements) return;
@@ -400,7 +418,7 @@ export function createKittyHandlers(state: ShimServerState, sendEvent: SendEvent
       imageDataBytes: payloads.reduce((sum, payload) => sum + payload.byteLength, 0),
     });
 
-    sendEvent(header, payloads);
+    sendEvent(header, payloads, { allowWhileBootstrapping: options?.allowWhileBootstrapping });
     emulator.clearKittyImagesDirty?.();
 
     if (invalidation) {

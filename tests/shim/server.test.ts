@@ -194,6 +194,137 @@ describe('shim server', () => {
     await fs.rm(socketDir, { recursive: true, force: true });
   });
 
+  test('hello returns before PTY bootstrap completes', async () => {
+    const socketDir = await fs.mkdtemp(join(tmpdir(), 'openmux-shim-'));
+    const socketPath = join(socketDir, 'shim.sock');
+
+    const fakePty = {
+      listAll: () => ['pty-1'],
+      getEmulator: async () => {
+        await new Promise((resolve) => setTimeout(resolve, 250));
+        return {};
+      },
+      subscribeUnified: () => () => {},
+      onExit: () => () => {},
+      subscribeToLifecycle: () => () => {},
+      subscribeToAllTitleChanges: () => () => {},
+    };
+
+    const server = await startShimServer({
+      socketPath,
+      withPty: async (fn) => fn(fakePty),
+      setHostColors: () => {},
+    });
+
+    const client = await connectClient(socketPath);
+    const reader = createFrameQueue(client);
+    await sendRequest(client, {
+      type: 'request',
+      requestId: 1,
+      method: 'hello',
+      params: { clientId: 'client-fast-hello' },
+    });
+
+    const hello = await reader.nextFrame(100);
+    expect(hello.header.ok).toBe(true);
+
+    client.destroy();
+    server.close();
+    await fs.rm(socketDir, { recursive: true, force: true });
+  });
+
+  test('attach replays a PTY full state only once', async () => {
+    const socketDir = await fs.mkdtemp(join(tmpdir(), 'openmux-shim-'));
+    const socketPath = join(socketDir, 'shim.sock');
+
+    const terminalState = {
+      cols: 80,
+      rows: 24,
+      cells: Array.from({ length: 24 }, () => Array.from({ length: 80 }, () => ({
+        char: ' ',
+        fg: { r: 255, g: 255, b: 255 },
+        bg: { r: 0, g: 0, b: 0 },
+        bold: false,
+        italic: false,
+        underline: false,
+        strikethrough: false,
+        inverse: false,
+        blink: false,
+        dim: false,
+        width: 1 as const,
+      }))),
+      cursor: { x: 0, y: 0, visible: true, style: 'block' as const },
+      alternateScreen: false,
+      mouseTracking: false,
+      cursorKeyMode: 'normal' as const,
+      kittyKeyboardFlags: 0,
+    };
+    const scrollState = {
+      viewportOffset: 0,
+      scrollbackLength: 0,
+      isAtBottom: true,
+    };
+
+    const fakePty = {
+      listAll: () => ['pty-1'],
+      getEmulator: async () => ({
+        getTerminalState: () => terminalState,
+      }),
+      subscribeUnified: (_ptyId: string, callback: (update: unknown) => void) => {
+        callback({
+          terminalUpdate: {
+            dirtyRows: new Map(),
+            cursor: terminalState.cursor,
+            scrollState,
+            cols: terminalState.cols,
+            rows: terminalState.rows,
+            isFull: true,
+            fullState: terminalState,
+            alternateScreen: terminalState.alternateScreen,
+            mouseTracking: terminalState.mouseTracking,
+            cursorKeyMode: terminalState.cursorKeyMode,
+            kittyKeyboardFlags: terminalState.kittyKeyboardFlags,
+            inBandResize: false,
+          },
+          scrollState,
+        });
+        return () => {};
+      },
+      onExit: () => () => {},
+      subscribeToLifecycle: () => () => {},
+      subscribeToAllTitleChanges: () => () => {},
+    };
+
+    const server = await startShimServer({
+      socketPath,
+      withPty: async (fn) => fn(fakePty),
+      setHostColors: () => {},
+    });
+
+    const client = await connectClient(socketPath);
+    const reader = createFrameQueue(client);
+    await sendRequest(client, {
+      type: 'request',
+      requestId: 1,
+      method: 'hello',
+      params: { clientId: 'client-single-replay' },
+    });
+
+    const hello = await reader.nextFrame();
+    expect(hello.header.ok).toBe(true);
+
+    const firstUpdate = await reader.nextFrame();
+    expect(firstUpdate.header.type).toBe('ptyUpdate');
+    expect(firstUpdate.header.ptyId).toBe('pty-1');
+
+    const duplicateUpdate = await nextFrameSafe(reader, 150);
+    expect(duplicateUpdate?.header.type).not.toBe('ptyUpdate');
+
+    client.destroy();
+    server.close();
+    await fs.rm(socketDir, { recursive: true, force: true });
+  });
+
   test('A -> B -> A race detaches once and keeps one active client', async () => {
     const socketDir = await fs.mkdtemp(join(tmpdir(), 'openmux-shim-'));
     const socketPath = join(socketDir, 'shim.sock');
@@ -271,6 +402,7 @@ describe('shim server', () => {
 
     const fakePty = {
       listAll: () => ['pty-1'],
+      getEmulator: async () => ({}),
       subscribeUnified: () => () => {},
       onExit: () => () => {},
       subscribeToLifecycle: () => () => {},
@@ -324,6 +456,7 @@ describe('shim server', () => {
 
     const fakePty = {
       listAll: () => ['pty-1'],
+      getEmulator: async () => ({}),
       subscribeUnified: () => () => {},
       onExit: () => () => {},
       subscribeToLifecycle: () => () => {},
