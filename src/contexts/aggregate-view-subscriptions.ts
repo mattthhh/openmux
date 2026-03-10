@@ -131,7 +131,8 @@ function extractGitMetadata(metadata: GitRepoMetadata | undefined): GitMetadataF
     gitState: metadata.state,
     gitDetached: metadata.detached,
     gitRepoKey: metadata.repoKey,
-    gitDiffStats: metadata.diffStats,
+    // Create a shallow copy to prevent shared reference issues across PTYs
+    gitDiffStats: metadata.diffStats ? { ...metadata.diffStats } : undefined,
   };
 }
 
