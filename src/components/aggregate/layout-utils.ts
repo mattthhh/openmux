@@ -125,11 +125,10 @@ export function getHintsText(
   if (previewMode) {
     const back = formatHintComboSet(getCombos(aggregateBindings.preview, 'aggregate.preview.exit'));
     const search = formatHintComboSet(getCombos(aggregateBindings.preview, 'aggregate.preview.search'));
-    const copy = formatHintComboSet(getCombos(aggregateBindings.preview, 'aggregate.preview.copy'));
     const zoom = formatGlobalActionHint(keybindings, 'pane.zoom');
     const kill = formatHintComboSet(getCombos(aggregateBindings.preview, 'aggregate.kill'));
     const zoomLabel = previewZoomed ? 'unzoom' : 'zoom';
-    return `${back}:back ${search}:search ${copy}:copy ${zoom}:${zoomLabel} ${kill}:kill`;
+    return `${back}:back ${search}:search ${zoom}:${zoomLabel} ${kill}:kill`;
   }
 
   if (vimEnabled) {

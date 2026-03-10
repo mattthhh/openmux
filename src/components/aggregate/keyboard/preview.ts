@@ -42,11 +42,6 @@ export function createAggregatePreviewHandler(deps: AggregateKeyboardDeps) {
       return true;
     }
 
-    if (action === 'aggregate.preview.copy') {
-      deps.handleEnterCopyMode();
-      return true;
-    }
-
     if (action === 'aggregate.kill') {
       const selectedPtyId = deps.getSelectedPtyId();
       if (selectedPtyId && deps.onRequestKillPty) {
