@@ -62,6 +62,11 @@ export function CopyModeProvider(props: CopyModeProviderProps) {
 
   const notifyChange = () => setCopyModeVersion((v) => v + 1);
 
+  /** Get the stored terminal state getter for the active copy mode session */
+  const getActiveGetTerminalState = (): ((ptyId: string) => TerminalState | null) | undefined => {
+    return state()?.getTerminalState;
+  };
+
   const isActive = (ptyId?: string): boolean => {
     const current = state();
     if (!current) return false;
@@ -95,7 +100,7 @@ export function CopyModeProvider(props: CopyModeProviderProps) {
     Math.max(min, Math.min(value, max));
 
   const clampCursor = (ptyId: string, cursor: CopyCursor): CopyCursor | null => {
-    const meta = getScrollMeta(ptyId);
+    const meta = getScrollMeta(ptyId, getActiveGetTerminalState());
     if (!meta.terminalState || meta.rows <= 0 || meta.cols <= 0) return null;
     const maxAbsY = Math.max(0, meta.scrollbackLength + meta.rows - 1);
     return {
@@ -105,7 +110,7 @@ export function CopyModeProvider(props: CopyModeProviderProps) {
   };
 
   const ensureCursorVisible = (ptyId: string, cursor: CopyCursor) => {
-    const meta = getScrollMeta(ptyId);
+    const meta = getScrollMeta(ptyId, getActiveGetTerminalState());
     if (meta.rows <= 0) return;
     const topAbsY = meta.scrollbackLength - meta.viewportOffset;
     const bottomAbsY = topAbsY + meta.rows - 1;
@@ -121,7 +126,7 @@ export function CopyModeProvider(props: CopyModeProviderProps) {
     if (!next.visualType || !next.anchor) {
       return { ...next, selectionRange: null, bounds: null };
     }
-    const meta = getScrollMeta(next.ptyId);
+    const meta = getScrollMeta(next.ptyId, next.getTerminalState);
     const cols = meta.cols || 1;
     const selection =
       next.visualType === 'line'
@@ -162,6 +167,7 @@ export function CopyModeProvider(props: CopyModeProviderProps) {
       visualType: null,
       selectionRange: null,
       bounds: null,
+      getTerminalState: overrideGetTerminalState,
     });
   };
 
@@ -197,14 +203,14 @@ export function CopyModeProvider(props: CopyModeProviderProps) {
   const moveToBottom = () => {
     const current = state();
     if (!current) return;
-    const meta = getScrollMeta(current.ptyId);
+    const meta = getScrollMeta(current.ptyId, getActiveGetTerminalState());
     if (meta.rows <= 0) return;
     const maxAbsY = Math.max(0, meta.scrollbackLength + meta.rows - 1);
     moveCursorTo({ x: current.cursor.x, absY: maxAbsY });
   };
 
   const getLineCells = (ptyId: string, absY: number): TerminalCell[] | null => {
-    const meta = getScrollMeta(ptyId);
+    const meta = getScrollMeta(ptyId, getActiveGetTerminalState());
     if (!meta.terminalState) return null;
     if (absY < meta.scrollbackLength) {
       return meta.emulator?.getScrollbackLine(absY) ?? null;
@@ -214,7 +220,7 @@ export function CopyModeProvider(props: CopyModeProviderProps) {
   };
 
   const getLineAccessor = (ptyId: string): LineAccessor | null => {
-    const meta = getScrollMeta(ptyId);
+    const meta = getScrollMeta(ptyId, getActiveGetTerminalState());
     if (!meta.terminalState) return null;
     const maxAbsY = Math.max(0, meta.scrollbackLength + meta.rows - 1);
     const getLine = (absY: number) => {
@@ -250,7 +256,7 @@ export function CopyModeProvider(props: CopyModeProviderProps) {
   const getViewportRows = () => {
     const current = state();
     if (!current) return 0;
-    const meta = getScrollMeta(current.ptyId);
+    const meta = getScrollMeta(current.ptyId, getActiveGetTerminalState());
     return meta.rows ?? 0;
   };
 
@@ -490,7 +496,7 @@ export function CopyModeProvider(props: CopyModeProviderProps) {
   const copySelection = async () => {
     const current = state();
     if (!current) return;
-    const meta = getScrollMeta(current.ptyId);
+    const meta = getScrollMeta(current.ptyId, getActiveGetTerminalState());
     if (!meta.terminalState) return;
     const scrollbackLength = meta.scrollbackLength ?? 0;
 

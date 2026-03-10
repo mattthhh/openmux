@@ -15,6 +15,8 @@ export interface CopyModeState {
   visualType: CopyVisualType | null;
   selectionRange: SelectionRange | null;
   bounds: SelectionBounds | null;
+  /** Custom terminal state getter for aggregate view PTYs (optional) */
+  getTerminalState?: (ptyId: string) => TerminalState | null;
 }
 
 export interface CopyModeContextValue {
