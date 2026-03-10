@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.14](https://github.com/monotykamary/openmux/compare/v0.3.13...v0.3.14) (2026-03-10)
+
+
+### Features
+
+* **aggregate-view:** enable scrollbar click and drag in preview mode ([62b7f29](https://github.com/monotykamary/openmux/commit/62b7f29dd38fa08b80d6d46fc0dfd9bf3f8546ac))
+
 ### [0.3.13](https://github.com/monotykamary/openmux/compare/v0.3.12...v0.3.13) (2026-03-10)
 
 
