@@ -55,6 +55,7 @@ interface AggregateViewProps {
   onDetach?: () => void;
   onRequestKillPty?: (ptyId: string) => void;
   onToggleCommandPalette?: () => void;
+  onToggleConsole?: () => void;
   onVimModeChange?: (mode: VimInputMode) => void;
 }
 
@@ -782,6 +783,7 @@ export function AggregateView(props: AggregateViewProps) {
     handleListEnter,
     onToggleSessionPicker: togglePicker,
     onToggleCommandPalette: props.onToggleCommandPalette,
+    onToggleConsole: props.onToggleConsole,
     onRequestQuit: props.onRequestQuit,
     onDetach: props.onDetach,
     onRequestKillPty: props.onRequestKillPty,

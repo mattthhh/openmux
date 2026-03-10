@@ -396,6 +396,7 @@ function AppContent() {
         width={width()}
         height={height()}
         onCommandPaletteExecute={handleCommandPaletteExecute}
+        onToggleConsole={handleToggleConsole}
       />
     </box>
   );

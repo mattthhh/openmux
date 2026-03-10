@@ -24,6 +24,7 @@ interface AppOverlaysProps {
   width: number;
   height: number;
   onCommandPaletteExecute: (command: CommandPaletteCommand) => void;
+  onToggleConsole?: () => void;
 }
 
 export function AppOverlays(props: AppOverlaysProps) {
@@ -50,6 +51,7 @@ export function AppOverlays(props: AppOverlaysProps) {
         onDetach={overlays.handleDetach}
         onRequestKillPty={overlays.confirmationHandlers.handleRequestKillPty}
         onToggleCommandPalette={overlays.toggleCommandPalette}
+        onToggleConsole={props.onToggleConsole}
         onVimModeChange={overlays.setAggregateVimMode}
       />
 

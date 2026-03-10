@@ -129,6 +129,7 @@ export const DEFAULT_KEYBINDINGS: KeybindingsConfig = {
       'd': 'aggregate.prefix.detach',
       'escape': 'aggregate.prefix.exit',
       '/': 'aggregate.prefix.search',
+      '`': 'aggregate.prefix.console.toggle',
     },
   },
   sessionPicker: {

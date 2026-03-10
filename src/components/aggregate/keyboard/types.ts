@@ -58,6 +58,7 @@ export interface AggregateKeyboardDeps {
   handleListEnter: () => boolean;
   onToggleSessionPicker?: () => void;
   onToggleCommandPalette?: () => void;
+  onToggleConsole?: () => void;
 
   onRequestQuit?: () => void;
   onDetach?: () => void;

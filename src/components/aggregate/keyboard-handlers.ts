@@ -36,6 +36,7 @@ export function createAggregateKeyboardHandler(deps: AggregateKeyboardDeps) {
     handleCopyModeKeys,
     onToggleSessionPicker,
     onToggleCommandPalette,
+    onToggleConsole,
   } = deps;
 
   const { handleSearchModeKeys } = createAggregateSearchHandler(deps);
@@ -122,6 +123,9 @@ export function createAggregateKeyboardHandler(deps: AggregateKeyboardDeps) {
           if (getPreviewMode()) {
             handleEnterSearch();
           }
+          return true;
+        case 'aggregate.prefix.console.toggle':
+          onToggleConsole?.();
           return true;
         default:
           if (prefixAction) {
