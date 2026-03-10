@@ -41,6 +41,10 @@ import {
   getFilterText,
   calculateFooterWidths,
 } from './aggregate';
+import {
+  calculateAggregateListViewport,
+  getAggregateListScrollOffsetForSelection,
+} from './aggregate/list-viewport';
 import type { FlattenedTreeItem, TreeNode } from '../contexts/aggregate-view-types';
 import { truncateHint } from './overlay-hints';
 import { createVimSequenceHandler, type VimInputMode } from '../core/vim-sequences';
@@ -244,46 +248,17 @@ export function AggregateView(props: AggregateViewProps) {
     })
   );
 
-  // Scroll-aware visibility calculation
-  // We reserve 1 row for top indicator (if not at start) and 1 row for bottom indicator (if not at end)
-  const visibleListStart = createMemo(() => {
-    const maxRows = layout().maxVisibleCards;
-    const totalRows = state.flattenedTree.length;
-
-    if (maxRows <= 0 || totalRows <= maxRows) {
-      return 0;
-    }
-
-    // Use explicit scroll offset - allow scrolling independently of selection
-    const scrollOffset = state.listScrollOffset;
-
-    // Calculate effective rows (reserve 1 for top indicator if scrolled, 1 for bottom if needed)
-    const showTopIndicator = scrollOffset > 0;
-    const effectiveMaxRows = Math.max(1, maxRows - (showTopIndicator ? 1 : 0));
-
-    return Math.max(0, Math.min(scrollOffset, totalRows - effectiveMaxRows));
-  });
-
-  const showTopIndicator = createMemo(() => visibleListStart() > 0);
-
-  const effectiveMaxVisible = createMemo(() => {
-    const maxRows = layout().maxVisibleCards;
-    return Math.max(1, maxRows - (showTopIndicator() ? 1 : 0));
-  });
+  const listViewport = createMemo(() =>
+    calculateAggregateListViewport({
+      totalItems: state.flattenedTree.length,
+      maxRows: layout().maxVisibleCards,
+      scrollOffset: state.listScrollOffset,
+    })
+  );
 
   const visibleItems = createMemo(() => {
-    const start = visibleListStart();
-    const maxVisible = effectiveMaxVisible();
-    // Reserve 1 row for bottom indicator if there are more items
-    const showBottom = start + maxVisible < state.flattenedTree.length;
-    const count = Math.max(1, maxVisible - (showBottom ? 1 : 0));
-    return state.flattenedTree.slice(start, start + count);
-  });
-
-  const showBottomIndicator = createMemo(() => {
-    const start = visibleListStart();
-    const maxVisible = effectiveMaxVisible();
-    return start + maxVisible < state.flattenedTree.length;
+    const viewport = listViewport();
+    return state.flattenedTree.slice(viewport.start, viewport.end);
   });
 
   const getSessionIdForItem = (item: FlattenedTreeItem | undefined): string | null => {
@@ -295,9 +270,10 @@ export function AggregateView(props: AggregateViewProps) {
   };
 
   const getItemAtListMouse = (event: OpenTUIMouseEvent): FlattenedTreeItem | undefined => {
-    const relY = event.y - 1;
-    if (relY < 0) return undefined;
-    return visibleItems()[relY];
+    const viewport = listViewport();
+    const relY = event.y - 1 - (viewport.showTopIndicator ? 1 : 0);
+    if (relY < 0 || relY >= viewport.visibleCount) return undefined;
+    return state.flattenedTree[viewport.start + relY];
   };
 
   const beginSessionDrag = (sessionId: string) => {
@@ -383,39 +359,21 @@ export function AggregateView(props: AggregateViewProps) {
     }
   });
 
-  // Ensure selected item is visible when selection changes (keyboard navigation)
-  // Only reacts to selection changes, not scroll offset changes
   createEffect((prevSelectedIndex?: number) => {
     if (!state.showAggregateView) return state.selectedIndex;
 
     const selectedIndex = state.selectedIndex;
-
-    // Only run when selection actually changes
     if (prevSelectedIndex === selectedIndex) return selectedIndex;
 
-    const scrollOffset = state.listScrollOffset;
-    const maxRows = layout().maxVisibleCards;
-    const totalRows = state.flattenedTree.length;
+    const nextScrollOffset = getAggregateListScrollOffsetForSelection({
+      selectedIndex,
+      totalItems: state.flattenedTree.length,
+      maxRows: layout().maxVisibleCards,
+      scrollOffset: state.listScrollOffset,
+    });
 
-    // If selection is above current view, scroll up
-    if (selectedIndex < scrollOffset) {
-      setListScrollOffset(selectedIndex);
-      return selectedIndex;
-    }
-
-    // Calculate the last visible row index (0-based within the pane)
-    // We need to reserve 1 row for bottom indicator if there are more items below
-    const hasMoreBelow = selectedIndex < totalRows - 1;
-    const reservedForBottom = hasMoreBelow ? 1 : 0;
-    const lastVisibleRow = maxRows - 1 - reservedForBottom;
-
-    // If selection would be at or beyond last visible row, scroll down
-    const relativeIndex = selectedIndex - scrollOffset;
-    if (relativeIndex >= lastVisibleRow) {
-      // Scroll so selection appears at lastVisibleRow - 1 (one row above bottom indicator)
-      const targetOffset = selectedIndex - (lastVisibleRow - 1);
-      setListScrollOffset(Math.max(0, targetOffset));
-      return selectedIndex;
+    if (nextScrollOffset !== state.listScrollOffset) {
+      setListScrollOffset(nextScrollOffset);
     }
 
     return selectedIndex;
@@ -974,9 +932,9 @@ export function AggregateView(props: AggregateViewProps) {
             >
               <box style={{ flexDirection: 'column' }}>
                 {/* Scroll up indicator */}
-                <Show when={showTopIndicator()}>
+                <Show when={listViewport().showTopIndicator}>
                   <box style={{ height: 1, justifyContent: 'center' }}>
-                    <text fg={overlaySubtle()}>▲ {visibleListStart()} more</text>
+                    <text fg={overlaySubtle()}>▲ {listViewport().hiddenAboveCount} more</text>
                   </box>
                 </Show>
                 <Show
@@ -1082,9 +1040,9 @@ export function AggregateView(props: AggregateViewProps) {
                   </For>
                 </Show>
                 {/* Scroll down indicator */}
-                <Show when={showBottomIndicator()}>
+                <Show when={listViewport().showBottomIndicator}>
                   <box style={{ height: 1, justifyContent: 'center' }}>
-                    <text fg={overlaySubtle()}>▼ {state.flattenedTree.length - visibleListStart() - visibleItems().length} more</text>
+                    <text fg={overlaySubtle()}>▼ {listViewport().hiddenBelowCount} more</text>
                   </box>
                 </Show>
               </box>
