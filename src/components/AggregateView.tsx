@@ -61,6 +61,10 @@ import { setShimmerEnabled } from '../core/shimmer';
 import type { Workspace } from '../core/types';
 import { collectPanes } from '../core/layout-tree';
 import type { FlattenedTreeItem, PtyInfo } from '../contexts/aggregate-view-types';
+import {
+  resolvePendingAggregatePaneFocus,
+  type PendingAggregatePaneFocus,
+} from './aggregate/pending-pane-focus';
 
 interface AggregateViewProps {
   width: number;
@@ -132,6 +136,7 @@ export function AggregateView(props: AggregateViewProps) {
   const [prefixActive, setPrefixActive] = createSignal(false);
   const [inSearchMode, setInSearchMode] = createSignal(false);
   const [aggregateCopyModeActive, setAggregateCopyModeActive] = createSignal(false);
+  const [pendingPaneFocus, setPendingPaneFocus] = createSignal<PendingAggregatePaneFocus | null>(null);
 
   let prefixTimeout: ReturnType<typeof setTimeout> | null = null;
 
@@ -279,6 +284,38 @@ export function AggregateView(props: AggregateViewProps) {
     if (loadState?.status === 'unloaded' && !state.loadAttemptedSessionIds.has(sessionId)) {
       loadSessionPtys(sessionId);
     }
+  });
+
+  createEffect(() => {
+    if (!state.showAggregateView) {
+      setPendingPaneFocus(null);
+      return;
+    }
+
+    const resolution = resolvePendingAggregatePaneFocus({
+      pending: pendingPaneFocus(),
+      allPtys: state.allPtys,
+      flattenedTreeIndex: state.flattenedTreeIndex,
+      expandedSessionIds: state.expandedSessionIds,
+      filterQuery: state.filterQuery,
+    });
+
+    if (resolution.type === 'wait') return;
+
+    if (resolution.type === 'clear-filter') {
+      if (state.filterQuery) {
+        setFilterQuery('');
+      }
+      return;
+    }
+
+    if (resolution.type === 'expand-session') {
+      toggleSessionExpanded(resolution.sessionId);
+      return;
+    }
+
+    selectPty(resolution.ptyId);
+    setPendingPaneFocus(null);
   });
 
   // Preload emulator for selected PTY
@@ -501,6 +538,8 @@ export function AggregateView(props: AggregateViewProps) {
       selectedSessionId ?? findSessionForPty(selectedPtyId!)?.sessionId ?? sessionState.activeSessionId;
     if (!targetSessionId) return;
 
+    setPendingPaneFocus(null);
+
     let targetWorkspaceId = layoutState.activeWorkspaceId;
     let targetCwd: string | undefined;
 
@@ -562,7 +601,10 @@ export function AggregateView(props: AggregateViewProps) {
     const paneId = await createPaneWithPTY(targetCwd, 'shell');
     if (!paneId) {
       console.error('Failed to create pane in aggregate view');
+      return;
     }
+
+    setPendingPaneFocus({ sessionId: targetSessionId, paneId });
   };
 
   // Keyboard handler
