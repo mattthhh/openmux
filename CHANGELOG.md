@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.17](https://github.com/monotykamary/openmux/compare/v0.3.16...v0.3.17) (2026-03-11)
+
+
+### Bug Fixes
+
+* **aggregate,types:** resolve broken imports and type errors in aggregate view modules ([3015ee7](https://github.com/monotykamary/openmux/commit/3015ee738c175d55a9bb34c232d12d00ebc54cdb))
+
 ### [0.3.16](https://github.com/monotykamary/openmux/compare/v0.3.15...v0.3.16) (2026-03-11)
 
 
