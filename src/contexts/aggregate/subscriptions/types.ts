@@ -2,7 +2,7 @@
  * Types for subscription management in Aggregate View.
  */
 
-import type { PtyTitleChangeEvent } from '../../effect/bridge/pty-bridge';
+import type { PtyTitleChangeEvent } from '../../../effect/bridge/pty-bridge';
 
 /** Subscription manager holding all active subscription cleanup functions */
 export interface SubscriptionManager {

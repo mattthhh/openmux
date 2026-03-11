@@ -8,8 +8,8 @@
 import * as errore from 'errore';
 import { produce, type SetStoreFunction } from 'solid-js/store';
 
-import type { AggregateViewState, PtyInfo } from '../aggregate-view-types';
-import type { SessionMetadata } from '../../effect/models';
+import type { AggregateViewState, PtyInfo } from '../types';
+import type { SessionMetadata } from '../../../effect/models';
 import type { CurrentSessionPty, CurrentSessionHints } from '../subscriptions/types';
 import { listSessionsResult, getSessionSummaryResult } from '../../../effect/bridge/session-bridge';
 import { recomputeMatches, recomputeTree } from '../session/operations';
@@ -38,7 +38,7 @@ export async function initialLoadOnce(
     (e) => new AggregateBridgeError({ 
       operation: 'listSessions', 
       target: 'initialLoad', 
-      cause: e 
+      reason: String(e) 
     })
   );
   if (sessionsResult instanceof Error) return sessionsResult;
@@ -86,7 +86,7 @@ export async function initialLoadOnce(
         (e) => new SessionStorageError({ 
           operation: 'getSummary', 
           path: String(session.id), 
-          cause: e 
+          reason: String(e) 
         })
       );
       return [

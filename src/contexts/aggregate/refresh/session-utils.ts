@@ -5,7 +5,7 @@
  * pane ordering, and workspace/pane relationships.
  */
 
-import type { SerializedSession, SerializedLayoutNode } from '../../effect/models';
+import type { SerializedSession, SerializedLayoutNode } from '../../../effect/models';
 
 /**
  * Recursively collect pane IDs from a serialized layout node.

@@ -6,7 +6,7 @@
  */
 
 import type { SetStoreFunction } from 'solid-js/store';
-import type { AggregateViewState } from '../aggregate-view-types';
+import type { AggregateViewState } from '../types';
 import type { RefreshState, PtyOwnership, CurrentSessionHints, CurrentSessionPty } from '../subscriptions/types';
 import { refreshPtysOnce } from './full-refresh';
 import { refreshPtysSubsetOnce } from './subset-refresh';

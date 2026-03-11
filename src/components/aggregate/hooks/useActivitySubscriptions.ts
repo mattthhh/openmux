@@ -114,7 +114,7 @@ export function useActivitySubscriptions(options: {
   /**
    * Subscribe to a PTY's activity.
    */
-  const subscribe = async (ptyId: string): Promise<void | ActivitySubscriptionError> => {
+  const subscribe = async (ptyId: string): Promise<void> => {
     if (subscriptions.has(ptyId) || pendingSubscriptions.has(ptyId)) {
       return;
     }
@@ -179,7 +179,7 @@ export function useActivitySubscriptions(options: {
         failedSubscriptions.delete(ptyId);
       }
       
-      return result;
+      return;
     }
 
     // Success - clear any failure tracking

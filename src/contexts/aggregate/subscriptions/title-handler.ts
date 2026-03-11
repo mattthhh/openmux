@@ -5,7 +5,7 @@
  */
 
 import { produce, type SetStoreFunction } from 'solid-js/store';
-import type { AggregateViewState } from '../aggregate-view-types';
+import type { AggregateViewState } from '../types';
 
 /** Title change event */
 export interface TitleChangeEvent {

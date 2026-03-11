@@ -11,7 +11,7 @@ import * as errore from 'errore';
 import { produce, type SetStoreFunction } from 'solid-js/store';
 import { PtyMetadataError, ServicesNotInitializedError } from '../../../effect/errors';
 
-import type { AggregateViewState } from '../aggregate-view-types';
+import type { AggregateViewState } from '../types';
 import type { PtyMetadata } from '../../../effect/bridge/aggregate/types';
 import { getPtyMetadata } from '../../../effect/bridge/aggregate';
 import { getGlobalGitMetadataCache, type GitRepoMetadata } from '../../git-metadata-cache';
@@ -59,7 +59,7 @@ export async function refreshPtysSubsetOnce(
         (e) => new PtyMetadataError({ 
           operation: 'get', 
           ptyId: id, 
-          cause: e 
+          reason: String(e) 
         })
       )
     )

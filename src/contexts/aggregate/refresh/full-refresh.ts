@@ -47,7 +47,7 @@ export async function refreshPtysOnce(
     (e) => new SessionStorageError({ 
       operation: 'listSessions', 
       path: 'aggregate', 
-      cause: e 
+      reason: String(e) 
     })
   );
   if (sessionsResult instanceof Error) return sessionsResult;
@@ -58,7 +58,7 @@ export async function refreshPtysOnce(
     (e) => new AggregateBridgeError({ 
       operation: 'listAllPtysWithMetadata', 
       target: 'aggregate', 
-      cause: e 
+      reason: String(e) 
     })
   );
   if (livePtysResult instanceof Error) return livePtysResult;
@@ -76,7 +76,7 @@ export async function refreshPtysOnce(
         (e) => new SessionStorageError({ 
           operation: 'getSummary', 
           path: String(session.id), 
-          cause: e 
+          reason: String(e) 
         })
       );
       return [
@@ -95,7 +95,7 @@ export async function refreshPtysOnce(
         (e) => new SessionStorageError({ 
           operation: 'load', 
           path: String(session.id), 
-          cause: e 
+          reason: String(e) 
         })
       )
     ] as const)
@@ -125,7 +125,7 @@ export async function refreshPtysOnce(
         (e) => new AggregateBridgeError({ 
           operation: 'getSessionPtyMapping', 
           target: String(session.id), 
-          cause: e 
+          reason: String(e) 
         })
       )
     ] as const)
@@ -335,7 +335,7 @@ export function ptyMetadataToInfo(metadata: AggregatePtyMetadata, existing?: Pty
     gitStaged: metadata.gitStaged,
     gitUnstaged: metadata.gitUnstaged,
     gitUntracked: metadata.gitUntracked,
-    gitConflicted: metadata.conflicted,
+    gitConflicted: metadata.gitConflicted,
     gitAhead: metadata.gitAhead,
     gitBehind: metadata.gitBehind,
     gitStashCount: metadata.gitStashCount,

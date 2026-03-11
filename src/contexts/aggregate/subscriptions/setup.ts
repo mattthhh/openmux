@@ -7,7 +7,7 @@
  * - Periodic polling for git metadata updates
  */
 
-import type { AggregateViewState } from '../aggregate-view-types';
+import type { AggregateViewState } from '../types';
 import type { 
   SubscriptionManager, 
   LifecycleHandlers, 

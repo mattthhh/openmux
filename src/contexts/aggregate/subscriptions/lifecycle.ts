@@ -10,7 +10,7 @@ import * as errore from 'errore';
 import { produce, type SetStoreFunction } from 'solid-js/store';
 import { PtyMetadataError } from '../../../effect/errors';
 
-import type { AggregateViewState, PtyInfo } from '../aggregate-view-types';
+import type { AggregateViewState, PtyInfo } from '../types';
 import type { PtyOwnership, CurrentSessionHints } from './types';
 import { getPtyMetadata } from '../../../effect/bridge/aggregate-bridge';
 import { getGlobalGitMetadataCache } from '../../git-metadata-cache';
@@ -146,7 +146,7 @@ export function createLifecycleHandlers(
       (e) => new PtyMetadataError({ 
         operation: 'get', 
         ptyId, 
-        cause: e 
+        reason: String(e) 
       })
     );
     

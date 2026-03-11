@@ -1,6 +1,6 @@
 {
   "include": ["src/**/*", "native/zig-pty/ts/**/*", "native/zig-git/ts/**/*"],
-  "exclude": ["node_modules"],
+  "exclude": ["node_modules", "**/*.test.ts", "**/*.test.tsx", "**/*.litmus.test.ts", "**/*.litmus.test.tsx", "**/*.smoke.test.ts", "**/*.smoke.test.tsx"],
   "compilerOptions": {
     // Effect Language Service
     "plugins": [{ "name": "@effect/language-service" }],

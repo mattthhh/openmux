@@ -2,10 +2,10 @@
  * Types for refresh operations in Aggregate View.
  */
 
-import type { PtyInfo } from './aggregate-view-types';
-import type { SessionMetadata } from './effect/models';
-import type { PtyMetadata } from './effect/bridge/aggregate-bridge';
-import type { PtyOwnership, CurrentSessionHints } from './subscriptions/types';
+import type { PtyInfo } from '../types';
+import type { SessionMetadata } from '../../../effect/models';
+import type { PtyMetadata } from '../../../effect/bridge/aggregate/types';
+import type { PtyOwnership, CurrentSessionHints } from '../subscriptions/types';
 
 /** Extended PTY metadata with session information */
 export interface AggregatePtyMetadata extends PtyMetadata {
@@ -45,4 +45,24 @@ export interface BatchRefreshOptions {
 /** Subset refresh options */
 export interface SubsetRefreshOptions {
   forceRefresh?: boolean;
+}
+
+/** Dependencies for full refresh */
+export interface FullRefreshDeps {
+  resolvePtyOwnership: (ptyId: string) => PtyOwnership | null;
+  getCurrentSessionHints: () => CurrentSessionHints;
+  getCurrentSessionPaneOrder: () => Map<string, number> | null;
+}
+
+/** Dependencies for subset refresh */
+export interface SubsetRefreshDeps {
+  resolvePtyOwnership: (ptyId: string) => PtyOwnership | null;
+  getCurrentSessionHints: () => CurrentSessionHints;
+  getCurrentSessionPaneOrder: () => Map<string, number> | null;
+}
+
+/** Dependencies for initial load */
+export interface InitialLoadDeps {
+  getCurrentSessionHints: () => CurrentSessionHints;
+  getCurrentSessionPtys?: () => Array<{ ptyId: string; paneId: string; workspaceId: number; title?: string }>;
 }

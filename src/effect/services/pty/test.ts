@@ -84,6 +84,11 @@ export function createTestPtyService(): PtyService {
           scrollState: { viewportOffset: 0, isAtBottom: true, scrollbackLength: 0 },
           cols: 80,
           rows: 24,
+          isFull: false,
+          alternateScreen: false,
+          mouseTracking: false,
+          cursorKeyMode: 'normal',
+          inBandResize: false,
         },
         scrollState: { viewportOffset: 0, isAtBottom: true, scrollbackLength: 0 },
       })
