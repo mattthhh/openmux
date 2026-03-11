@@ -1,7 +1,7 @@
 /**
  * Shim Replay Handler - Litmus Tests
  */
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'bun:test';
 import { createShimServerState } from '../server-state';
 import {
   allowBootstrapReplay,

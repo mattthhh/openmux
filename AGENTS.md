@@ -13,11 +13,11 @@ bun run lint          # Lint Effect code (effect-language-service)
 bun run build         # Build standalone binary (./scripts/build.sh)
 bun run build:release # Build optimized binary
 bun run install:local # Build and install locally
-bun run test          # Run TS + Zig + Ghostty VT tests
-bun run test:ts       # Run Vitest only
+bun run test          # Run bun:test TS + Zig + Ghostty VT tests
+bun run test:ts       # Run bun:test suite only
 bun run test:pty      # Run Zig PTY tests only
 bun run test:ghostty-vt # Run Ghostty VT Zig tests
-bun run test:watch    # Run Vitest in watch mode
+bun run test:watch    # Run bun:test in watch mode
 bun run check:circular # Detect circular deps in src/
 ```
 
@@ -31,7 +31,7 @@ bun run check:circular # Detect circular deps in src/
 
 ## Technology Stack
 
-- **Bun** - Runtime and package manager (use instead of Node.js)
+- **Bun** - Runtime, package manager, and test runner (`bun:test`)
 - **OpenTUI** - Terminal UI library with SolidJS reconciler (@opentui/core, @opentui/solid)
 - **SolidJS** - Reactive UI framework via OpenTUI's SolidJS reconciler
 - **zig-pty** - PTY support for shell process management (pure Zig implementation)

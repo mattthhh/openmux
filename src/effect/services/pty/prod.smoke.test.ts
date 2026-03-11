@@ -2,7 +2,7 @@
  * PTY Service Production Implementation - Smoke Tests
  * Basic integration tests using test implementation (no native dependencies)
  */
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { createTestPtyService } from './test';
 import { PtyNotFoundError } from '../../errors';
 import type { PtyService } from './interface';

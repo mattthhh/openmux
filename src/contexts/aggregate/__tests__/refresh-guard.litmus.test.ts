@@ -2,7 +2,7 @@
  * Litmus tests for RefreshGuard - fast, single concept tests.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { RefreshGuard } from '../refresh/guard';
 import { createRefreshState, type RefreshState } from '../subscriptions/types';
 

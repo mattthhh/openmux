@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect } from 'bun:test'
 import { buildSessionTreeNodes } from './build'
 import type { SessionWithPtys, PtyMetadata } from '../types'
 import type { SessionMetadata } from '../../../models'

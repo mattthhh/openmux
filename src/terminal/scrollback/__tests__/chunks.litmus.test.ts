@@ -3,7 +3,7 @@
  * Fast, single-concept tests for chunk creation, finding, and reading.
  */
 
-import { describe, it, expect } from "vitest"
+import { describe, it, expect } from "bun:test"
 import type { ArchiveChunk } from "../types"
 import {
   createChunk,

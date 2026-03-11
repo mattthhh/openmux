@@ -2,7 +2,7 @@
  * Smoke tests for subscription types - basic integration checks.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { 
   createSubscriptionManager, 
   createRefreshState 

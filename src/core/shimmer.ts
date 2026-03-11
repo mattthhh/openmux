@@ -213,7 +213,7 @@ export function hasRecentPtyStdoutActivity(ptyId: string, now = Date.now()): boo
 const BACKGROUND_PROCESS_PATTERNS = [
   /^webpack/,
   /^jest/,
-  /^vitest/,
+  /^bun test/,
   /^npm run (watch|dev|start)/,
   /^yarn (watch|dev|start)/,
   /^pnpm (watch|dev|start)/,

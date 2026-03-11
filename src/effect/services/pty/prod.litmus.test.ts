@@ -2,7 +2,7 @@
  * PTY Service Production Implementation - Litmus Tests
  * Fast, focused tests for core functionality
  */
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { PtyState } from './state';
 import { createTestPtyService } from './test';
 import type { PtyService } from './interface';

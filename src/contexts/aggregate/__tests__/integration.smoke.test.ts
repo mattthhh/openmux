@@ -2,7 +2,7 @@
  * Integration smoke tests - basic integration between modules.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { buildTreeRoot, flattenTree, getSortedSessions } from '../';
 import { filterPtys, groupPtysBySession, sortPtysForSession } from '../filter';
 import type { PtyInfo, AggregateViewState, SessionMetadata, SessionTreeNode } from '../types';

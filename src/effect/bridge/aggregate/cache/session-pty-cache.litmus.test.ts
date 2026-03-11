@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach } from 'bun:test'
 import { SessionPtyCache, DEFAULT_CACHE_MAX_AGE_MS } from './session-pty-cache'
 import type { PtyId, SessionId } from '../../../types'
 

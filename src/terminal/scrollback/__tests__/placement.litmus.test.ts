@@ -3,7 +3,7 @@
  * Fast, single-concept tests for Kitty graphics placement handling.
  */
 
-import { describe, it, expect } from "vitest"
+import { describe, it, expect } from "bun:test"
 import type { ArchiveChunk } from "../types"
 import {
   packPlacements,

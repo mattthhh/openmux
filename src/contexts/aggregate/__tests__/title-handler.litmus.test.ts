@@ -2,7 +2,7 @@
  * Litmus tests for title change handler - fast, single concept tests.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { createTitleChangeHandler } from '../subscriptions/title-handler';
 import type { AggregateViewState } from '../../aggregate-view-types';
 import { createStore, produce } from 'solid-js/store';

@@ -2,7 +2,7 @@
  * Smoke tests for git metadata - basic integration checks.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { extractGitMetadata, areGitDiffStatsEqual, didPtyInfoChange } from '../git/metadata';
 import type { GitRepoMetadata } from '../../git-metadata-cache';
 import type { PtyInfo } from '../../aggregate-view-types';

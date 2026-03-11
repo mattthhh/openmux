@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'bun:test'
 import { fetchPtyMetadata, batchFetchPtyMetadata, fetchPtyMetadataSafe } from './fetch'
 import { asPtyId } from '../cache/session-pty-cache'
 import type { PtyService } from '../../../services/Pty'

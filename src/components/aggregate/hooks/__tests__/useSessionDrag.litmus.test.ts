@@ -2,7 +2,7 @@
  * useSessionDrag litmus test - Quick validation of core functionality.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { createRoot } from 'solid-js';
 import { useSessionDrag } from '../useSessionDrag';
 import type { OpenTUIMouseEvent } from '@opentui/core';

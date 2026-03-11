@@ -3,7 +3,7 @@
  * Integration tests covering all public API methods.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from "vitest"
+import { describe, it, expect, beforeEach, afterEach } from "bun:test"
 import fs from "node:fs"
 import path from "node:path"
 import os from "node:os"

@@ -2,7 +2,7 @@
  * Full coverage tests for aggregate view operations.
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi } from 'bun:test';
 import { produce } from 'solid-js/store';
 import {
   // Filter

@@ -2,7 +2,7 @@
  * Litmus tests for subscription types - fast, single concept tests.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { 
   createSubscriptionManager, 
   createRefreshState,

@@ -2,7 +2,7 @@
  * useVimMode smoke test - Basic integration scenarios.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { createRoot, createSignal, createEffect } from 'solid-js';
 import { useVimMode } from '../useVimMode';
 

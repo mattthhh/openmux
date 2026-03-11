@@ -2,7 +2,7 @@
  * Tree operations litmus tests - fast, single concept tests.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import {
   getDefaultLoadState,
   createLoadingPlaceholder,

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi } from 'bun:test'
 import { loadSessionPtysOnDemand } from './lazy-load'
 import type { SessionManager } from '../../../services/SessionManager'
 import type { PtyService } from '../../../services/Pty'

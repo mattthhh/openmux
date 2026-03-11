@@ -1,7 +1,7 @@
 /**
  * PTY Service Test Implementation - Litmus Tests
  */
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'bun:test';
 import { createTestPtyService } from './index';
 import { PtyNotFoundError } from '../../errors';
 import type { PtyService } from './interface';

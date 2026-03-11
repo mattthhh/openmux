@@ -1,7 +1,7 @@
 /**
  * Shim Events Handler - Litmus Tests
  */
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'bun:test';
 import type net from 'net';
 import { createShimServerState } from '../server-state';
 import {

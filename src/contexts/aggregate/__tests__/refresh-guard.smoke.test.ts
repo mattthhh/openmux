@@ -2,7 +2,7 @@
  * Smoke tests for RefreshGuard - basic integration checks.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { RefreshGuard } from '../refresh/guard';
 import { createRefreshState, type RefreshState } from '../subscriptions/types';
 

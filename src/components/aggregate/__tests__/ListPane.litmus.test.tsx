@@ -2,7 +2,7 @@
  * ListPane litmus test - Quick validation of component rendering.
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi } from 'bun:test';
 import type { ListPaneProps } from '../ListPane';
 
 // Mock OpenTUI

@@ -2,7 +2,7 @@
  * Litmus tests for session utilities - fast, single concept tests.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { 
   collectSerializedPaneIds, 
   buildSessionPaneOrder,

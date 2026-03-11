@@ -2,7 +2,7 @@
  * useVimMode litmus test - Quick validation of core functionality.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { createRoot, createSignal } from 'solid-js';
 import { useVimMode } from '../useVimMode';
 

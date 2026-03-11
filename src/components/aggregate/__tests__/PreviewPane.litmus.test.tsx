@@ -2,7 +2,7 @@
  * PreviewPane litmus test - Quick validation of component rendering.
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi } from 'bun:test';
 import type { PreviewPaneProps, PreviewMouseHandlers } from '../PreviewPane';
 
 describe('PreviewPane litmus', () => {
