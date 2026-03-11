@@ -2,8 +2,8 @@
  * useActivitySubscriptions - Hook for managing PTY activity subscriptions in AggregateView.
  *
  * Manages subscriptions to PTY stdout activity for shimmer effects. Automatically
- * subscribes to visible PTYs and unsubscribes when they leave the view or the
- * aggregate view closes.
+ * subscribes to the PTYs we are actively tracking and unsubscribes when they
+ * leave that tracked set or the aggregate view closes.
  *
  * NOTE: This hook also enables PTY updates via setPtyUpdateEnabled. PTYs from other
  * sessions have updates disabled by default (for performance), but we need updates
@@ -45,19 +45,19 @@ interface UseActivitySubscriptionsResult {
 /**
  * Hook for managing PTY activity subscriptions with automatic lifecycle management.
  *
- * Subscribes to stdout activity updates for all visible PTYs and manages
- * cleanup when PTYs leave the view or the aggregate view closes.
+ * Subscribes to stdout activity updates for the PTYs we actively want to track and
+ * manages cleanup when they leave the tracked set or the aggregate view closes.
  *
  * @param options - Hook options
  * @param options.isActive - Whether subscriptions should be active
- * @param options.getAllPtys - Accessor returning all PTYs to subscribe to
+ * @param options.getTrackedPtys - Accessor returning the PTYs whose activity should be tracked
  * @returns UseActivitySubscriptionsResult with subscription controls
  *
  * @example
  * ```tsx
  * const activity = useActivitySubscriptions({
  *   isActive: () => state.showAggregateView,
- *   getAllPtys: () => state.allPtys,
+ *   getTrackedPtys: visiblePtys,
  * });
  *
  * // Subscriptions are automatically managed via effects
@@ -67,7 +67,7 @@ interface UseActivitySubscriptionsResult {
  */
 export function useActivitySubscriptions(options: {
   isActive: Accessor<boolean>;
-  getAllPtys: Accessor<PtyInfo[]>;
+  getTrackedPtys: Accessor<PtyInfo[]>;
 }): UseActivitySubscriptionsResult {
   // Map of PTY ID to subscription entry
   const subscriptions = new Map<string, SubscriptionEntry>();
@@ -194,7 +194,7 @@ export function useActivitySubscriptions(options: {
     }
 
     // Check if this PTY is still in the current list
-    const currentIds = new Set(options.getAllPtys().map((pty) => pty.ptyId));
+    const currentIds = new Set(options.getTrackedPtys().map((pty) => pty.ptyId));
     if (!currentIds.has(ptyId)) {
       result();
       clearPtyStdoutActivity(ptyId);
@@ -229,7 +229,7 @@ export function useActivitySubscriptions(options: {
         return;
       }
 
-      const currentPtyIds = new Set(options.getAllPtys().map((pty) => pty.ptyId));
+      const currentPtyIds = new Set(options.getTrackedPtys().map((pty) => pty.ptyId));
 
       // Unsubscribe from PTYs no longer in the list
       // But don't touch pending subscriptions - let them complete
@@ -303,7 +303,7 @@ export function useActivitySubscriptions(options: {
   // Auto-sync when dependencies change
   createEffect(() => {
     const active = options.isActive();
-    const ptys = options.getAllPtys();
+    const ptys = options.getTrackedPtys();
 
     // Trigger sync whenever active state or PTYs change
     void sync();

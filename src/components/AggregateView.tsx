@@ -60,7 +60,7 @@ import { loadSessionData, getHostBackgroundColor } from '../effect/bridge';
 import { setShimmerEnabled } from '../core/shimmer';
 import type { Workspace } from '../core/types';
 import { collectPanes } from '../core/layout-tree';
-import type { FlattenedTreeItem } from '../contexts/aggregate-view-types';
+import type { FlattenedTreeItem, PtyInfo } from '../contexts/aggregate-view-types';
 
 interface AggregateViewProps {
   width: number;
@@ -126,10 +126,6 @@ export function AggregateView(props: AggregateViewProps) {
   // Extracted hooks
   const vim = useVimMode({ isAggregateVisible: () => state.showAggregateView });
   const emulatorCache = useEmulatorCache({ isActive: () => state.showAggregateView });
-  const activity = useActivitySubscriptions({
-    isActive: () => state.showAggregateView,
-    getAllPtys: () => state.allPtys,
-  });
   const sessionDrag = useSessionDrag();
 
   // Local state
@@ -161,6 +157,27 @@ export function AggregateView(props: AggregateViewProps) {
       scrollOffset: state.listScrollOffset,
     })
   );
+
+  const trackedActivityPtys = createMemo(() => {
+    const viewport = listViewport();
+    const tracked = new Map<string, PtyInfo>();
+
+    for (let index = viewport.start; index < viewport.end; index++) {
+      const item = state.flattenedTree[index];
+      if (!item || item.node.type !== 'pty') continue;
+      tracked.set(item.node.ptyInfo.ptyId, item.node.ptyInfo);
+    }
+
+    return [...tracked.values()];
+  });
+
+  // The list shimmer only needs activity for rows that are currently visible.
+  // The preview PTY already has its own TerminalView subscription, so subscribing
+  // to every loaded PTY here just amplifies update traffic and client-side work.
+  const activity = useActivitySubscriptions({
+    isActive: () => state.showAggregateView,
+    getTrackedPtys: trackedActivityPtys,
+  });
 
   const hostBgColor = createMemo(() => {
     void terminal.hostColorsVersion;
