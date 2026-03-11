@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.18](https://github.com/monotykamary/openmux/compare/v0.3.17...v0.3.18) (2026-03-11)
+
+
+### Bug Fixes
+
+* **aggregate:** limit activity subscriptions to visible PTYs ([b27badf](https://github.com/monotykamary/openmux/commit/b27badf0216d0b91199a945e7a6f1124bbcac452))
+
+
+### Tests
+
+* migrate remaining vitest usage to bun:test ([c86c077](https://github.com/monotykamary/openmux/commit/c86c077e621530373f09ed203d151d901e9bd532))
+
 ### [0.3.17](https://github.com/monotykamary/openmux/compare/v0.3.16...v0.3.17) (2026-03-11)
 
 
