@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.19](https://github.com/monotykamary/openmux/compare/v0.3.18...v0.3.19) (2026-03-11)
+
+
+### Bug Fixes
+
+* **aggregate:** speed up session loading ([2ec1d0c](https://github.com/monotykamary/openmux/commit/2ec1d0c4c0152ebcc064212e86c330d0c0dffd63))
+
+
+### Refactoring
+
+* **kitty-graphics:** use errore pattern for placement serialization ([270a1bd](https://github.com/monotykamary/openmux/commit/270a1bdbe3dc23ccb424ae6a233315caf7472e29))
+
 ### [0.3.18](https://github.com/monotykamary/openmux/compare/v0.3.17...v0.3.18) (2026-03-11)
 
 
