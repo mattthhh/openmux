@@ -43,6 +43,7 @@ export {
   unpackPlacements,
   toArchivePlacement,
   type ArchivePlacement,
+  PlacementSerializeError,
 } from './kitty-graphics/archive-placement';
 
 export const CELL_SIZE = 16; // bytes per cell

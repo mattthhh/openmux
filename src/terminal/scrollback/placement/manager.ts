@@ -55,11 +55,16 @@ export function packPlacements(placements: ArchivePlacement[]): Buffer {
 /**
  * Unpacks ArchivePlacements from a Buffer read from file.
  * @param buffer - Buffer containing packed placements
- * @returns Array of ArchivePlacements
+ * @returns Array of ArchivePlacements, empty array on error
  */
 export function unpackPlacements(buffer: Buffer): ArchivePlacement[] {
   const arrayBuffer = toArrayBuffer(buffer)
-  return unpackPlacementsFromArrayBuffer(arrayBuffer)
+  const result = unpackPlacementsFromArrayBuffer(arrayBuffer)
+  if (result instanceof Error) {
+    console.warn('[placement-manager] Failed to unpack placements:', result.message)
+    return []
+  }
+  return result
 }
 
 /**

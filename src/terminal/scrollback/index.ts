@@ -45,6 +45,7 @@ export {
   unpackPlacements,
   toArchivePlacement,
   type ArchivePlacement,
+  PlacementSerializeError,
 } from "./placement"
 
 // Chunk operations (for advanced use)

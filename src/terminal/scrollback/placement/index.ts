@@ -11,4 +11,5 @@ export {
   unpackPlacements,
   toArchivePlacement,
   type ArchivePlacement,
+  PlacementSerializeError,
 } from "../../kitty-graphics/archive-placement"

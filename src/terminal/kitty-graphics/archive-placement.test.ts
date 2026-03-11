@@ -12,6 +12,7 @@ import {
   unpackPlacements,
   toArchivePlacement,
   type ArchivePlacement,
+  PlacementSerializeError,
 } from './archive-placement';
 
 describe('ArchivePlacement serialization', () => {
@@ -117,9 +118,11 @@ describe('ArchivePlacement serialization', () => {
       expect(unpacked.z).toBe(-100);
     });
 
-    it('should throw on buffer too small', () => {
+    it('should return error on buffer too small', () => {
       const smallBuffer = new ArrayBuffer(59);
-      expect(() => unpackPlacement(smallBuffer)).toThrow(/Buffer too small/);
+      const result = unpackPlacement(smallBuffer);
+      expect(result).toBeInstanceOf(PlacementSerializeError);
+      expect((result as PlacementSerializeError).message).toMatch(/Buffer too small/);
     });
 
     it('should handle external placement tag', () => {
@@ -201,11 +204,13 @@ describe('ArchivePlacement serialization', () => {
       expect(unpacked[0].imageId).toBe(1);
     });
 
-    it('should throw when count exceeds buffer size', () => {
+    it('should return error when count exceeds buffer size', () => {
       const packed = packPlacements([
         { ...basePlacement, archiveOffset: 0, originalScreenY: 0 },
       ]);
-      expect(() => unpackPlacements(packed, 2)).toThrow(/Buffer too small/);
+      const result = unpackPlacements(packed, 2);
+      expect(result).toBeInstanceOf(PlacementSerializeError);
+      expect((result as PlacementSerializeError).message).toMatch(/Buffer too small/);
     });
   });
 

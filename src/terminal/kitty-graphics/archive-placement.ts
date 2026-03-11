@@ -25,6 +25,13 @@
  */
 
 import type { KittyGraphicsPlacement, KittyGraphicsPlacementTag } from '../emulator-interface';
+import * as errore from 'errore';
+
+/** Error for archive placement serialization/deserialization failures */
+export class PlacementSerializeError extends errore.createTaggedError({
+  name: 'PlacementSerializeError',
+  message: 'Placement serialization failed: $reason',
+}) {}
 
 /**
  * Extended placement type with archive-specific metadata.
@@ -105,13 +112,13 @@ export function packPlacement(placement: ArchivePlacement): ArrayBuffer {
 /**
  * Unpack an ArchivePlacement from an ArrayBuffer
  * @param buffer The buffer to deserialize (must be at least 64 bytes)
- * @returns The deserialized ArchivePlacement
+ * @returns The deserialized ArchivePlacement, or PlacementSerializeError on failure
  */
-export function unpackPlacement(buffer: ArrayBuffer): ArchivePlacement {
+export function unpackPlacement(buffer: ArrayBuffer): ArchivePlacement | PlacementSerializeError {
   if (buffer.byteLength < PLACEMENT_SIZE) {
-    throw new Error(
-      `Buffer too small for placement: expected at least ${PLACEMENT_SIZE} bytes, got ${buffer.byteLength}`
-    );
+    return new PlacementSerializeError({
+      reason: `Buffer too small for placement: expected at least ${PLACEMENT_SIZE} bytes, got ${buffer.byteLength}`,
+    });
   }
   const view = new DataView(buffer);
   return unpackPlacementAt(view, 0);
@@ -137,15 +144,15 @@ export function packPlacements(placements: ArchivePlacement[]): ArrayBuffer {
  * Unpack multiple placements from an ArrayBuffer
  * @param buffer The buffer to deserialize
  * @param count Number of placements to unpack (defaults to buffer.length / PLACEMENT_SIZE)
- * @returns Array of deserialized ArchivePlacements
+ * @returns Array of deserialized ArchivePlacements, or PlacementSerializeError on failure
  */
-export function unpackPlacements(buffer: ArrayBuffer, count?: number): ArchivePlacement[] {
+export function unpackPlacements(buffer: ArrayBuffer, count?: number): ArchivePlacement[] | PlacementSerializeError {
   const placementCount = count ?? Math.floor(buffer.byteLength / PLACEMENT_SIZE);
 
   if (buffer.byteLength < placementCount * PLACEMENT_SIZE) {
-    throw new Error(
-      `Buffer too small for ${placementCount} placements: expected at least ${placementCount * PLACEMENT_SIZE} bytes, got ${buffer.byteLength}`
-    );
+    return new PlacementSerializeError({
+      reason: `Buffer too small for ${placementCount} placements: expected at least ${placementCount * PLACEMENT_SIZE} bytes, got ${buffer.byteLength}`,
+    });
   }
 
   const view = new DataView(buffer);
