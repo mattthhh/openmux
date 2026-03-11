@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.16](https://github.com/monotykamary/openmux/compare/v0.3.15...v0.3.16) (2026-03-11)
+
+
+### Bug Fixes
+
+* **aggregate-view:** enable PTY updates for shimmer tracking in background sessions ([431d880](https://github.com/monotykamary/openmux/commit/431d880f61616812c1d409386a5ebc5d756d1076))
+* **aggregate,pty,shim,tests:** resolve post-refactor test failures ([41a5626](https://github.com/monotykamary/openmux/commit/41a56260ed2065ddedc9cf7fbc178753f0711e22))
+
+
+### Refactoring
+
+* **aggregate,scrollback,copy-mode,pty,shim:** modularize 7 large modules ([9af419a](https://github.com/monotykamary/openmux/commit/9af419af5277d6bb01f759ba287aafc36d0f545a))
+
 ### [0.3.15](https://github.com/monotykamary/openmux/compare/v0.3.14...v0.3.15) (2026-03-10)
 
 
