@@ -4,11 +4,15 @@
  * Manages subscriptions to PTY stdout activity for shimmer effects. Automatically
  * subscribes to visible PTYs and unsubscribes when they leave the view or the
  * aggregate view closes.
+ *
+ * NOTE: This hook also enables PTY updates via setPtyUpdateEnabled. PTYs from other
+ * sessions have updates disabled by default (for performance), but we need updates
+ * enabled to track activity for the shimmer effect.
  */
 
 import { createEffect, onCleanup, type Accessor } from 'solid-js';
 import * as errore from 'errore';
-import { subscribeUnifiedToPty } from '../../../effect/bridge';
+import { subscribeUnifiedToPty, setPtyUpdateEnabled } from '../../../effect/bridge';
 import { recordPtyStdoutActivity, clearPtyStdoutActivity } from '../../../core/shimmer';
 import { createTaggedError } from 'errore';
 import type { PtyInfo } from '../../../contexts/aggregate-view-types';
@@ -29,7 +33,7 @@ interface SubscriptionEntry {
 /** Result of useActivitySubscriptions hook */
 interface UseActivitySubscriptionsResult {
   /** Force sync subscriptions (normally auto-synced via effects) */
-  sync: () => void;
+  sync: () => Promise<void>;
   /** Get all active subscription PTY IDs */
   getActivePtyIds: () => string[];
   /** Check if a PTY has an active subscription */
@@ -77,6 +81,9 @@ export function useActivitySubscriptions(options: {
       entry.unsubscribe();
       subscriptions.delete(ptyId);
       clearPtyStdoutActivity(ptyId);
+      // Disable updates for this PTY (safe to call even if PTY is visible elsewhere,
+      // as the visibility system has its own reference counting)
+      void setPtyUpdateEnabled(ptyId, false);
     }
   };
 
@@ -87,34 +94,64 @@ export function useActivitySubscriptions(options: {
     for (const [ptyId, entry] of subscriptions) {
       entry.unsubscribe();
       clearPtyStdoutActivity(ptyId);
+      // Disable updates for this PTY
+      void setPtyUpdateEnabled(ptyId, false);
     }
     subscriptions.clear();
   };
+
+  // Track pending subscriptions to prevent races
+  const pendingSubscriptions = new Set<string>();
+  
+  // Track failed subscriptions for retry
+  const failedSubscriptions = new Map<string, number>(); // ptyId -> retry count
+  const MAX_RETRIES = 3;
+  
+  // Guard to prevent concurrent sync calls
+  let isSyncing = false;
+  let needsResync = false;
 
   /**
    * Subscribe to a PTY's activity.
    */
   const subscribe = async (ptyId: string): Promise<void | ActivitySubscriptionError> => {
-    if (subscriptions.has(ptyId)) {
+    if (subscriptions.has(ptyId) || pendingSubscriptions.has(ptyId)) {
       return;
     }
 
+    // Mark as pending to prevent duplicate subscription attempts
+    pendingSubscriptions.add(ptyId);
+
+    // Enable updates for this PTY so we can track activity
+    // PTYs from other sessions have updates disabled by default for performance
+    await setPtyUpdateEnabled(ptyId, true);
+
     let seenInitialUpdate = false;
+    let lastDirtyCount = 0;
 
     const result = await errore.tryAsync<() => void, ActivitySubscriptionError>({
       try: () =>
         subscribeUnifiedToPty(ptyId, (update) => {
-          // Skip the first update (initial state, not activity)
+          const dirtyCount = update.terminalUpdate.dirtyRows.size;
+          
+          // Skip the first update if it has no dirty rows (just initial state)
+          // But if first update HAS dirty rows, it's real activity
           if (!seenInitialUpdate) {
             seenInitialUpdate = true;
+            lastDirtyCount = dirtyCount;
+            if (dirtyCount > 0) {
+              recordPtyStdoutActivity(ptyId);
+            }
             return;
           }
 
           // Check for stdout activity in dirty rows
-          const hasStdoutActivity = update.terminalUpdate.dirtyRows.size > 0;
-          if (hasStdoutActivity) {
+          // Only record if there are NEW dirty rows (not just repeated updates)
+          if (dirtyCount > 0) {
             recordPtyStdoutActivity(ptyId);
           }
+          
+          lastDirtyCount = dirtyCount;
         }),
       catch: (e) =>
         new ActivitySubscriptionError({
@@ -124,51 +161,127 @@ export function useActivitySubscriptions(options: {
         }),
     });
 
+    // Remove from pending
+    pendingSubscriptions.delete(ptyId);
+
     if (result instanceof ActivitySubscriptionError) {
       clearPtyStdoutActivity(ptyId);
+      // Re-disable updates since subscription failed
+      void setPtyUpdateEnabled(ptyId, false);
+      
+      // Track failure for retry
+      const retryCount = (failedSubscriptions.get(ptyId) ?? 0) + 1;
+      if (retryCount <= MAX_RETRIES) {
+        failedSubscriptions.set(ptyId, retryCount);
+        console.warn(`[useActivitySubscriptions] Subscription failed for ${ptyId}, will retry (attempt ${retryCount}/${MAX_RETRIES})`);
+      } else {
+        console.error(`[useActivitySubscriptions] Subscription failed for ${ptyId} after ${MAX_RETRIES} attempts, giving up`);
+        failedSubscriptions.delete(ptyId);
+      }
+      
       return result;
     }
 
-    // Store subscription if still active
-    if (options.isActive()) {
-      subscriptions.set(ptyId, {
-        ptyId,
-        unsubscribe: result,
-        subscribedAt: Date.now(),
-      });
-    } else {
-      // Unsubscribe immediately if no longer active
+    // Success - clear any failure tracking
+    failedSubscriptions.delete(ptyId);
+
+    // Double-check we're still active before storing
+    if (!options.isActive()) {
       result();
       clearPtyStdoutActivity(ptyId);
+      void setPtyUpdateEnabled(ptyId, false);
+      return;
     }
+
+    // Check if this PTY is still in the current list
+    const currentIds = new Set(options.getAllPtys().map((pty) => pty.ptyId));
+    if (!currentIds.has(ptyId)) {
+      result();
+      clearPtyStdoutActivity(ptyId);
+      void setPtyUpdateEnabled(ptyId, false);
+      return;
+    }
+
+    // Store subscription
+    subscriptions.set(ptyId, {
+      ptyId,
+      unsubscribe: result,
+      subscribedAt: Date.now(),
+    });
   };
 
   /**
    * Sync subscriptions to match current PTYs.
    */
-  const sync = (): void => {
-    if (!options.isActive()) {
-      unsubscribeAll();
+  const sync = async (): Promise<void> => {
+    // Prevent concurrent syncs
+    if (isSyncing) {
+      needsResync = true;
       return;
     }
-
-    const currentPtyIds = new Set(options.getAllPtys().map((pty) => pty.ptyId));
-
-    // Unsubscribe from PTYs no longer in the list
-    for (const [ptyId, entry] of subscriptions) {
-      if (!currentPtyIds.has(ptyId)) {
-        entry.unsubscribe();
-        subscriptions.delete(ptyId);
-        clearPtyStdoutActivity(ptyId);
+    
+    isSyncing = true;
+    needsResync = false;
+    
+    try {
+      if (!options.isActive()) {
+        unsubscribeAll();
+        return;
       }
-    }
 
-    // Subscribe to new PTYs
-    for (const ptyId of currentPtyIds) {
-      if (!subscriptions.has(ptyId)) {
-        void subscribe(ptyId).catch((e) => {
-          console.warn(`[useActivitySubscriptions] Failed to subscribe to PTY ${ptyId}:`, e);
-        });
+      const currentPtyIds = new Set(options.getAllPtys().map((pty) => pty.ptyId));
+
+      // Unsubscribe from PTYs no longer in the list
+      // But don't touch pending subscriptions - let them complete
+      for (const [ptyId, entry] of subscriptions) {
+        if (!currentPtyIds.has(ptyId)) {
+          entry.unsubscribe();
+          subscriptions.delete(ptyId);
+          clearPtyStdoutActivity(ptyId);
+          // Disable updates for this PTY since we're no longer tracking it
+          await setPtyUpdateEnabled(ptyId, false);
+        }
+      }
+
+      // Subscribe to new PTYs (but not ones already being processed)
+      const subscribePromises: Promise<void>[] = [];
+      const reenablePromises: Promise<void>[] = [];
+      
+      for (const ptyId of currentPtyIds) {
+        // Subscribe if:
+        // - Not already subscribed
+        // - Not currently being processed
+        // - Hasn't failed too many times
+        const retryCount = failedSubscriptions.get(ptyId) ?? 0;
+        const shouldSubscribe = !subscriptions.has(ptyId) && 
+                               !pendingSubscriptions.has(ptyId) &&
+                               retryCount < MAX_RETRIES;
+        
+        if (shouldSubscribe) {
+          subscribePromises.push(
+            subscribe(ptyId).catch((e) => {
+              // Error is already logged in subscribe()
+            })
+          );
+        } else if (subscriptions.has(ptyId)) {
+          // Already subscribed - re-enable updates to ensure they weren't disabled
+          // by the visibility system (e.g., when switching workspaces)
+          reenablePromises.push(
+            setPtyUpdateEnabled(ptyId, true).catch((e) => {
+              // Silently ignore - PTY might have been destroyed
+            })
+          );
+        }
+      }
+      
+      // Wait for all operations to complete
+      await Promise.all([...subscribePromises, ...reenablePromises]);
+    } finally {
+      isSyncing = false;
+      
+      // If another sync was requested while we were working, run it now
+      if (needsResync) {
+        void sync();
       }
     }
   };
@@ -193,7 +306,7 @@ export function useActivitySubscriptions(options: {
     const ptys = options.getAllPtys();
 
     // Trigger sync whenever active state or PTYs change
-    sync();
+    void sync();
 
     // Enable/disable shimmer based on active state
     if (active) {
