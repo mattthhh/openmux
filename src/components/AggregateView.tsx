@@ -250,24 +250,34 @@ export function AggregateView(props: AggregateViewProps) {
     exitAggregateCopyMode();
   });
 
-  // Auto-load session PTYs on placeholder selection
+  // Auto-load session PTYs when an unloaded session or its placeholder is selected.
   createEffect(() => {
     if (!state.showAggregateView) return;
 
     const selectedItem = state.flattenedTree[state.selectedIndex];
     if (!selectedItem) return;
 
-    if (
-      selectedItem.node.type === 'placeholder' &&
-      selectedItem.node.message === '...' &&
-      selectedItem.parentSessionId
-    ) {
-      const sessionId = selectedItem.parentSessionId;
-      const loadState = state.sessionLoadStates.get(sessionId);
-
-      if (loadState?.status === 'unloaded' && !state.loadAttemptedSessionIds.has(sessionId)) {
-        loadSessionPtys(sessionId);
+    const sessionId = (() => {
+      if (selectedItem.node.type === 'session' && selectedItem.node.loadState.status === 'unloaded') {
+        return selectedItem.node.session.id;
       }
+
+      if (
+        selectedItem.node.type === 'placeholder' &&
+        selectedItem.node.message === '...' &&
+        selectedItem.parentSessionId
+      ) {
+        return selectedItem.parentSessionId;
+      }
+
+      return null;
+    })();
+
+    if (!sessionId) return;
+
+    const loadState = state.sessionLoadStates.get(sessionId);
+    if (loadState?.status === 'unloaded' && !state.loadAttemptedSessionIds.has(sessionId)) {
+      loadSessionPtys(sessionId);
     }
   });
 

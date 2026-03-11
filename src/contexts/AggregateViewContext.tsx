@@ -44,6 +44,7 @@ import { useTerminal } from './TerminalContext';
 import { findPaneLocation, findPtyLocation } from '../components/aggregate/utils';
 import { collectPanes } from '../core/layout-tree';
 import { getAggregateSessionOrderResult, setAggregateSessionOrder } from '../effect/bridge/session-bridge';
+import { getSessionCwd as getStoredSessionCwd } from '../effect/bridge';
 
 const AggregateViewContext = createContext<AggregateViewContextValue | null>(null);
 
@@ -119,7 +120,7 @@ interface AggregateViewProviderProps extends ParentProps {}
     const sessionId = session.state.activeSessionId;
     if (!sessionId) return [];
 
-    const ptys: Array<{ ptyId: string; paneId: string; workspaceId: number; title?: string }> = [];
+    const ptys: Array<{ ptyId: string; paneId: string; workspaceId: number; title?: string; cwd?: string }> = [];
 
     for (const [wsId, workspace] of Object.entries(layout.state.workspaces)) {
       if (!workspace) continue;
@@ -127,7 +128,14 @@ interface AggregateViewProviderProps extends ParentProps {}
       const workspaceId = Number(wsId);
       const collectPtys = (node: unknown) => {
         if (!node) return;
-        const n = node as { type?: string; id?: string; ptyId?: string; first?: unknown; second?: unknown };
+        const n = node as {
+          type?: string;
+          id?: string;
+          ptyId?: string;
+          title?: string;
+          first?: unknown;
+          second?: unknown;
+        };
         if (n.type === 'split') {
           collectPtys(n.first);
           collectPtys(n.second);
@@ -136,7 +144,8 @@ interface AggregateViewProviderProps extends ParentProps {}
             ptyId: n.ptyId,
             paneId: n.id,
             workspaceId,
-            title: undefined, // Can be fetched later
+            title: n.title,
+            cwd: getStoredSessionCwd(n.id),
           });
         }
       };
@@ -152,7 +161,7 @@ interface AggregateViewProviderProps extends ParentProps {}
     return ptys;
   };
 
-  const { refreshPtys, refreshPtysSubset, initialLoad } =
+  const { refreshPtys, refreshPtysSubset, initialLoad, bootstrapPtys } =
     createAggregateViewRefreshers(
       state,
       setState,
@@ -227,7 +236,9 @@ interface AggregateViewProviderProps extends ParentProps {}
           lifecycleHandlers
         );
 
-        // Finally, do full refresh in background to populate other sessions
+        // Bootstrap mapped PTYs from saved session data so rows appear quickly,
+        // then hydrate live metadata in the background.
+        void bootstrapPtys();
         void refreshPtys();
       })();
     } else {

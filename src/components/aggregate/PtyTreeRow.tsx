@@ -178,9 +178,17 @@ export function PtyTreeRow(props: PtyTreeRowProps) {
 
   // Show folder + active process, while still letting the label truncate before git metadata.
   const label = createMemo(() => {
-    const directoryName = getDirectoryName(props.pty.cwd);
+    const directoryName = getDirectoryName(props.pty.cwd).trim();
     const processName = getProcessDisplayName(props.pty);
-    return processName ? `${directoryName} (${processName})` : directoryName;
+    const savedTitle = props.pty.title?.trim() ?? '';
+    const shellName = getProcessBaseName(props.pty.shell) || 'shell';
+    const baseLabel = directoryName || savedTitle || shellName;
+
+    if (!processName || processName === baseLabel) {
+      return baseLabel;
+    }
+
+    return `${baseLabel} (${processName})`;
   });
 
   // Git metadata

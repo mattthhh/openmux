@@ -262,6 +262,20 @@ export function createAggregateViewActions(
         }
       }
 
+      if (result.ptys.length > 0) {
+        for (const pty of result.ptys) {
+          s.recentlyAddedPtyIds.add(pty.ptyId);
+        }
+
+        setTimeout(() => {
+          setState(produce((s2) => {
+            for (const pty of result.ptys) {
+              s2.recentlyAddedPtyIds.delete(pty.ptyId);
+            }
+          }));
+        }, 5000);
+      }
+
       s.allPtysIndex = new Map(s.allPtys.map((pty, index) => [pty.ptyId, index] as const));
 
       const paneCount = result.ptys.length > 0
@@ -275,6 +289,7 @@ export function createAggregateViewActions(
           focusedPaneId: previousFocusedPaneId,
           paneCount,
         });
+        s.loadAttemptedSessionIds.delete(sessionId);
       } else {
         s.sessionLoadStates.set(sessionId, {
           status: 'unloaded',
@@ -282,11 +297,16 @@ export function createAggregateViewActions(
           focusedPaneId: previousFocusedPaneId,
           paneCount,
         });
+        s.loadAttemptedSessionIds.delete(sessionId);
       }
 
       recomputeMatches(s);
       recomputeTree(s);
     }));
+
+    if (!(result instanceof Error) && result.ptys.length > 0) {
+      void refreshPtys();
+    }
   };
 
   /** Get the loading state for a session */
