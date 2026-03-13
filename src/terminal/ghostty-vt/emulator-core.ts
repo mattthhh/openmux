@@ -29,6 +29,7 @@ import { searchTerminal } from "./terminal-search";
 import { fetchScrollbackLine } from "./scrollback";
 import { getCursorSnapshot } from "./cursor";
 import { prepareEmulatorUpdate } from "./emulator-updates";
+import { deferNextTick } from "../../core/scheduling";
 import { HOT_SCROLLBACK_LIMIT } from "../scrollback-config";
 import {
   applyColorRemapToRow,
@@ -146,10 +147,14 @@ export class GhosttyVTEmulatorCore {
       this.needsFullRefresh = true;
       return;
     }
-    this.prepareUpdate(true);
-    for (const callback of this.updateCallbacks) {
-      callback();
-    }
+    // Defer prepareUpdate to next tick to ensure native reflow completes
+    deferNextTick(() => {
+      if (this._disposed) return;
+      this.prepareUpdate(true);
+      for (const callback of this.updateCallbacks) {
+        callback();
+      }
+    });
   }
 
   setPixelSize(widthPx: number, heightPx: number): void {

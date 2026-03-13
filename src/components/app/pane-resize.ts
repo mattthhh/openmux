@@ -138,11 +138,14 @@ export function createPaneResizeHandlers(deps: PaneResizeDeps) {
       }
     }
     // Force refresh for PTYs that were already visible (same session case)
-    // This ensures they send fresh reflowed state to subscribers
+    // This ensures they send fresh reflowed state to subscribers.
+    // Defer to macrotask to run after emulator's deferred prepareUpdate.
     deferMacrotask(() => {
-      for (const ptyId of resizedPtyIds) {
-        void refreshPty(ptyId);
-      }
+      deferMacrotask(() => {
+        for (const ptyId of resizedPtyIds) {
+          void refreshPty(ptyId);
+        }
+      });
     });
   };
 

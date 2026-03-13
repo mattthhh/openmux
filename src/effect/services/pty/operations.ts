@@ -161,7 +161,8 @@ export function createOperations(deps: OperationsDeps) {
       // Ignore mode query errors
     }
 
-    notifySubscribers(session)
+    // Note: Emulator.resize() now defers prepareUpdate to ensure native reflow completes
+    // before notifying subscribers. No need to call notifySubscribers here.
   }
 
   async function getCwd(id: PtyId): Promise<PtyNotFoundError | string> {
