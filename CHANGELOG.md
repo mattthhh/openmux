@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.24](https://github.com/monotykamary/openmux/compare/v0.3.23...v0.3.24) (2026-03-13)
+
+
+### Features
+
+* suppress clear-screen sequences during PTY resize window ([c199cb0](https://github.com/monotykamary/openmux/commit/c199cb0a8408e9d65ea46daaba5c926454816186))
+
+
+### Bug Fixes
+
+* defer emulator prepareUpdate after resize to ensure native reflow completes ([39b631a](https://github.com/monotykamary/openmux/commit/39b631a7ed1fcf519d54c367824371e2f194169a))
+* defer resize-triggered render to prevent race with emulator update ([73bf59b](https://github.com/monotykamary/openmux/commit/73bf59b7a3d742cdc7ab5c8185383689597c319d))
+* defer restorePaneSizes to allow preview unmount before resize ([612601f](https://github.com/monotykamary/openmux/commit/612601fd7d94794533b3d368eab528dd06a26fae))
+* force PTY refresh after restorePaneSizes to fix reflow race ([baee2a7](https://github.com/monotykamary/openmux/commit/baee2a710b0c433429d1b2a4ab3a2d7ed3709e9b))
+* race condition in TerminalView subscription setup ([2e3b94e](https://github.com/monotykamary/openmux/commit/2e3b94e730cef78e7dec084274778455ba1487c7))
+
 ### [0.3.23](https://github.com/monotykamary/openmux/compare/v0.3.22...v0.3.23) (2026-03-12)
 
 ### [0.3.22](https://github.com/monotykamary/openmux/compare/v0.3.21...v0.3.22) (2026-03-12)
