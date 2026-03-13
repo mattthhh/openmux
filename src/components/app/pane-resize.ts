@@ -5,7 +5,7 @@
 
 import type { PaneData } from '../../core/types';
 import { deferNextTick, deferMacrotask } from '../../core/scheduling';
-import { refreshPty } from '../../effect/bridge';
+import { refreshPty } from '../../effect/bridge/pty-bridge';
 
 export interface PaneResizeDeps {
   getPanes: () => PaneData[];

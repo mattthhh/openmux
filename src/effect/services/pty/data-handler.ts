@@ -6,7 +6,7 @@ import type { SyncModeParser } from "../../../terminal/sync-mode-parser"
 import type { InternalPtySession } from "./types"
 import { deferMacrotask } from "../../../core/scheduling"
 import { tracePtyChunk, tracePtyEvent } from "../../../terminal/pty-trace"
-import { copyToClipboard } from "../../bridge"
+import { copyToClipboard } from "../../bridge/clipboard-bridge"
 import * as errore from "errore"
 
 /** Base64 decode error for clipboard operations */
