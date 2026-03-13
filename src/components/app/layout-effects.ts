@@ -72,12 +72,15 @@ export function setupAppLayoutEffects(params: {
   });
 
   // Restore PTY sizes when aggregate view closes
+  // Defer to next tick to allow preview unmount to complete first
   createEffect(
     on(
       () => aggregateState.showAggregateView,
       (isOpen, wasOpen) => {
         if (wasOpen && !isOpen && terminal.isInitialized) {
-          paneResizeHandlers.restorePaneSizes();
+          deferNextTick(() => {
+            paneResizeHandlers.restorePaneSizes();
+          });
         }
       },
       { defer: true }
