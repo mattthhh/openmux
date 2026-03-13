@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.25](https://github.com/monotykamary/openmux/compare/v0.3.24...v0.3.25) (2026-03-13)
+
+
+### Bug Fixes
+
+* **imports:** use direct module imports to break circular dependency through bridge barrel ([2ba6cf8](https://github.com/monotykamary/openmux/commit/2ba6cf871f56af4e25c990c58ab737f7ecb92392))
+
 ### [0.3.24](https://github.com/monotykamary/openmux/compare/v0.3.23...v0.3.24) (2026-03-13)
 
 
