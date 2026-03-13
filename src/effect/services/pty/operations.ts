@@ -146,6 +146,9 @@ export function createOperations(deps: OperationsDeps) {
     session.emulator.resize(cols, rows)
     session.emulator.setPixelSize?.(session.pixelWidth, session.pixelHeight)
 
+    // Record resize timestamp for clear-screen suppression
+    session.lastResizeTime = Date.now()
+
     // Check if DECSET 2048 (in-band resize notifications) is enabled
     try {
       const inBandResizeEnabled = session.emulator.getMode(2048)

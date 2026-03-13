@@ -43,6 +43,11 @@ const SCROLLBACK_CLEAR_PROBE_LEN = 128
 const SCROLLBACK_CLEAR_REGEX = /\x1b\[([0-9;]*)J/g
 const SCROLLBACK_CLEAR_C1_REGEX = /\x9b([0-9;]*)J/g
 
+// Clear-screen suppression after resize (prevents shell SIGWINCH clears from destroying reflowed content)
+const CLEAR_SUPPRESSION_WINDOW_MS = 50
+const CLEAR_SCREEN_REGEX = /\x1b\[2J/g
+const CLEAR_SCREEN_C1_REGEX = /\x9b2J/g
+
 function normalizeProcessName(value: string | null | undefined): string | null {
   if (!value) return null
   const trimmed = value.trim()
@@ -71,6 +76,26 @@ function hasScrollbackEraseSequence(text: string, regex: RegExp): boolean {
     if (parts.includes("3")) return true
   }
   return false
+}
+
+/**
+ * Check if we should suppress clear-screen sequences (CSI 2 J) for this session.
+ * Returns true if we're within the suppression window after a resize.
+ */
+function shouldSuppressClearScreen(session: InternalPtySession): boolean {
+  if (session.lastResizeTime === 0) return false
+  const elapsed = Date.now() - session.lastResizeTime
+  return elapsed < CLEAR_SUPPRESSION_WINDOW_MS
+}
+
+/**
+ * Filter out clear-screen sequences (CSI 2 J) from data.
+ * Used during the suppression window after resize to prevent shell SIGWINCH
+ * from clearing the reflowed scrollback content.
+ */
+function suppressClearScreenSequences(data: string): string {
+  // Replace CSI 2 J with nothing (drop the sequence)
+  return data.replace(CLEAR_SCREEN_REGEX, "").replace(CLEAR_SCREEN_C1_REGEX, "")
 }
 
 /**
@@ -270,10 +295,15 @@ export function createDataHandler(options: DataHandlerOptions) {
 
     if (force) {
       while (state.pendingSegments.length > 0) {
-        const segment = state.pendingSegments.shift() ?? ""
+        let segment = state.pendingSegments.shift() ?? ""
         if (segment.length === 0) continue
         if (shouldClearScrollback(segment)) {
           resetScrollbackState()
+        }
+        // Suppress clear-screen sequences during resize suppression window
+        if (shouldSuppressClearScreen(session)) {
+          segment = suppressClearScreenSequences(segment)
+          if (segment.length === 0) continue
         }
         session.emulator.write(segment)
         wrote = true
@@ -309,8 +339,14 @@ export function createDataHandler(options: DataHandlerOptions) {
         if (shouldClearScrollback(batch)) {
           resetScrollbackState()
         }
-        session.emulator.write(batch)
-        wrote = true
+        // Suppress clear-screen sequences during resize suppression window
+        if (shouldSuppressClearScreen(session)) {
+          batch = suppressClearScreenSequences(batch)
+        }
+        if (batch.length > 0) {
+          session.emulator.write(batch)
+          wrote = true
+        }
       }
     }
 

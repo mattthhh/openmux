@@ -57,4 +57,6 @@ export interface InternalPtySession {
     /** Track last at-bottom state to clear caches on return */
     lastIsAtBottom: boolean
   }
+  /** Timestamp of last resize operation (ms since epoch). Used to suppress destructive clear sequences during resize. */
+  lastResizeTime: number
 }

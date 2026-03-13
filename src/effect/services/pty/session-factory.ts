@@ -154,6 +154,7 @@ export async function createSession(
     focusTrackingOwnerProcess: null,
     pendingNotify: false,
     scrollState: { viewportOffset: 0, lastScrollbackLength: 0, lastIsAtBottom: true },
+    lastResizeTime: 0,
   }
 
   session.scrollbackArchiver = new ScrollbackArchiver(session, liveEmulator)
