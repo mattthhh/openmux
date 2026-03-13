@@ -145,6 +145,13 @@ export interface ITerminalEmulator {
   setUpdateEnabled?(enabled: boolean): void;
 
   /**
+   * Force a refresh of cached state and notify subscribers.
+   * Used after operations that change terminal dimensions but may have been
+   * missed by subscribers due to visibility races.
+   */
+  refresh?(): void;
+
+  /**
    * Subscribe to terminal mode changes (DECSET/DECRST)
    * Callback receives new modes and optionally previous modes for transition detection.
    * @returns Unsubscribe function

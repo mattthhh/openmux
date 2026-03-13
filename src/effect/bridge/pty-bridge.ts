@@ -402,6 +402,22 @@ export async function setPtyUpdateEnabledWithService(pty: PtyService, ptyId: str
   }
 }
 
+/** Refresh PTY state to force a fresh update for visible terminals */
+export async function refreshPty(ptyId: string): Promise<void> {
+  return refreshPtyWithService(getPtyService(), ptyId)
+}
+
+/** Refresh PTY with a specific service */
+export async function refreshPtyWithService(pty: PtyService, ptyId: string): Promise<void> {
+  try {
+    const emulator = await pty.getEmulator(asPtyId(ptyId))
+    if (emulator instanceof Error) return
+    emulator.refresh?.()
+  } catch {
+    // Ignore
+  }
+}
+
 /** Apply host colors with a specific service */
 export async function applyHostColorsWithService(pty: PtyService, colors: TerminalColors): Promise<void> {
   if (isShimClient()) {

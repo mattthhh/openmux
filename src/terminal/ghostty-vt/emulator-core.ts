@@ -359,6 +359,23 @@ export class GhosttyVTEmulatorCore {
     };
   }
 
+  refresh(): void {
+    if (this._disposed) return;
+    // Invalidate cached state and force a fresh update
+    this.cachedState = null;
+    this.pendingUpdate = null;
+    this.scrollbackCache.clear();
+    this.scrollbackSnapshotDirty = true;
+    if (this.updatesEnabled) {
+      this.prepareUpdate(true);
+      for (const callback of this.updateCallbacks) {
+        callback();
+      }
+    } else {
+      this.needsFullRefresh = true;
+    }
+  }
+
   async search(query: string, options?: { limit?: number }): Promise<SearchResult> {
     return searchTerminal(query, options, {
       getScrollbackLength: () => this.terminal.getScrollbackLength(),

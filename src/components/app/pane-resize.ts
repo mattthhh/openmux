@@ -4,7 +4,8 @@
  */
 
 import type { PaneData } from '../../core/types';
-import { deferNextTick } from '../../core/scheduling';
+import { deferNextTick, deferMacrotask } from '../../core/scheduling';
+import { refreshPty } from '../../effect/bridge';
 
 export interface PaneResizeDeps {
   getPanes: () => PaneData[];
@@ -123,6 +124,7 @@ export function createPaneResizeHandlers(deps: PaneResizeDeps) {
    * The preview resizes PTYs to preview dimensions, so we need to restore pane dimensions
    */
   const restorePaneSizes = () => {
+    const resizedPtyIds: string[] = [];
     for (const pane of getPanes()) {
       if (pane.ptyId && pane.rectangle) {
         const cols = Math.max(1, pane.rectangle.width - 2);
@@ -132,8 +134,16 @@ export function createPaneResizeHandlers(deps: PaneResizeDeps) {
         const pixelHeight = metrics ? rows * metrics.cellHeight : null;
         resizePTY(pane.ptyId, cols, rows, pixelWidth ?? undefined, pixelHeight ?? undefined);
         lastGeometry.set(pane.ptyId, { cols, rows, pixelWidth, pixelHeight });
+        resizedPtyIds.push(pane.ptyId);
       }
     }
+    // Force refresh for PTYs that were already visible (same session case)
+    // This ensures they send fresh reflowed state to subscribers
+    deferMacrotask(() => {
+      for (const ptyId of resizedPtyIds) {
+        void refreshPty(ptyId);
+      }
+    });
   };
 
   return {

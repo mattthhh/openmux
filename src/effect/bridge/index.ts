@@ -37,6 +37,7 @@ export {
   subscribeUnifiedToPty,
   getEmulator,
   setPtyUpdateEnabled,
+  refreshPty,
   applyHostColors,
   subscribeToPtyLifecycle,
   subscribeToAllTitleChanges,
