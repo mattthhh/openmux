@@ -93,8 +93,10 @@ export function setupUnifiedSubscription(deps: UnifiedSubscriptionDeps): void {
           if (!mounted) return;
 
           viewState.emulator = em;
-          attachVisibleEmulator(ptyId, em);
 
+          // Set up subscription BEFORE enabling emulator updates.
+          // This prevents a race where the emulator fires an immediate update
+          // (e.g., after resize with needsFullRefresh) before we're listening.
           const unsubResult = await errore.tryAsync<() => void, Error>({
             try: () => subscribeUnifiedToPty(ptyId, (update: UnifiedTerminalUpdate) => {
               if (!mounted) return;
@@ -140,6 +142,10 @@ export function setupUnifiedSubscription(deps: UnifiedSubscriptionDeps): void {
           if (unsubResult instanceof Error) return;
 
           unsubscribe = unsubResult;
+
+          // Now safe to enable updates - subscription is active and will catch immediate updates
+          attachVisibleEmulator(ptyId, em);
+
           requestRenderFrame();
         };
 
