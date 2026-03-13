@@ -7,6 +7,7 @@ let createAggregateKeyboardHandler: typeof import("../../../src/components/aggre
 
 vi.mock("../../../src/effect/bridge", () => ({
   writeToPty: vi.fn(),
+  refreshPty: vi.fn(),
 }));
 
 vi.mock("../../../src/terminal/key-encoder", () => ({

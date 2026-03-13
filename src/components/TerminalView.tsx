@@ -11,6 +11,7 @@ import { useCopyMode } from '../contexts/CopyModeContext';
 import { useSearch } from '../contexts/SearchContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { getHostBackgroundColor } from '../effect/bridge';
+import { deferMacrotask } from '../core/scheduling';
 import { createTerminalRenderer } from './terminal-view/terminal-renderer';
 import { createTerminalViewState } from './terminal-view/view-state';
 import { setupUnifiedSubscription } from './terminal-view/unified-subscription';
@@ -95,12 +96,16 @@ export function TerminalView(props: TerminalViewProps) {
   );
 
   // Resize events don't always trigger a terminal update, so force a render to avoid blank frames.
+  // Defer to macrotask to ensure any pending emulator resize updates arrive before we render,
+  // preventing a race where we render with stale dimensions before the reflowed state arrives.
   createEffect(
     on(
       [() => props.width, () => props.height],
       () => {
-        setVersion((v) => v + 1);
-        renderer.requestRender();
+        deferMacrotask(() => {
+          setVersion((v) => v + 1);
+          renderer.requestRender();
+        });
       }
     )
   );
