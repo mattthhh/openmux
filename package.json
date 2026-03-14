@@ -1,6 +1,6 @@
 {
   "name": "openmux",
-  "version": "0.3.25",
+  "version": "0.3.26",
   "description": "Terminal multiplexer with master-stack tiling layout",
   "module": "src/index.tsx",
   "type": "module",

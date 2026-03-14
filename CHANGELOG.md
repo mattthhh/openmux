@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.26](https://github.com/monotykamary/openmux/compare/v0.3.25...v0.3.26) (2026-03-14)
+
+
+### Bug Fixes
+
+* suppress CSI 3 J (scrollback clear) during resize window ([9d4c5a5](https://github.com/monotykamary/openmux/commit/9d4c5a58f33df28e9872cb8f727837d5f6f25533))
+
 ### [0.3.25](https://github.com/monotykamary/openmux/compare/v0.3.24...v0.3.25) (2026-03-13)
 
 
