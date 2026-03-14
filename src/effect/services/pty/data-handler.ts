@@ -297,16 +297,20 @@ export function createDataHandler(options: DataHandlerOptions) {
       while (state.pendingSegments.length > 0) {
         let segment = state.pendingSegments.shift() ?? ""
         if (segment.length === 0) continue
-        if (shouldClearScrollback(segment)) {
-          resetScrollbackState()
-        }
-        // Suppress clear-screen sequences during resize suppression window
+        // Suppress ALL clear sequences during resize suppression window
         if (shouldSuppressClearScreen(session)) {
+          segment = segment.replace(SCROLLBACK_CLEAR_REGEX, "").replace(SCROLLBACK_CLEAR_C1_REGEX, "")
           segment = suppressClearScreenSequences(segment)
           if (segment.length === 0) continue
         }
-        session.emulator.write(segment)
-        wrote = true
+        if (segment.length > 0) {
+          // Only check for scrollback clear if NOT in suppression window
+          if (shouldClearScrollback(segment)) {
+            resetScrollbackState()
+          }
+          session.emulator.write(segment)
+          wrote = true
+        }
         segmentsProcessed += 1
       }
     } else {
@@ -336,14 +340,19 @@ export function createDataHandler(options: DataHandlerOptions) {
       }
 
       if (batch.length > 0) {
-        if (shouldClearScrollback(batch)) {
-          resetScrollbackState()
-        }
-        // Suppress clear-screen sequences during resize suppression window
+        // Suppress ALL clear sequences during resize suppression window (both CSI 2 J and CSI 3 J)
+        // Shells send these during SIGWINCH handling - dropping them preserves reflowed content
         if (shouldSuppressClearScreen(session)) {
+          // First suppress CSI 3 J (scrollback clear) to prevent resetScrollbackState()
+          batch = batch.replace(SCROLLBACK_CLEAR_REGEX, "").replace(SCROLLBACK_CLEAR_C1_REGEX, "")
+          // Then suppress CSI 2 J (screen clear)
           batch = suppressClearScreenSequences(batch)
         }
         if (batch.length > 0) {
+          // Only check for scrollback clear if NOT in suppression window
+          if (shouldClearScrollback(batch)) {
+            resetScrollbackState()
+          }
           session.emulator.write(batch)
           wrote = true
         }
