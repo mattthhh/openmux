@@ -3,7 +3,7 @@
  * Handles bracketed paste from host terminal
  */
 
-import type { PasteEvent } from '@opentui/core';
+import { decodePasteBytes, type PasteEvent } from '@opentui/core';
 
 export interface PasteHandlerDeps {
   getFocusedPtyId: () => string | undefined;
@@ -27,7 +27,7 @@ export function createPasteHandler(deps: PasteHandlerDeps) {
     // Write the pasted text directly to the focused pane's PTY
     const focusedPtyId = getFocusedPtyId();
     if (focusedPtyId) {
-      writeToPTY(focusedPtyId, event.text);
+      writeToPTY(focusedPtyId, decodePasteBytes(event.bytes));
     }
   };
 
