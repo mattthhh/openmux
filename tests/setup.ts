@@ -50,3 +50,12 @@ mock.module("@opentui/solid/jsx-runtime", () => solidJsxRuntime);
 mock.module("@opentui/solid/jsx-dev-runtime", () => solidJsxRuntime);
 mock.module("../src/effect/bridge", () => effectBridgeMocks);
 mock.module("../src/terminal/ghostty-vt/ffi", () => ({ ghostty: mockGhostty }));
+
+// Mock shim-bridge to prevent accidental shim client connections in tests
+mock.module("../src/effect/bridge/shim-bridge", () => ({
+  registerPtyPane: async () => {},
+  getSessionPtyMapping: async () => undefined,
+  onShimDetached: () => () => {},
+  shutdownShim: async () => {},
+  waitForShimClient: async () => {},
+}));
