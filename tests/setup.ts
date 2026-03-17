@@ -59,3 +59,19 @@ mock.module("../src/effect/bridge/shim-bridge", () => ({
   shutdownShim: async () => {},
   waitForShimClient: async () => {},
 }));
+
+// Mock shim/client/connection to prevent socket connection attempts in tests
+// This specifically mocks waitForShim which tries to connect to the shim socket
+// Note: handlePtyNotification is imported from the actual module to preserve test functionality
+import { handlePtyNotification } from "../src/shim/client/frame-handler";
+
+mock.module("../src/shim/client/connection", () => ({
+  sendRequest: async () => ({ header: { type: 'response', ok: true, result: {} }, payloads: [] }),
+  sendRequestDirect: async () => ({ header: { type: 'response', ok: true, result: {} }, payloads: [] }),
+  ensureConnected: async () => {},
+  waitForShim: async () => {},
+  onShimDetached: () => () => {},
+  shutdownShim: async () => {},
+  // Preserve the actual handlePtyNotification for tests that use it
+  handlePtyNotification,
+}));
