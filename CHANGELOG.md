@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.28](https://github.com/monotykamary/openmux/compare/v0.3.27...v0.3.28) (2026-03-17)
+
+
+### Bug Fixes
+
+* **aggregate-view:** prevent deleted PTYs from respawning during race condition ([760f73c](https://github.com/monotykamary/openmux/commit/760f73c6ea365eb77fa3df49899a67c9e111b624))
+
+
+### Tests
+
+* **kitty:** align archive edge cases with hot scrollback limit ([a8ff0ee](https://github.com/monotykamary/openmux/commit/a8ff0eee44bcaad396e6d5108f2be76c4359660a))
+
 ### [0.3.27](https://github.com/monotykamary/openmux/compare/v0.3.26...v0.3.27) (2026-03-17)
 
 
