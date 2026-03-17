@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.31](https://github.com/monotykamary/openmux/compare/v0.3.30...v0.3.31) (2026-03-17)
+
+
+### Bug Fixes
+
+* **paste-handler:** use decodePasteBytes for PasteEvent bytes property ([a82926e](https://github.com/monotykamary/openmux/commit/a82926ec428727a5ec6ec95a8eb000387f82ab99))
+
 ### [0.3.30](https://github.com/monotykamary/openmux/compare/v0.3.29...v0.3.30) (2026-03-17)
 
 ### [0.3.29](https://github.com/monotykamary/openmux/compare/v0.3.28...v0.3.29) (2026-03-17)
