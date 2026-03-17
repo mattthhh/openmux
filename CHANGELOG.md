@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.27](https://github.com/monotykamary/openmux/compare/v0.3.26...v0.3.27) (2026-03-17)
+
+
+### Bug Fixes
+
+* **terminal:** reduce redraw stalls and offload kitty chunks ([cd93c07](https://github.com/monotykamary/openmux/commit/cd93c0789baffd858fc881cd74bc34d337314993))
+
 ### [0.3.26](https://github.com/monotykamary/openmux/compare/v0.3.25...v0.3.26) (2026-03-14)
 
 
