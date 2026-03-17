@@ -795,6 +795,20 @@ export function createAggregateViewRefreshers(
           }
         }
 
+        // Build set of live PTY IDs from the service
+        const livePtyIds = new Set(freshPtys.map(p => p.ptyId));
+
+        // Clear deletedPtyIds only for PTYs confirmed gone from service
+        // This prevents race condition where deferred destruction hasn't completed yet
+        for (const deletedPtyId of s.deletedPtyIds) {
+          if (!livePtyIds.has(deletedPtyId)) {
+            // PTY is confirmed gone from service, safe to clear
+            s.deletedPtyIds.delete(deletedPtyId);
+          }
+          // If PTY is still in live list, keep it in deletedPtyIds
+          // (deferred destruction is still pending)
+        }
+
         // Merge fresh PTYs while preserving pending and recently added PTYs
         // CRITICAL: Filter out deleted PTYs to prevent stale data
         const filteredFreshPtys = freshPtys.filter(p => !s.deletedPtyIds.has(p.ptyId));
@@ -1205,6 +1219,11 @@ export function createLifecycleHandlers(
    * Handle PTY destroyed - remove from list instantly.
    * This is synchronous for immediate UI feedback.
    * Selection moves to adjacent PTY (below first, then above).
+   * 
+   * The PTY is added to deletedPtyIds, which prevents it from being re-added
+   * during background refresh. Entries are only cleared from deletedPtyIds
+   * when refreshPtys confirms the PTY is actually gone from the service
+   * (handling the race condition with deferred destruction).
    */
   const handlePtyDestroyed = (ptyId: string): void => {
     setState(produce((s) => {
@@ -1216,12 +1235,9 @@ export function createLifecycleHandlers(
       // Clear from recently added (it's now legitimately gone)
       s.recentlyAddedPtyIds.delete(ptyId);
 
-      // Clear deleted tracking after 5 seconds (prevents memory leak, allows legitimate re-add)
-      setTimeout(() => {
-        setState(produce((s2) => {
-          s2.deletedPtyIds.delete(ptyId);
-        }));
-      }, 5000);
+      // Note: deletedPtyIds entry is cleared by refreshPtysOnce when it confirms
+      // the PTY is actually gone from the service (not just marked for deletion).
+      // This prevents race conditions with deferred destruction.
 
       const index = s.allPtysIndex.get(ptyId);
       if (index === undefined) return;
