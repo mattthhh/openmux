@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.29](https://github.com/monotykamary/openmux/compare/v0.3.28...v0.3.29) (2026-03-17)
+
+
+### Bug Fixes
+
+* **zig-ghostty-wrapper:** fix Ghostty VT handler return type for vendored stream compatibility ([0303aa3](https://github.com/monotykamary/openmux/commit/0303aa35faa527b4ae46389e1c93afabe2d46b85))
+
+
+### Tests
+
+* mock shim connection module to prevent CI socket failures ([6c84829](https://github.com/monotykamary/openmux/commit/6c8482956d9058841092a71150af0912ea92c065))
+* mock shim-bridge to prevent CI socket connection failures ([7946036](https://github.com/monotykamary/openmux/commit/79460369b988e06f2e2cc1ab32f02f949eb8212f))
+
 ### [0.3.28](https://github.com/monotykamary/openmux/compare/v0.3.27...v0.3.28) (2026-03-17)
 
 
