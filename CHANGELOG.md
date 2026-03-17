@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.32](https://github.com/monotykamary/openmux/compare/v0.3.31...v0.3.32) (2026-03-17)
+
+
+### Bug Fixes
+
+* **aggregate-view:** clean up placeholder PTYs when creation is cancelled ([895ebb6](https://github.com/monotykamary/openmux/commit/895ebb6ea272a6ad1325daf30ab9c0a3eecfbcba))
+
 ### [0.3.31](https://github.com/monotykamary/openmux/compare/v0.3.30...v0.3.31) (2026-03-17)
 
 
