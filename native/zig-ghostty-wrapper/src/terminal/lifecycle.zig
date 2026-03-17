@@ -214,7 +214,7 @@ pub fn setPixelSize(ptr: ?*anyopaque, width_px: c_int, height_px: c_int) callcon
 
 pub fn write(ptr: ?*anyopaque, data: [*]const u8, len: usize) callconv(.c) void {
     const wrapper: *TerminalWrapper = @ptrCast(@alignCast(ptr orelse return));
-    wrapper.stream.nextSlice(data[0..len]) catch return;
+    wrapper.stream.nextSlice(data[0..len]);
     trimScrollbackLines(wrapper);
 }
 

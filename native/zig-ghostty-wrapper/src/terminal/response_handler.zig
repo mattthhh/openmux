@@ -35,6 +35,16 @@ pub const ResponseHandler = struct {
         self: *ResponseHandler,
         comptime action: Action.Tag,
         value: Action.Value(action),
+    ) void {
+        self.vtFallible(action, value) catch |err| {
+            std.log.warn("error handling VT action action={} err={}", .{ action, err });
+        };
+    }
+
+    inline fn vtFallible(
+        self: *ResponseHandler,
+        comptime action: Action.Tag,
+        value: Action.Value(action),
     ) !void {
         switch (action) {
             // Device status reports - these need responses
