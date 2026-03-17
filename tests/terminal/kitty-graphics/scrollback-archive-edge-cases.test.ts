@@ -4,6 +4,7 @@ import type { TerminalCell } from '../../../src/core/types';
 import type { ArchivePlacement } from '../../../src/terminal/kitty-graphics/archive-placement';
 import { ScrollbackArchive } from '../../../src/terminal/scrollback-archive';
 import { ArchivedTerminalEmulator } from '../../../src/terminal/archived-emulator';
+import { HOT_SCROLLBACK_LIMIT } from '../../../src/terminal/scrollback-config';
 import { ScrollbackArchiver } from '../../../src/effect/services/pty/scrollback-archiver';
 import type { InternalPtySession } from '../../../src/effect/services/pty/types';
 import {
@@ -27,7 +28,7 @@ describe('Kitty Graphics Scrollback Archive Edge Cases', () => {
    */
   describe('rapid scrollback trimming', () => {
     it('preserves all placements during rapid archival', async () => {
-      const scrollbackLength = 5000; // Much larger than HOT_SCROLLBACK_LIMIT
+      const scrollbackLength = HOT_SCROLLBACK_LIMIT + 5000;
       const placements: KittyGraphicsPlacement[] = [
         // Placements spread across different parts of scrollback
         createPlacement(1, 1, { screenX: 0, screenY: 0, columns: 10, rows: 5 }),
@@ -73,7 +74,7 @@ describe('Kitty Graphics Scrollback Archive Edge Cases', () => {
     });
 
     it('handles concurrent archival without duplication', async () => {
-      const scrollbackLength = 3000;
+      const scrollbackLength = HOT_SCROLLBACK_LIMIT + 3000;
       const placements: KittyGraphicsPlacement[] = [
         createPlacement(1, 1, { screenX: 0, screenY: 0, columns: 5, rows: 2 }),
       ].map(p => ({ ...p, screenY: -scrollbackLength }));
@@ -106,7 +107,7 @@ describe('Kitty Graphics Scrollback Archive Edge Cases', () => {
     });
 
     it('recovers from interrupted archival', async () => {
-      const scrollbackLength = 2500;
+      const scrollbackLength = HOT_SCROLLBACK_LIMIT + 2500;
       const placements: KittyGraphicsPlacement[] = [
         createPlacement(1, 1, { screenX: 0, screenY: 0, columns: 10, rows: 5 }),
       ].map(p => ({ ...p, screenY: -scrollbackLength }));
