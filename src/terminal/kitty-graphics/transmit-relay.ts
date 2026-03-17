@@ -146,6 +146,7 @@ export class KittyTransmitRelay {
     }
 
     const mergedParams = mergeTransmitParams(this.pendingChunk?.params ?? null, transmit);
+    const mergedControlParams = mergeControlParams(this.pendingChunk?.controlParams ?? null, parsed.params);
     const medium = mergedParams.medium ?? 'd';
     const isPng = (mergedParams.format ?? '') === '100';
 
@@ -176,12 +177,12 @@ export class KittyTransmitRelay {
           offload,
           filePayload: '',
           mode: 'buffer',
-          controlParams: new Map(parsed.params),
+          controlParams: mergedControlParams,
         };
       } else {
         const filePath = this.finishOffload(offload);
         const payload = Buffer.from(filePath).toString('base64');
-        forwardSequence = buildForwardFileSequence(parsed, payload);
+        forwardSequence = buildForwardFileSequence(mergedControlParams, payload);
         if (shouldStubEmulator) {
           offloadDims = parsePngDimensionsFromFilePath(filePath);
         }
@@ -207,8 +208,8 @@ export class KittyTransmitRelay {
     if (shouldStubEmulator && (medium === 'f' || medium === 't') && transmit.more) {
       const filePayload = `${this.pendingChunk?.mode === 'buffer' ? this.pendingChunk.filePayload : ''}${parsed.data}`;
       const controlParams = this.pendingChunk?.mode === 'buffer'
-        ? this.pendingChunk.controlParams
-        : new Map(parsed.params);
+        ? mergeControlParams(this.pendingChunk.controlParams, parsed.params)
+        : mergedControlParams;
       this.pendingChunk = {
         guestKey,
         params: mergedParams,
@@ -228,7 +229,7 @@ export class KittyTransmitRelay {
       const controlParams = new Map(baseParams);
       const rebuiltControl = rebuildControl(controlParams);
       parsedForStub = { ...parsed, data: combinedPayload, params: controlParams, control: rebuiltControl };
-      forwardSequence = buildForwardFileSequence(parsedForStub, combinedPayload);
+      forwardSequence = buildForwardFileSequence(controlParams, combinedPayload);
       const emuParams = new Map(controlParams);
       emuParams.delete('m');
       const emuControl = rebuildControl(emuParams);
@@ -272,7 +273,7 @@ export class KittyTransmitRelay {
         offload: shouldOffload ? (this.pendingChunk?.offload ?? activeOffload ?? null) : null,
         filePayload: '',
         mode,
-        controlParams: new Map(parsed.params),
+        controlParams: mergedControlParams,
       };
     } else if (!this.pendingChunk?.offload || activeOffload) {
       this.pendingChunk = null;
@@ -359,7 +360,8 @@ export class KittyTransmitRelay {
     if (this.offloadThresholdBytes <= 0) return false;
     const medium = params.medium ?? 'd';
     if (medium !== 'd') return false;
-    if (!data && !isChunked) return false;
+    if (isChunked) return true;
+    if (!data) return false;
     const estimated = estimateDecodedSize(data);
     return estimated >= this.offloadThresholdBytes;
   }
@@ -450,12 +452,23 @@ function nextSynthetic(current: number): number {
   return next;
 }
 
-function buildForwardFileSequence(parsed: KittySequence, payload: string): string {
-  const controlParams = new Map(parsed.params);
+function buildForwardFileSequence(controlParamsInput: Map<string, string>, payload: string): string {
+  const controlParams = new Map(controlParamsInput);
   controlParams.set('a', 't');
   controlParams.set('q', '2');
   controlParams.set('t', 'f');
   controlParams.delete('m');
   const rebuiltControl = rebuildControl(controlParams);
   return `${KITTY_PREFIX_ESC}${rebuiltControl};${payload}${ESC}\\`;
+}
+
+function mergeControlParams(
+  base: Map<string, string> | null,
+  next: Map<string, string>
+): Map<string, string> {
+  const merged = new Map(base ?? undefined);
+  for (const [key, value] of next) {
+    merged.set(key, value);
+  }
+  return merged;
 }

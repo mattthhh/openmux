@@ -387,7 +387,8 @@ export class KittyTransmitBroker {
     if (this.offloadThresholdBytes <= 0) return false;
     const medium = params.medium ?? 'd';
     if (medium !== 'd') return false;
-    if (!data && !isChunked) return false;
+    if (isChunked) return true;
+    if (!data) return false;
     const estimated = estimateDecodedSize(data);
     return estimated >= this.offloadThresholdBytes;
   }

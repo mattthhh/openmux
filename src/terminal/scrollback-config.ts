@@ -14,7 +14,7 @@ function parseEnvNumber(name: string, fallback: number): number {
 
 export const HOT_SCROLLBACK_LIMIT = parseEnvNumber(
   "OPENMUX_SCROLLBACK_HOT_LIMIT",
-  parseEnvNumber("SCROLLBACK_LIMIT", 2000)
+  parseEnvNumber("SCROLLBACK_LIMIT", 20000)
 );
 
 export const SCROLLBACK_ARCHIVE_MAX_BYTES_PER_PTY =
@@ -25,5 +25,5 @@ export const SCROLLBACK_ARCHIVE_MAX_BYTES_GLOBAL =
 
 export const SCROLLBACK_ARCHIVE_CHUNK_MAX_LINES = parseEnvNumber(
   "OPENMUX_SCROLLBACK_ARCHIVE_CHUNK_LINES",
-  2000
+  4000
 );

@@ -72,6 +72,9 @@ describe('KittyTransmitBroker', () => {
   });
 
   it('reuses host ids across chunked transmissions', () => {
+    const priorThreshold = process.env.OPENMUX_KITTY_OFFLOAD_THRESHOLD;
+    process.env.OPENMUX_KITTY_OFFLOAD_THRESHOLD = '0';
+
     const broker = new KittyTransmitBroker();
     const writes: string[] = [];
     broker.setWriter((chunk) => writes.push(chunk));
@@ -88,9 +91,18 @@ describe('KittyTransmitBroker', () => {
     expect(writes[0]).toContain('m=1');
     expect(writes[0]).toContain('i=1');
     expect(writes[1]).toContain('i=1');
+
+    if (priorThreshold === undefined) {
+      delete process.env.OPENMUX_KITTY_OFFLOAD_THRESHOLD;
+    } else {
+      process.env.OPENMUX_KITTY_OFFLOAD_THRESHOLD = priorThreshold;
+    }
   });
 
   it('finalizes chunked relay continuations that include only image id', () => {
+    const priorThreshold = process.env.OPENMUX_KITTY_OFFLOAD_THRESHOLD;
+    process.env.OPENMUX_KITTY_OFFLOAD_THRESHOLD = '0';
+
     const broker = new KittyTransmitBroker();
     const writes: string[] = [];
     broker.setWriter((chunk) => writes.push(chunk));
@@ -108,6 +120,12 @@ describe('KittyTransmitBroker', () => {
     expect(writes[0]).toContain('i=1');
     expect(writes[1]).not.toContain('m=1');
     expect(writes[1]).toContain('i=1');
+
+    if (priorThreshold === undefined) {
+      delete process.env.OPENMUX_KITTY_OFFLOAD_THRESHOLD;
+    } else {
+      process.env.OPENMUX_KITTY_OFFLOAD_THRESHOLD = priorThreshold;
+    }
   });
 
   it('strips png payloads for emulator sequences', () => {
@@ -258,6 +276,47 @@ describe('KittyTransmitBroker', () => {
     expect(filePath.length).toBeGreaterThan(0);
     expect(filePath).toContain('tty-graphics-protocol');
     expect(host).not.toContain(payload);
+
+    try {
+      fs.unlinkSync(filePath);
+    } catch {
+      // ignore cleanup failures
+    }
+
+    process.env.OPENMUX_KITTY_OFFLOAD_THRESHOLD = priorThreshold;
+    process.env.OPENMUX_KITTY_OFFLOAD_CLEANUP_MS = priorCleanup;
+  });
+
+  it('offloads chunked direct payloads when the total image exceeds the threshold', () => {
+    const priorThreshold = process.env.OPENMUX_KITTY_OFFLOAD_THRESHOLD;
+    const priorCleanup = process.env.OPENMUX_KITTY_OFFLOAD_CLEANUP_MS;
+    process.env.OPENMUX_KITTY_OFFLOAD_THRESHOLD = '64';
+    process.env.OPENMUX_KITTY_OFFLOAD_CLEANUP_MS = '60000';
+
+    const broker = new KittyTransmitBroker();
+    const writes: string[] = [];
+    broker.setWriter((chunk) => writes.push(chunk));
+
+    const payload = Buffer.from('abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz').toString('base64');
+    const first = payload.slice(0, 24);
+    const second = payload.slice(24, 48);
+    const third = payload.slice(48);
+
+    broker.handleSequence('pty-8b', `${ESC}_Ga=t,f=24,i=12,m=1;${first}${ESC}\\`);
+    broker.handleSequence('pty-8b', `${ESC}_Gm=1;${second}${ESC}\\`);
+    const output = broker.handleSequence('pty-8b', `${ESC}_G;${third}${ESC}\\`);
+
+    expect(output).toContain(third);
+    expect(writes).toHaveLength(1);
+    const host = writes[0];
+    expect(host).toContain('t=f');
+    expect(host).not.toContain(payload);
+    const payloadStart = host.indexOf(';') + 1;
+    const payloadEnd = host.indexOf(`${ESC}\\`);
+    const hostPayload = host.slice(payloadStart, payloadEnd);
+    const filePath = Buffer.from(hostPayload, 'base64').toString('utf8');
+    expect(filePath.length).toBeGreaterThan(0);
+    expect(filePath).toContain('tty-graphics-protocol');
 
     try {
       fs.unlinkSync(filePath);

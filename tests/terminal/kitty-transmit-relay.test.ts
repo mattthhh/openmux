@@ -109,6 +109,49 @@ describe('KittyTransmitRelay', () => {
     });
   });
 
+  it('offloads chunked direct payloads when the total image exceeds the threshold', () => {
+    withStubEnv(() => {
+      const priorThreshold = process.env.OPENMUX_KITTY_OFFLOAD_THRESHOLD;
+      const priorCleanup = process.env.OPENMUX_KITTY_OFFLOAD_CLEANUP_MS;
+      process.env.OPENMUX_KITTY_OFFLOAD_THRESHOLD = '64';
+      process.env.OPENMUX_KITTY_OFFLOAD_CLEANUP_MS = '60000';
+
+      const relay = new KittyTransmitRelay();
+      const first = PNG_1X1.slice(0, 40);
+      const second = PNG_1X1.slice(40, 80);
+      const third = PNG_1X1.slice(80);
+
+      const firstResult = relay.handleSequence('pty-4b', `${ESC}_Ga=t,f=100,i=6,m=1;${first}${ESC}\\`);
+      expect(firstResult.forwardSequence).toBeNull();
+      expect(firstResult.emuSequence).toContain('s=1');
+      expect(firstResult.emuSequence).toContain('v=1');
+
+      const secondResult = relay.handleSequence('pty-4b', `${ESC}_Gm=1;${second}${ESC}\\`);
+      expect(secondResult.forwardSequence).toBeNull();
+
+      const thirdResult = relay.handleSequence('pty-4b', `${ESC}_G;${third}${ESC}\\`);
+      expect(thirdResult.forwardSequence).toContain('t=f');
+      expect(thirdResult.forwardSequence).toContain('f=100');
+      expect(thirdResult.forwardSequence).toContain('i=6');
+
+      const payloadStart = thirdResult.forwardSequence!.indexOf(';') + 1;
+      const payloadEnd = thirdResult.forwardSequence!.indexOf(`${ESC}\\`);
+      const hostPayload = thirdResult.forwardSequence!.slice(payloadStart, payloadEnd);
+      const filePath = Buffer.from(hostPayload, 'base64').toString('utf8');
+      expect(fs.existsSync(filePath)).toBe(true);
+      expect(thirdResult.emuSequence).toBe('');
+
+      try {
+        fs.unlinkSync(filePath);
+      } catch {
+        // ignore
+      }
+
+      process.env.OPENMUX_KITTY_OFFLOAD_THRESHOLD = priorThreshold;
+      process.env.OPENMUX_KITTY_OFFLOAD_CLEANUP_MS = priorCleanup;
+    });
+  });
+
   it('stubs shared memory payloads when stubAllFormats is enabled', () => {
     const relay = new KittyTransmitRelay({ stubAllFormats: true });
     const sequence = `${ESC}_Ga=T,t=s,s=10,v=12,i=7;SHMKEY${ESC}\\`;

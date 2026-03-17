@@ -1,16 +1,159 @@
 /**
  * Scrollback archiver - spills live scrollback into a disk archive.
- * (errore version - unchanged from original)
  */
 import type { InternalPtySession } from "./types"
-import type { ITerminalEmulator, KittyGraphicsPlacement } from "../../../terminal/emulator-interface"
+import type { ITerminalEmulator } from "../../../terminal/emulator-interface"
 import type { TerminalCell } from "../../../core/types"
-import type { ArchivePlacement } from "../../../terminal/scrollback-archive"
+import type { ArchivePlacement, ScrollbackArchive } from "../../../terminal/scrollback-archive"
 import { HOT_SCROLLBACK_LIMIT } from "../../../terminal/scrollback-config"
+import { tracePtyEvent } from "../../../terminal/pty-trace"
 import { deferMacrotask } from "../../../core/scheduling"
 
-const ARCHIVE_BATCH_LINES = 256
+const ARCHIVE_BATCH_LINES = 512
 const MAX_BATCHES_PER_RUN = 4
+
+export interface DrainScrollbackOverflowOptions {
+  scrollbackArchive: ScrollbackArchive
+  liveEmulator: ITerminalEmulator
+  hotScrollbackLimit?: number
+  archiveBatchLines?: number
+  maxBatches?: number
+}
+
+export interface DrainScrollbackOverflowResult {
+  batches: number
+  linesArchived: number
+  placementsArchived: number
+  remainingOverflow: number
+}
+
+export async function drainScrollbackOverflow(
+  options: DrainScrollbackOverflowOptions
+): Promise<DrainScrollbackOverflowResult> {
+  const {
+    scrollbackArchive,
+    liveEmulator,
+    hotScrollbackLimit = HOT_SCROLLBACK_LIMIT,
+    archiveBatchLines = ARCHIVE_BATCH_LINES,
+    maxBatches = MAX_BATCHES_PER_RUN,
+  } = options
+
+  if (liveEmulator.isDisposed || liveEmulator.isAlternateScreen()) {
+    return {
+      batches: 0,
+      linesArchived: 0,
+      placementsArchived: 0,
+      remainingOverflow: 0,
+    }
+  }
+
+  const overflow = liveEmulator.getScrollbackLength() - hotScrollbackLimit
+  if (overflow <= 0) {
+    return {
+      batches: 0,
+      linesArchived: 0,
+      placementsArchived: 0,
+      remainingOverflow: 0,
+    }
+  }
+
+  const maxLinesPerRun = archiveBatchLines * maxBatches
+  const targetLineCount = Math.min(overflow, maxLinesPerRun)
+  const archiveStartOffset = scrollbackArchive.length
+  const lines = captureLines({ liveEmulator, count: targetLineCount })
+  if (lines.length === 0) {
+    return {
+      batches: 0,
+      linesArchived: 0,
+      placementsArchived: 0,
+      remainingOverflow: overflow,
+    }
+  }
+
+  const placements = capturePlacements({
+    liveEmulator,
+    linesArchived: lines.length,
+    archiveStartOffset,
+  })
+
+  await scrollbackArchive.appendLines(lines)
+  if (placements.length > 0) {
+    await scrollbackArchive.appendPlacements(placements)
+  }
+
+  if ("trimScrollback" in liveEmulator) {
+    const trimmer = liveEmulator as ITerminalEmulator & {
+      trimScrollback?: (lines: number) => void
+    }
+    trimmer.trimScrollback?.(lines.length)
+  }
+
+  return {
+    batches: Math.ceil(lines.length / archiveBatchLines),
+    linesArchived: lines.length,
+    placementsArchived: placements.length,
+    remainingOverflow: Math.max(0, liveEmulator.getScrollbackLength() - hotScrollbackLimit),
+  }
+}
+
+function captureLines(options: {
+  liveEmulator: ITerminalEmulator
+  count: number
+}): TerminalCell[][] {
+  const { liveEmulator, count } = options
+  const lines: TerminalCell[][] = []
+
+  for (let i = 0; i < count; i++) {
+    const line = liveEmulator.getScrollbackLine(i)
+    if (!line) break
+    lines.push(line)
+  }
+
+  return lines
+}
+
+/**
+ * Capture Kitty placements that overlap with the lines being archived.
+ * This must be called BEFORE trimScrollback() to avoid losing placement data.
+ */
+function capturePlacements(options: {
+  liveEmulator: ITerminalEmulator
+  linesArchived: number
+  archiveStartOffset: number
+}): ArchivePlacement[] {
+  const { liveEmulator, linesArchived, archiveStartOffset } = options
+
+  if (!liveEmulator.getKittyPlacements) {
+    return []
+  }
+
+  const placements = liveEmulator.getKittyPlacements()
+  if (!placements || placements.length === 0) {
+    return []
+  }
+
+  const archivedPlacements: ArchivePlacement[] = []
+
+  for (const placement of placements) {
+    const placementStartY = placement.screenY
+    const placementRows = Math.max(1, placement.rows)
+    const placementEndYExclusive = placementStartY + placementRows
+
+    if (placementEndYExclusive <= 0 || placementStartY >= linesArchived) {
+      continue
+    }
+
+    const archiveLine = Math.max(0, placementStartY)
+    archivedPlacements.push({
+      ...placement,
+      archiveOffset: archiveStartOffset + archiveLine,
+      originalScreenY: placement.screenY,
+      screenY: archiveLine,
+    })
+  }
+
+  return archivedPlacements
+}
 
 export class ScrollbackArchiver {
   private scheduled = false
@@ -46,49 +189,26 @@ export class ScrollbackArchiver {
     }
 
     this.running = true
+    const startedAt = typeof performance !== "undefined" ? performance.now() : Date.now()
     try {
-      if (this.liveEmulator.isDisposed) return
-      if (this.liveEmulator.isAlternateScreen()) return
-
-      let batches = 0
-      while (batches < MAX_BATCHES_PER_RUN) {
-        const overflow = this.liveEmulator.getScrollbackLength() - HOT_SCROLLBACK_LIMIT
-        if (overflow <= 0) break
-
-        const batchSize = Math.min(overflow, ARCHIVE_BATCH_LINES)
-
-        // Get current archive offset before appending
-        const archiveStartOffset = this.session.scrollbackArchive.length
-
-        // Capture lines first (before trimScrollback removes them from live emulator)
-        const lines = this.captureLines(batchSize)
-        if (lines.length === 0) break
-
-        // Capture placements BEFORE calling trimScrollback() - this is critical
-        // because trimScrollback() marks placements on pruned lines as garbage
-        const placements = this.capturePlacements(lines.length, archiveStartOffset)
-
-        // Store lines and placements in archive
-        await this.session.scrollbackArchive.appendLines(lines)
-        
-        // Store placements separately (ScrollbackArchive has dedicated method)
-        if (placements.length > 0) {
-          await this.session.scrollbackArchive.appendPlacements(placements)
-        }
-
-        // Now safe to trim - placements have been captured
-        if ("trimScrollback" in this.liveEmulator) {
-          const trimmer = this.liveEmulator as ITerminalEmulator & {
-            trimScrollback?: (lines: number) => void
-          }
-          trimmer.trimScrollback?.(lines.length)
-        } else {
-          break
-        }
-
-        batches += 1
+      const result = await drainScrollbackOverflow({
+        scrollbackArchive: this.session.scrollbackArchive,
+        liveEmulator: this.liveEmulator,
+      })
+      const durationMs = (typeof performance !== "undefined" ? performance.now() : Date.now()) - startedAt
+      if (result.linesArchived > 0 || durationMs >= 8) {
+        tracePtyEvent("scrollback-archiver-run", {
+          ptyId: this.session.id,
+          durationMs,
+          linesArchived: result.linesArchived,
+          placementsArchived: result.placementsArchived,
+          batches: result.batches,
+          remainingOverflow: result.remainingOverflow,
+          archiveLength: this.session.scrollbackArchive.length,
+          liveScrollbackLength: this.liveEmulator.getScrollbackLength(),
+        })
       }
-      if (this.liveEmulator.getScrollbackLength() > HOT_SCROLLBACK_LIMIT) {
+      if (result.remainingOverflow > 0) {
         this.pending = true
       }
     } catch {
@@ -100,69 +220,5 @@ export class ScrollbackArchiver {
         this.schedule()
       }
     }
-  }
-
-  private captureLines(count: number): TerminalCell[][] {
-    const lines: TerminalCell[][] = []
-    for (let i = 0; i < count; i++) {
-      const line = this.liveEmulator.getScrollbackLine(i)
-      if (!line) break
-      lines.push(line)
-    }
-    return lines
-  }
-
-  /**
-   * Capture Kitty placements that overlap with the lines being archived.
-   * This must be called BEFORE trimScrollback() to avoid losing placement data.
-   *
-   * @param linesArchived - Number of lines being archived (from top of scrollback)
-   * @param archiveStartOffset - Current archive line count (where these lines will be stored)
-   * @returns Array of ArchivePlacement with adjusted coordinates
-   */
-  private capturePlacements(
-    linesArchived: number,
-    archiveStartOffset: number
-  ): ArchivePlacement[] {
-    // Graceful no-op if emulator doesn't support Kitty graphics
-    if (!this.liveEmulator.getKittyPlacements) {
-      return []
-    }
-
-    const placements = this.liveEmulator.getKittyPlacements()
-    if (!placements || placements.length === 0) {
-      return []
-    }
-
-    const archivedPlacements: ArchivePlacement[] = []
-
-    for (const placement of placements) {
-      // Ghostty reports placement.screenY in active-screen coordinates where:
-      //   0 = oldest history line in the live emulator
-      //   scrollbackLength = first visible row
-      // We archive the oldest [0, linesArchived) history range.
-      const placementStartY = placement.screenY
-      const placementRows = Math.max(1, placement.rows)
-      const placementEndYExclusive = placementStartY + placementRows
-
-      // Keep placements whose vertical span intersects the pruned history range.
-      if (placementEndYExclusive <= 0 || placementStartY >= linesArchived) {
-        continue
-      }
-
-      const archiveLine = Math.max(0, placementStartY)
-      const archivePlacement: ArchivePlacement = {
-        ...placement,
-        // archiveOffset: absolute line index in persisted archive
-        archiveOffset: archiveStartOffset + archiveLine,
-        // Preserve original coordinate from live emulator for debugging/migration.
-        originalScreenY: placement.screenY,
-        // Stored as archive-relative absolute (0 = oldest archived line)
-        screenY: archiveLine,
-      }
-      archivedPlacements.push(archivePlacement)
-    }
-
-    return archivedPlacements
   }
 }

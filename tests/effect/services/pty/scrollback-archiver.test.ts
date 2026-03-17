@@ -7,6 +7,7 @@ import type {
 } from "../../../../src/terminal/emulator-interface";
 import type { TerminalCell } from "../../../../src/core/types";
 import type { ScrollbackArchive } from "../../../../src/terminal/scrollback-archive";
+import { HOT_SCROLLBACK_LIMIT } from "../../../../src/terminal/scrollback-config";
 
 /**
  * Create a mock terminal emulator for testing.
@@ -175,11 +176,13 @@ function createMockSession(
   };
 }
 
+const overflowScrollbackLength = HOT_SCROLLBACK_LIMIT + 500;
+
 describe("ScrollbackArchiver", () => {
   describe("capturePlacements (via run integration)", () => {
     test("handles emulator without Kitty graphics support gracefully", async () => {
       const emulator = createMockEmulator({
-        scrollbackLength: 2500, // Above HOT_SCROLLBACK_LIMIT (2000) to trigger archiving
+        scrollbackLength: overflowScrollbackLength,
         supportsKittyGraphics: false,
       });
       const archive = createMockScrollbackArchive();
@@ -198,8 +201,7 @@ describe("ScrollbackArchiver", () => {
 
     test("captures placements overlapping archived line range", async () => {
       // Create placements that overlap with the lines being archived
-      // HOT_SCROLLBACK_LIMIT = 2000, so we need scrollback > 2000 to trigger archiving
-      const scrollbackLength = 2500;
+      const scrollbackLength = overflowScrollbackLength;
       const placements: KittyGraphicsPlacement[] = [
         // Placement on line 0 (will be archived - within first 500 lines)
         {
@@ -207,7 +209,7 @@ describe("ScrollbackArchiver", () => {
           placementId: 1,
           placementTag: 0,
           screenX: 0,
-          screenY: -2500, // Line 0 relative to visible screen (scrollbackLength=2500)
+          screenY: -scrollbackLength, // Line 0 relative to visible screen
           xOffset: 0,
           yOffset: 0,
           sourceX: 0,
@@ -224,7 +226,7 @@ describe("ScrollbackArchiver", () => {
           placementId: 2,
           placementTag: 0,
           screenX: 0,
-          screenY: -2400, // Line 100 relative to visible screen
+          screenY: -(scrollbackLength - 100), // Line 100 relative to visible screen
           xOffset: 0,
           yOffset: 0,
           sourceX: 0,
@@ -292,8 +294,8 @@ describe("ScrollbackArchiver", () => {
     });
 
     test("preserves original screenY in placement metadata", async () => {
-      const scrollbackLength = 2500;
-      const originalScreenY = -2500;
+      const scrollbackLength = overflowScrollbackLength;
+      const originalScreenY = -scrollbackLength;
       const placements: KittyGraphicsPlacement[] = [
         {
           imageId: 1,
@@ -334,7 +336,7 @@ describe("ScrollbackArchiver", () => {
 
     test("returns empty array when no placements exist", async () => {
       const emulator = createMockEmulator({
-        scrollbackLength: 2500,
+        scrollbackLength: overflowScrollbackLength,
         placements: [],
         supportsKittyGraphics: true,
       });
@@ -355,7 +357,7 @@ describe("ScrollbackArchiver", () => {
 
   describe("coordinate mapping", () => {
     test("calculates archiveOffset correctly", async () => {
-      const scrollbackLength = 2500;
+      const scrollbackLength = overflowScrollbackLength;
       const archiveStartOffset = 500; // Archive already has 500 lines
       const placements: KittyGraphicsPlacement[] = [
         {
@@ -363,7 +365,7 @@ describe("ScrollbackArchiver", () => {
           placementId: 1,
           placementTag: 0,
           screenX: 0,
-          screenY: -2500, // Line 0 - will have archiveOffset = 500 + 0 = 500
+          screenY: -scrollbackLength, // Line 0 - will have archiveOffset = 500 + 0 = 500
           xOffset: 0,
           yOffset: 0,
           sourceX: 0,
@@ -399,14 +401,14 @@ describe("ScrollbackArchiver", () => {
     });
 
     test("captures top-of-history placements using positive Ghostty coordinates", async () => {
-      const scrollbackLength = 2300;
+      const scrollbackLength = overflowScrollbackLength;
       const placements: KittyGraphicsPlacement[] = [
         {
           imageId: 10,
           placementId: 1,
           placementTag: 0,
           screenX: 1,
-          screenY: 5, // inside first archived batch [0, 256)
+          screenY: 5, // inside first archived batch
           xOffset: 0,
           yOffset: 0,
           sourceX: 0,
@@ -422,7 +424,7 @@ describe("ScrollbackArchiver", () => {
           placementId: 1,
           placementTag: 0,
           screenX: 1,
-          screenY: 400, // outside first archived batch
+          screenY: 520, // outside first archived batch
           xOffset: 0,
           yOffset: 0,
           sourceX: 0,
@@ -462,7 +464,7 @@ describe("ScrollbackArchiver", () => {
 
   describe("edge cases", () => {
     test("handles placement partially overlapping archived range", async () => {
-      const scrollbackLength = 2500;
+      const scrollbackLength = overflowScrollbackLength;
       // Placement spans lines 100-109, batch archives 0-255
       // So this placement IS fully within the archived range
       const placements: KittyGraphicsPlacement[] = [
@@ -471,7 +473,7 @@ describe("ScrollbackArchiver", () => {
           placementId: 1,
           placementTag: 0,
           screenX: 0,
-          screenY: -2400, // Line 100
+          screenY: -(scrollbackLength - 100), // Line 100
           xOffset: 0,
           yOffset: 0,
           sourceX: 0,
@@ -501,7 +503,7 @@ describe("ScrollbackArchiver", () => {
 
     test("handles emulator returning undefined for getKittyPlacements", async () => {
       const emulator = createMockEmulator({
-        scrollbackLength: 2500,
+        scrollbackLength: overflowScrollbackLength,
         supportsKittyGraphics: true,
       });
       // Override to return undefined
