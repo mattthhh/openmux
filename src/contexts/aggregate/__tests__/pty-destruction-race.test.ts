@@ -325,4 +325,98 @@ describe('PTY destruction race condition', () => {
     expect(newPty).toBeDefined();
     expect(newPty?.shell).toBe('/bin/zsh');  // Verify it's the new one
   });
+
+  it('should clean up placeholder when PTY is destroyed during creation', async () => {
+    const { state, lifecycleHandlers } = createTestHarness();
+
+    // Setup: Add a placeholder PTY (simulating handlePtyCreated start)
+    const placeholderPty: PtyInfo = {
+      ptyId: 'orphaned-pty',
+      cwd: '',
+      gitBranch: undefined,
+      gitDiffStats: undefined,
+      gitDirty: false,
+      gitStaged: 0,
+      gitUnstaged: 0,
+      gitUntracked: 0,
+      gitConflicted: 0,
+      gitAhead: undefined,
+      gitBehind: undefined,
+      gitStashCount: undefined,
+      gitState: undefined,
+      gitDetached: false,
+      gitRepoKey: undefined,
+      foregroundProcess: undefined,
+      shell: undefined,
+      title: '...', // Placeholder loading indicator
+      workspaceId: undefined,
+      paneId: undefined,
+      sessionId: '', // Not yet resolved
+      sessionMetadata: undefined,
+    };
+
+    state.allPtys.push(placeholderPty);
+    state.allPtysIndex = buildPtyIndex(state.allPtys);
+    state.pendingPtyIds.add('orphaned-pty');
+
+    // Verify placeholder is there
+    expect(state.allPtys.find(p => p.ptyId === 'orphaned-pty')).toBeDefined();
+    expect(state.allPtys.find(p => p.ptyId === 'orphaned-pty')?.title).toBe('...');
+
+    // Step 1: PTY is destroyed before metadata fetch completes
+    lifecycleHandlers.handlePtyDestroyed('orphaned-pty');
+
+    // Verify: Placeholder should be removed, not left orphaned
+    expect(state.allPtys.find(p => p.ptyId === 'orphaned-pty')).toBeUndefined();
+    expect(state.pendingPtyIds.has('orphaned-pty')).toBe(false);
+    expect(state.deletedPtyIds.has('orphaned-pty')).toBe(true);
+
+    // Step 2: Advance time to clear deletedPtyIds
+    vi.advanceTimersByTime(5000);
+
+    // After deletedPtyIds clears, the PTY should stay gone
+    expect(state.allPtys.find(p => p.ptyId === 'orphaned-pty')).toBeUndefined();
+  });
+
+  it('should not leave shell-titled orphaned PTYs when creation fails', async () => {
+    const { state, setState, lifecycleHandlers } = createTestHarness();
+
+    // Setup: Simulate a PTY that was partially created with shell title
+    // This can happen if metadata fetch fails halfway
+    const partialPty: PtyInfo = {
+      ptyId: 'partial-pty',
+      cwd: '/tmp',
+      gitBranch: undefined,
+      gitDiffStats: undefined,
+      gitDirty: false,
+      gitStaged: 0,
+      gitUnstaged: 0,
+      gitUntracked: 0,
+      gitConflicted: 0,
+      gitAhead: undefined,
+      gitBehind: undefined,
+      gitStashCount: undefined,
+      gitState: undefined,
+      gitDetached: false,
+      gitRepoKey: undefined,
+      foregroundProcess: 'bash',
+      shell: '/bin/bash',
+      title: 'shell', // Partial creation may leave this title
+      workspaceId: 1,
+      paneId: 'pane-1',
+      sessionId: 'session-1',
+      sessionMetadata: createMockSession(),
+    };
+
+    state.allPtys.push(partialPty);
+    state.allPtysIndex = buildPtyIndex(state.allPtys);
+    state.pendingPtyIds.add('partial-pty');
+
+    // Step 1: Destroy the partial PTY
+    lifecycleHandlers.handlePtyDestroyed('partial-pty');
+
+    // Verify: Should be completely removed
+    expect(state.allPtys.find(p => p.ptyId === 'partial-pty')).toBeUndefined();
+    expect(state.pendingPtyIds.has('partial-pty')).toBe(false);
+  });
 });

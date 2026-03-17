@@ -1168,6 +1168,18 @@ export function createLifecycleHandlers(
       if (!s.pendingPtyIds.has(ptyId) || s.deletedPtyIds.has(ptyId)) {
         // Clean up pending if it exists
         s.pendingPtyIds.delete(ptyId);
+
+        // CRITICAL: Remove placeholder from allPtys to prevent orphaned entries
+        // The placeholder was added at the start of handlePtyCreated, but if the
+        // PTY was destroyed before we could fetch metadata, we need to clean it up
+        const placeholderIndex = s.allPtysIndex.get(ptyId);
+        if (placeholderIndex !== undefined) {
+          s.allPtys.splice(placeholderIndex, 1);
+          s.allPtysIndex = buildPtyIndex(s.allPtys);
+          recomputeMatches(s);
+          recomputeTree(s);
+        }
+
         return; // PTY was destroyed while we were fetching metadata, don't add it
       }
 
