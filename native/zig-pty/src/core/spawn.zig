@@ -115,12 +115,25 @@ pub fn spawnPty(
         else
             "/bin/sh";
 
-        const argv = [_:null]?[*:0]const u8{
-            shell,
-            "-c",
-            cmd,
-            null,
-        };
+        // Platform-specific: macOS uses login shells by default to source .bash_profile/.zprofile
+        // Linux and other Unix systems typically use non-login shells (GUI login sources profile)
+        const is_macos = @import("builtin").target.os.tag == .macos;
+        
+        const argv = if (is_macos)
+            [_:null]?[*:0]const u8{
+                shell,
+                "-l", // Login shell on macOS
+                "-c",
+                cmd,
+                null,
+            }
+        else
+            [_:null]?[*:0]const u8{
+                shell,
+                "-c",
+                cmd,
+                null,
+            };
 
         _ = c.execve(
             shell,
