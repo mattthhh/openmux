@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.34](https://github.com/monotykamary/openmux/compare/v0.3.33...v0.3.34) (2026-03-23)
+
+
+### Bug Fixes
+
+* **zig-pty:** spawn login shell on macOS to source profile files ([896a14b](https://github.com/monotykamary/openmux/commit/896a14b004ce0840fa4b074d46749a924e570592)), closes [#13](https://github.com/monotykamary/openmux/issues/13)
+
 ### [0.3.33](https://github.com/monotykamary/openmux/compare/v0.3.32...v0.3.33) (2026-03-23)
 
 ### [0.3.32](https://github.com/monotykamary/openmux/compare/v0.3.31...v0.3.32) (2026-03-17)
