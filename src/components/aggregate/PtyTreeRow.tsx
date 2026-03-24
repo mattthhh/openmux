@@ -24,6 +24,8 @@ export interface PtyTreeRowProps {
   isSelected: boolean;
   /** Max width for rendering */
   maxWidth: number;
+  /** Max git metadata width across all PTYs for alignment */
+  maxMetaWidth: number;
   /** Tree prefix glyph - IGNORED for cleaner look */
   treePrefix: string;
   /** Indentation string (just spaces, no tree glyphs) */
@@ -197,20 +199,20 @@ export function PtyTreeRow(props: PtyTreeRowProps) {
   // Calculate layout - clean, no tree glyphs
   const indentWidth = () => props.indent.length;
   const spacing = 2; // Double space for cleaner look
+  const rightGutter = 1; // Minimum right-side padding
 
   // Available width for content.
-  // Keep the left indent, but do not reserve any trailing right gutter.
   const availableWidth = () =>
-    props.maxWidth - indentWidth();
+    props.maxWidth - indentWidth() - rightGutter;
 
-  // Reserve space for git metadata on the right and favor metadata over the label.
-  const gitMetaWidth = () => gitMeta().length;
+  // Use the shared maxMetaWidth for alignment across all rows
+  const reservedMetaWidth = () => props.maxMetaWidth;
   const labelMaxWidth = () => {
-    const reservedForMeta = gitMetaWidth() > 0 ? gitMetaWidth() + spacing : 0;
-    return Math.max(0, availableWidth() - reservedForMeta);
+    const reserved = reservedMetaWidth() > 0 ? reservedMetaWidth() + spacing : 0;
+    return Math.max(0, availableWidth() - reserved);
   };
 
-  // Truncate the folder label aggressively so git metadata stays visible.
+  // Truncate the folder label so git metadata stays aligned
   const displayLabel = createMemo(() => {
     const text = label();
     const maxWidth = labelMaxWidth();
@@ -220,17 +222,25 @@ export function PtyTreeRow(props: PtyTreeRowProps) {
     return text.slice(0, maxWidth - 1) + '…';
   });
 
-  // Calculate padding between label and git metadata
+  // Calculate padding between label and git metadata (fixed alignment with right-aligned metadata)
   const padding = createMemo(() => {
     const labelLen = displayLabel().length;
-    const metaLen = gitMetaWidth();
-    const gap = labelLen > 0 && metaLen > 0 ? spacing : 0;
-    const totalContent = labelLen + gap + metaLen;
-    const avail = availableWidth();
-    if (totalContent < avail) {
-      return ' '.repeat(avail - totalContent);
-    }
-    return gap > 0 ? ' '.repeat(gap) : '';
+    const metaLen = gitMeta().length;
+    const reserved = reservedMetaWidth();
+    
+    // If no metadata for this row, no padding needed
+    if (metaLen === 0) return '';
+    
+    // Base gap: align to the fixed column based on maxMetaWidth
+    const targetColumn = labelMaxWidth() + spacing;
+    const currentPos = labelLen;
+    const baseGap = Math.max(0, targetColumn - currentPos);
+    
+    // Right-align the metadata within the reserved space
+    // If reserved space is larger than actual metadata, add extra padding
+    const rightAlignPadding = Math.max(0, reserved - metaLen);
+    
+    return ' '.repeat(baseGap + rightAlignPadding);
   });
 
   // Apply shimmer to label characters if active

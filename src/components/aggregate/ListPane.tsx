@@ -5,7 +5,7 @@
  * Supports selection, expansion, drag-and-drop reordering, and lazy loading.
  */
 
-import { Show, For, type Component, type JSX } from 'solid-js';
+import { Show, For, type Component, type JSX, createMemo } from 'solid-js';
 import type { MouseEvent as OpenTUIMouseEvent } from '@opentui/core';
 import type { FlattenedTreeItem, TreeNode } from '../../contexts/aggregate-view-types';
 import type { Theme } from '../../contexts/ThemeContext';
@@ -100,6 +100,34 @@ export const ListPane: Component<ListPaneProps> = (props) => {
   const visibleItems = () => {
     return props.flattenedTree.slice(props.viewport.start, props.viewport.end);
   };
+
+  // Compute max git metadata width across ALL PTYs for stable alignment
+  const maxMetaWidth = createMemo(() => {
+    let max = 0;
+    for (const item of props.flattenedTree) {
+      if (item.node.type === 'pty') {
+        const stats = item.node.ptyInfo.gitDiffStats;
+        const parts: string[] = [];
+        if (item.node.ptyInfo.gitDetached) parts.push('@');
+        if (item.node.ptyInfo.gitState && item.node.ptyInfo.gitState !== 'none' && item.node.ptyInfo.gitState !== 'unknown') {
+          parts.push('~');
+        }
+        if (stats && (stats.added > 0 || stats.removed > 0 || stats.binary > 0)) {
+          if (stats.added > 0) parts.push(`+${stats.added}`);
+          if (stats.removed > 0) parts.push(`-${stats.removed}`);
+          if (stats.binary > 0) parts.push(`*${stats.binary}`);
+        }
+        if (item.node.ptyInfo.gitAhead && item.node.ptyInfo.gitAhead > 0) {
+          parts.push(`↑${item.node.ptyInfo.gitAhead}`);
+        }
+        if (item.node.ptyInfo.gitBehind && item.node.ptyInfo.gitBehind > 0) {
+          parts.push(`↓${item.node.ptyInfo.gitBehind}`);
+        }
+        max = Math.max(max, parts.join(' ').length);
+      }
+    }
+    return max;
+  });
 
   // Handle mouse down on session (starts drag)
   const handleSessionMouseDown = (sessionId: string, index: number) => {
@@ -235,6 +263,7 @@ export const ListPane: Component<ListPaneProps> = (props) => {
                         }
                         isSelected={isSelected()}
                         maxWidth={props.layout.innerWidth}
+                        maxMetaWidth={maxMetaWidth()}
                         treePrefix={ptyTreePrefix()}
                         indent={ptyIndent()}
                         aggregateTheme={props.theme.ui.aggregate}
