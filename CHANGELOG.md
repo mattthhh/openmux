@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.35](https://github.com/monotykamary/openmux/compare/v0.3.34...v0.3.35) (2026-03-24)
+
+
+### Features
+
+* **aggregate:** add git metadata column alignment with truncation ([8d9088b](https://github.com/monotykamary/openmux/commit/8d9088b6b3e3adb9f9bd1f84189af204b32c8f2b))
+
 ### [0.3.34](https://github.com/monotykamary/openmux/compare/v0.3.33...v0.3.34) (2026-03-23)
 
 
