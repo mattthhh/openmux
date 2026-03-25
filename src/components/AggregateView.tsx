@@ -60,7 +60,7 @@ import { loadSessionData, getHostBackgroundColor } from '../effect/bridge';
 import { setShimmerEnabled } from '../core/shimmer';
 import type { Workspace } from '../core/types';
 import { collectPanes } from '../core/layout-tree';
-import type { FlattenedTreeItem, PtyInfo } from '../contexts/aggregate-view-types';
+import type { FlattenedTreeItem } from '../contexts/aggregate-view-types';
 import {
   resolvePendingAggregatePaneFocus,
   type PendingAggregatePaneFocus,
@@ -163,22 +163,18 @@ export function AggregateView(props: AggregateViewProps) {
     })
   );
 
+  // Track activity for ALL PTYs in the aggregate view, not just visible viewport rows.
+  // This ensures shimmer animation appears correctly when scrolling to a PTY that had
+  // output while off-screen or in a collapsed session.
   const trackedActivityPtys = createMemo(() => {
-    const viewport = listViewport();
-    const tracked = new Map<string, PtyInfo>();
-
-    for (let index = viewport.start; index < viewport.end; index++) {
-      const item = state.flattenedTree[index];
-      if (!item || item.node.type !== 'pty') continue;
-      tracked.set(item.node.ptyInfo.ptyId, item.node.ptyInfo);
-    }
-
-    return [...tracked.values()];
+    // Use matchedPtys which contains all PTYs currently in the aggregate view tree
+    // (respects filters but includes those scrolled out of view or in collapsed sessions)
+    return state.matchedPtys;
   });
 
-  // The list shimmer only needs activity for rows that are currently visible.
-  // The preview PTY already has its own TerminalView subscription, so subscribing
-  // to every loaded PTY here just amplifies update traffic and client-side work.
+  // Subscribe to activity updates for all tracked PTYs to enable shimmer effects.
+  // We track all PTYs in the view, not just visible ones, so activity that happens
+  // while a PTY is scrolled out of view or in a collapsed session is still recorded.
   const activity = useActivitySubscriptions({
     isActive: () => state.showAggregateView,
     getTrackedPtys: trackedActivityPtys,
