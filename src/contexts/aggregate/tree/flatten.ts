@@ -130,8 +130,21 @@ export function flattenTree(
       });
     }
 
+    // When filtering, we filter children but ALWAYS keep the session header.
+    // The only exception is when a session is EXPANDED and has NO matching children.
+    // A collapsed session should always be visible because its children aren't shown anyway.
     const visiblePtyCount = visibleChildren.filter((n) => n.type === 'pty').length;
-    if (hasFilter && visiblePtyCount === 0) {
+    const isExpanded = sessionNode.isExpanded;
+    
+    // Skip this session only if:
+    // 1. There's an active filter
+    // 2. The session is EXPANDED (so we can see its children)
+    // 3. No PTYs match the filter (visiblePtyCount === 0)
+    //
+    // Collapsed sessions should ALWAYS be shown because:
+    // - Their children aren't visible anyway
+    // - User needs to see the session to interact with it (expand, switch to it, etc.)
+    if (hasFilter && isExpanded && visiblePtyCount === 0) {
       continue;
     }
 
