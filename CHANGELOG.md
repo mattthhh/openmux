@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.36](https://github.com/monotykamary/openmux/compare/v0.3.35...v0.3.36) (2026-03-25)
+
+
+### Bug Fixes
+
+* **aggregate:** keep collapsed sessions visible when filter is active ([37e9d6e](https://github.com/monotykamary/openmux/commit/37e9d6e08f12964064cad316caa58580369d3432))
+* **aggregate:** track activity for all PTYs to fix shimmer animation ([5151010](https://github.com/monotykamary/openmux/commit/515101043e192a01c4f7c941c5e64f79f1dfc106))
+
+
+### Tests
+
+* **shimmer:** add activity tracking tests ([22b0f33](https://github.com/monotykamary/openmux/commit/22b0f33cde7fa4e977c0db44f987e49e081c6754))
+
 ### [0.3.35](https://github.com/monotykamary/openmux/compare/v0.3.34...v0.3.35) (2026-03-24)
 
 
