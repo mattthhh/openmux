@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.37](https://github.com/monotykamary/openmux/compare/v0.3.36...v0.3.37) (2026-03-26)
+
+
+### Bug Fixes
+
+* **build:** restore Zig builds after Xcode update ([1790ca7](https://github.com/monotykamary/openmux/commit/1790ca786419b101529c11b23bbd2850551ac330))
+* **terminal:** track dirty rows even when updates disabled ([4e2ddc6](https://github.com/monotykamary/openmux/commit/4e2ddc688c16a5e8e70890a3226b85894b8efb9c))
+
+
+### Tests
+
+* **shimmer:** add integration test for non-active session PTYs ([4876c36](https://github.com/monotykamary/openmux/commit/4876c36d50221023641337c5a9dd2482ef955ebc))
+
 ### [0.3.36](https://github.com/monotykamary/openmux/compare/v0.3.35...v0.3.36) (2026-03-25)
 
 
