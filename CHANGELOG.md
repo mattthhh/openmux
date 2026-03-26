@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.38](https://github.com/monotykamary/openmux/compare/v0.3.37...v0.3.38) (2026-03-26)
+
+
+### Bug Fixes
+
+* preserve PTY update gating after aggregate close ([6cfe2c3](https://github.com/monotykamary/openmux/commit/6cfe2c388bbfc26aa20f38b9b2a5c33a0ba7897d))
+* **tsconfig:** add node and bun types for typecheck ([a0bc6c9](https://github.com/monotykamary/openmux/commit/a0bc6c944c879f19c6f39c812567d14183be5434))
+
 ### [0.3.37](https://github.com/monotykamary/openmux/compare/v0.3.36...v0.3.37) (2026-03-26)
 
 
