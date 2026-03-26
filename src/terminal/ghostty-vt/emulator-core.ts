@@ -121,15 +121,17 @@ export class GhosttyVTEmulatorCore {
     if (stripped.length > 0) {
       this.scrollbackSnapshotDirty = true;
       this.terminal.write(stripped);
-      if (!this.updatesEnabled) {
-        this.needsFullRefresh = true;
-        return;
-      }
-    } else if (!this.updatesEnabled) {
+    }
+
+    // Always prepare update to track dirty rows (needed for activity tracking)
+    // but only notify subscribers when updates are enabled
+    this.prepareUpdate(false);
+
+    if (!this.updatesEnabled) {
+      this.needsFullRefresh = true;
       return;
     }
 
-    this.prepareUpdate(false);
     for (const callback of this.updateCallbacks) {
       callback();
     }

@@ -148,7 +148,7 @@ beforeEach(() => {
 })
 
 describe("GhosttyVTEmulator", () => {
-  it("defers updates while disabled and refreshes on enable", () => {
+  it("tracks dirty rows while disabled but defers update callbacks until enabled", () => {
     const emulator = new GhosttyVTEmulator(2, 1, getDefaultColors())
     const terminal = terminalState.last
     expect(terminal).not.toBeNull()
@@ -163,12 +163,14 @@ describe("GhosttyVTEmulator", () => {
     emulator.write("hello")
 
     expect(terminal!.writeCalls).toContain("hello")
-    expect(terminal!.updateCalls).toBe(updateCallsBefore)
+    // Update IS called to track dirty rows for activity tracking, even when disabled
+    expect(terminal!.updateCalls).toBeGreaterThan(updateCallsBefore)
+    // But callbacks are NOT fired when disabled
     expect(updateSpy).not.toHaveBeenCalled()
 
     emulator.setUpdateEnabled(true)
 
-    expect(terminal!.updateCalls).toBeGreaterThan(updateCallsBefore)
+    // Callbacks fire when re-enabled
     expect(updateSpy).toHaveBeenCalled()
   })
 
