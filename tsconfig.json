@@ -20,6 +20,9 @@
     "verbatimModuleSyntax": false,
     "noEmit": true,
 
+    // Type definitions for Node.js and Bun APIs
+    "types": ["node", "bun"],
+
     // Best practices
     "strict": true,
     "skipLibCheck": true,
