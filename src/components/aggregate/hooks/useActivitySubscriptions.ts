@@ -5,17 +5,23 @@
  * subscribes to the PTYs we are actively tracking and unsubscribes when they
  * leave that tracked set or the aggregate view closes.
  *
- * NOTE: This hook also enables PTY updates via setPtyUpdateEnabled. PTYs from other
- * sessions have updates disabled by default (for performance), but we need updates
- * enabled to track activity for the shimmer effect.
+ * NOTE: This hook holds a shared PTY update gate while activity tracking is active.
+ * PTYs from other sessions have updates disabled by default (for performance), but we
+ * need updates enabled to track activity for the shimmer effect without clobbering
+ * workspace-visible PTYs when aggregate view closes.
  */
 
 import { createEffect, onCleanup, type Accessor } from 'solid-js';
 import * as errore from 'errore';
-import { subscribeUnifiedToPty, setPtyUpdateEnabled } from '../../../effect/bridge';
+import { subscribeUnifiedToPty } from '../../../effect/bridge';
 import { recordPtyStdoutActivity, clearPtyStdoutActivity } from '../../../core/shimmer';
 import { createTaggedError } from 'errore';
 import type { PtyInfo } from '../../../contexts/aggregate-view-types';
+import {
+  ensureActivityPtyEnabled,
+  registerActivityPty,
+  unregisterActivityPty,
+} from '../../terminal-view/visibility';
 
 /** Error when activity subscription fails */
 export class ActivitySubscriptionError extends createTaggedError({
@@ -81,9 +87,7 @@ export function useActivitySubscriptions(options: {
       entry.unsubscribe();
       subscriptions.delete(ptyId);
       clearPtyStdoutActivity(ptyId);
-      // Disable updates for this PTY (safe to call even if PTY is visible elsewhere,
-      // as the visibility system has its own reference counting)
-      void setPtyUpdateEnabled(ptyId, false);
+      unregisterActivityPty(ptyId);
     }
   };
 
@@ -94,8 +98,7 @@ export function useActivitySubscriptions(options: {
     for (const [ptyId, entry] of subscriptions) {
       entry.unsubscribe();
       clearPtyStdoutActivity(ptyId);
-      // Disable updates for this PTY
-      void setPtyUpdateEnabled(ptyId, false);
+      unregisterActivityPty(ptyId);
     }
     subscriptions.clear();
   };
@@ -122,9 +125,10 @@ export function useActivitySubscriptions(options: {
     // Mark as pending to prevent duplicate subscription attempts
     pendingSubscriptions.add(ptyId);
 
-    // Enable updates for this PTY so we can track activity
-    // PTYs from other sessions have updates disabled by default for performance
-    await setPtyUpdateEnabled(ptyId, true);
+    // Keep PTY updates enabled while aggregate activity tracking is subscribed.
+    // This shares the same ref-counted gate as visible TerminalViews, so closing
+    // aggregate view won't disable a workspace PTY that's still on screen.
+    registerActivityPty(ptyId);
 
     let seenInitialUpdate = false;
     let lastDirtyCount = 0;
@@ -166,9 +170,8 @@ export function useActivitySubscriptions(options: {
 
     if (result instanceof ActivitySubscriptionError) {
       clearPtyStdoutActivity(ptyId);
-      // Re-disable updates since subscription failed
-      void setPtyUpdateEnabled(ptyId, false);
-      
+      unregisterActivityPty(ptyId);
+
       // Track failure for retry
       const retryCount = (failedSubscriptions.get(ptyId) ?? 0) + 1;
       if (retryCount <= MAX_RETRIES) {
@@ -189,7 +192,7 @@ export function useActivitySubscriptions(options: {
     if (!options.isActive()) {
       result();
       clearPtyStdoutActivity(ptyId);
-      void setPtyUpdateEnabled(ptyId, false);
+      unregisterActivityPty(ptyId);
       return;
     }
 
@@ -198,7 +201,7 @@ export function useActivitySubscriptions(options: {
     if (!currentIds.has(ptyId)) {
       result();
       clearPtyStdoutActivity(ptyId);
-      void setPtyUpdateEnabled(ptyId, false);
+      unregisterActivityPty(ptyId);
       return;
     }
 
@@ -238,44 +241,38 @@ export function useActivitySubscriptions(options: {
           entry.unsubscribe();
           subscriptions.delete(ptyId);
           clearPtyStdoutActivity(ptyId);
-          // Disable updates for this PTY since we're no longer tracking it
-          await setPtyUpdateEnabled(ptyId, false);
+          unregisterActivityPty(ptyId);
         }
       }
 
       // Subscribe to new PTYs (but not ones already being processed)
       const subscribePromises: Promise<void>[] = [];
-      const reenablePromises: Promise<void>[] = [];
-      
+
       for (const ptyId of currentPtyIds) {
         // Subscribe if:
         // - Not already subscribed
         // - Not currently being processed
         // - Hasn't failed too many times
         const retryCount = failedSubscriptions.get(ptyId) ?? 0;
-        const shouldSubscribe = !subscriptions.has(ptyId) && 
-                               !pendingSubscriptions.has(ptyId) &&
-                               retryCount < MAX_RETRIES;
-        
+        const shouldSubscribe = !subscriptions.has(ptyId) &&
+          !pendingSubscriptions.has(ptyId) &&
+          retryCount < MAX_RETRIES;
+
         if (shouldSubscribe) {
           subscribePromises.push(
-            subscribe(ptyId).catch((e) => {
+            subscribe(ptyId).catch(() => {
               // Error is already logged in subscribe()
             })
           );
-        } else if (subscriptions.has(ptyId)) {
-          // Already subscribed - re-enable updates to ensure they weren't disabled
-          // by the visibility system (e.g., when switching workspaces)
-          reenablePromises.push(
-            setPtyUpdateEnabled(ptyId, true).catch((e) => {
-              // Silently ignore - PTY might have been destroyed
-            })
-          );
+          continue;
+        }
+
+        if (subscriptions.has(ptyId)) {
+          ensureActivityPtyEnabled(ptyId);
         }
       }
-      
-      // Wait for all operations to complete
-      await Promise.all([...subscribePromises, ...reenablePromises]);
+
+      await Promise.all(subscribePromises);
     } finally {
       isSyncing = false;
       
