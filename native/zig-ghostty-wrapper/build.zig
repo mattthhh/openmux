@@ -183,7 +183,13 @@ pub fn build(b: *std.Build) !void {
     const simd_default = !target.result.cpu.arch.isWasm();
     const simd_enabled = b.option(bool, "simd", "Enable SIMD fast paths") orelse simd_default;
 
-    const ghostty_dep = b.dependency("ghostty", .{});
+    // We only embed Ghostty's VT library. Opt into the lib-vt-only build so
+    // the dependency does not try to build the full macOS xcframework/app.
+    const ghostty_dep = b.dependency("ghostty", .{
+        .target = target,
+        .optimize = optimize,
+        .@"emit-lib-vt" = true,
+    });
 
     const uucode_dep = b.dependency("uucode", .{
         .build_config_path = ghostty_dep.path("src/build/uucode_config.zig"),

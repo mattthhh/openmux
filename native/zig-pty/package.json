@@ -6,7 +6,7 @@
   "types": "./dist/index.d.ts",
   "type": "module",
   "scripts": {
-    "build:zig": "zig build -Doptimize=ReleaseFast",
+    "build:zig": "bash ../../scripts/zig.sh build -Doptimize=ReleaseFast",
     "build:ts": "bun build ./src/index.ts --outdir ./dist --target bun",
     "build": "bun run build:zig && bun run build:ts",
     "test": "bun test",

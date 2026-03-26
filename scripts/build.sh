@@ -94,7 +94,7 @@ build_zig_pty() {
     fi
 
     cd "$zig_pty_dir"
-    zig build -Doptimize=ReleaseFast
+    bash "$PROJECT_DIR/scripts/zig.sh" build -Doptimize=ReleaseFast
     cd "$PROJECT_DIR"
 
     echo "Built zig-pty native library"
@@ -122,7 +122,7 @@ build_zig_git() {
     fi
 
     cd "$zig_git_dir"
-    zig build -Doptimize=ReleaseFast
+    bash "$PROJECT_DIR/scripts/zig.sh" build -Doptimize=ReleaseFast
     cd "$PROJECT_DIR"
 
     echo "Built zig-git native library"
@@ -148,7 +148,7 @@ build_ghostty_vt() {
     fi
 
     cd "$zig_ghostty_wrapper_dir"
-    zig build -Doptimize=ReleaseFast
+    bash "$PROJECT_DIR/scripts/zig.sh" build -Doptimize=ReleaseFast
     cd "$PROJECT_DIR"
 
     echo "Built ghostty-vt wrapper library"

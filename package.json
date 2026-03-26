@@ -20,10 +20,10 @@
     "build:release": "./scripts/build.sh --release",
     "install:local": "./scripts/build.sh --install",
     "update:submodules": "./scripts/update-submodules.sh",
-    "test": "bun test && (cd native/zig-pty && zig build test --summary all) && (cd native/zig-git && zig build test --summary all) && bun run test:zig-ghostty-wrapper",
+    "test": "bun test && (cd native/zig-pty && bash ../../scripts/zig.sh build test --summary all) && (cd native/zig-git && bash ../../scripts/zig.sh build test --summary all) && bun run test:zig-ghostty-wrapper",
     "test:ts": "bun test",
-    "test:pty": "cd native/zig-pty && zig build test --summary all",
-    "test:git": "cd native/zig-git && zig build test --summary all",
+    "test:pty": "cd native/zig-pty && bash ../../scripts/zig.sh build test --summary all",
+    "test:git": "cd native/zig-git && bash ../../scripts/zig.sh build test --summary all",
     "test:zig-ghostty-wrapper": "./scripts/test-ghostty-vt.sh",
     "test:ghostty-wrapper": "bun run test:zig-ghostty-wrapper",
     "test:ghostty-vt": "bun run test:zig-ghostty-wrapper",
@@ -64,20 +64,20 @@
   "devDependencies": {
     "@types/bun": "^1.3.11",
     "@types/node": "^25.5.0",
-    "@typescript-eslint/eslint-plugin": "^8.57.1",
-    "@typescript-eslint/parser": "^8.57.1",
+    "@typescript-eslint/eslint-plugin": "^8.57.2",
+    "@typescript-eslint/parser": "^8.57.2",
     "eslint": "^10.1.0",
     "standard-version": "^9.5.0"
   },
   "peerDependencies": {
-    "typescript": "^5.9.3"
+    "typescript": "^6.0.2"
   },
   "dependencies": {
     "@iarna/toml": "^2.2.5",
     "@opentui/core": "^0.1.90",
     "@opentui/solid": "^0.1.90",
     "errore": "^0.14.1",
-    "solid-js": "^1.9.11",
+    "solid-js": "^1.9.12",
     "zod": "^4.3.6"
   }
 }

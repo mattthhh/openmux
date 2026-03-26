@@ -16,8 +16,8 @@ if ! command -v zig &> /dev/null; then
 fi
 
 cd "$wrapper_dir"
-zig build test --summary all
-zig build
+bash "$PROJECT_DIR/scripts/zig.sh" build test --summary all
+bash "$PROJECT_DIR/scripts/zig.sh" build
 cd "$PROJECT_DIR"
 
 bun scripts/test-zig-ghostty-wrapper-smoke.ts
