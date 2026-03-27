@@ -41,9 +41,9 @@
     "postinstall": "simple-git-hooks"
   },
   "simple-git-hooks": {
-    "pre-commit": "npx lint-staged",
+    "pre-commit": "bunx lint-staged",
     "pre-push": "bun run typecheck && bun run test:ts",
-    "commit-msg": "npx commitlint --edit ${1}"
+    "commit-msg": "bunx commitlint --edit ${1}"
   },
   "lint-staged": {
     "*.{ts,tsx,js,json,md}": [
