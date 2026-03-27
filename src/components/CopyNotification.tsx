@@ -19,6 +19,7 @@ interface PaneRectangle {
 
 interface CopyNotificationProps {
   visible: boolean;
+  status: 'pending' | 'success' | 'error';
   charCount: number;
   /** Rectangle of the pane where copy occurred */
   paneRect: PaneRectangle | null;
@@ -51,6 +52,16 @@ function parseRgbaHex(value: string, fallback: RGBA): RGBA {
  * Styled with left/right partial borders matching the pane focus color
  * Uses semi-transparent dark background
  */
+function formatCharCount(charCount: number): string {
+  if (charCount >= 1_000_000) {
+    return `${(charCount / 1_000_000).toFixed(charCount >= 10_000_000 ? 0 : 1)}M`;
+  }
+  if (charCount >= 1_000) {
+    return `${(charCount / 1_000).toFixed(charCount >= 10_000 ? 0 : 1)}k`;
+  }
+  return `${charCount}`;
+}
+
 export function CopyNotification(props: CopyNotificationProps) {
   const theme = useTheme();
   const terminal = useTerminal();
@@ -69,11 +80,16 @@ export function CopyNotification(props: CopyNotificationProps) {
   const bgColor = () => parseRgbaHex(copyColors().backgroundColor, autoBgColor());
   const textColor = () => parseRgbaHex(copyColors().textColor, autoTextColor());
   const borderColor = () => parseRgbaHex(copyColors().borderColor, autoBorderColor());
+  const label = createMemo(() => {
+    if (props.status === 'pending') return 'Copying content…';
+    if (props.status === 'error') return 'Copy failed';
+    if (props.charCount > 0) return `Copied ${formatCharCount(props.charCount)} chars`;
+    return 'Copied to clipboard';
+  });
 
   return (
     <Show when={props.visible && props.paneRect}>
       {(paneRect: Accessor<PaneRectangle>) => {
-        // Position at top-right of pane, with some padding from edges
         const leftPosition = () => Math.max(0, paneRect().x + paneRect().width - TOAST_WIDTH - 2);
         const topPosition = () => paneRect().y + 1;
 
@@ -98,7 +114,7 @@ export function CopyNotification(props: CopyNotificationProps) {
               style={{
                 fg: textColor(),
               }}
-              content="Copied to clipboard"
+              content={label()}
             />
           </box>
         );

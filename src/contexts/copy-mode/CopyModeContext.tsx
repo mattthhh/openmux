@@ -283,6 +283,8 @@ export function CopyModeProvider(props: CopyModeProviderProps) {
     const meta = getActiveScrollMeta(current.ptyId);
     if (!meta.terminalState) return;
 
+    await selection.beginCopy(current.ptyId);
+
     const fetchScrollbackChunk = (startOffset: number, count: number) =>
       getScrollbackLines(current.ptyId, startOffset, count);
     const getLiveLine = (absY: number) => {
@@ -302,6 +304,7 @@ export function CopyModeProvider(props: CopyModeProviderProps) {
       });
       if (result instanceof TextExtractionError) {
         console.warn('Text extraction failed:', result.message);
+        selection.notifyCopyError(current.ptyId);
         return;
       }
       text = result;
@@ -321,15 +324,24 @@ export function CopyModeProvider(props: CopyModeProviderProps) {
       });
       if (result instanceof TextExtractionError) {
         console.warn('Text extraction failed:', result.message);
+        selection.notifyCopyError(current.ptyId);
         return;
       }
       text = result;
     }
 
     const copyResult = prepareCopyText(text);
-    if (!copyResult) return;
+    if (!copyResult) {
+      selection.clearCopyNotification();
+      return;
+    }
 
-    await copyToClipboard(copyResult.text);
+    const didCopy = await copyToClipboard(copyResult.text);
+    if (!didCopy) {
+      selection.notifyCopyError(current.ptyId);
+      return;
+    }
+
     selection.notifyCopy(copyResult.length, current.ptyId);
   };
 

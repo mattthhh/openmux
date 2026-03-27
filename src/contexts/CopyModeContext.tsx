@@ -523,6 +523,8 @@ export function CopyModeProvider(props: CopyModeProviderProps) {
     if (!meta.terminalState) return;
     const scrollbackLength = meta.scrollbackLength ?? 0;
 
+    await selection.beginCopy(current.ptyId);
+
     const fetchScrollbackChunk = (startOffset: number, count: number) =>
       getScrollbackLines(current.ptyId, startOffset, count);
     const getLiveLine = (absY: number) => {
@@ -540,12 +542,21 @@ export function CopyModeProvider(props: CopyModeProviderProps) {
       });
       if (result instanceof TextExtractionError) {
         console.warn('Text extraction failed:', result.message);
+        selection.notifyCopyError(current.ptyId);
         return;
       }
-      if (result.length > 0) {
-        await copyToClipboard(result);
-        selection.notifyCopy(result.length, current.ptyId);
+      if (result.length === 0) {
+        selection.clearCopyNotification();
+        return;
       }
+
+      const didCopy = await copyToClipboard(result);
+      if (!didCopy) {
+        selection.notifyCopyError(current.ptyId);
+        return;
+      }
+
+      selection.notifyCopy(result.length, current.ptyId);
       return;
     }
 
@@ -565,12 +576,21 @@ export function CopyModeProvider(props: CopyModeProviderProps) {
     });
     if (result instanceof TextExtractionError) {
       console.warn('Text extraction failed:', result.message);
+      selection.notifyCopyError(current.ptyId);
       return;
     }
-    if (result.length > 0) {
-      await copyToClipboard(result);
-      selection.notifyCopy(result.length, current.ptyId);
+    if (result.length === 0) {
+      selection.clearCopyNotification();
+      return;
     }
+
+    const didCopy = await copyToClipboard(result);
+    if (!didCopy) {
+      selection.notifyCopyError(current.ptyId);
+      return;
+    }
+
+    selection.notifyCopy(result.length, current.ptyId);
   };
 
   const value: CopyModeContextValue = {

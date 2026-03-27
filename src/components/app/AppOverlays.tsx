@@ -110,6 +110,7 @@ export function AppOverlays(props: AppOverlaysProps) {
 
       <CopyNotification
         visible={selection.copyNotification.visible}
+        status={selection.copyNotification.status}
         charCount={selection.copyNotification.charCount}
         paneRect={(() => {
           const ptyId = selection.copyNotification.ptyId;

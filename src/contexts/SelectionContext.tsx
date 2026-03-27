@@ -16,6 +16,7 @@ import {
   type ParentProps,
 } from 'solid-js';
 import type { SelectionBounds } from '../core/types';
+import { deferMacrotask } from '../core/scheduling';
 import { copyToClipboard } from '../effect/bridge';
 import {
   type SelectionPoint,
@@ -47,8 +48,11 @@ interface PaneSelection {
 /**
  * Copy notification state
  */
+type CopyNotificationStatus = 'pending' | 'success' | 'error';
+
 interface CopyNotificationState {
   visible: boolean;
+  status: CopyNotificationStatus;
   charCount: number;
   /** The ptyId of the pane where copy occurred */
   ptyId: string | null;
@@ -120,9 +124,24 @@ interface SelectionContextValue {
   copyNotification: CopyNotificationState;
 
   /**
-   * Show copy notification (used by copy mode)
+   * Show a pending copy notification and yield so it can render.
+   */
+  beginCopy: (ptyId: string) => Promise<void>;
+
+  /**
+   * Show copy success notification (used by copy mode)
    */
   notifyCopy: (charCount: number, ptyId: string) => void;
+
+  /**
+   * Show copy failure notification.
+   */
+  notifyCopyError: (ptyId: string) => void;
+
+  /**
+   * Hide any visible copy notification.
+   */
+  clearCopyNotification: () => void;
 }
 
 
@@ -141,6 +160,7 @@ export function SelectionProvider(props: SelectionProviderProps) {
   // Copy notification state
   const [copyNotification, setCopyNotification] = createSignal<CopyNotificationState>({
     visible: false,
+    status: 'success',
     charCount: 0,
     ptyId: null,
   });
@@ -160,21 +180,50 @@ export function SelectionProvider(props: SelectionProviderProps) {
     setSelectionVersion((v) => v + 1);
   };
 
-  // Show copy notification briefly
-  const showCopyNotification = (charCount: number, ptyId: string) => {
-    // Clear any existing timer
-    if (notificationTimer) {
-      clearTimeout(notificationTimer);
-    }
+  const clearNotificationTimer = () => {
+    if (!notificationTimer) return;
+    clearTimeout(notificationTimer);
+    notificationTimer = null;
+  };
 
-    // Show notification
-    setCopyNotification({ visible: true, charCount, ptyId });
+  const clearCopyNotification = () => {
+    clearNotificationTimer();
+    setCopyNotification({ visible: false, status: 'success', charCount: 0, ptyId: null });
+  };
 
-    // Auto-hide after 2 seconds
+  const scheduleNotificationHide = (timeoutMs: number) => {
+    clearNotificationTimer();
     notificationTimer = setTimeout(() => {
-      setCopyNotification({ visible: false, charCount: 0, ptyId: null });
-      notificationTimer = null;
-    }, 2000);
+      clearCopyNotification();
+    }, timeoutMs);
+  };
+
+  const showCopyNotification = (
+    status: CopyNotificationStatus,
+    ptyId: string,
+    charCount: number,
+    timeoutMs?: number
+  ) => {
+    clearNotificationTimer();
+    setCopyNotification({ visible: true, status, charCount, ptyId });
+    if (typeof timeoutMs === 'number') {
+      scheduleNotificationHide(timeoutMs);
+    }
+  };
+
+  const beginCopy = async (ptyId: string): Promise<void> => {
+    showCopyNotification('pending', ptyId, 0);
+    await new Promise<void>((resolve) => {
+      deferMacrotask(resolve);
+    });
+  };
+
+  const notifyCopy = (charCount: number, ptyId: string) => {
+    showCopyNotification('success', ptyId, charCount, 2000);
+  };
+
+  const notifyCopyError = (ptyId: string) => {
+    showCopyNotification('error', ptyId, 0, 3000);
   };
 
   // Start selection
@@ -239,29 +288,34 @@ export function SelectionProvider(props: SelectionProviderProps) {
   ): Promise<void> => {
     const selection = selections.get(ptyId);
     if (!selection?.normalizedRange) {
-      // Clear anyway
       selections.delete(ptyId);
       notifyChange();
       return;
     }
 
-    // Extract text (focus cell is already excluded by extractSelectedText)
+    const normalizedRange = selection.normalizedRange;
+    selections.delete(ptyId);
+    notifyChange();
+
+    await beginCopy(ptyId);
+
     const text = extractSelectedText(
-      selection.normalizedRange,
+      normalizedRange,
       scrollbackLength,
       getLine
     );
-
-    // Copy to clipboard if there's text
-    if (text.length > 0) {
-      await copyToClipboard(text);
-      // Show notification
-      showCopyNotification(text.length, ptyId);
+    if (text.length === 0) {
+      clearCopyNotification();
+      return;
     }
 
-    // Clear selection
-    selections.delete(ptyId);
-    notifyChange();
+    const didCopy = await copyToClipboard(text);
+    if (!didCopy) {
+      notifyCopyError(ptyId);
+      return;
+    }
+
+    notifyCopy(text.length, ptyId);
   };
 
   // Clear selection for a pane
@@ -311,7 +365,10 @@ export function SelectionProvider(props: SelectionProviderProps) {
     clearAllSelections,
     isCellSelected,
     getSelection,
-    notifyCopy: showCopyNotification,
+    beginCopy,
+    notifyCopy,
+    notifyCopyError,
+    clearCopyNotification,
     get selectionVersion() { return selectionVersion(); },
     get copyNotification() { return copyNotification(); },
   };
