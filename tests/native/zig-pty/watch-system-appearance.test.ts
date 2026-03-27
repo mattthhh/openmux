@@ -1,6 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from "bun:test";
-import * as fsActual from "node:fs";
-import * as osActual from "node:os";
+import { beforeEach, describe, expect, it, vi } from 'bun:test';
+import * as fsActual from 'node:fs';
+import * as osActual from 'node:os';
 
 type MockStream = {
   on: ReturnType<typeof vi.fn>;
@@ -24,8 +24,8 @@ const mocks = vi.hoisted(() => {
   };
 
   const processMock = {
-    platform: "darwin",
-    cwd: vi.fn(() => "/tmp"),
+    platform: 'darwin',
+    cwd: vi.fn(() => '/tmp'),
     on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
       addListener(event, handler);
       return processMock;
@@ -122,17 +122,17 @@ const mocks = vi.hoisted(() => {
   };
 });
 
-vi.mock("bun:ffi", () => ({
+vi.mock('bun:ffi', () => ({
   ptr: (value: unknown) => value,
 }));
 
-vi.mock("node:fs", () => ({
+vi.mock('node:fs', () => ({
   ...fsActual,
   default: { ...fsActual, createReadStream: mocks.createReadStream },
   createReadStream: mocks.createReadStream,
 }));
 
-vi.mock("node:os", () => {
+vi.mock('node:os', () => {
   const constants = {
     ...osActual.constants,
     signals: { ...osActual.constants.signals, SIGUSR2: 12 },
@@ -144,11 +144,11 @@ vi.mock("node:os", () => {
   };
 });
 
-vi.mock("node:process", () => ({
+vi.mock('node:process', () => ({
   default: mocks.processMock,
 }));
 
-vi.mock("../../../native/zig-pty/ts/lib-loader", () => ({
+vi.mock('../../../native/zig-pty/ts/lib-loader', () => ({
   lib: {
     symbols: {
       bun_pty_notify_register: mocks.notifyRegister,
@@ -160,40 +160,46 @@ vi.mock("../../../native/zig-pty/ts/lib-loader", () => ({
 
 const loadWatchSystemAppearance = async () => {
   const mod = await import(`../../../native/zig-pty/ts/index?appearance=${Date.now()}`);
-  return mod.watchSystemAppearance;
+  return {
+    watchSystemAppearance: mod.watchSystemAppearance,
+    reset: mod.__resetAppearanceWatcherForTest,
+  };
 };
 
-beforeEach(() => {
+beforeEach(async () => {
   mocks.reset();
+  // Reset the module-level state to ensure clean test isolation
+  const mod = await import(`../../../native/zig-pty/ts/index?reset=${Date.now()}`);
+  mod.__resetAppearanceWatcherForTest?.();
 });
 
-describe("watchSystemAppearance", () => {
-  it("shares watchers and fans out callbacks", async () => {
+describe('watchSystemAppearance', () => {
+  it('shares watchers and fans out callbacks', async () => {
     mocks.registerFds.push(10, 11);
     mocks.registerTokens.push(101, 102);
     mocks.signalTokens.push(201, 202);
 
-    const watchSystemAppearance = await loadWatchSystemAppearance();
+    const { watchSystemAppearance } = await loadWatchSystemAppearance();
     const first = vi.fn();
     const second = vi.fn();
 
     const stopFirst = watchSystemAppearance(first);
     const stopSecond = watchSystemAppearance(second);
 
-    expect(stopFirst).toBeTypeOf("function");
-    expect(stopSecond).toBeTypeOf("function");
+    expect(stopFirst).toBeTypeOf('function');
+    expect(stopSecond).toBeTypeOf('function');
     expect(mocks.notifyRegister).toHaveBeenCalledTimes(2);
     expect(mocks.notifyRegisterSignal).toHaveBeenCalledTimes(2);
     expect(mocks.createReadStream).toHaveBeenCalledTimes(2);
     expect(mocks.processMock.on).toHaveBeenCalledTimes(1);
 
     expect(mocks.streams.length).toBe(2);
-    mocks.streams[0].emit("data", Buffer.from([0]));
+    mocks.streams[0].emit('data', Buffer.from([0]));
 
     expect(first).toHaveBeenCalledTimes(1);
     expect(second).toHaveBeenCalledTimes(1);
 
-    mocks.processMock.emit("SIGUSR2");
+    mocks.processMock.emit('SIGUSR2');
 
     expect(first).toHaveBeenCalledTimes(2);
     expect(second).toHaveBeenCalledTimes(2);
@@ -207,27 +213,27 @@ describe("watchSystemAppearance", () => {
     expect(mocks.streams[1].destroy).toHaveBeenCalled();
   });
 
-  it("cleans up on exit and allows re-register", async () => {
+  it('cleans up on exit and allows re-register', async () => {
     mocks.registerFds.push(10, 11, 12, 13);
     mocks.registerTokens.push(101, 102, 103, 104);
     mocks.signalTokens.push(201, 202, 203, 204);
 
-    const watchSystemAppearance = await loadWatchSystemAppearance();
+    const { watchSystemAppearance } = await loadWatchSystemAppearance();
     const handler = vi.fn();
 
     const stop = watchSystemAppearance(handler);
 
-    expect(stop).toBeTypeOf("function");
+    expect(stop).toBeTypeOf('function');
     expect(mocks.processMock.once).toHaveBeenCalledTimes(1);
 
-    mocks.processMock.emit("exit");
+    mocks.processMock.emit('exit');
 
     expect(mocks.notifyCancel).toHaveBeenCalledTimes(4);
 
     const handler2 = vi.fn();
     const stop2 = watchSystemAppearance(handler2);
 
-    expect(stop2).toBeTypeOf("function");
+    expect(stop2).toBeTypeOf('function');
     expect(mocks.notifyRegister).toHaveBeenCalledTimes(4);
     expect(mocks.notifyRegisterSignal).toHaveBeenCalledTimes(4);
     expect(mocks.processMock.once).toHaveBeenCalledTimes(1);

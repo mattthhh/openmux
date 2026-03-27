@@ -1,4 +1,4 @@
-import { vi } from "bun:test";
+import { vi } from 'bun:test';
 
 export const effectBridgeMocks = {
   createSessionLegacy: vi.fn(),
@@ -21,6 +21,7 @@ export const effectBridgeMocks = {
   markPtyCreated: vi.fn(),
   copyToClipboard: vi.fn(),
   readFromClipboard: vi.fn(),
+  setPtyUpdateEnabled: vi.fn(),
   // Aggregate view functions
   listAllPtysWithMetadata: vi.fn(),
   getPtyMetadata: vi.fn(),

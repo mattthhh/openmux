@@ -1,13 +1,7 @@
-import { beforeEach, describe, expect, it, mock } from 'bun:test';
+import { beforeEach, describe, expect, it, mock, vi } from 'bun:test';
 import type { ITerminalEmulator } from '../../../terminal/emulator-interface';
-
-const setPtyUpdateEnabledMock = mock(async () => {});
-
-mock.module('../../../effect/bridge', () => ({
-  setPtyUpdateEnabled: setPtyUpdateEnabledMock,
-}));
-
-const {
+import { setPtyUpdateEnabled } from '../../../effect/bridge';
+import {
   attachVisibleEmulator,
   clearVisiblePty,
   ensureActivityPtyEnabled,
@@ -15,11 +9,11 @@ const {
   registerVisiblePty,
   unregisterActivityPty,
   unregisterVisiblePty,
-} = await import('../visibility');
+} from '../visibility';
 
 describe('terminal-view visibility gating (litmus)', () => {
   beforeEach(() => {
-    setPtyUpdateEnabledMock.mockClear();
+    vi.mocked(setPtyUpdateEnabled).mockClear();
   });
 
   it('does not disable a visible PTY when aggregate activity tracking releases', () => {
@@ -34,12 +28,12 @@ describe('terminal-view visibility gating (litmus)', () => {
     attachVisibleEmulator(ptyId, emulator);
     registerActivityPty(ptyId);
 
-    setPtyUpdateEnabledMock.mockClear();
+    vi.mocked(setPtyUpdateEnabled).mockClear();
     setUpdateEnabledMock.mockClear();
 
     unregisterActivityPty(ptyId);
 
-    expect(setPtyUpdateEnabledMock).not.toHaveBeenCalledWith(ptyId, false);
+    expect(setPtyUpdateEnabled).not.toHaveBeenCalledWith(ptyId, false);
     expect(setUpdateEnabledMock).not.toHaveBeenCalledWith(false);
 
     unregisterVisiblePty(ptyId, emulator);
@@ -49,11 +43,11 @@ describe('terminal-view visibility gating (litmus)', () => {
     const ptyId = 'pty-activity-only';
 
     registerActivityPty(ptyId);
-    setPtyUpdateEnabledMock.mockClear();
+    vi.mocked(setPtyUpdateEnabled).mockClear();
 
     unregisterActivityPty(ptyId);
 
-    expect(setPtyUpdateEnabledMock).toHaveBeenCalledWith(ptyId, false);
+    expect(setPtyUpdateEnabled).toHaveBeenCalledWith(ptyId, false);
   });
 
   it('keeps activity tracking alive when visible state is cleared', () => {
@@ -62,16 +56,16 @@ describe('terminal-view visibility gating (litmus)', () => {
     registerVisiblePty(ptyId);
     registerActivityPty(ptyId);
 
-    setPtyUpdateEnabledMock.mockClear();
+    vi.mocked(setPtyUpdateEnabled).mockClear();
 
     clearVisiblePty(ptyId);
-    expect(setPtyUpdateEnabledMock).not.toHaveBeenCalledWith(ptyId, false);
+    expect(setPtyUpdateEnabled).not.toHaveBeenCalledWith(ptyId, false);
 
     ensureActivityPtyEnabled(ptyId);
-    expect(setPtyUpdateEnabledMock).toHaveBeenCalledWith(ptyId, true);
+    expect(setPtyUpdateEnabled).toHaveBeenCalledWith(ptyId, true);
 
-    setPtyUpdateEnabledMock.mockClear();
+    vi.mocked(setPtyUpdateEnabled).mockClear();
     unregisterActivityPty(ptyId);
-    expect(setPtyUpdateEnabledMock).toHaveBeenCalledWith(ptyId, false);
+    expect(setPtyUpdateEnabled).toHaveBeenCalledWith(ptyId, false);
   });
 });

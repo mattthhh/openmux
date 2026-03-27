@@ -1,11 +1,11 @@
 import type { ITerminalEmulator } from '../../terminal/emulator-interface';
-import { setPtyUpdateEnabled as setPtyUpdateEnabledBridge } from '../../effect/bridge';
+import { setPtyUpdateEnabled } from '../../effect/bridge';
 
 const visiblePtyCounts = new Map<string, number>();
 const activityPtyCounts = new Map<string, number>();
 
 const applyUpdateGate = (ptyId: string, enabled: boolean, emulator?: ITerminalEmulator | null) => {
-  void setPtyUpdateEnabledBridge(ptyId, enabled);
+  void setPtyUpdateEnabled(ptyId, enabled);
   if (emulator && !emulator.isDisposed) {
     emulator.setUpdateEnabled?.(enabled);
   }

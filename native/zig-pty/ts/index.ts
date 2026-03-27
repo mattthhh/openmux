@@ -10,14 +10,14 @@
  * - terminal.ts: Terminal class
  */
 
-import { ptr } from "bun:ffi";
-import fs from "node:fs";
-import os from "node:os";
-import process from "node:process";
-import { lib } from "./lib-loader";
-import { Terminal } from "./terminal";
-import type { IPty, IPtyForkOptions } from "./types";
-import { DEFAULT_COLS, DEFAULT_ROWS, SPAWN_PENDING, SPAWN_ERROR } from "./types";
+import { ptr } from 'bun:ffi';
+import fs from 'node:fs';
+import os from 'node:os';
+import process from 'node:process';
+import { lib } from './lib-loader';
+import { Terminal } from './terminal';
+import type { IPty, IPtyForkOptions } from './types';
+import { DEFAULT_COLS, DEFAULT_ROWS, SPAWN_PENDING, SPAWN_ERROR } from './types';
 
 // Re-export types
 export type {
@@ -27,7 +27,7 @@ export type {
   IPty,
   TerminalOptions,
   ExitEvent,
-} from "./types";
+} from './types';
 
 // Re-export Terminal class
 export { Terminal };
@@ -35,11 +35,7 @@ export { Terminal };
 /**
  * Spawn a PTY synchronously
  */
-export function spawn(
-  file: string,
-  args: string[],
-  options: IPtyForkOptions
-): IPty {
+export function spawn(file: string, args: string[], options: IPtyForkOptions): IPty {
   return new Terminal(file, args, options);
 }
 
@@ -52,33 +48,29 @@ function shQuote(s: string): string {
  * Spawn a PTY asynchronously - the fork() happens off the main thread.
  * This prevents animation stutter when creating new panes.
  */
-export function spawnAsync(
-  file: string,
-  args: string[],
-  options: IPtyForkOptions
-): Promise<IPty> {
+export function spawnAsync(file: string, args: string[], options: IPtyForkOptions): Promise<IPty> {
   const cols = options.cols ?? DEFAULT_COLS;
   const rows = options.rows ?? DEFAULT_ROWS;
   const cwd = options.cwd ?? process.cwd();
 
-  const cmdline = [file, ...args.map(shQuote)].join(" ");
+  const cmdline = [file, ...args.map(shQuote)].join(' ');
 
-  let envStr = "";
+  let envStr = '';
   if (options.env) {
     const envPairs = Object.entries(options.env).map(([k, v]) => `${k}=${v}`);
-    envStr = envPairs.join("\0") + "\0";
+    envStr = envPairs.join('\0') + '\0';
   }
 
   const requestId = lib.symbols.bun_pty_spawn_async(
-    Buffer.from(`${cmdline}\0`, "utf8"),
-    Buffer.from(`${cwd}\0`, "utf8"),
-    Buffer.from(`${envStr}\0`, "utf8"),
+    Buffer.from(`${cmdline}\0`, 'utf8'),
+    Buffer.from(`${cwd}\0`, 'utf8'),
+    Buffer.from(`${envStr}\0`, 'utf8'),
     cols,
     rows
   );
 
   if (requestId < 0) {
-    return Promise.reject(new Error("PTY async spawn request failed"));
+    return Promise.reject(new Error('PTY async spawn request failed'));
   }
 
   return new Promise((resolve, reject) => {
@@ -93,7 +85,7 @@ export function spawnAsync(
       }
 
       if (result === SPAWN_ERROR || result < 0) {
-        reject(new Error("PTY spawn failed"));
+        reject(new Error('PTY spawn failed'));
         return;
       }
 
@@ -110,14 +102,14 @@ export function spawnAsync(
 }
 
 const APPEARANCE_NOTIFICATIONS = [
-  "AppleInterfaceThemeChangedNotification",
-  "AppleInterfaceStyleChangedNotification",
+  'AppleInterfaceThemeChangedNotification',
+  'AppleInterfaceStyleChangedNotification',
 ];
 
-const SIGNAL_NAME = "SIGUSR2";
+const SIGNAL_NAME = 'SIGUSR2';
 const SIGNAL_NUMBER =
   (os.constants.signals as Record<string, number | undefined>)[SIGNAL_NAME] ??
-  (process.platform === "darwin" ? 31 : 12);
+  (process.platform === 'darwin' ? 31 : 12);
 
 type AppearanceWatcher = {
   callbacks: Set<() => void>;
@@ -126,6 +118,18 @@ type AppearanceWatcher = {
 
 let sharedAppearanceWatcher: AppearanceWatcher | null = null;
 let appearanceExitHookAttached = false;
+
+/**
+ * Reset the appearance watcher state. For testing only.
+ * @internal
+ */
+export function __resetAppearanceWatcherForTest(): void {
+  if (sharedAppearanceWatcher) {
+    sharedAppearanceWatcher.cleanup();
+    sharedAppearanceWatcher = null;
+  }
+  appearanceExitHookAttached = false;
+}
 
 function createAppearanceWatcher(onChange: () => void): (() => void) | null {
   const watchers: Array<{
@@ -138,7 +142,7 @@ function createAppearanceWatcher(onChange: () => void): (() => void) | null {
 
   for (const name of APPEARANCE_NOTIFICATIONS) {
     const tokenBuf = Buffer.alloc(4);
-    const nameBuf = Buffer.from(`${name}\0`, "utf8");
+    const nameBuf = Buffer.from(`${name}\0`, 'utf8');
     const signalToken = lib.symbols.bun_pty_notify_register_signal(nameBuf, SIGNAL_NUMBER);
     if (signalToken >= 0) {
       signalTokens.push(signalToken);
@@ -147,10 +151,10 @@ function createAppearanceWatcher(onChange: () => void): (() => void) | null {
     const fd = lib.symbols.bun_pty_notify_register(nameBuf, ptr(tokenBuf));
     if (fd >= 0) {
       const token = tokenBuf.readInt32LE(0);
-      const stream = fs.createReadStream("", { fd, autoClose: true, highWaterMark: 4 });
+      const stream = fs.createReadStream('', { fd, autoClose: true, highWaterMark: 4 });
       const onData = () => onChange();
-      stream.on("data", onData);
-      stream.on("error", () => {});
+      stream.on('data', onData);
+      stream.on('error', () => {});
       watchers.push({ stream, token, onData });
     }
   }
@@ -177,7 +181,7 @@ function createAppearanceWatcher(onChange: () => void): (() => void) | null {
       }
     }
     for (const watcher of watchers) {
-      watcher.stream.off("data", watcher.onData);
+      watcher.stream.off('data', watcher.onData);
       watcher.stream.destroy();
       try {
         lib.symbols.bun_pty_notify_cancel(watcher.token);
@@ -193,7 +197,7 @@ function createAppearanceWatcher(onChange: () => void): (() => void) | null {
  * Returns a cleanup function, or null if unsupported.
  */
 export function watchSystemAppearance(onChange: () => void): (() => void) | null {
-  if (process.platform !== "darwin") return null;
+  if (process.platform !== 'darwin') return null;
 
   if (!sharedAppearanceWatcher) {
     const callbacks = new Set<() => void>();
@@ -211,7 +215,7 @@ export function watchSystemAppearance(onChange: () => void): (() => void) | null
     sharedAppearanceWatcher = { callbacks, cleanup };
     if (!appearanceExitHookAttached) {
       appearanceExitHookAttached = true;
-      process.once("exit", () => {
+      process.once('exit', () => {
         if (sharedAppearanceWatcher) {
           sharedAppearanceWatcher.cleanup();
           sharedAppearanceWatcher = null;
