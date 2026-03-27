@@ -54,7 +54,6 @@ export interface ITerminalEmulator {
    */
   dispose(): void;
 
-
   /**
    * Get the total number of lines in the scrollback buffer
    */
@@ -68,6 +67,12 @@ export interface ITerminalEmulator {
   getScrollbackLine(offset: number): TerminalCell[] | null;
 
   /**
+   * Prefetch a range of scrollback lines into any internal cache.
+   * Optional because local emulators may already have synchronous access.
+   */
+  prefetchScrollbackLines?(startOffset: number, count: number): Promise<void>;
+
+  /**
    * Get dirty terminal update with structural sharing.
    * Returns only changed rows instead of full state (key optimization).
    */
@@ -78,7 +83,6 @@ export interface ITerminalEmulator {
    * Creates fresh cell arrays to ensure React detects changes properly.
    */
   getTerminalState(): TerminalState;
-
 
   /**
    * Get cursor position and visibility

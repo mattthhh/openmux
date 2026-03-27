@@ -1,114 +1,114 @@
 /**
  * PTY Operations - core operations for managing PTY sessions (errore version)
  */
-import type { TerminalState } from "../../../core/types"
-import type { ITerminalEmulator } from "../../../terminal/emulator-interface"
-import { PtyNotFoundError } from "../../errors"
-import type { PtyId, Cols, Rows } from "../../types"
-import type { PtySession } from "../../models"
-import type { InternalPtySession } from "./types"
-import { notifySubscribers, notifyScrollSubscribers } from "./notification"
-import { HOT_SCROLLBACK_LIMIT } from "../../../terminal/scrollback-config"
-import type { SubscriptionRegistry } from "./subscription-manager"
-import { tracePtyEvent, tracePtyChunk } from "../../../terminal/pty-trace"
+import type { TerminalState } from '../../../core/types';
+import type { ITerminalEmulator } from '../../../terminal/emulator-interface';
+import { PtyNotFoundError } from '../../errors';
+import type { PtyId, Cols, Rows } from '../../types';
+import type { PtySession } from '../../models';
+import type { InternalPtySession } from './types';
+import { notifySubscribers, notifyScrollSubscribers } from './notification';
+import { HOT_SCROLLBACK_LIMIT } from '../../../terminal/scrollback-config';
+import type { SubscriptionRegistry } from './subscription-manager';
+import { tracePtyEvent, tracePtyChunk } from '../../../terminal/pty-trace';
 
-const FOCUS_IN_SEQUENCE = "\x1b[I"
-const FOCUS_OUT_SEQUENCE = "\x1b[O"
+const FOCUS_IN_SEQUENCE = '\x1b[I';
+const FOCUS_OUT_SEQUENCE = '\x1b[O';
 
 function normalizeProcessName(value: string | null | undefined): string | null {
-  if (!value) return null
-  const trimmed = value.trim()
-  if (!trimmed) return null
-  const base = trimmed.split(/[\\/]/).pop() ?? trimmed
-  const normalized = base.replace(/^-+/, "").toLowerCase()
-  return normalized.length > 0 ? normalized : null
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const base = trimmed.split(/[\\/]/).pop() ?? trimmed;
+  const normalized = base.replace(/^-+/, '').toLowerCase();
+  return normalized.length > 0 ? normalized : null;
 }
 
 function getShellProcessName(session: InternalPtySession): string | null {
-  return normalizeProcessName(session.shell)
+  return normalizeProcessName(session.shell);
 }
 
 function getForegroundProcessName(session: InternalPtySession): string | null {
   try {
-    return normalizeProcessName(session.pty.getForegroundProcessName())
+    return normalizeProcessName(session.pty.getForegroundProcessName());
   } catch {
-    return null
+    return null;
   }
 }
 
 export interface OperationsDeps {
-  sessions: Map<PtyId, InternalPtySession>
-  lifecycleRegistry: SubscriptionRegistry<{ type: 'created' | 'destroyed'; ptyId: PtyId }>
+  sessions: Map<PtyId, InternalPtySession>;
+  lifecycleRegistry: SubscriptionRegistry<{ type: 'created' | 'destroyed'; ptyId: PtyId }>;
 }
 
 export function createOperations(deps: OperationsDeps) {
-  const { sessions, lifecycleRegistry } = deps
+  const { sessions, lifecycleRegistry } = deps;
 
   function getSessionOrFail(id: PtyId): InternalPtySession | PtyNotFoundError {
-    const session = sessions.get(id)
+    const session = sessions.get(id);
     if (!session) {
-      return new PtyNotFoundError({ ptyId: id })
+      return new PtyNotFoundError({ ptyId: id });
     }
-    return session
+    return session;
   }
 
   async function write(id: PtyId, data: string): Promise<PtyNotFoundError | void> {
-    const sessionOrError = getSessionOrFail(id)
+    const sessionOrError = getSessionOrFail(id);
     if (sessionOrError instanceof PtyNotFoundError) {
-      return sessionOrError
+      return sessionOrError;
     }
-    const session = sessionOrError
+    const session = sessionOrError;
 
     // Auto-scroll to bottom when user types
     if (session.scrollState.viewportOffset > 0) {
-      session.scrollState.viewportOffset = 0
-      notifySubscribers(session)
-      notifyScrollSubscribers(session)
+      session.scrollState.viewportOffset = 0;
+      notifySubscribers(session);
+      notifyScrollSubscribers(session);
     }
 
-    session.pty.write(data)
+    session.pty.write(data);
   }
 
   async function sendFocusEvent(id: PtyId, focused: boolean): Promise<PtyNotFoundError | void> {
-    const sessionOrError = getSessionOrFail(id)
+    const sessionOrError = getSessionOrFail(id);
     if (sessionOrError instanceof PtyNotFoundError) {
-      return sessionOrError
+      return sessionOrError;
     }
-    const session = sessionOrError
-    session.focusState = focused
+    const session = sessionOrError;
+    session.focusState = focused;
 
-    const shellProcess = getShellProcessName(session)
-    const foregroundProcess = getForegroundProcessName(session)
+    const shellProcess = getShellProcessName(session);
+    const foregroundProcess = getForegroundProcessName(session);
 
     if (
-      session.focusTrackingEnabled
-      && shellProcess
-      && foregroundProcess === shellProcess
-      && session.focusTrackingOwnerProcess
-      && session.focusTrackingOwnerProcess !== shellProcess
+      session.focusTrackingEnabled &&
+      shellProcess &&
+      foregroundProcess === shellProcess &&
+      session.focusTrackingOwnerProcess &&
+      session.focusTrackingOwnerProcess !== shellProcess
     ) {
-      tracePtyEvent("pty-focus-tracking-stale-reset", {
+      tracePtyEvent('pty-focus-tracking-stale-reset', {
         ptyId: id,
         ownerProcess: session.focusTrackingOwnerProcess,
         shellProcess,
         foregroundProcess,
-      })
-      session.focusTrackingEnabled = false
-      session.focusTrackingOwnerProcess = null
+      });
+      session.focusTrackingEnabled = false;
+      session.focusTrackingOwnerProcess = null;
     }
 
-    const sequence = focused ? FOCUS_IN_SEQUENCE : FOCUS_OUT_SEQUENCE
-    tracePtyEvent("pty-focus-send", {
+    const sequence = focused ? FOCUS_IN_SEQUENCE : FOCUS_OUT_SEQUENCE;
+    tracePtyEvent('pty-focus-send', {
       ptyId: id,
       focused,
       trackingEnabled: session.focusTrackingEnabled,
       ownerProcess: session.focusTrackingOwnerProcess,
       shellProcess,
       foregroundProcess,
-    })
-    tracePtyChunk("pty-focus-seq", sequence, { ptyId: id })
-    if (!session.focusTrackingEnabled) return
-    session.pty.write(sequence)
+    });
+    tracePtyChunk('pty-focus-seq', sequence, { ptyId: id });
+    if (!session.focusTrackingEnabled) return;
+    session.pty.write(sequence);
   }
 
   async function resize(
@@ -118,44 +118,46 @@ export function createOperations(deps: OperationsDeps) {
     pixelWidth?: number,
     pixelHeight?: number
   ): Promise<PtyNotFoundError | void> {
-    const sessionOrError = getSessionOrFail(id)
+    const sessionOrError = getSessionOrFail(id);
     if (sessionOrError instanceof PtyNotFoundError) {
-      return sessionOrError
+      return sessionOrError;
     }
-    const session = sessionOrError
+    const session = sessionOrError;
 
-    const hasPixels = typeof pixelWidth === "number" && pixelWidth > 0
-      && typeof pixelHeight === "number" && pixelHeight > 0
+    const hasPixels =
+      typeof pixelWidth === 'number' &&
+      pixelWidth > 0 &&
+      typeof pixelHeight === 'number' &&
+      pixelHeight > 0;
 
-    if (hasPixels && "resizeWithPixels" in session.pty) {
-      session.pty.resizeWithPixels(cols, rows, pixelWidth, pixelHeight)
+    if (hasPixels && 'resizeWithPixels' in session.pty) {
+      session.pty.resizeWithPixels(cols, rows, pixelWidth, pixelHeight);
     } else {
-      session.pty.resize(cols, rows)
+      session.pty.resize(cols, rows);
     }
-    session.cols = cols
-    session.rows = rows
+    session.cols = cols;
+    session.rows = rows;
     if (hasPixels) {
-      session.pixelWidth = pixelWidth
-      session.pixelHeight = pixelHeight
-      session.cellWidth = Math.max(1, Math.floor(pixelWidth / cols))
-      session.cellHeight = Math.max(1, Math.floor(pixelHeight / rows))
+      session.pixelWidth = pixelWidth;
+      session.pixelHeight = pixelHeight;
+      session.cellWidth = Math.max(1, Math.floor(pixelWidth / cols));
+      session.cellHeight = Math.max(1, Math.floor(pixelHeight / rows));
     } else {
-      session.pixelWidth = cols * session.cellWidth
-      session.pixelHeight = rows * session.cellHeight
+      session.pixelWidth = cols * session.cellWidth;
+      session.pixelHeight = rows * session.cellHeight;
     }
-    session.emulator.resize(cols, rows)
-    session.emulator.setPixelSize?.(session.pixelWidth, session.pixelHeight)
+    session.emulator.resize(cols, rows);
+    session.emulator.setPixelSize?.(session.pixelWidth, session.pixelHeight);
 
     // Record resize timestamp for clear-screen suppression
-    session.lastResizeTime = Date.now()
+    session.lastResizeTime = Date.now();
 
     // Check if DECSET 2048 (in-band resize notifications) is enabled
     try {
-      const inBandResizeEnabled = session.emulator.getMode(2048)
+      const inBandResizeEnabled = session.emulator.getMode(2048);
       if (inBandResizeEnabled) {
-        const resizeNotification =
-          `\x1b[48;${rows};${cols};${session.pixelHeight};${session.pixelWidth}t`
-        session.pty.write(resizeNotification)
+        const resizeNotification = `\x1b[48;${rows};${cols};${session.pixelHeight};${session.pixelWidth}t`;
+        session.pty.write(resizeNotification);
       }
     } catch {
       // Ignore mode query errors
@@ -166,55 +168,55 @@ export function createOperations(deps: OperationsDeps) {
   }
 
   async function getCwd(id: PtyId): Promise<PtyNotFoundError | string> {
-    const sessionOrError = getSessionOrFail(id)
+    const sessionOrError = getSessionOrFail(id);
     if (sessionOrError instanceof PtyNotFoundError) {
-      return sessionOrError
+      return sessionOrError;
     }
-    const session = sessionOrError
+    const session = sessionOrError;
 
     if (session.pty.pid === undefined) {
-      return session.cwd
+      return session.cwd;
     }
 
     // Use native zig-pty method directly (no subprocess spawning)
-    const cwd = session.pty.getCwd()
-    return cwd ?? session.cwd
+    const cwd = session.pty.getCwd();
+    return cwd ?? session.cwd;
   }
 
   async function destroy(id: PtyId): Promise<void> {
-    const session = sessions.get(id)
-    if (!session) return
+    const session = sessions.get(id);
+    if (!session) return;
 
     if (session.closing) {
-      return
+      return;
     }
-    session.closing = true
+    session.closing = true;
 
     // Clear subscribers
     for (const callback of session.subscribers) {
-      callback(null as unknown as TerminalState)
+      callback(null as unknown as TerminalState);
     }
-    session.subscribers.clear()
+    session.subscribers.clear();
 
     // Kill PTY and dispose emulator
-    session.pty.kill()
-    session.emulator.dispose()
-    session.kittyRelayDispose?.()
-    session.queryPassthrough.dispose()
+    session.pty.kill();
+    session.emulator.dispose();
+    session.kittyRelayDispose?.();
+    session.queryPassthrough.dispose();
 
     // Remove from map BEFORE emitting lifecycle event
-    sessions.delete(id)
+    sessions.delete(id);
 
     // Emit lifecycle event AFTER removal
-    lifecycleRegistry.notify({ type: 'destroyed', ptyId: id })
+    lifecycleRegistry.notify({ type: 'destroyed', ptyId: id });
   }
 
   async function getSession(id: PtyId): Promise<PtyNotFoundError | PtySession> {
-    const sessionOrError = getSessionOrFail(id)
+    const sessionOrError = getSessionOrFail(id);
     if (sessionOrError instanceof PtyNotFoundError) {
-      return sessionOrError
+      return sessionOrError;
     }
-    const session = sessionOrError
+    const session = sessionOrError;
 
     return {
       id: session.id,
@@ -223,98 +225,104 @@ export function createOperations(deps: OperationsDeps) {
       rows: session.rows as Rows,
       cwd: session.cwd,
       shell: session.shell,
-    }
+    };
   }
 
   async function getTerminalState(id: PtyId): Promise<PtyNotFoundError | TerminalState> {
-    const sessionOrError = getSessionOrFail(id)
+    const sessionOrError = getSessionOrFail(id);
     if (sessionOrError instanceof PtyNotFoundError) {
-      return sessionOrError
+      return sessionOrError;
     }
-    const session = sessionOrError
-    return session.emulator.getTerminalState()
+    const session = sessionOrError;
+    return session.emulator.getTerminalState();
   }
 
   async function getScrollState(id: PtyId): Promise<
-    PtyNotFoundError | {
-      viewportOffset: number
-      scrollbackLength: number
-      isAtBottom: boolean
-      isAtScrollbackLimit?: boolean
-    }
+    | PtyNotFoundError
+    | {
+        viewportOffset: number;
+        scrollbackLength: number;
+        isAtBottom: boolean;
+        isAtScrollbackLimit?: boolean;
+      }
   > {
-    const sessionOrError = getSessionOrFail(id)
+    const sessionOrError = getSessionOrFail(id);
     if (sessionOrError instanceof PtyNotFoundError) {
-      return sessionOrError
+      return sessionOrError;
     }
-    const session = sessionOrError
-    const scrollbackLength = session.emulator.getScrollbackLength()
-    const isAtScrollbackLimit = session.liveEmulator.getScrollbackLength() >= HOT_SCROLLBACK_LIMIT
+    const session = sessionOrError;
+    const scrollbackLength = session.emulator.getScrollbackLength();
+    const isAtScrollbackLimit = session.liveEmulator.getScrollbackLength() >= HOT_SCROLLBACK_LIMIT;
 
     return {
       viewportOffset: session.scrollState.viewportOffset,
       scrollbackLength,
       isAtBottom: session.scrollState.viewportOffset === 0,
       isAtScrollbackLimit,
-    }
+    };
   }
 
   async function setScrollOffset(id: PtyId, offset: number): Promise<PtyNotFoundError | void> {
-    const sessionOrError = getSessionOrFail(id)
+    const sessionOrError = getSessionOrFail(id);
     if (sessionOrError instanceof PtyNotFoundError) {
-      return sessionOrError
+      return sessionOrError;
     }
-    const session = sessionOrError
-    const maxOffset = session.emulator.getScrollbackLength()
-    session.scrollState.viewportOffset = Math.max(0, Math.min(offset, maxOffset))
-    notifyScrollSubscribers(session)
+    const session = sessionOrError;
+    const maxOffset = session.emulator.getScrollbackLength();
+    session.scrollState.viewportOffset = Math.max(0, Math.min(offset, maxOffset));
+    notifyScrollSubscribers(session);
   }
 
   async function setUpdateEnabled(id: PtyId, enabled: boolean): Promise<PtyNotFoundError | void> {
-    const sessionOrError = getSessionOrFail(id)
+    const sessionOrError = getSessionOrFail(id);
     if (sessionOrError instanceof PtyNotFoundError) {
-      return sessionOrError
+      return sessionOrError;
     }
-    const session = sessionOrError
-    session.emulator.setUpdateEnabled?.(enabled)
+    const session = sessionOrError;
+    session.emulator.setUpdateEnabled?.(enabled);
   }
 
   async function getEmulator(id: PtyId): Promise<PtyNotFoundError | ITerminalEmulator> {
-    const sessionOrError = getSessionOrFail(id)
+    const sessionOrError = getSessionOrFail(id);
     if (sessionOrError instanceof PtyNotFoundError) {
-      return sessionOrError
+      return sessionOrError;
     }
-    const session = sessionOrError
-    return session.emulator
+    const session = sessionOrError;
+    return session.emulator;
+  }
+
+  function getEmulatorSync(id: PtyId): ITerminalEmulator | null {
+    const session = sessions.get(id);
+    return session?.emulator ?? null;
   }
 
   async function destroyAll(): Promise<void> {
-    const ids = Array.from(sessions.keys())
+    const ids = Array.from(sessions.keys());
     for (const id of ids) {
-      await destroy(id)
+      await destroy(id);
     }
   }
 
   async function listAll(): Promise<PtyId[]> {
-    return Array.from(sessions.keys())
+    return Array.from(sessions.keys());
   }
 
   async function getTitle(id: PtyId): Promise<PtyNotFoundError | string> {
-    const sessionOrError = getSessionOrFail(id)
+    const sessionOrError = getSessionOrFail(id);
     if (sessionOrError instanceof PtyNotFoundError) {
-      return sessionOrError
+      return sessionOrError;
     }
-    const session = sessionOrError
-    return session.emulator.getTitle()
+    const session = sessionOrError;
+    return session.emulator.getTitle();
   }
 
   async function getLastCommand(id: PtyId): Promise<PtyNotFoundError | string | undefined> {
-    const sessionOrError = getSessionOrFail(id)
+    const sessionOrError = getSessionOrFail(id);
     if (sessionOrError instanceof PtyNotFoundError) {
-      return sessionOrError
+      return sessionOrError;
     }
-    const session = sessionOrError
-    return session.lastCommand ?? undefined
+    const session = sessionOrError;
+    return session.lastCommand ?? undefined;
   }
 
   return {
@@ -329,10 +337,11 @@ export function createOperations(deps: OperationsDeps) {
     setScrollOffset,
     setUpdateEnabled,
     getEmulator,
+    getEmulatorSync,
     destroyAll,
     listAll,
     getTitle,
     getLastCommand,
     getSessionOrFail,
-  }
+  };
 }

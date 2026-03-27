@@ -1,21 +1,21 @@
 /**
  * Bridge module for errore-based services (errore version).
  * Provides simple async functions backed by errore services.
- * 
+ *
  * Unlike the Effect version, these functions directly accept service instances
  * rather than using Effect runtime for dependency injection.
- * 
+ *
  * Use these functions to interact with services from UI components.
  */
 
 // Re-export types that are commonly needed
-export type { AppServices, TestAppServices, ServiceInitError } from "../services"
+export type { AppServices, TestAppServices, ServiceInitError } from '../services';
 
 // Re-export KeyboardEvent from core
-export type { KeyboardEvent } from "../../core/keyboard-event"
+export type { KeyboardEvent } from '../../core/keyboard-event';
 
 // Clipboard bridge
-export { copyToClipboard, readFromClipboard } from "./clipboard-bridge"
+export { copyToClipboard, readFromClipboard } from './clipboard-bridge';
 
 // PTY bridge
 export {
@@ -32,10 +32,12 @@ export {
   onPtyExit,
   getScrollState,
   capturePty,
+  getScrollbackLines,
   setScrollOffset,
   scrollToBottom,
   subscribeUnifiedToPty,
   getEmulator,
+  getEmulatorSync,
   setPtyUpdateEnabled,
   refreshPty,
   applyHostColors,
@@ -44,7 +46,7 @@ export {
   getPtyTitle,
   type PtyLifecycleEvent,
   type PtyTitleChangeEvent,
-} from "./pty-bridge"
+} from './pty-bridge';
 
 // Session bridge
 export {
@@ -69,7 +71,7 @@ export {
   deleteSessionLegacy,
   saveCurrentSession,
   loadSessionData,
-} from "./session-bridge"
+} from './session-bridge';
 
 // Template bridge
 export {
@@ -78,7 +80,7 @@ export {
   saveTemplate,
   deleteTemplate,
   buildLayoutFromTemplate,
-} from "./template-bridge"
+} from './template-bridge';
 
 // Aggregate bridge
 export {
@@ -90,10 +92,10 @@ export {
   type PtyMetadata,
   type SessionWithPtys,
   type VisualTreeNode,
-} from "./aggregate-bridge"
+} from './aggregate-bridge';
 
 // Color bridge
-export { getHostBackgroundColor, getHostForegroundColor } from "./color-bridge"
+export { getHostBackgroundColor, getHostForegroundColor } from './color-bridge';
 
 // Shim bridge
 export {
@@ -103,7 +105,7 @@ export {
   onShimDetached,
   shutdownShim,
   waitForShimClient,
-} from "./shim-bridge"
+} from './shim-bridge';
 
 // Keyboard router bridge
 export {
@@ -115,7 +117,7 @@ export {
   routeKeyboardEventSync,
   getActiveOverlay,
   hasKeyboardHandler,
-} from "./keyboard-router-bridge"
+} from './keyboard-router-bridge';
 
 // App coordinator bridge
 export {
@@ -130,4 +132,4 @@ export {
   clearSessionCommandMap,
   setActiveSessionIdForShim,
   getActiveSessionIdForShim,
-} from "./app-coordinator-bridge"
+} from './app-coordinator-bridge';

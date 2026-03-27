@@ -4,15 +4,11 @@
  * Provides a virtual cursor for scrollback navigation and selection.
  */
 
-import {
-  createContext,
-  useContext,
-  createSignal,
-  type ParentProps,
-} from 'solid-js';
+import { createContext, useContext, createSignal, type ParentProps } from 'solid-js';
 import type { TerminalCell, TerminalState } from '../core/types';
-import { isCellInRange, extractSelectedText } from '../core/coordinates';
-import { copyToClipboard } from '../effect/bridge';
+import { isCellInRange } from '../core/coordinates';
+import { clampScrollOffset } from '../core/scroll-utils';
+import { copyToClipboard, getScrollbackLines } from '../effect/bridge';
 import { useTerminal } from './TerminalContext';
 import { useSelection } from './SelectionContext';
 import type {
@@ -26,6 +22,11 @@ import {
   buildCharSelectionRange,
   buildLineSelectionRange,
 } from './copy-mode/selection-utils';
+import {
+  extractBlockTextByChunks,
+  extractRangeTextByChunks,
+  TextExtractionError,
+} from './copy-mode/text';
 import {
   type LineAccessor,
   findSpanAtOrAfter,
@@ -44,18 +45,12 @@ export type { CopyModeContextValue, CopyCursor, CopyVisualType } from './copy-mo
 
 const CopyModeContext = createContext<CopyModeContextValue | null>(null);
 
-
 interface CopyModeProviderProps extends ParentProps {}
 
 export function CopyModeProvider(props: CopyModeProviderProps) {
   const terminal = useTerminal();
   const selection = useSelection();
-  const {
-    getScrollState,
-    setScrollOffset,
-    getEmulatorSync,
-    getTerminalStateSync,
-  } = terminal;
+  const { getScrollState, setScrollOffset, getEmulatorSync, getTerminalStateSync } = terminal;
 
   const [state, setState] = createSignal<CopyModeState | null>(null);
   const [copyModeVersion, setCopyModeVersion] = createSignal(0);
@@ -84,12 +79,14 @@ export function CopyModeProvider(props: CopyModeProviderProps) {
     return current.cursor;
   };
 
-  const getScrollMeta = (ptyId: string, overrideGetTerminalState?: (ptyId: string) => TerminalState | null) => {
+  const getScrollMeta = (
+    ptyId: string,
+    overrideGetTerminalState?: (ptyId: string) => TerminalState | null
+  ) => {
     const terminalState = overrideGetTerminalState?.(ptyId) ?? getTerminalStateSync(ptyId);
     const emulator = getEmulatorSync(ptyId);
     const scrollState = getScrollState(ptyId);
-    const scrollbackLength =
-      scrollState?.scrollbackLength ?? emulator?.getScrollbackLength() ?? 0;
+    const scrollbackLength = scrollState?.scrollbackLength ?? emulator?.getScrollbackLength() ?? 0;
     const rows = terminalState?.rows ?? 0;
     const cols = terminalState?.cols ?? 0;
     const viewportOffset = scrollState?.viewportOffset ?? 0;
@@ -116,9 +113,11 @@ export function CopyModeProvider(props: CopyModeProviderProps) {
     const bottomAbsY = topAbsY + meta.rows - 1;
 
     if (cursor.absY < topAbsY) {
-      setScrollOffset(ptyId, meta.scrollbackLength - cursor.absY);
+      const offset = meta.scrollbackLength - cursor.absY;
+      setScrollOffset(ptyId, clampScrollOffset(offset, meta.scrollbackLength));
     } else if (cursor.absY > bottomAbsY) {
-      setScrollOffset(ptyId, meta.scrollbackLength - (cursor.absY - (meta.rows - 1)));
+      const offset = meta.scrollbackLength - (cursor.absY - (meta.rows - 1));
+      setScrollOffset(ptyId, clampScrollOffset(offset, meta.scrollbackLength));
     }
   };
 
@@ -146,14 +145,18 @@ export function CopyModeProvider(props: CopyModeProviderProps) {
     notifyChange();
   };
 
-  const enterCopyMode = (ptyId: string, overrideGetTerminalState?: (ptyId: string) => TerminalState | null) => {
+  const enterCopyMode = (
+    ptyId: string,
+    overrideGetTerminalState?: (ptyId: string) => TerminalState | null
+  ) => {
     const meta = getScrollMeta(ptyId, overrideGetTerminalState);
     if (!meta.terminalState || meta.rows <= 0 || meta.cols <= 0) return;
     const cursorY = meta.terminalState.cursor.y ?? 0;
     const cursorX = meta.terminalState.cursor.x ?? 0;
-    const absY = meta.viewportOffset > 0
-      ? meta.scrollbackLength - meta.viewportOffset
-      : meta.scrollbackLength + cursorY;
+    const absY =
+      meta.viewportOffset > 0
+        ? meta.scrollbackLength - meta.viewportOffset
+        : meta.scrollbackLength + cursorY;
     const maxAbsY = Math.max(0, meta.scrollbackLength + meta.rows - 1);
     const clamped = {
       x: clamp(cursorX, 0, Math.max(0, meta.cols - 1)),
@@ -320,7 +323,11 @@ export function CopyModeProvider(props: CopyModeProviderProps) {
     const word = findSpanAtOrAfter(access, current.cursor.absY, current.cursor.x, isWideWordChar);
     if (!word) return;
 
-    if (isWideWordChar(currentChar) && word.absY === current.cursor.absY && current.cursor.x <= word.end) {
+    if (
+      isWideWordChar(currentChar) &&
+      word.absY === current.cursor.absY &&
+      current.cursor.x <= word.end
+    ) {
       const next = findSpanAtOrAfter(access, word.absY, word.end + 1, isWideWordChar);
       if (next) {
         moveCursorTo({ x: next.start, absY: next.absY });
@@ -341,9 +348,11 @@ export function CopyModeProvider(props: CopyModeProviderProps) {
     const word = findSpanAtOrBefore(access, current.cursor.absY, current.cursor.x, isWideWordChar);
     if (!word) return;
 
-    if (isWideWordChar(currentChar) &&
+    if (
+      isWideWordChar(currentChar) &&
       word.absY === current.cursor.absY &&
-      current.cursor.x === word.start) {
+      current.cursor.x === word.start
+    ) {
       const prev = findSpanAtOrBefore(access, word.absY, word.start - 1, isWideWordChar);
       if (prev) {
         moveCursorTo({ x: prev.start, absY: prev.absY });
@@ -364,9 +373,11 @@ export function CopyModeProvider(props: CopyModeProviderProps) {
     const word = findSpanAtOrAfter(access, current.cursor.absY, current.cursor.x, isWideWordChar);
     if (!word) return;
 
-    if (isWideWordChar(currentChar) &&
+    if (
+      isWideWordChar(currentChar) &&
       word.absY === current.cursor.absY &&
-      current.cursor.x <= word.end) {
+      current.cursor.x <= word.end
+    ) {
       if (current.cursor.x < word.end) {
         moveCursorTo({ x: word.end, absY: word.absY });
         return;
@@ -385,24 +396,34 @@ export function CopyModeProvider(props: CopyModeProviderProps) {
     const current = state();
     if (!current) return;
     if (current.visualType === type) {
-      updateState({ ...current, anchor: null, visualType: null, selectionRange: null, bounds: null });
+      updateState({
+        ...current,
+        anchor: null,
+        visualType: null,
+        selectionRange: null,
+        bounds: null,
+      });
       return;
     }
-    updateState(recomputeSelection({
-      ...current,
-      anchor: current.cursor,
-      visualType: type,
-    }));
+    updateState(
+      recomputeSelection({
+        ...current,
+        anchor: current.cursor,
+        visualType: type,
+      })
+    );
   };
 
   const startSelection = (type: CopyVisualType) => {
     const current = state();
     if (!current) return;
-    updateState(recomputeSelection({
-      ...current,
-      anchor: current.cursor,
-      visualType: type,
-    }));
+    updateState(
+      recomputeSelection({
+        ...current,
+        anchor: current.cursor,
+        visualType: type,
+      })
+    );
   };
 
   const selectWord = (mode: 'inner' | 'around') => {
@@ -453,11 +474,13 @@ export function CopyModeProvider(props: CopyModeProviderProps) {
   const selectLine = () => {
     const current = state();
     if (!current) return;
-    updateState(recomputeSelection({
-      ...current,
-      anchor: current.cursor,
-      visualType: 'line',
-    }));
+    updateState(
+      recomputeSelection({
+        ...current,
+        anchor: current.cursor,
+        visualType: 'line',
+      })
+    );
   };
 
   const clearSelection = () => {
@@ -500,54 +523,53 @@ export function CopyModeProvider(props: CopyModeProviderProps) {
     if (!meta.terminalState) return;
     const scrollbackLength = meta.scrollbackLength ?? 0;
 
+    const fetchScrollbackChunk = (startOffset: number, count: number) =>
+      getScrollbackLines(current.ptyId, startOffset, count);
+    const getLiveLine = (absY: number) => {
+      const liveY = absY - scrollbackLength;
+      return meta.terminalState?.cells[liveY] ?? null;
+    };
+
     if (current.visualType === 'block' && current.anchor) {
-      const minX = Math.min(current.anchor.x, current.cursor.x);
-      const maxX = Math.max(current.anchor.x, current.cursor.x);
-      const minY = Math.min(current.anchor.absY, current.cursor.absY);
-      const maxY = Math.max(current.anchor.absY, current.cursor.absY);
-      const lines: string[] = [];
-      for (let absY = minY; absY <= maxY; absY += 1) {
-        const row = getLineCells(current.ptyId, absY);
-        let rowText = '';
-        for (let x = minX; x <= maxX; x += 1) {
-          const cell = row?.[x];
-          if (!cell) {
-            rowText += ' ';
-            continue;
-          }
-          rowText += cell.char;
-          if (cell.width === 2) {
-            x += 1;
-          }
-        }
-        lines.push(rowText);
+      const result = await extractBlockTextByChunks({
+        anchor: current.anchor,
+        cursor: current.cursor,
+        scrollbackLength,
+        fetchScrollbackLines: fetchScrollbackChunk,
+        getLiveLine,
+      });
+      if (result instanceof TextExtractionError) {
+        console.warn('Text extraction failed:', result.message);
+        return;
       }
-      const text = lines.join('\n');
-      if (text.length > 0) {
-        await copyToClipboard(text);
-        selection.notifyCopy(text.length, current.ptyId);
+      if (result.length > 0) {
+        await copyToClipboard(result);
+        selection.notifyCopy(result.length, current.ptyId);
       }
       return;
     }
 
-    let range = current.selectionRange;
-    if (!range) {
-      const line = getLineCells(current.ptyId, current.cursor.absY);
-      const cols = meta.cols || (line?.length ?? 1);
-      range = {
-        startX: 0,
-        startY: current.cursor.absY,
-        endX: Math.max(1, cols),
-        endY: current.cursor.absY,
-        focusAtEnd: true,
-      };
-    }
+    const range = current.selectionRange ?? {
+      startX: 0,
+      startY: current.cursor.absY,
+      endX: Math.max(1, meta.cols || 1),
+      endY: current.cursor.absY,
+      focusAtEnd: true as const,
+    };
 
-    const getLine = (absY: number) => getLineCells(current.ptyId, absY);
-    const text = extractSelectedText(range, scrollbackLength, getLine);
-    if (text.length > 0) {
-      await copyToClipboard(text);
-      selection.notifyCopy(text.length, current.ptyId);
+    const result = await extractRangeTextByChunks({
+      range,
+      scrollbackLength,
+      fetchScrollbackLines: fetchScrollbackChunk,
+      getLiveLine,
+    });
+    if (result instanceof TextExtractionError) {
+      console.warn('Text extraction failed:', result.message);
+      return;
+    }
+    if (result.length > 0) {
+      await copyToClipboard(result);
+      selection.notifyCopy(result.length, current.ptyId);
     }
   };
 
@@ -579,14 +601,12 @@ export function CopyModeProvider(props: CopyModeProviderProps) {
     clearSelection,
     isCellSelected,
     hasSelection,
-    get copyModeVersion() { return copyModeVersion(); },
+    get copyModeVersion() {
+      return copyModeVersion();
+    },
   };
 
-  return (
-    <CopyModeContext.Provider value={value}>
-      {props.children}
-    </CopyModeContext.Provider>
-  );
+  return <CopyModeContext.Provider value={value}>{props.children}</CopyModeContext.Provider>;
 }
 
 export function useCopyMode(): CopyModeContextValue {

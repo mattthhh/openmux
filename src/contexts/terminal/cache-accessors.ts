@@ -6,7 +6,12 @@
 import type { TerminalState } from '../../core/types';
 import type { ITerminalEmulator } from '../../terminal/emulator-interface';
 import type { PtyCaches } from '../../hooks/usePtySubscription';
-import { getPtyCwd, getPtyForegroundProcess, getPtyLastCommand } from '../../effect/bridge';
+import {
+  getPtyCwd,
+  getPtyForegroundProcess,
+  getPtyLastCommand,
+  getEmulatorSync as getEmulatorSyncFromService,
+} from '../../effect/bridge';
 
 export interface CacheAccessorDeps {
   /** Unified caches for PTY state */
@@ -23,12 +28,7 @@ export interface CacheAccessorDeps {
  * Creates cache accessor functions for TerminalContext
  */
 export function createCacheAccessors(deps: CacheAccessorDeps) {
-  const {
-    ptyCaches,
-    ptyToPaneMap,
-    ptyToSessionMap,
-    getFocusedPtyId,
-  } = deps;
+  const { ptyCaches, ptyToPaneMap, ptyToSessionMap, getFocusedPtyId } = deps;
 
   /**
    * Get the current working directory of the focused pane
@@ -89,9 +89,10 @@ export function createCacheAccessors(deps: CacheAccessorDeps) {
 
   /**
    * Get cached emulator synchronously (for selection text extraction)
+   * Falls back to service-level lookup if not in cache
    */
   const getEmulatorSync = (ptyId: string): ITerminalEmulator | null => {
-    return ptyCaches.emulators.get(ptyId) ?? null;
+    return ptyCaches.emulators.get(ptyId) ?? getEmulatorSyncFromService(ptyId);
   };
 
   /**
@@ -114,9 +115,7 @@ export function createCacheAccessors(deps: CacheAccessorDeps) {
   /**
    * Find which session owns a PTY - O(1) using reverse index
    */
-  const findSessionForPty = (
-    ptyId: string
-  ): { sessionId: string; paneId: string } | null => {
+  const findSessionForPty = (ptyId: string): { sessionId: string; paneId: string } | null => {
     // O(1) lookup using reverse index
     const sessionInfo = ptyToSessionMap.get(ptyId);
     if (sessionInfo) {

@@ -5,14 +5,10 @@
  * Refactored to use modular navigation, selection, and text extraction.
  */
 
-import {
-  createContext,
-  useContext,
-  createSignal,
-  type ParentProps,
-} from 'solid-js';
+import { createContext, useContext, createSignal, type ParentProps } from 'solid-js';
 import type { TerminalState } from '../../core/types';
-import { copyToClipboard } from '../../effect/bridge';
+import { clampScrollOffset } from '../../core/scroll-utils';
+import { copyToClipboard, getScrollbackLines } from '../../effect/bridge';
 import { useTerminal } from '../TerminalContext';
 import { useSelection } from '../SelectionContext';
 import type { CopyModeContextValue, CopyModeState } from './types';
@@ -44,9 +40,8 @@ import {
   isCopyModeActive,
 } from './selection';
 import {
-  extractBlockText,
-  extractRangeText,
-  extractLineAtCursor,
+  extractBlockTextByChunks,
+  extractRangeTextByChunks,
   prepareCopyText,
   TextExtractionError,
 } from './text';
@@ -62,8 +57,7 @@ interface CopyModeProviderProps extends ParentProps {}
 export function CopyModeProvider(props: CopyModeProviderProps) {
   const terminal = useTerminal();
   const selection = useSelection();
-  const { getScrollState, setScrollOffset, getEmulatorSync, getTerminalStateSync } =
-    terminal;
+  const { getScrollState, setScrollOffset, getEmulatorSync, getTerminalStateSync } = terminal;
 
   const [state, setState] = createSignal<CopyModeState | null>(null);
   const [copyModeVersion, setCopyModeVersion] = createSignal(0);
@@ -79,12 +73,10 @@ export function CopyModeProvider(props: CopyModeProviderProps) {
     ptyId: string,
     overrideGetTerminalState?: (ptyId: string) => TerminalState | null
   ): ScrollMeta => {
-    const terminalState =
-      overrideGetTerminalState?.(ptyId) ?? getTerminalStateSync(ptyId);
+    const terminalState = overrideGetTerminalState?.(ptyId) ?? getTerminalStateSync(ptyId);
     const emulator = getEmulatorSync(ptyId);
     const scrollState = getScrollState(ptyId);
-    const scrollbackLength =
-      scrollState?.scrollbackLength ?? emulator?.getScrollbackLength() ?? 0;
+    const scrollbackLength = scrollState?.scrollbackLength ?? emulator?.getScrollbackLength() ?? 0;
     const rows = terminalState?.rows ?? 0;
     const cols = terminalState?.cols ?? 0;
     const viewportOffset = scrollState?.viewportOffset ?? 0;
@@ -100,9 +92,10 @@ export function CopyModeProvider(props: CopyModeProviderProps) {
 
   /** Ensure cursor is visible by scrolling if needed */
   const ensureCursorVisible = (ptyId: string, cursor: import('./types').CopyCursor) => {
-    const scrollOffset = calculateScrollForVisibility(cursor, getActiveScrollMeta(ptyId));
+    const meta = getActiveScrollMeta(ptyId);
+    const scrollOffset = calculateScrollForVisibility(cursor, meta);
     if (scrollOffset !== null) {
-      setScrollOffset(ptyId, scrollOffset);
+      setScrollOffset(ptyId, clampScrollOffset(scrollOffset, meta.scrollbackLength));
     }
   };
 
@@ -112,7 +105,10 @@ export function CopyModeProvider(props: CopyModeProviderProps) {
     if (!current) return;
     const clamped = clampCursor(cursor, getActiveScrollMeta(current.ptyId));
     if (!clamped) return;
-    const next = recomputeSelection({ ...current, cursor: clamped }, getActiveScrollMeta(current.ptyId));
+    const next = recomputeSelection(
+      { ...current, cursor: clamped },
+      getActiveScrollMeta(current.ptyId)
+    );
     updateState(next);
     ensureCursorVisible(current.ptyId, clamped);
   };
@@ -218,7 +214,10 @@ export function CopyModeProvider(props: CopyModeProviderProps) {
 
   // Word navigation - delegates to navigation module
   const execWordNav = (
-    fn: (access: import('./text-utils').LineAccessor, cursor: import('./types').CopyCursor) => import('./navigation').WordNavResult | null
+    fn: (
+      access: import('./text-utils').LineAccessor,
+      cursor: import('./types').CopyCursor
+    ) => import('./navigation').WordNavResult | null
   ) => {
     const current = state();
     if (!current) return;
@@ -284,28 +283,47 @@ export function CopyModeProvider(props: CopyModeProviderProps) {
     const meta = getActiveScrollMeta(current.ptyId);
     if (!meta.terminalState) return;
 
+    const fetchScrollbackChunk = (startOffset: number, count: number) =>
+      getScrollbackLines(current.ptyId, startOffset, count);
+    const getLiveLine = (absY: number) => {
+      const liveY = absY - meta.scrollbackLength;
+      return meta.terminalState?.cells[liveY] ?? null;
+    };
+
     let text: string;
 
     if (current.visualType === 'block' && current.anchor) {
-      text = extractBlockText(current.anchor, current.cursor, (absY) =>
-        getLineCellsAt(absY, meta)
-      );
-    } else {
-      let range = current.selectionRange;
-      if (!range) {
-        text = extractLineAtCursor(current.cursor, meta.cols, (absY) =>
-          getLineCellsAt(absY, meta)
-        );
-      } else {
-        const result = extractRangeText(range, meta.scrollbackLength, (absY) =>
-          getLineCellsAt(absY, meta)
-        );
-        if (result instanceof TextExtractionError) {
-          console.warn('Text extraction failed:', result.message);
-          return;
-        }
-        text = result;
+      const result = await extractBlockTextByChunks({
+        anchor: current.anchor,
+        cursor: current.cursor,
+        scrollbackLength: meta.scrollbackLength,
+        fetchScrollbackLines: fetchScrollbackChunk,
+        getLiveLine,
+      });
+      if (result instanceof TextExtractionError) {
+        console.warn('Text extraction failed:', result.message);
+        return;
       }
+      text = result;
+    } else {
+      const range = current.selectionRange ?? {
+        startX: 0,
+        startY: current.cursor.absY,
+        endX: Math.max(1, meta.cols),
+        endY: current.cursor.absY,
+        focusAtEnd: true as const,
+      };
+      const result = await extractRangeTextByChunks({
+        range,
+        scrollbackLength: meta.scrollbackLength,
+        fetchScrollbackLines: fetchScrollbackChunk,
+        getLiveLine,
+      });
+      if (result instanceof TextExtractionError) {
+        console.warn('Text extraction failed:', result.message);
+        return;
+      }
+      text = result;
     }
 
     const copyResult = prepareCopyText(text);
@@ -343,14 +361,12 @@ export function CopyModeProvider(props: CopyModeProviderProps) {
     clearSelection: selApi.clear,
     isCellSelected: (ptyId, x, absY) => isCellSelectedSync(state(), ptyId, x, absY),
     hasSelection: (ptyId) => hasSelection(state(), ptyId),
-    get copyModeVersion() { return copyModeVersion(); },
+    get copyModeVersion() {
+      return copyModeVersion();
+    },
   };
 
-  return (
-    <CopyModeContext.Provider value={value}>
-      {props.children}
-    </CopyModeContext.Provider>
-  );
+  return <CopyModeContext.Provider value={value}>{props.children}</CopyModeContext.Provider>;
 }
 
 export function useCopyMode(): CopyModeContextValue {
