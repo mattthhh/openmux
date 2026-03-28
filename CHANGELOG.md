@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.40](https://github.com/monotykamary/openmux/compare/v0.3.39...v0.3.40) (2026-03-28)
+
+### Bug Fixes
+
+- **kitty-graphics:** preserve native placement sizing on replay ([03e3e26](https://github.com/monotykamary/openmux/commit/03e3e26f8deffee90df415e9181c558c0e322394))
+- **kitty-graphics:** rebuild placements after replay refresh ([75b6872](https://github.com/monotykamary/openmux/commit/75b6872e9827aea722abfbc282f7cb1cb721cda4))
+
 ### [0.3.39](https://github.com/monotykamary/openmux/compare/v0.3.38...v0.3.39) (2026-03-27)
 
 ### Features
