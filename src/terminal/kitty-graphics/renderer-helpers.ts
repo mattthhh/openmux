@@ -51,6 +51,8 @@ export function isSameRender(a: PlacementRender, b: PlacementRender): boolean {
     a.globalCol === b.globalCol &&
     a.columns === b.columns &&
     a.rows === b.rows &&
+    a.includeColumns === b.includeColumns &&
+    a.includeRows === b.includeRows &&
     a.xOffset === b.xOffset &&
     a.yOffset === b.yOffset &&
     a.sourceX === b.sourceX &&

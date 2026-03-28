@@ -67,6 +67,8 @@ export type PlacementRender = {
   globalCol: number;
   columns: number;
   rows: number;
+  includeColumns: boolean;
+  includeRows: boolean;
   xOffset: number;
   yOffset: number;
   sourceX: number;

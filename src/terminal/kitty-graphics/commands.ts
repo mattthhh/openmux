@@ -8,7 +8,11 @@ const KITTY_ESCAPE = `${ESC}_G`;
 const KITTY_END = `${ESC}\\`;
 const BASE64_CHUNK_SIZE = 4096;
 
-export function buildTransmitImage(hostId: number, info: KittyGraphicsImageInfo, data: Uint8Array): string {
+export function buildTransmitImage(
+  hostId: number,
+  info: KittyGraphicsImageInfo,
+  data: Uint8Array
+): string {
   const prepared = prepareImageData(info, data);
   if (!prepared) {
     return '';
@@ -47,10 +51,10 @@ export function buildDisplay(render: PlacementRender): string {
     ['C', 1],
     ['i', render.hostImageId],
     ['p', render.hostPlacementId],
-    ['c', render.columns],
-    ['r', render.rows],
   ];
 
+  if (render.includeColumns) params.push(['c', render.columns]);
+  if (render.includeRows) params.push(['r', render.rows]);
   if (render.sourceX > 0) params.push(['x', render.sourceX]);
   if (render.sourceY > 0) params.push(['y', render.sourceY]);
   if (render.sourceWidth > 0) params.push(['w', render.sourceWidth]);

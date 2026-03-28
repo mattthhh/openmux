@@ -8,6 +8,8 @@ export function computePlacementRender(
   metrics: CellMetrics
 ): PlacementRender | null {
   const { cellWidth, cellHeight } = metrics;
+  const includeColumns = placement.columns > 0;
+  const includeRows = placement.rows > 0;
 
   // screenY is expressed in the wrapped emulator's absolute line space:
   //   0 = oldest line in total scrollback (archive + live)
@@ -88,6 +90,8 @@ export function computePlacementRender(
     globalCol: pane.offsetX + visibleLeft,
     columns,
     rows,
+    includeColumns,
+    includeRows,
     xOffset,
     yOffset,
     sourceX,
@@ -126,7 +130,7 @@ export function applyClipRects(
     return [render];
   }
 
-  allowed.sort((a, b) => (a.y - b.y) || (a.x - b.x));
+  allowed.sort((a, b) => a.y - b.y || a.x - b.x);
 
   const pieces: PlacementRender[] = [];
   allowed.forEach((rect, index) => {
@@ -186,7 +190,8 @@ function slicePlacement(
   const rectBottom = rect.y + rect.height;
 
   if (rect.width <= 0 || rect.height <= 0) return null;
-  if (rect.x < gridLeft || rect.y < gridTop || rectRight > gridRight || rectBottom > gridBottom) return null;
+  if (rect.x < gridLeft || rect.y < gridTop || rectRight > gridRight || rectBottom > gridBottom)
+    return null;
 
   const trimLeftCells = rect.x - gridLeft;
   const trimTopCells = rect.y - gridTop;
