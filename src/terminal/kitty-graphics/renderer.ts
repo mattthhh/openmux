@@ -2,12 +2,7 @@ import { getHostCapabilities } from '../capabilities';
 import { buildDeleteImage } from './commands';
 import { getKittyTransmitBroker } from './transmit-broker';
 import { tracePtyEvent } from '../pty-trace';
-import {
-  buildScreenKey,
-  getCellMetrics,
-  getScreenKeys,
-  getWriter,
-} from './renderer-helpers';
+import { buildScreenKey, getCellMetrics, getScreenKeys, getWriter } from './renderer-helpers';
 import { updatePtyState } from './renderer/pty-state';
 import {
   clearPanePlacements,
@@ -50,7 +45,9 @@ export class KittyGraphicsRenderer {
 
   updatePane(
     paneKey: string,
-    state: Omit<PaneState, 'needsClear' | 'removed' | 'hidden' | 'layer'> & { layer?: KittyPaneLayer }
+    state: Omit<PaneState, 'needsClear' | 'removed' | 'hidden' | 'layer'> & {
+      layer?: KittyPaneLayer;
+    }
   ): void {
     const layer = state.layer ?? 'base';
     const emulator = state.emulator && !state.emulator.isDisposed ? state.emulator : null;
@@ -108,6 +105,14 @@ export class KittyGraphicsRenderer {
     }
   }
 
+  invalidatePty(ptyId: string): void {
+    for (const pane of this.panes.values()) {
+      if (pane.ptyId === ptyId) {
+        pane.needsClear = true;
+      }
+    }
+  }
+
   markPtyDestroyed(ptyId: string): void {
     this.pendingPtyDeletes.add(ptyId);
   }
@@ -121,8 +126,10 @@ export class KittyGraphicsRenderer {
         height: Math.max(0, Math.floor(rect.height)),
       }))
       .filter((rect) => rect.width > 0 && rect.height > 0)
-      .sort((a, b) => (a.y - b.y) || (a.x - b.x));
-    const nextKey = nextRects.map((rect) => `${rect.x},${rect.y},${rect.width},${rect.height}`).join('|');
+      .sort((a, b) => a.y - b.y || a.x - b.x);
+    const nextKey = nextRects
+      .map((rect) => `${rect.x},${rect.y},${rect.width},${rect.height}`)
+      .join('|');
     if (nextKey === this.clipRectsKey) return;
     this.clipRects = nextRects;
     this.clipRectsKey = nextKey;
@@ -246,9 +253,7 @@ export class KittyGraphicsRenderer {
 
     for (const [paneKey, pane] of this.panes) {
       if (pane.removed || !pane.ptyId || !pane.emulator) {
-        const reason = pane.removed
-          ? 'removed'
-          : (!pane.ptyId ? 'missing-pty' : 'missing-emulator');
+        const reason = pane.removed ? 'removed' : !pane.ptyId ? 'missing-pty' : 'missing-emulator';
         clearPanePlacements({ paneKey, placementsByPane: this.placementsByPane, output, reason });
         if (pane.removed) {
           this.panes.delete(paneKey);
@@ -301,7 +306,11 @@ export class KittyGraphicsRenderer {
         if (images) {
           for (const [id, image] of images) {
             output.push(buildDeleteImage(image.hostId));
-            deletePlacementsForImage({ imageId: id, placementsByPane: this.placementsByPane, output });
+            deletePlacementsForImage({
+              imageId: id,
+              placementsByPane: this.placementsByPane,
+              output,
+            });
             broker?.dropMapping(ptyId, image.info);
           }
           this.imageRegistry.delete(ptyId);
@@ -321,5 +330,4 @@ export class KittyGraphicsRenderer {
     }
     writeOut(output.join(''));
   }
-
 }

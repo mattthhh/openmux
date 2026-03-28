@@ -4,6 +4,7 @@
  */
 import * as errore from 'errore';
 import type { TerminalScrollState, TerminalState, DirtyTerminalUpdate } from '../../core/types';
+import type { ITerminalEmulator } from '../../terminal/emulator-interface';
 import { packDirtyUpdate } from '../../terminal/cell-serialization';
 import { buildGuestKey } from '../../terminal/kitty-graphics/sequence-utils';
 import { ShimConnectionError } from '../../effect/errors';
@@ -44,32 +45,50 @@ export function sendFullSnapshot(
     (packed.fullStateData ?? new ArrayBuffer(0)) as ArrayBuffer,
   ];
 
-  sendEvent({
-    type: 'ptyUpdate',
-    ptyId,
-    packed: {
-      cursor: packed.cursor,
-      cols: packed.cols,
-      rows: packed.rows,
-      scrollbackLength: packed.scrollbackLength,
-      isFull: packed.isFull,
-      alternateScreen: packed.alternateScreen,
-      mouseTracking: packed.mouseTracking,
-      cursorKeyMode: packed.cursorKeyMode,
-      kittyKeyboardFlags: packed.kittyKeyboardFlags,
-      inBandResize: packed.inBandResize,
+  sendEvent(
+    {
+      type: 'ptyUpdate',
+      ptyId,
+      packed: {
+        cursor: packed.cursor,
+        cols: packed.cols,
+        rows: packed.rows,
+        scrollbackLength: packed.scrollbackLength,
+        isFull: packed.isFull,
+        alternateScreen: packed.alternateScreen,
+        mouseTracking: packed.mouseTracking,
+        cursorKeyMode: packed.cursorKeyMode,
+        kittyKeyboardFlags: packed.kittyKeyboardFlags,
+        inBandResize: packed.inBandResize,
+      },
+      scrollState: {
+        viewportOffset: scrollState.viewportOffset,
+        isAtBottom: scrollState.isAtBottom,
+      },
+      payloadLengths: payloads.map((payload) => payload.byteLength),
     },
-    scrollState: {
-      viewportOffset: scrollState.viewportOffset,
-      isAtBottom: scrollState.isAtBottom,
-    },
-    payloadLengths: payloads.map((payload) => payload.byteLength),
-  }, payloads, options);
+    payloads,
+    options
+  );
 }
 
 /**
  * Replay cached Kitty transmits for a PTY
  */
+function normalizeScrollState(
+  emulator: ITerminalEmulator,
+  scrollState: TerminalScrollState
+): TerminalScrollState {
+  const scrollbackLength = emulator.getScrollbackLength();
+  const viewportOffset = Math.max(0, Math.min(scrollState.viewportOffset, scrollbackLength));
+  return {
+    ...scrollState,
+    viewportOffset,
+    scrollbackLength,
+    isAtBottom: viewportOffset === 0,
+  };
+}
+
 function replayKittyTransmits(
   state: ShimServerState,
   ptyId: string,
@@ -132,29 +151,43 @@ export async function replayPtyState(
   // Try cached state first
   const cachedEmulator = state.ptyEmulators.get(ptyId);
   const cachedScrollState = state.ptyScrollStates.get(ptyId);
-  
+
   if (cachedEmulator && cachedScrollState) {
-    sendFullSnapshot(sendEvent, ptyId, cachedEmulator.getTerminalState(), cachedScrollState, options);
+    const normalizedScrollState = normalizeScrollState(cachedEmulator, cachedScrollState);
+    state.ptyScrollStates.set(ptyId, normalizedScrollState);
+    sendFullSnapshot(
+      sendEvent,
+      ptyId,
+      cachedEmulator.getTerminalState(),
+      normalizedScrollState,
+      options
+    );
     replayKittyTransmits(state, ptyId, kittyHandlers.sendKittyTransmit, options);
-    kittyHandlers.sendKittyUpdate(ptyId, cachedEmulator, true, { allowWhileBootstrapping: options?.allowWhileBootstrapping });
+    kittyHandlers.sendKittyUpdate(ptyId, cachedEmulator, true, {
+      allowWhileBootstrapping: options?.allowWhileBootstrapping,
+    });
     return;
   }
 
   // Fetch from PTY service
-  const stateResult = await errore.tryAsync<{
-    state: TerminalState;
-    scrollState: TerminalScrollState;
-  }, ShimConnectionError>({
+  const stateResult = await errore.tryAsync<
+    {
+      state: TerminalState;
+      scrollState: TerminalScrollState;
+    },
+    ShimConnectionError
+  >({
     try: async () => {
-      return await withPty(async (pty) => {
+      return (await withPty(async (pty) => {
         const terminalState = await pty.getTerminalState(asPtyId(ptyId));
         const scrollState = await pty.getScrollState(asPtyId(ptyId));
         return { state: terminalState, scrollState };
-      }) as { state: TerminalState; scrollState: TerminalScrollState };
+      })) as { state: TerminalState; scrollState: TerminalScrollState };
     },
-    catch: (e) => new ShimConnectionError({ reason: `Failed to get terminal state: ${e}`, cause: e }),
+    catch: (e) =>
+      new ShimConnectionError({ reason: `Failed to get terminal state: ${e}`, cause: e }),
   });
-  
+
   if (stateResult instanceof ShimConnectionError) return stateResult;
 
   state.ptyScrollStates.set(ptyId, stateResult.scrollState);
@@ -177,5 +210,9 @@ export function allowBootstrapReplay(
 ): boolean {
   if (!options?.bootstrap || !options.attach) return false;
   const { socket, clientId, attachEpoch } = options.attach;
-  return state.activeClient === socket && state.activeClientId === clientId && state.attachEpoch === attachEpoch;
+  return (
+    state.activeClient === socket &&
+    state.activeClientId === clientId &&
+    state.attachEpoch === attachEpoch
+  );
 }

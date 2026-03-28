@@ -68,8 +68,12 @@ export function setupUnifiedSubscription(deps: UnifiedSubscriptionDeps): void {
           const currentEmulator = viewState.emulator;
           if (currentEmulator && 'prefetchScrollbackLines' in currentEmulator) {
             await errore.tryAsync<void, Error>({
-              try: () => (currentEmulator as { prefetchScrollbackLines: (start: number, count: number) => Promise<void> })
-                .prefetchScrollbackLines(start, count),
+              try: () =>
+                (
+                  currentEmulator as {
+                    prefetchScrollbackLines: (start: number, count: number) => Promise<void>;
+                  }
+                ).prefetchScrollbackLines(start, count),
               catch: (e) => new Error('Prefetch failed', { cause: e }),
             });
           }
@@ -98,45 +102,58 @@ export function setupUnifiedSubscription(deps: UnifiedSubscriptionDeps): void {
           // This prevents a race where the emulator fires an immediate update
           // (e.g., after resize with needsFullRefresh) before we're listening.
           const unsubResult = await errore.tryAsync<() => void, Error>({
-            try: () => subscribeUnifiedToPty(ptyId, (update: UnifiedTerminalUpdate) => {
-              if (!mounted) return;
+            try: () =>
+              subscribeUnifiedToPty(ptyId, (update: UnifiedTerminalUpdate) => {
+                if (!mounted) return;
 
-              const { terminalUpdate } = update;
-              if (terminalUpdate.isFull && terminalUpdate.fullState) {
-                viewState.terminalState = terminalUpdate.fullState;
-                cachedRows = [...terminalUpdate.fullState.cells];
-              } else {
-                const existingState = viewState.terminalState;
-                if (existingState) {
-                  for (const [rowIdx, newRow] of terminalUpdate.dirtyRows) {
-                    cachedRows[rowIdx] = newRow;
-                  }
-                  viewState.terminalState = {
-                    ...existingState,
-                    cells: cachedRows,
-                    cursor: terminalUpdate.cursor,
-                    alternateScreen: terminalUpdate.alternateScreen,
-                    mouseTracking: terminalUpdate.mouseTracking,
-                    cursorKeyMode: terminalUpdate.cursorKeyMode,
-                  };
-                }
-              }
-
-              viewState.scrollState = update.scrollState;
-
-              if (viewState.lastScrollbackLength !== null && viewState.scrollState.viewportOffset > 0) {
-                const scrollbackDelta = viewState.scrollState.scrollbackLength - viewState.lastScrollbackLength;
-                if (scrollbackDelta > 0 && viewState.emulator) {
-                  const start = Math.max(0, viewState.scrollState.scrollbackLength - recentPrefetchWindow);
-                  for (let offset = start; offset < viewState.scrollState.scrollbackLength; offset++) {
-                    viewState.emulator.getScrollbackLine(offset);
+                const { terminalUpdate } = update;
+                if (terminalUpdate.isFull && terminalUpdate.fullState) {
+                  viewState.terminalState = terminalUpdate.fullState;
+                  cachedRows = [...terminalUpdate.fullState.cells];
+                  getKittyGraphicsRenderer()?.invalidatePty(ptyId);
+                } else {
+                  const existingState = viewState.terminalState;
+                  if (existingState) {
+                    for (const [rowIdx, newRow] of terminalUpdate.dirtyRows) {
+                      cachedRows[rowIdx] = newRow;
+                    }
+                    viewState.terminalState = {
+                      ...existingState,
+                      cells: cachedRows,
+                      cursor: terminalUpdate.cursor,
+                      alternateScreen: terminalUpdate.alternateScreen,
+                      mouseTracking: terminalUpdate.mouseTracking,
+                      cursorKeyMode: terminalUpdate.cursorKeyMode,
+                    };
                   }
                 }
-              }
-              viewState.lastScrollbackLength = viewState.scrollState.scrollbackLength;
 
-              requestRenderFrame();
-            }),
+                viewState.scrollState = update.scrollState;
+
+                if (
+                  viewState.lastScrollbackLength !== null &&
+                  viewState.scrollState.viewportOffset > 0
+                ) {
+                  const scrollbackDelta =
+                    viewState.scrollState.scrollbackLength - viewState.lastScrollbackLength;
+                  if (scrollbackDelta > 0 && viewState.emulator) {
+                    const start = Math.max(
+                      0,
+                      viewState.scrollState.scrollbackLength - recentPrefetchWindow
+                    );
+                    for (
+                      let offset = start;
+                      offset < viewState.scrollState.scrollbackLength;
+                      offset++
+                    ) {
+                      viewState.emulator.getScrollbackLine(offset);
+                    }
+                  }
+                }
+                viewState.lastScrollbackLength = viewState.scrollState.scrollbackLength;
+
+                requestRenderFrame();
+              }),
             catch: (e) => new Error('Failed to subscribe to PTY', { cause: e }),
           });
           if (unsubResult instanceof Error) return;
