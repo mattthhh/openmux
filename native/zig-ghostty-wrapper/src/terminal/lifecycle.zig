@@ -53,8 +53,7 @@ fn pruneScrollbackLines(wrapper: *TerminalWrapper, extra: usize) void {
         }
     }
 
-    pages.eraseRows(
-        .{ .history = .{} },
+    pages.eraseHistory(
         .{ .history = .{ .y = @intCast(trim - 1) } },
     );
 

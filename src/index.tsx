@@ -92,14 +92,11 @@ async function initializeAndRender(): Promise<StartupError | void> {
         ? false
         : !hostCaps.kittyGraphics;
 
-  const interceptingStdin = createPasteInterceptingStdin(
-    process.stdin,
-    {
-      onPasteTriggered: () => {
-        triggerClipboardPaste();
-      },
-    }
-  );
+  const interceptingStdin = createPasteInterceptingStdin(process.stdin, {
+    onPasteTriggered: () => {
+      triggerClipboardPaste();
+    },
+  });
 
   const renderResult = await errore.tryAsync<void, StartupError>({
     try: async () => {
@@ -109,7 +106,7 @@ async function initializeAndRender(): Promise<StartupError | void> {
         exitSignals: ['SIGTERM', 'SIGQUIT', 'SIGABRT'],
         useMouse: true,
         enableMouseMovement: true,
-        useConsole: true,
+        consoleMode: 'console-overlay',
         useKittyKeyboard: { events: true },
         useThread,
         consoleOptions: {
@@ -122,7 +119,8 @@ async function initializeAndRender(): Promise<StartupError | void> {
         },
       });
     },
-    catch: (e) => new StartupError({ reason: e instanceof Error ? e.message : String(e), cause: e }),
+    catch: (e) =>
+      new StartupError({ reason: e instanceof Error ? e.message : String(e), cause: e }),
   });
 
   return renderResult instanceof StartupError ? renderResult : undefined;
