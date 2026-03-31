@@ -1,4 +1,4 @@
-import { beforeAll, beforeEach, describe, expect, it, vi } from "bun:test";
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'bun:test';
 
 import type { Workspaces } from '../../src/core/operations/layout-actions';
 import type { SessionState } from '../../src/core/operations/session-actions';
@@ -10,7 +10,6 @@ let listSessionsLegacy: typeof import('../../src/effect/bridge').listSessionsLeg
 let loadSessionData: typeof import('../../src/effect/bridge').loadSessionData;
 let saveCurrentSession: typeof import('../../src/effect/bridge').saveCurrentSession;
 let switchToSession: typeof import('../../src/effect/bridge').switchToSession;
-
 
 const createMetadata = (id: string, name = id): SessionMetadata => ({
   id,
@@ -88,18 +87,19 @@ describe('createSessionOperations', () => {
       cwdMap: new Map<string, string>(),
     };
 
-    vi.mocked(listSessionsLegacy).mockResolvedValue([sessionB]);
-    vi.mocked(loadSessionData).mockResolvedValue(loadedData);
-    vi.mocked(switchToSession).mockResolvedValue(undefined);
-    vi.mocked(deleteSessionLegacy).mockResolvedValue(undefined);
+    // Cast to any to set mock resolved value
+    (listSessionsLegacy as any).mockResolvedValue([sessionB]);
+    (loadSessionData as any).mockResolvedValue(loadedData);
+    (switchToSession as any).mockResolvedValue(undefined);
+    (deleteSessionLegacy as any).mockResolvedValue(undefined);
 
     await ops.deleteSession(sessionA.id);
 
-    expect(vi.mocked(saveCurrentSession)).not.toHaveBeenCalled();
+    expect(saveCurrentSession).not.toHaveBeenCalled();
     expect(onBeforeSwitch).toHaveBeenCalledWith(sessionA.id);
     expect(onDeleteSession).toHaveBeenCalledWith(sessionA.id);
-    expect(vi.mocked(deleteSessionLegacy)).toHaveBeenCalledWith(sessionA.id);
-    expect(vi.mocked(switchToSession)).toHaveBeenCalledWith(sessionB.id);
+    expect(deleteSessionLegacy).toHaveBeenCalledWith(sessionA.id);
+    expect(switchToSession).toHaveBeenCalledWith(sessionB.id);
     expect(onSessionLoad).toHaveBeenCalledWith(
       loadedData.workspaces,
       loadedData.activeWorkspaceId,
@@ -143,16 +143,16 @@ describe('createSessionOperations', () => {
       refreshSessions,
     });
 
-    vi.mocked(listSessionsLegacy).mockResolvedValue([]);
-    vi.mocked(deleteSessionLegacy).mockResolvedValue(undefined);
-    vi.mocked(createSessionLegacy).mockResolvedValue(newSession);
+    (listSessionsLegacy as any).mockResolvedValue([]);
+    (deleteSessionLegacy as any).mockResolvedValue(undefined);
+    (createSessionLegacy as any).mockResolvedValue(newSession);
 
     await ops.deleteSession(sessionA.id);
 
-    expect(vi.mocked(saveCurrentSession)).not.toHaveBeenCalled();
+    expect(saveCurrentSession).not.toHaveBeenCalled();
     expect(onBeforeSwitch).toHaveBeenCalledWith(sessionA.id);
     expect(onDeleteSession).toHaveBeenCalledWith(sessionA.id);
-    expect(vi.mocked(createSessionLegacy)).toHaveBeenCalled();
+    expect(createSessionLegacy).toHaveBeenCalled();
     expect(onSessionLoad).toHaveBeenCalledWith(
       {},
       1,
@@ -193,7 +193,7 @@ describe('createSessionOperations', () => {
 
     await ops.saveSession();
 
-    expect(vi.mocked(saveCurrentSession)).not.toHaveBeenCalled();
+    expect(saveCurrentSession).not.toHaveBeenCalled();
     expect(refreshSessions).not.toHaveBeenCalled();
   });
 
@@ -220,16 +220,11 @@ describe('createSessionOperations', () => {
       refreshSessions,
     });
 
-    vi.mocked(saveCurrentSession).mockResolvedValue(undefined);
+    (saveCurrentSession as any).mockResolvedValue(undefined);
 
     await ops.saveSession();
 
-    expect(vi.mocked(saveCurrentSession)).toHaveBeenCalledWith(
-      sessionA,
-      {},
-      1,
-      expect.any(Function)
-    );
+    expect(saveCurrentSession).toHaveBeenCalledWith(sessionA, {}, 1, expect.any(Function));
     expect(refreshSessions).toHaveBeenCalled();
   });
 });

@@ -1,5 +1,5 @@
 /**
- * Test setup - global mocks for safety
+ * Test setup - global mocks for safety and vi polyfills
  */
 import { mock, vi } from 'bun:test';
 import * as solidJsxRuntime from 'solid-js/h/jsx-runtime';
@@ -69,18 +69,8 @@ mock.module('../src/effect/bridge/shim-bridge', () => ({
   waitForShimClient: async () => {},
 }));
 
-// Mock shim client connection to prevent actual socket connections
-import { handlePtyNotification } from '../src/shim/client/frame-handler';
-
-mock.module('../src/shim/client/connection', () => ({
-  sendRequest: async () => ({ header: { type: 'response', ok: true, result: {} }, payloads: [] }),
-  sendRequestDirect: async () => ({
-    header: { type: 'response', ok: true, result: {} },
-    payloads: [],
-  }),
-  ensureConnected: async () => {},
-  waitForShim: async () => {},
-  onShimDetached: () => () => {},
-  shutdownShim: async () => {},
-  handlePtyNotification,
-}));
+// Note: We intentionally do NOT mock shim/client or shim/client/connection here.
+// Bun's module mocking doesn't properly handle namespace imports (`import * as X`)
+// when combined with test file-level mocks. Tests that need to mock these modules
+// should do so in their own vi.mock() calls, and tests that need the real
+// implementation (like connection-notification.test.ts) can import it directly.
