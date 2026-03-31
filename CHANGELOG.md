@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.42](https://github.com/monotykamary/openmux/compare/v0.3.41...v0.3.42) (2026-03-31)
+
+
+### Bug Fixes
+
+* **aggregate:** stop stale PTYs from reviving ([382f2b0](https://github.com/monotykamary/openmux/commit/382f2b09f7e1c30feab17dcd6f27786c11a8218a))
+
 ### [0.3.41](https://github.com/monotykamary/openmux/compare/v0.3.40...v0.3.41) (2026-03-31)
 
 ### Features
