@@ -3,10 +3,10 @@
  */
 
 import { describe, it, expect } from 'bun:test';
-import { 
-  collectSerializedPaneIds, 
+import {
+  collectSerializedPaneIds,
   buildSessionPaneOrder,
-  findWorkspaceIdForPane 
+  findWorkspaceIdForPane,
 } from '../refresh/session-utils';
 import type { SerializedSession, SerializedLayoutNode } from '../../effect/models';
 
@@ -70,7 +70,7 @@ describe('session utils (litmus)', () => {
         createdAt: Date.now(),
         updatedAt: Date.now(),
       };
-      
+
       const order = buildSessionPaneOrder(session);
       expect(order.size).toBe(0);
     });
@@ -78,17 +78,19 @@ describe('session utils (litmus)', () => {
     it('assigns correct order indices', () => {
       const session: SerializedSession = {
         id: 'session-1',
-        workspaces: [{
-          id: 1,
-          mainPane: { id: 'pane-1', ptyId: 'pty-1' },
-          stackPanes: [],
-          focusedPaneId: 'pane-1',
-        }],
+        workspaces: [
+          {
+            id: 1,
+            mainPane: { id: 'pane-1', ptyId: 'pty-1' },
+            stackPanes: [],
+            focusedPaneId: 'pane-1',
+          },
+        ],
         activeWorkspaceId: 1,
         createdAt: Date.now(),
         updatedAt: Date.now(),
       };
-      
+
       const order = buildSessionPaneOrder(session);
       expect(order.get('pane-1')).toBe(0);
     });
@@ -103,41 +105,45 @@ describe('session utils (litmus)', () => {
         createdAt: Date.now(),
         updatedAt: Date.now(),
       };
-      
+
       expect(findWorkspaceIdForPane(session, 'pane-1')).toBeUndefined();
     });
 
     it('finds workspace for pane in main pane', () => {
       const session: SerializedSession = {
         id: 'session-1',
-        workspaces: [{
-          id: 1,
-          mainPane: { id: 'pane-1', ptyId: 'pty-1' },
-          stackPanes: [],
-          focusedPaneId: 'pane-1',
-        }],
+        workspaces: [
+          {
+            id: 1,
+            mainPane: { id: 'pane-1', ptyId: 'pty-1' },
+            stackPanes: [],
+            focusedPaneId: 'pane-1',
+          },
+        ],
         activeWorkspaceId: 1,
         createdAt: Date.now(),
         updatedAt: Date.now(),
       };
-      
+
       expect(findWorkspaceIdForPane(session, 'pane-1')).toBe(1);
     });
 
     it('finds workspace for pane in stack panes', () => {
       const session: SerializedSession = {
         id: 'session-1',
-        workspaces: [{
-          id: 2,
-          mainPane: { id: 'pane-1', ptyId: 'pty-1' },
-          stackPanes: [{ id: 'pane-2', ptyId: 'pty-2' }],
-          focusedPaneId: 'pane-1',
-        }],
+        workspaces: [
+          {
+            id: 2,
+            mainPane: { id: 'pane-1', ptyId: 'pty-1' },
+            stackPanes: [{ id: 'pane-2', ptyId: 'pty-2' }],
+            focusedPaneId: 'pane-1',
+          },
+        ],
         activeWorkspaceId: 2,
         createdAt: Date.now(),
         updatedAt: Date.now(),
       };
-      
+
       expect(findWorkspaceIdForPane(session, 'pane-2')).toBe(2);
     });
   });

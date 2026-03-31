@@ -27,10 +27,10 @@ describe('createTestPtyService (litmus)', () => {
 
   it('should create mock PTYs', async () => {
     const ptyId = await service.create({ cols: 80, rows: 24 });
-    
+
     expect(ptyId).not.toBeInstanceOf(Error);
     if (ptyId instanceof Error) return;
-    
+
     expect(ptyId).toBeTypeOf('string');
   });
 
@@ -44,12 +44,12 @@ describe('createTestPtyService (litmus)', () => {
     const ptyId = await service.create({ cols: 80, rows: 24 });
     expect(ptyId).not.toBeInstanceOf(Error);
     if (ptyId instanceof Error) return;
-    
+
     const session = await service.getSession(ptyId);
-    
+
     expect(session).not.toBeInstanceOf(Error);
     if (session instanceof Error) return;
-    
+
     expect(session.id).toBe(ptyId);
     expect(session.pid).toBe(12345);
     expect(session.cols).toBe(80);
@@ -60,10 +60,10 @@ describe('createTestPtyService (litmus)', () => {
 
   it('should return mock terminal state', async () => {
     const state = await service.getTerminalState('test-pty' as any);
-    
+
     expect(state).not.toBeInstanceOf(Error);
     if (state instanceof Error) return;
-    
+
     expect(state.cursorX).toBe(0);
     expect(state.cursorY).toBe(0);
     expect(state.cursorVisible).toBe(true);
@@ -80,13 +80,13 @@ describe('createTestPtyService (litmus)', () => {
     const unsub3 = await service.subscribeUnified('pty' as any, () => {});
     const unsub4 = await service.onExit('pty' as any, () => {});
     const unsub5 = await service.subscribeToTitleChange('pty' as any, () => {});
-    
+
     expect(unsub1).toBeTypeOf('function');
     expect(unsub2).toBeTypeOf('function');
     expect(unsub3).toBeTypeOf('function');
     expect(unsub4).toBeTypeOf('function');
     expect(unsub5).toBeTypeOf('function');
-    
+
     // Should not throw
     unsub1();
     unsub2();

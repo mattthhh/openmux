@@ -7,7 +7,7 @@ import { createShimPtyService } from './index';
 describe('createShimPtyService (litmus)', () => {
   it('should create a service with all required methods', () => {
     const service = createShimPtyService();
-    
+
     expect(service.create).toBeTypeOf('function');
     expect(service.write).toBeTypeOf('function');
     expect(service.resize).toBeTypeOf('function');

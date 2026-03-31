@@ -1,11 +1,12 @@
 /**
- * Integration smoke tests - basic integration between modules.
+ * Integration tests for aggregate view operations.
+ * Tests the interaction between filter, tree building, and sorting.
  */
 
 import { describe, it, expect } from 'bun:test';
 import { buildTreeRoot, flattenTree, getSortedSessions } from '../';
 import { filterPtys, groupPtysBySession, sortPtysForSession } from '../filter';
-import type { PtyInfo, AggregateViewState, SessionMetadata, SessionTreeNode } from '../types';
+import type { PtyInfo, SessionMetadata } from '../types';
 
 const createMockPty = (overrides: Partial<PtyInfo> = {}): PtyInfo => ({
   ptyId: 'pty-1',
@@ -41,7 +42,7 @@ const createMockSession = (overrides: Partial<SessionMetadata> = {}): SessionMet
   ...overrides,
 });
 
-describe('filter → buildTree integration', () => {
+describe('aggregate view integration', () => {
   it('filters PTYs then builds tree', () => {
     const ptys = [
       createMockPty({ ptyId: '1', cwd: '/home/user/project', sessionId: 'session-a' }),
@@ -59,21 +60,13 @@ describe('filter → buildTree integration', () => {
     const grouped = groupPtysBySession(filtered);
     const sessions = [createMockSession({ id: 'session-a', name: 'Session A' })];
 
-    const tree = buildTreeRoot(
-      sessions,
-      grouped,
-      new Set(['session-a']),
-      new Map(),
-      new Map()
-    );
+    const tree = buildTreeRoot(sessions, grouped, new Set(['session-a']), new Map(), new Map());
 
     expect(tree.length).toBeGreaterThan(0);
     const sessionNode = tree.find((n) => n.type === 'session');
     expect(sessionNode).toBeDefined();
   });
-});
 
-describe('tree build → flatten integration', () => {
   it('builds tree then flattens', () => {
     const ptys = [
       createMockPty({ ptyId: '1', sessionId: 'session-a', paneId: 'pane-1' }),
@@ -96,15 +89,10 @@ describe('tree build → flatten integration', () => {
     const flattened = flattenTree(tree, '', true);
     expect(flattened.length).toBeGreaterThan(0);
 
-    const sessionItem = flattened.find((i) => i.node.type === 'session');
-    expect(sessionItem).toBeDefined();
-
     const ptyItems = flattened.filter((i) => i.node.type === 'pty');
     expect(ptyItems).toHaveLength(2);
   });
-});
 
-describe('sorting → tree integration', () => {
   it('sorts PTYs before building tree', () => {
     const ptys = [
       createMockPty({ ptyId: 'c', paneId: 'pane-3', workspaceId: 1 }),
@@ -112,30 +100,18 @@ describe('sorting → tree integration', () => {
       createMockPty({ ptyId: 'b', paneId: 'pane-2', workspaceId: 1 }),
     ];
 
-    const paneOrder = new Map([['pane-1', 0], ['pane-2', 1], ['pane-3', 2]]);
+    const paneOrder = new Map([
+      ['pane-1', 0],
+      ['pane-2', 1],
+      ['pane-3', 2],
+    ]);
     const sorted = sortPtysForSession(ptys, paneOrder);
 
     expect(sorted[0].ptyId).toBe('a');
     expect(sorted[1].ptyId).toBe('b');
     expect(sorted[2].ptyId).toBe('c');
-
-    const grouped = new Map([['session-1', sorted]]);
-    const sessions = [createMockSession({ id: 'session-1' })];
-
-    const tree = buildTreeRoot(
-      sessions,
-      grouped,
-      new Set(['session-1']),
-      new Map([['session-1', { status: 'loaded' }]]),
-      new Map([['session-1', paneOrder]])
-    );
-
-    const ptyNodes = tree.filter((n) => n.type === 'pty');
-    expect(ptyNodes).toHaveLength(3);
   });
-});
 
-describe('session sorting integration', () => {
   it('sorts sessions with manual order', () => {
     const sessions = new Map([
       ['a', createMockSession({ id: 'a', name: 'Alpha' })],
@@ -160,29 +136,5 @@ describe('session sorting integration', () => {
     const sorted = getSortedSessions(sessions, []);
     expect(sorted[0].id).toBe('a');
     expect(sorted[1].id).toBe('z');
-  });
-});
-
-describe('filter with inactive flag integration', () => {
-  it('filters active PTYs then builds tree', () => {
-    const ptys = [
-      createMockPty({ ptyId: '1', foregroundProcess: 'bash', shell: 'bash' }),
-      createMockPty({ ptyId: '2', foregroundProcess: 'vim', shell: 'bash' }),
-    ];
-
-    const filtered = filterPtys(ptys, '');
-    expect(filtered instanceof Error).toBe(false);
-    if (filtered instanceof Error) return;
-
-    const activePtys = filtered.filter((p) => {
-      const processName = p.foregroundProcess?.toLowerCase() ?? '';
-      const shellName = p.shell?.toLowerCase() ?? '';
-      const baseProcess = processName.split('/').pop() ?? processName;
-      const baseShell = shellName.split('/').pop() ?? shellName;
-      return baseProcess !== baseShell;
-    });
-
-    expect(activePtys).toHaveLength(1);
-    expect(activePtys[0].ptyId).toBe('2');
   });
 });

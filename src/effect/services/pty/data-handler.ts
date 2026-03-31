@@ -127,8 +127,9 @@ function detectPiFullRedrawPattern(data: string): {
 /**
  * Suppress clear sequences within a synchronized output block.
  * Removes CSI 2 J, CSI H, CSI 3 J but preserves content.
+ * @internal Exported for testing
  */
-function suppressPiClearSequences(content: string): string {
+export function suppressPiClearSequences(content: string): string {
   return content
     .replace(CLEAR_SCREEN_REGEX, '') // CSI 2 J
     .replace(CLEAR_SCREEN_C1_REGEX, '') // C1 CSI 2 J
@@ -142,8 +143,9 @@ function suppressPiClearSequences(content: string): string {
  * Filter out clear-screen sequences (CSI 2 J) from data.
  * Used during the suppression window after resize to prevent shell SIGWINCH
  * from clearing the reflowed scrollback content.
+ * @internal Exported for testing
  */
-function suppressClearScreenSequences(data: string): string {
+export function suppressClearScreenSequences(data: string): string {
   // Replace CSI 2 J with nothing (drop the sequence)
   return data.replace(CLEAR_SCREEN_REGEX, '').replace(CLEAR_SCREEN_C1_REGEX, '');
 }

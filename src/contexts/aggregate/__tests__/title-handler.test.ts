@@ -38,7 +38,7 @@ describe('title handler (litmus)', () => {
       deletedPtyIds: new Set(),
       listScrollOffset: 0,
     });
-    
+
     const handler = createTitleChangeHandler(setState);
     expect(typeof handler).toBe('function');
   });
@@ -68,7 +68,7 @@ describe('title handler (litmus)', () => {
       sessionId: 'session-1',
       sessionMetadata: undefined,
     };
-    
+
     const [state, setState] = createStore<AggregateViewState>({
       showAggregateView: false,
       filterQuery: '',
@@ -98,10 +98,10 @@ describe('title handler (litmus)', () => {
       deletedPtyIds: new Set(),
       listScrollOffset: 0,
     });
-    
+
     const handler = createTitleChangeHandler(setState);
     handler({ ptyId: 'pty-1', title: 'new-title' });
-    
+
     expect(state.allPtys[0].title).toBe('new-title');
     expect(state.matchedPtys[0].title).toBe('new-title');
   });

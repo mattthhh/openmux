@@ -46,7 +46,9 @@ describe('shim handlers/events (litmus)', () => {
     it('should not suppress when allowWhileBootstrapping is true', () => {
       state.bootstrappingPtyIds.add('pty-1');
       const header: ShimHeader = { type: 'ptyUpdate', ptyId: 'pty-1' };
-      expect(shouldSuppressBootstrappingEvent(state, header, { allowWhileBootstrapping: true })).toBe(false);
+      expect(
+        shouldSuppressBootstrappingEvent(state, header, { allowWhileBootstrapping: true })
+      ).toBe(false);
     });
 
     it('should not suppress other event types during bootstrapping', () => {
@@ -110,7 +112,7 @@ describe('shim handlers/events (litmus)', () => {
     it('should not send when no active client', () => {
       const sender = createEventSender(state);
       const header: ShimHeader = { type: 'ptyUpdate', ptyId: 'pty-1' };
-      
+
       // Should not throw
       sender(header, []);
     });
