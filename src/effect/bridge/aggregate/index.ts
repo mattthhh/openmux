@@ -1,7 +1,7 @@
 /**
  * Aggregate Bridge
  * Modular architecture for PTY listing with metadata for aggregate view
- * 
+ *
  * @module aggregate
  */
 
@@ -15,7 +15,7 @@ export type {
   ListAllPtysOptions,
   LoadSessionPtysResult,
   SessionPtyCacheEntry,
-} from "./types"
+} from './types';
 
 // Cache
 export {
@@ -24,22 +24,16 @@ export {
   aggregateSessionMappings,
   clearAllCaches,
   invalidateSessionCache,
+  removeAggregateSessionMappingForPty,
   DEFAULT_CACHE_MAX_AGE_MS,
   asPtyId,
-} from "./cache/session-pty-cache"
+} from './cache/session-pty-cache';
 
 // Metadata fetching
-export {
-  fetchPtyMetadata,
-  batchFetchPtyMetadata,
-  fetchPtyMetadataSafe,
-} from "./metadata/fetch"
+export { fetchPtyMetadata, batchFetchPtyMetadata, fetchPtyMetadataSafe } from './metadata/fetch';
 
 // Session listing
-export {
-  listSessionsWithPtys,
-  listSessionsWithPtysWithService,
-} from "./sessions/list"
+export { listSessionsWithPtys, listSessionsWithPtysWithService } from './sessions/list';
 
 // Lazy loading
 export {
@@ -47,7 +41,7 @@ export {
   loadSessionPtysWithService,
   loadSessionPtysOnDemand,
   getAggregateSessionPtyMapping,
-} from "./sessions/lazy-load"
+} from './sessions/lazy-load';
 
 // Tree building
 export {
@@ -56,7 +50,7 @@ export {
   countTotalPtys,
   findPtyNode,
   findSessionNode,
-} from "./tree/build"
+} from './tree/build';
 
 // Backward-compatible API
 export {
@@ -64,4 +58,4 @@ export {
   getPtyMetadataWithService,
   listAllPtysWithMetadata,
   listAllPtysWithMetadataWithService,
-} from "./api/backward-compat"
+} from './api/backward-compat';

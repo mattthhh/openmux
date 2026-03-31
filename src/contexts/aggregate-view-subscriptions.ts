@@ -5,11 +5,7 @@
 import { produce, type SetStoreFunction } from 'solid-js/store';
 import type { PtyInfo, AggregateViewState } from './aggregate-view-types';
 import type { SessionMetadata, SerializedLayoutNode, SerializedSession } from '../effect/models';
-import {
-  buildPtyIndex,
-  recomputeMatches,
-  recomputeTree,
-} from './aggregate-view-helpers';
+import { buildPtyIndex, recomputeMatches, recomputeTree } from './aggregate-view-helpers';
 import { runStream, streamFromSubscription, tap, repeatWithInterval } from '../effect/stream-utils';
 import {
   listSessionsResult,
@@ -20,6 +16,7 @@ import {
   listAllPtysWithMetadata,
   getPtyMetadata,
   getAggregateSessionPtyMapping,
+  removeAggregateSessionMappingForPty,
   type PtyMetadata,
 } from '../effect/bridge/aggregate-bridge';
 import {
@@ -27,10 +24,7 @@ import {
   subscribeToAllTitleChanges,
   type PtyTitleChangeEvent,
 } from '../effect/bridge/pty-bridge';
-import {
-  getGlobalGitMetadataCache,
-  type GitRepoMetadata,
-} from './git-metadata-cache';
+import { getGlobalGitMetadataCache, type GitRepoMetadata } from './git-metadata-cache';
 import { getGitInfo, getGitDiffStats } from '../effect/services/pty/helpers';
 import type { GitDiffStats } from './aggregate-view-types';
 import type { GitInfo } from '../effect/services/pty/helpers';
@@ -93,7 +87,7 @@ interface GitMetadataFields {
   gitAhead: number | undefined;
   gitBehind: number | undefined;
   gitStashCount: number | undefined;
-  gitState: GitInfo["state"] | undefined;
+  gitState: GitInfo['state'] | undefined;
   gitDetached: boolean;
   gitRepoKey: string | undefined;
 }
@@ -141,10 +135,7 @@ interface AggregatePtyMetadata extends PtyMetadata {
   sessionMetadata?: SessionMetadata;
 }
 
-function areGitDiffStatsEqual(
-  a: GitDiffStats | undefined,
-  b: GitDiffStats | undefined
-): boolean {
+function areGitDiffStatsEqual(a: GitDiffStats | undefined, b: GitDiffStats | undefined): boolean {
   if (!a && !b) return true;
   if (!a || !b) return false;
   return a.added === b.added && a.removed === b.removed && a.binary === b.binary;
@@ -202,7 +193,10 @@ function ptyMetadataToInfo(metadata: AggregatePtyMetadata, existing?: PtyInfo): 
   };
 }
 
-function collectSerializedPaneIds(node: SerializedLayoutNode | null | undefined, result: string[]): void {
+function collectSerializedPaneIds(
+  node: SerializedLayoutNode | null | undefined,
+  result: string[]
+): void {
   if (!node) return;
   if ('type' in node && node.type === 'split') {
     collectSerializedPaneIds(node.first, result);
@@ -233,7 +227,10 @@ function countSerializedPanes(node: SerializedLayoutNode | null | undefined): nu
   return 1;
 }
 
-function getSessionSummaryFromDetails(session: SerializedSession): { workspaceCount: number; paneCount: number } {
+function getSessionSummaryFromDetails(session: SerializedSession): {
+  workspaceCount: number;
+  paneCount: number;
+} {
   let workspaceCount = 0;
   let paneCount = 0;
 
@@ -326,9 +323,19 @@ export function createAggregateViewRefreshers(
   setState: SetStoreFunction<AggregateViewState>,
   refreshState: RefreshState,
   resolvePtyOwnership: (ptyId: string) => PtyOwnership | null,
-  getCurrentSessionHints: () => { sessionId: string | null; lastActiveWorkspaceId?: number; focusedPaneId?: string },
+  getCurrentSessionHints: () => {
+    sessionId: string | null;
+    lastActiveWorkspaceId?: number;
+    focusedPaneId?: string;
+  },
   getCurrentSessionPaneOrder: () => Map<string, number> | null,
-  getCurrentSessionPtys?: () => Array<{ ptyId: string; paneId: string; workspaceId: number; title?: string; cwd?: string }>
+  getCurrentSessionPtys?: () => Array<{
+    ptyId: string;
+    paneId: string;
+    workspaceId: number;
+    title?: string;
+    cwd?: string;
+  }>
 ) {
   const gitCache = getGlobalGitMetadataCache({
     fetchGitInfo: (cwd) => getGitInfo(cwd, { force: true }),
@@ -393,65 +400,74 @@ export function createAggregateViewRefreshers(
           ] as const;
         })
       );
-      const summaryBySessionId = new Map<string, { workspaceCount: number; paneCount: number } | null>(summaryEntries);
+      const summaryBySessionId = new Map<
+        string,
+        { workspaceCount: number; paneCount: number } | null
+      >(summaryEntries);
 
-      setState(produce((s) => {
-        // Update sessions
-        s.allSessions.clear();
-        for (const session of sessions) {
-          s.allSessions.set(session.id, session);
-        }
-
-        // Mark all current PTYs as recently added (protected from background refresh)
-        for (const pty of quickPtys) {
-          s.recentlyAddedPtyIds.add(pty.ptyId);
-        }
-
-        // Clear recentlyAdded after 5 seconds (gives more time for background refresh + pane creation)
-        setTimeout(() => {
-          setState(produce((s2) => {
-            for (const pty of quickPtys) {
-              s2.recentlyAddedPtyIds.delete(pty.ptyId);
-            }
-          }));
-        }, 5000);
-
-        // Merge with any existing PTYs (in case of refresh)
-        const existingPtyIds = new Set(s.allPtys.map(p => p.ptyId));
-        const newPtys = quickPtys.filter(p => !existingPtyIds.has(p.ptyId));
-
-        if (newPtys.length > 0) {
-          s.allPtys = [...s.allPtys, ...newPtys];
-          s.allPtysIndex = buildPtyIndex(s.allPtys);
-        }
-
-        // Set up initial load states
-        for (const session of sessions) {
-          const sessionId = String(session.id);
-          const summary = summaryBySessionId.get(sessionId);
-          const isCurrentSession = sessionId === currentSessionHints.sessionId;
-
-          // Current session is considered loaded immediately
-          // Other sessions are marked unloaded for lazy loading
-          const existingLoadState = s.sessionLoadStates.get(sessionId);
-          if (!existingLoadState) {
-            s.sessionLoadStates.set(sessionId, {
-              status: isCurrentSession ? 'loaded' : 'unloaded',
-              paneCount: summary?.paneCount ?? 0,
-              lastActiveWorkspaceId: isCurrentSession ? currentSessionHints.lastActiveWorkspaceId : undefined,
-              focusedPaneId: isCurrentSession ? currentSessionHints.focusedPaneId : undefined,
-            });
+      setState(
+        produce((s) => {
+          // Update sessions
+          s.allSessions.clear();
+          for (const session of sessions) {
+            s.allSessions.set(session.id, session);
           }
-        }
 
-        // Auto-expand current session
-        if (currentSessionHints.sessionId) {
-          s.expandedSessionIds.add(currentSessionHints.sessionId);
-        }
+          // Mark all current PTYs as recently added (protected from background refresh)
+          for (const pty of quickPtys) {
+            s.recentlyAddedPtyIds.add(pty.ptyId);
+          }
 
-        recomputeMatches(s);
-        recomputeTree(s);
-      }));
+          // Clear recentlyAdded after 5 seconds (gives more time for background refresh + pane creation)
+          setTimeout(() => {
+            setState(
+              produce((s2) => {
+                for (const pty of quickPtys) {
+                  s2.recentlyAddedPtyIds.delete(pty.ptyId);
+                }
+              })
+            );
+          }, 5000);
+
+          // Merge with any existing PTYs (in case of refresh)
+          const existingPtyIds = new Set(s.allPtys.map((p) => p.ptyId));
+          const newPtys = quickPtys.filter((p) => !existingPtyIds.has(p.ptyId));
+
+          if (newPtys.length > 0) {
+            s.allPtys = [...s.allPtys, ...newPtys];
+            s.allPtysIndex = buildPtyIndex(s.allPtys);
+          }
+
+          // Set up initial load states
+          for (const session of sessions) {
+            const sessionId = String(session.id);
+            const summary = summaryBySessionId.get(sessionId);
+            const isCurrentSession = sessionId === currentSessionHints.sessionId;
+
+            // Current session is considered loaded immediately
+            // Other sessions are marked unloaded for lazy loading
+            const existingLoadState = s.sessionLoadStates.get(sessionId);
+            if (!existingLoadState) {
+              s.sessionLoadStates.set(sessionId, {
+                status: isCurrentSession ? 'loaded' : 'unloaded',
+                paneCount: summary?.paneCount ?? 0,
+                lastActiveWorkspaceId: isCurrentSession
+                  ? currentSessionHints.lastActiveWorkspaceId
+                  : undefined,
+                focusedPaneId: isCurrentSession ? currentSessionHints.focusedPaneId : undefined,
+              });
+            }
+          }
+
+          // Auto-expand current session
+          if (currentSessionHints.sessionId) {
+            s.expandedSessionIds.add(currentSessionHints.sessionId);
+          }
+
+          recomputeMatches(s);
+          recomputeTree(s);
+        })
+      );
 
       return;
     } catch (error) {
@@ -468,7 +484,9 @@ export function createAggregateViewRefreshers(
       const sessions = [...sessionsResult];
 
       const sessionDetailsEntries = await Promise.all(
-        sessions.map(async (session) => [String(session.id), await loadSession(String(session.id))] as const)
+        sessions.map(
+          async (session) => [String(session.id), await loadSession(String(session.id))] as const
+        )
       );
       const sessionDetailsById = new Map(sessionDetailsEntries);
       const sessionMetadataById = new Map<string, SessionMetadata>(
@@ -476,7 +494,10 @@ export function createAggregateViewRefreshers(
       );
 
       const sessionMappingEntries = await Promise.all(
-        sessions.map(async (session) => [String(session.id), await getAggregateSessionPtyMapping(String(session.id))] as const)
+        sessions.map(
+          async (session) =>
+            [String(session.id), await getAggregateSessionPtyMapping(String(session.id))] as const
+        )
       );
       const sessionMappingById = new Map(sessionMappingEntries);
 
@@ -491,13 +512,16 @@ export function createAggregateViewRefreshers(
           continue;
         }
 
-        const paneOrder = sessionId === currentSessionHints.sessionId && currentSessionPaneOrder
-          ? currentSessionPaneOrder
-          : buildSessionPaneOrder(sessionDetails);
+        const paneOrder =
+          sessionId === currentSessionHints.sessionId && currentSessionPaneOrder
+            ? currentSessionPaneOrder
+            : buildSessionPaneOrder(sessionDetails);
         sessionPaneOrders.set(sessionId, paneOrder);
 
         const paneRecords = new Map(
-          collectSessionPaneRecords(sessionDetails).map((record) => [record.paneId, record] as const)
+          collectSessionPaneRecords(sessionDetails).map(
+            (record) => [record.paneId, record] as const
+          )
         );
         const mappingInfo = sessionMappingById.get(sessionId);
         const sessionMetadata = sessionMetadataById.get(sessionId);
@@ -505,7 +529,12 @@ export function createAggregateViewRefreshers(
           continue;
         }
 
+        const stalePaneIds = new Set(mappingInfo.stalePaneIds);
         for (const [paneId, ptyId] of mappingInfo.mapping) {
+          if (stalePaneIds.has(paneId) || state.deletedPtyIds.has(ptyId)) {
+            continue;
+          }
+
           const paneRecord = paneRecords.get(paneId);
           provisionalPtys.push({
             ptyId,
@@ -542,68 +571,76 @@ export function createAggregateViewRefreshers(
         return;
       }
 
-      setState(produce((s) => {
-        for (const session of sessions) {
-          s.allSessions.set(session.id, session);
-        }
-
-        for (const [sessionId, paneOrder] of sessionPaneOrders) {
-          s.sessionPaneOrders.set(sessionId, paneOrder);
-        }
-
-        const existingIndex = new Map(s.allPtys.map((pty, index) => [pty.ptyId, index] as const));
-        for (const pty of provisionalPtys) {
-          const index = existingIndex.get(pty.ptyId);
-          if (index === undefined) {
-            existingIndex.set(pty.ptyId, s.allPtys.length);
-            s.allPtys.push(pty);
-          } else {
-            s.allPtys[index] = {
-              ...s.allPtys[index],
-              ...pty,
-            };
+      setState(
+        produce((s) => {
+          for (const session of sessions) {
+            s.allSessions.set(session.id, session);
           }
-          s.recentlyAddedPtyIds.add(pty.ptyId);
-        }
 
-        if (provisionalPtys.length > 0) {
-          setTimeout(() => {
-            setState(produce((s2) => {
-              for (const pty of provisionalPtys) {
-                s2.recentlyAddedPtyIds.delete(pty.ptyId);
-              }
-            }));
-          }, 5000);
-        }
+          for (const [sessionId, paneOrder] of sessionPaneOrders) {
+            s.sessionPaneOrders.set(sessionId, paneOrder);
+          }
 
-        for (const [sessionId, paneCount] of provisionalPaneCountBySession) {
-          const sessionDetails = sessionDetailsById.get(sessionId);
-          const detailValue = sessionDetails instanceof Error ? undefined : sessionDetails;
-          const detailWorkspaceId = detailValue?.activeWorkspaceId;
-          const detailFocusedPaneId = detailWorkspaceId !== undefined
-            ? detailValue?.workspaces.find((workspace) => workspace.id === detailWorkspaceId)?.focusedPaneId ?? undefined
-            : undefined;
+          const existingIndex = new Map(s.allPtys.map((pty, index) => [pty.ptyId, index] as const));
+          for (const pty of provisionalPtys) {
+            const index = existingIndex.get(pty.ptyId);
+            if (index === undefined) {
+              existingIndex.set(pty.ptyId, s.allPtys.length);
+              s.allPtys.push(pty);
+            } else {
+              s.allPtys[index] = {
+                ...s.allPtys[index],
+                ...pty,
+              };
+            }
+            s.recentlyAddedPtyIds.add(pty.ptyId);
+          }
 
-          const lastActiveWorkspaceId = currentSessionHints.sessionId === sessionId
-            ? currentSessionHints.lastActiveWorkspaceId
-            : detailWorkspaceId;
-          const focusedPaneId = currentSessionHints.sessionId === sessionId
-            ? currentSessionHints.focusedPaneId
-            : detailFocusedPaneId;
+          if (provisionalPtys.length > 0) {
+            setTimeout(() => {
+              setState(
+                produce((s2) => {
+                  for (const pty of provisionalPtys) {
+                    s2.recentlyAddedPtyIds.delete(pty.ptyId);
+                  }
+                })
+              );
+            }, 5000);
+          }
 
-          s.sessionLoadStates.set(sessionId, {
-            status: 'loaded',
-            paneCount: Math.max(paneCount, s.sessionLoadStates.get(sessionId)?.paneCount ?? 0),
-            lastActiveWorkspaceId,
-            focusedPaneId: focusedPaneId ?? undefined,
-          });
-          s.loadAttemptedSessionIds.delete(sessionId);
-        }
+          for (const [sessionId, paneCount] of provisionalPaneCountBySession) {
+            const sessionDetails = sessionDetailsById.get(sessionId);
+            const detailValue = sessionDetails instanceof Error ? undefined : sessionDetails;
+            const detailWorkspaceId = detailValue?.activeWorkspaceId;
+            const detailFocusedPaneId =
+              detailWorkspaceId !== undefined
+                ? (detailValue?.workspaces.find((workspace) => workspace.id === detailWorkspaceId)
+                    ?.focusedPaneId ?? undefined)
+                : undefined;
 
-        s.allPtysIndex = buildPtyIndex(s.allPtys);
-        recomputeMatches(s);
-        recomputeTree(s);
-      }));
+            const lastActiveWorkspaceId =
+              currentSessionHints.sessionId === sessionId
+                ? currentSessionHints.lastActiveWorkspaceId
+                : detailWorkspaceId;
+            const focusedPaneId =
+              currentSessionHints.sessionId === sessionId
+                ? currentSessionHints.focusedPaneId
+                : detailFocusedPaneId;
+
+            s.sessionLoadStates.set(sessionId, {
+              status: 'loaded',
+              paneCount: Math.max(paneCount, s.sessionLoadStates.get(sessionId)?.paneCount ?? 0),
+              lastActiveWorkspaceId,
+              focusedPaneId: focusedPaneId ?? undefined,
+            });
+            s.loadAttemptedSessionIds.delete(sessionId);
+          }
+
+          s.allPtysIndex = buildPtyIndex(s.allPtys);
+          recomputeMatches(s);
+          recomputeTree(s);
+        })
+      );
 
       return;
     } catch (error) {
@@ -626,16 +663,22 @@ export function createAggregateViewRefreshers(
         return livePtysResult;
       }
       const livePtys = livePtysResult;
+      const serviceLivePtyIds = new Set(livePtys.map((pty) => pty.ptyId));
 
       const sessionMetadataById = new Map<string, SessionMetadata>(
         sessions.map((session) => [String(session.id), session])
       );
 
       const sessionDetailsEntries = await Promise.all(
-        sessions.map(async (session) => [String(session.id), await loadSession(String(session.id))] as const)
+        sessions.map(
+          async (session) => [String(session.id), await loadSession(String(session.id))] as const
+        )
       );
       const sessionDetailsById = new Map(sessionDetailsEntries);
-      const summaryBySessionId = new Map<string, { workspaceCount: number; paneCount: number } | null>(
+      const summaryBySessionId = new Map<
+        string,
+        { workspaceCount: number; paneCount: number } | null
+      >(
         sessionDetailsEntries.map(([sessionId, sessionDetails]) => [
           sessionId,
           sessionDetails instanceof Error ? null : getSessionSummaryFromDetails(sessionDetails),
@@ -656,7 +699,10 @@ export function createAggregateViewRefreshers(
       }
 
       const sessionMappingEntries = await Promise.all(
-        sessions.map(async (session) => [String(session.id), await getAggregateSessionPtyMapping(String(session.id))] as const)
+        sessions.map(
+          async (session) =>
+            [String(session.id), await getAggregateSessionPtyMapping(String(session.id))] as const
+        )
       );
       const mappedOwnershipByPtyId = new Map<string, PtyOwnership>();
       for (const [sessionId, mappingInfo] of sessionMappingEntries) {
@@ -679,7 +725,8 @@ export function createAggregateViewRefreshers(
       }> = [];
 
       for (const metadata of livePtys) {
-        const ownership = resolvePtyOwnership(metadata.ptyId) ?? mappedOwnershipByPtyId.get(metadata.ptyId);
+        const ownership =
+          resolvePtyOwnership(metadata.ptyId) ?? mappedOwnershipByPtyId.get(metadata.ptyId);
         if (!ownership) {
           continue;
         }
@@ -716,153 +763,161 @@ export function createAggregateViewRefreshers(
 
       const livePaneCountBySession = new Map<string, number>();
       for (const pty of freshPtys) {
-        livePaneCountBySession.set(pty.sessionId, (livePaneCountBySession.get(pty.sessionId) ?? 0) + 1);
+        livePaneCountBySession.set(
+          pty.sessionId,
+          (livePaneCountBySession.get(pty.sessionId) ?? 0) + 1
+        );
       }
 
-      setState(produce((s) => {
-        const nextSessionIds = new Set<string>(sessions.map((session) => String(session.id)));
+      setState(
+        produce((s) => {
+          const nextSessionIds = new Set<string>(sessions.map((session) => String(session.id)));
 
-        s.allSessions.clear();
-        for (const session of sessions) {
-          s.allSessions.set(session.id, session);
-        }
-
-        s.sessionPaneOrders.clear();
-        for (const [sessionId, paneOrder] of sessionPaneOrders) {
-          s.sessionPaneOrders.set(sessionId, paneOrder);
-        }
-
-        s.manualSessionOrder = s.manualSessionOrder.filter((sessionId) => nextSessionIds.has(sessionId));
-
-        for (const sessionId of [...s.sessionLoadStates.keys()]) {
-          if (!nextSessionIds.has(sessionId)) {
-            s.sessionLoadStates.delete(sessionId);
-            s.sessionPaneOrders.delete(sessionId);
-            s.loadingSessionIds.delete(sessionId);
-            s.loadAttemptedSessionIds.delete(sessionId);
-            s.expandedSessionIds.delete(sessionId);
-          }
-        }
-
-        const protectedPaneCountBySession = new Map<string, number>();
-        for (const pty of s.allPtys) {
-          if (!s.pendingPtyIds.has(pty.ptyId) && !s.recentlyAddedPtyIds.has(pty.ptyId)) {
-            continue;
+          s.allSessions.clear();
+          for (const session of sessions) {
+            s.allSessions.set(session.id, session);
           }
 
-          protectedPaneCountBySession.set(
-            pty.sessionId,
-            (protectedPaneCountBySession.get(pty.sessionId) ?? 0) + 1
+          s.sessionPaneOrders.clear();
+          for (const [sessionId, paneOrder] of sessionPaneOrders) {
+            s.sessionPaneOrders.set(sessionId, paneOrder);
+          }
+
+          s.manualSessionOrder = s.manualSessionOrder.filter((sessionId) =>
+            nextSessionIds.has(sessionId)
           );
-        }
 
-        for (const session of sessions) {
-          const sessionId = String(session.id);
-          const livePaneCount = livePaneCountBySession.get(sessionId) ?? 0;
-          const protectedPaneCount = protectedPaneCountBySession.get(sessionId) ?? 0;
-          const storedPaneCount = summaryBySessionId.get(sessionId)?.paneCount ?? 0;
-          const paneCount = Math.max(livePaneCount, protectedPaneCount, storedPaneCount);
-
-          const sessionDetails = sessionDetailsById.get(sessionId);
-          const detailValue = sessionDetails instanceof Error ? undefined : sessionDetails;
-          const detailWorkspaceId = detailValue?.activeWorkspaceId;
-          const detailFocusedPaneId = detailWorkspaceId !== undefined
-            ? detailValue?.workspaces.find((workspace) => workspace.id === detailWorkspaceId)?.focusedPaneId ?? undefined
-            : undefined;
-
-          const lastActiveWorkspaceId = currentSessionHints.sessionId === sessionId
-            ? currentSessionHints.lastActiveWorkspaceId
-            : detailWorkspaceId;
-          const focusedPaneId = currentSessionHints.sessionId === sessionId
-            ? currentSessionHints.focusedPaneId
-            : detailFocusedPaneId;
-
-          if (liveSessionIds.has(sessionId) || protectedPaneCount > 0) {
-            s.sessionLoadStates.set(sessionId, {
-              status: 'loaded',
-              paneCount,
-              lastActiveWorkspaceId,
-              focusedPaneId: focusedPaneId ?? undefined,
-            });
-            s.loadAttemptedSessionIds.delete(sessionId);
-          } else if (!s.loadingSessionIds.has(sessionId)) {
-            s.sessionLoadStates.set(sessionId, {
-              status: 'unloaded',
-              paneCount,
-              lastActiveWorkspaceId,
-              focusedPaneId: focusedPaneId ?? undefined,
-            });
-          }
-        }
-
-        // Build set of live PTY IDs from the service
-        const livePtyIds = new Set(freshPtys.map(p => p.ptyId));
-
-        // Clear deletedPtyIds only for PTYs confirmed gone from service
-        // This prevents race condition where deferred destruction hasn't completed yet
-        for (const deletedPtyId of s.deletedPtyIds) {
-          if (!livePtyIds.has(deletedPtyId)) {
-            // PTY is confirmed gone from service, safe to clear
-            s.deletedPtyIds.delete(deletedPtyId);
-          }
-          // If PTY is still in live list, keep it in deletedPtyIds
-          // (deferred destruction is still pending)
-        }
-
-        // Merge fresh PTYs while preserving pending and recently added PTYs
-        // CRITICAL: Filter out deleted PTYs to prevent stale data
-        const filteredFreshPtys = freshPtys.filter(p => !s.deletedPtyIds.has(p.ptyId));
-        const freshPtyMap = new Map(filteredFreshPtys.map(p => [p.ptyId, p]));
-
-        // Build new allPtys array:
-        // 1. Start with fresh PTYs (they have most current data)
-        // 2. For pending/recentlyAdded PTYs not in fresh, preserve them
-        // 3. Filter out deleted PTYs even if pending/recentlyAdded (user explicitly deleted them)
-        const currentPtyIds = new Set(s.allPtys.map(p => p.ptyId));
-        const newFreshPtys = filteredFreshPtys.filter(p => !currentPtyIds.has(p.ptyId));
-
-        // For existing PTYs: use fresh data if available, else keep current
-        const mergedPtys = s.allPtys.map(pty => {
-          // If this PTY was deleted, filter it out regardless of other status
-          if (s.deletedPtyIds.has(pty.ptyId)) {
-            return null;
+          for (const sessionId of [...s.sessionLoadStates.keys()]) {
+            if (!nextSessionIds.has(sessionId)) {
+              s.sessionLoadStates.delete(sessionId);
+              s.sessionPaneOrders.delete(sessionId);
+              s.loadingSessionIds.delete(sessionId);
+              s.loadAttemptedSessionIds.delete(sessionId);
+              s.expandedSessionIds.delete(sessionId);
+            }
           }
 
-          const freshPty = freshPtyMap.get(pty.ptyId);
-          if (freshPty) {
-            // PTY exists in both: use fresh data (it has proper session info)
-            return freshPty;
+          const protectedPaneCountBySession = new Map<string, number>();
+          for (const pty of s.allPtys) {
+            if (!s.pendingPtyIds.has(pty.ptyId) && !s.recentlyAddedPtyIds.has(pty.ptyId)) {
+              continue;
+            }
+
+            protectedPaneCountBySession.set(
+              pty.sessionId,
+              (protectedPaneCountBySession.get(pty.sessionId) ?? 0) + 1
+            );
           }
-          // PTY not in fresh list: keep current only if pending or recently added
-          if (s.pendingPtyIds.has(pty.ptyId) || s.recentlyAddedPtyIds.has(pty.ptyId)) {
-            return pty;
+
+          for (const session of sessions) {
+            const sessionId = String(session.id);
+            const livePaneCount = livePaneCountBySession.get(sessionId) ?? 0;
+            const protectedPaneCount = protectedPaneCountBySession.get(sessionId) ?? 0;
+            const storedPaneCount = summaryBySessionId.get(sessionId)?.paneCount ?? 0;
+            const paneCount = Math.max(livePaneCount, protectedPaneCount, storedPaneCount);
+
+            const sessionDetails = sessionDetailsById.get(sessionId);
+            const detailValue = sessionDetails instanceof Error ? undefined : sessionDetails;
+            const detailWorkspaceId = detailValue?.activeWorkspaceId;
+            const detailFocusedPaneId =
+              detailWorkspaceId !== undefined
+                ? (detailValue?.workspaces.find((workspace) => workspace.id === detailWorkspaceId)
+                    ?.focusedPaneId ?? undefined)
+                : undefined;
+
+            const lastActiveWorkspaceId =
+              currentSessionHints.sessionId === sessionId
+                ? currentSessionHints.lastActiveWorkspaceId
+                : detailWorkspaceId;
+            const focusedPaneId =
+              currentSessionHints.sessionId === sessionId
+                ? currentSessionHints.focusedPaneId
+                : detailFocusedPaneId;
+
+            if (liveSessionIds.has(sessionId) || protectedPaneCount > 0) {
+              s.sessionLoadStates.set(sessionId, {
+                status: 'loaded',
+                paneCount,
+                lastActiveWorkspaceId,
+                focusedPaneId: focusedPaneId ?? undefined,
+              });
+              s.loadAttemptedSessionIds.delete(sessionId);
+            } else if (!s.loadingSessionIds.has(sessionId)) {
+              s.sessionLoadStates.set(sessionId, {
+                status: 'unloaded',
+                paneCount,
+                lastActiveWorkspaceId,
+                focusedPaneId: focusedPaneId ?? undefined,
+              });
+            }
           }
-          // PTY not in fresh and not pending: it was removed, filter it out
-          return null;
-        }).filter((pty): pty is typeof pty & {} => pty !== null);
 
-        s.allPtys = [...mergedPtys, ...newFreshPtys];
-
-        s.allPtysIndex = buildPtyIndex(s.allPtys);
-
-        // Preserve selection if the selected PTY still exists after refresh
-        const selectedStillExists = s.selectedPtyId && s.allPtysIndex.has(s.selectedPtyId);
-        if (!selectedStillExists && s.selectedPtyId) {
-          // Selected PTY no longer exists, clear it (let next selection logic handle it)
-          s.selectedPtyId = null;
-        }
-
-        recomputeMatches(s);
-        recomputeTree(s);
-
-        // After tree recompute, fix up selection index if needed
-        if (s.selectedPtyId) {
-          const newIndex = s.flattenedTreeIndex.get(s.selectedPtyId);
-          if (newIndex !== undefined) {
-            s.selectedIndex = newIndex;
+          // Clear deletedPtyIds only after the PTY is gone from the raw service list.
+          // Ownership can disappear before the deferred destroy request completes, so using
+          // freshPtys here would clear the tombstone too early and let the PTY reappear.
+          for (const deletedPtyId of s.deletedPtyIds) {
+            if (!serviceLivePtyIds.has(deletedPtyId)) {
+              s.deletedPtyIds.delete(deletedPtyId);
+            }
           }
-        }
-      }));
+
+          // Merge fresh PTYs while preserving pending and recently added PTYs
+          // CRITICAL: Filter out deleted PTYs to prevent stale data
+          const filteredFreshPtys = freshPtys.filter((p) => !s.deletedPtyIds.has(p.ptyId));
+          const freshPtyMap = new Map(filteredFreshPtys.map((p) => [p.ptyId, p]));
+
+          // Build new allPtys array:
+          // 1. Start with fresh PTYs (they have most current data)
+          // 2. For pending/recentlyAdded PTYs not in fresh, preserve them
+          // 3. Filter out deleted PTYs even if pending/recentlyAdded (user explicitly deleted them)
+          const currentPtyIds = new Set(s.allPtys.map((p) => p.ptyId));
+          const newFreshPtys = filteredFreshPtys.filter((p) => !currentPtyIds.has(p.ptyId));
+
+          // For existing PTYs: use fresh data if available, else keep current
+          const mergedPtys = s.allPtys
+            .map((pty) => {
+              // If this PTY was deleted, filter it out regardless of other status
+              if (s.deletedPtyIds.has(pty.ptyId)) {
+                return null;
+              }
+
+              const freshPty = freshPtyMap.get(pty.ptyId);
+              if (freshPty) {
+                // PTY exists in both: use fresh data (it has proper session info)
+                return freshPty;
+              }
+              // PTY not in fresh list: keep current only if pending or recently added
+              if (s.pendingPtyIds.has(pty.ptyId) || s.recentlyAddedPtyIds.has(pty.ptyId)) {
+                return pty;
+              }
+              // PTY not in fresh and not pending: it was removed, filter it out
+              return null;
+            })
+            .filter((pty): pty is typeof pty & {} => pty !== null);
+
+          s.allPtys = [...mergedPtys, ...newFreshPtys];
+
+          s.allPtysIndex = buildPtyIndex(s.allPtys);
+
+          // Preserve selection if the selected PTY still exists after refresh
+          const selectedStillExists = s.selectedPtyId && s.allPtysIndex.has(s.selectedPtyId);
+          if (!selectedStillExists && s.selectedPtyId) {
+            // Selected PTY no longer exists, clear it (let next selection logic handle it)
+            s.selectedPtyId = null;
+          }
+
+          recomputeMatches(s);
+          recomputeTree(s);
+
+          // After tree recompute, fix up selection index if needed
+          if (s.selectedPtyId) {
+            const newIndex = s.flattenedTreeIndex.get(s.selectedPtyId);
+            if (newIndex !== undefined) {
+              s.selectedIndex = newIndex;
+            }
+          }
+        })
+      );
 
       return;
     } catch (error) {
@@ -902,7 +957,9 @@ export function createAggregateViewRefreshers(
       ptyIds.map((id) => getPtyMetadata(id, { skipGitDiffStats: true }))
     );
 
-    const updates = results.filter((result): result is PtyMetadata => result !== null && !(result instanceof Error));
+    const updates = results.filter(
+      (result): result is PtyMetadata => result !== null && !(result instanceof Error)
+    );
     if (updates.length === 0) {
       const firstError = results.find(
         (result): result is import('../effect/errors').ServicesNotInitializedError =>
@@ -913,53 +970,58 @@ export function createAggregateViewRefreshers(
 
     const cwds = [...new Set(updates.map((update) => update.cwd))];
     const gitMetadataMap = await gitCache.getMetadataBatch(cwds, { forceRefresh: true });
-    const updatesByRepo = new Map<string | undefined, Array<{ index: number; update: PtyMetadata; metadata: GitRepoMetadata | undefined }>>();
+    const updatesByRepo = new Map<
+      string | undefined,
+      Array<{ index: number; update: PtyMetadata; metadata: GitRepoMetadata | undefined }>
+    >();
 
     let didChange = false;
-    setState(produce((s) => {
-      for (const update of updates) {
-        const index = s.allPtysIndex.get(update.ptyId);
-        if (index === undefined || !s.allPtys[index]) continue;
+    setState(
+      produce((s) => {
+        for (const update of updates) {
+          const index = s.allPtysIndex.get(update.ptyId);
+          if (index === undefined || !s.allPtys[index]) continue;
 
-        const gitMetadata = gitMetadataMap.get(update.cwd);
-        const repoKey = gitMetadata?.repoKey;
-        const group = updatesByRepo.get(repoKey);
+          const gitMetadata = gitMetadataMap.get(update.cwd);
+          const repoKey = gitMetadata?.repoKey;
+          const group = updatesByRepo.get(repoKey);
 
-        if (group) {
-          group.push({ index, update, metadata: gitMetadata });
-        } else {
-          updatesByRepo.set(repoKey, [{ index, update, metadata: gitMetadata }]);
-        }
-      }
-
-      for (const [, group] of updatesByRepo) {
-        for (const { index, update, metadata } of group) {
-          const prev = s.allPtys[index];
-          const gitFields = extractGitMetadata(metadata);
-
-          const updated: PtyInfo = {
-            ...prev,
-            cwd: update.cwd,
-            foregroundProcess: update.foregroundProcess,
-            shell: update.shell ?? prev.shell,
-            title: update.title ?? prev.title,
-            workspaceId: update.workspaceId ?? prev.workspaceId,
-            paneId: update.paneId ?? prev.paneId,
-            ...gitFields,
-          };
-
-          if (didPtyInfoChange(prev, updated)) {
-            s.allPtys[index] = updated;
-            didChange = true;
+          if (group) {
+            group.push({ index, update, metadata: gitMetadata });
+          } else {
+            updatesByRepo.set(repoKey, [{ index, update, metadata: gitMetadata }]);
           }
         }
-      }
 
-      if (didChange) {
-        recomputeMatches(s);
-        recomputeTree(s);
-      }
-    }));
+        for (const [, group] of updatesByRepo) {
+          for (const { index, update, metadata } of group) {
+            const prev = s.allPtys[index];
+            const gitFields = extractGitMetadata(metadata);
+
+            const updated: PtyInfo = {
+              ...prev,
+              cwd: update.cwd,
+              foregroundProcess: update.foregroundProcess,
+              shell: update.shell ?? prev.shell,
+              title: update.title ?? prev.title,
+              workspaceId: update.workspaceId ?? prev.workspaceId,
+              paneId: update.paneId ?? prev.paneId,
+              ...gitFields,
+            };
+
+            if (didPtyInfoChange(prev, updated)) {
+              s.allPtys[index] = updated;
+              didChange = true;
+            }
+          }
+        }
+
+        if (didChange) {
+          recomputeMatches(s);
+          recomputeTree(s);
+        }
+      })
+    );
 
     return;
   };
@@ -1005,7 +1067,11 @@ export function createLifecycleHandlers(
   state: AggregateViewState,
   setState: SetStoreFunction<AggregateViewState>,
   resolvePtyOwnership: (ptyId: string) => PtyOwnership | null,
-  _getCurrentSessionHints: () => { sessionId: string | null; lastActiveWorkspaceId?: number; focusedPaneId?: string }
+  _getCurrentSessionHints: () => {
+    sessionId: string | null;
+    lastActiveWorkspaceId?: number;
+    focusedPaneId?: string;
+  }
 ) {
   const gitCache = getGlobalGitMetadataCache({
     fetchGitInfo: (cwd) => getGitInfo(cwd, { force: false }),
@@ -1031,48 +1097,50 @@ export function createLifecycleHandlers(
     }
 
     // Mark as pending immediately to prevent flickering during creation
-    setState(produce((s) => {
-      // If PTY was deleted while waiting, abort
-      if (s.deletedPtyIds.has(ptyId)) {
-        return;
-      }
+    setState(
+      produce((s) => {
+        // If PTY was deleted while waiting, abort
+        if (s.deletedPtyIds.has(ptyId)) {
+          return;
+        }
 
-      s.pendingPtyIds.add(ptyId);
+        s.pendingPtyIds.add(ptyId);
 
-      // If this is the first attempt, add a placeholder PTY immediately
-      // This ensures the pane appears in the list while we fetch metadata
-      if (retryCount === 0 && !s.allPtysIndex.has(ptyId)) {
-        const placeholderPty: PtyInfo = {
-          ptyId,
-          cwd: '',
-          gitBranch: undefined,
-          gitDiffStats: undefined,
-          gitDirty: false,
-          gitStaged: 0,
-          gitUnstaged: 0,
-          gitUntracked: 0,
-          gitConflicted: 0,
-          gitAhead: undefined,
-          gitBehind: undefined,
-          gitStashCount: undefined,
-          gitState: undefined,
-          gitDetached: false,
-          gitRepoKey: undefined,
-          foregroundProcess: undefined,
-          shell: undefined,
-          title: '...', // Loading indicator
-          workspaceId: undefined,
-          paneId: undefined,
-          sessionId: '', // Will be filled in when ownership resolved
-          sessionMetadata: undefined,
-        };
-        const newIndex = s.allPtys.length;
-        s.allPtys.push(placeholderPty);
-        s.allPtysIndex.set(ptyId, newIndex);
-        recomputeMatches(s);
-        recomputeTree(s);
-      }
-    }));
+        // If this is the first attempt, add a placeholder PTY immediately
+        // This ensures the pane appears in the list while we fetch metadata
+        if (retryCount === 0 && !s.allPtysIndex.has(ptyId)) {
+          const placeholderPty: PtyInfo = {
+            ptyId,
+            cwd: '',
+            gitBranch: undefined,
+            gitDiffStats: undefined,
+            gitDirty: false,
+            gitStaged: 0,
+            gitUnstaged: 0,
+            gitUntracked: 0,
+            gitConflicted: 0,
+            gitAhead: undefined,
+            gitBehind: undefined,
+            gitStashCount: undefined,
+            gitState: undefined,
+            gitDetached: false,
+            gitRepoKey: undefined,
+            foregroundProcess: undefined,
+            shell: undefined,
+            title: '...', // Loading indicator
+            workspaceId: undefined,
+            paneId: undefined,
+            sessionId: '', // Will be filled in when ownership resolved
+            sessionMetadata: undefined,
+          };
+          const newIndex = s.allPtys.length;
+          s.allPtys.push(placeholderPty);
+          s.allPtysIndex.set(ptyId, newIndex);
+          recomputeMatches(s);
+          recomputeTree(s);
+        }
+      })
+    );
 
     const ownership = resolvePtyOwnership(ptyId);
 
@@ -1084,16 +1152,18 @@ export function createLifecycleHandlers(
         return;
       }
       // Max retries reached - keep placeholder, clear pending
-      setState(produce((s) => {
-        s.pendingPtyIds.delete(ptyId);
-        // Update title to show error state
-        const index = s.allPtysIndex.get(ptyId);
-        if (index !== undefined && s.allPtys[index]?.title === '...') {
-          s.allPtys[index] = { ...s.allPtys[index], title: 'error' };
-          recomputeMatches(s);
-          recomputeTree(s);
-        }
-      }));
+      setState(
+        produce((s) => {
+          s.pendingPtyIds.delete(ptyId);
+          // Update title to show error state
+          const index = s.allPtysIndex.get(ptyId);
+          if (index !== undefined && s.allPtys[index]?.title === '...') {
+            s.allPtys[index] = { ...s.allPtys[index], title: 'error' };
+            recomputeMatches(s);
+            recomputeTree(s);
+          }
+        })
+      );
       return;
     }
 
@@ -1106,30 +1176,34 @@ export function createLifecycleHandlers(
         return;
       }
       // Keep placeholder but clear pending status
-      setState(produce((s) => {
-        s.pendingPtyIds.delete(ptyId);
-      }));
+      setState(
+        produce((s) => {
+          s.pendingPtyIds.delete(ptyId);
+        })
+      );
       return;
     }
 
     // Fetch metadata for the new PTY
     const metadataResult = await getPtyMetadata(ptyId, { skipGitDiffStats: true });
     if (!metadataResult || metadataResult instanceof Error) {
-      setState(produce((s) => {
-        s.pendingPtyIds.delete(ptyId);
-        // Keep placeholder but mark as error
-        const index = s.allPtysIndex.get(ptyId);
-        if (index !== undefined) {
-          s.allPtys[index] = {
-            ...s.allPtys[index],
-            sessionId: ownership.sessionId,
-            sessionMetadata,
-            title: metadataResult instanceof Error ? 'error' : 'shell',
-          };
-          recomputeMatches(s);
-          recomputeTree(s);
-        }
-      }));
+      setState(
+        produce((s) => {
+          s.pendingPtyIds.delete(ptyId);
+          // Keep placeholder but mark as error
+          const index = s.allPtysIndex.get(ptyId);
+          if (index !== undefined) {
+            s.allPtys[index] = {
+              ...s.allPtys[index],
+              sessionId: ownership.sessionId,
+              sessionMetadata,
+              title: metadataResult instanceof Error ? 'error' : 'shell',
+            };
+            recomputeMatches(s);
+            recomputeTree(s);
+          }
+        })
+      );
       return;
     }
 
@@ -1163,139 +1237,134 @@ export function createLifecycleHandlers(
       sessionMetadata,
     };
 
-    setState(produce((s) => {
-      // Race condition check: if PTY is no longer pending or was deleted, abort
-      if (!s.pendingPtyIds.has(ptyId) || s.deletedPtyIds.has(ptyId)) {
-        // Clean up pending if it exists
-        s.pendingPtyIds.delete(ptyId);
+    setState(
+      produce((s) => {
+        // Race condition check: if PTY is no longer pending or was deleted, abort
+        if (!s.pendingPtyIds.has(ptyId) || s.deletedPtyIds.has(ptyId)) {
+          // Clean up pending if it exists
+          s.pendingPtyIds.delete(ptyId);
 
-        // CRITICAL: Remove placeholder from allPtys to prevent orphaned entries
-        // The placeholder was added at the start of handlePtyCreated, but if the
-        // PTY was destroyed before we could fetch metadata, we need to clean it up
-        const placeholderIndex = s.allPtysIndex.get(ptyId);
-        if (placeholderIndex !== undefined) {
-          s.allPtys.splice(placeholderIndex, 1);
-          s.allPtysIndex = buildPtyIndex(s.allPtys);
-          recomputeMatches(s);
-          recomputeTree(s);
+          // CRITICAL: Remove placeholder from allPtys to prevent orphaned entries
+          // The placeholder was added at the start of handlePtyCreated, but if the
+          // PTY was destroyed before we could fetch metadata, we need to clean it up
+          const placeholderIndex = s.allPtysIndex.get(ptyId);
+          if (placeholderIndex !== undefined) {
+            s.allPtys.splice(placeholderIndex, 1);
+            s.allPtysIndex = buildPtyIndex(s.allPtys);
+            recomputeMatches(s);
+            recomputeTree(s);
+          }
+
+          return; // PTY was destroyed while we were fetching metadata, don't add it
         }
 
-        return; // PTY was destroyed while we were fetching metadata, don't add it
-      }
+        // Check if PTY already exists
+        const existingIndex = s.allPtysIndex.get(ptyId);
+        if (existingIndex !== undefined) {
+          s.allPtys[existingIndex] = newPty;
+        } else {
+          // Add to the end of allPtys
+          const newIndex = s.allPtys.length;
+          s.allPtys.push(newPty);
+          s.allPtysIndex.set(ptyId, newIndex);
+        }
 
-      // Check if PTY already exists
-      const existingIndex = s.allPtysIndex.get(ptyId);
-      if (existingIndex !== undefined) {
-        s.allPtys[existingIndex] = newPty;
-      } else {
-        // Add to the end of allPtys
-        const newIndex = s.allPtys.length;
-        s.allPtys.push(newPty);
-        s.allPtysIndex.set(ptyId, newIndex);
-      }
+        // Clear pending status
+        s.pendingPtyIds.delete(ptyId);
 
-      // Clear pending status
-      s.pendingPtyIds.delete(ptyId);
+        // Mark as recently added for protection during initial load period
+        s.recentlyAddedPtyIds.add(ptyId);
+        // Clear after 5 seconds
+        setTimeout(() => {
+          setState(
+            produce((s2) => {
+              s2.recentlyAddedPtyIds.delete(ptyId);
+            })
+          );
+        }, 5000);
 
-      // Mark as recently added for protection during initial load period
-      s.recentlyAddedPtyIds.add(ptyId);
-      // Clear after 5 seconds
-      setTimeout(() => {
-        setState(produce((s2) => {
-          s2.recentlyAddedPtyIds.delete(ptyId);
-        }));
-      }, 5000);
+        // Update session load state to loaded if it wasn't already
+        const loadState = s.sessionLoadStates.get(ownership.sessionId);
+        if (loadState && loadState.status !== 'loaded') {
+          s.sessionLoadStates.set(ownership.sessionId, {
+            ...loadState,
+            status: 'loaded',
+            paneCount: (loadState.paneCount ?? 0) + 1,
+          });
+        }
 
-      // Update session load state to loaded if it wasn't already
-      const loadState = s.sessionLoadStates.get(ownership.sessionId);
-      if (loadState && loadState.status !== 'loaded') {
-        s.sessionLoadStates.set(ownership.sessionId, {
-          ...loadState,
-          status: 'loaded',
-          paneCount: (loadState.paneCount ?? 0) + 1,
-        });
-      }
+        // Auto-expand the session if this is the first PTY
+        const sessionPtyCount = s.allPtys.filter((p) => p.sessionId === ownership.sessionId).length;
+        if (sessionPtyCount === 1) {
+          s.expandedSessionIds.add(ownership.sessionId);
+        }
 
-      // Auto-expand the session if this is the first PTY
-      const sessionPtyCount = s.allPtys.filter(p => p.sessionId === ownership.sessionId).length;
-      if (sessionPtyCount === 1) {
-        s.expandedSessionIds.add(ownership.sessionId);
-      }
-
-      recomputeMatches(s);
-      recomputeTree(s);
-    }));
+        recomputeMatches(s);
+        recomputeTree(s);
+      })
+    );
   };
 
   /**
    * Handle PTY destroyed - remove from list instantly.
    * This is synchronous for immediate UI feedback.
    * Selection moves to adjacent PTY (below first, then above).
-   * 
+   *
    * The PTY is added to deletedPtyIds, which prevents it from being re-added
    * during background refresh. Entries are only cleared from deletedPtyIds
    * when refreshPtys confirms the PTY is actually gone from the service
    * (handling the race condition with deferred destruction).
    */
   const handlePtyDestroyed = (ptyId: string): void => {
-    setState(produce((s) => {
-      // Mark as deleted immediately (prevents background refresh from adding it back)
-      s.deletedPtyIds.add(ptyId);
+    setState(
+      produce((s) => {
+        // Mark as deleted immediately (prevents background refresh from adding it back)
+        s.deletedPtyIds.add(ptyId);
+        removeAggregateSessionMappingForPty(ptyId);
 
-      // Clear from pending if it was still being created
-      s.pendingPtyIds.delete(ptyId);
-      // Clear from recently added (it's now legitimately gone)
-      s.recentlyAddedPtyIds.delete(ptyId);
+        // Clear from pending if it was still being created
+        s.pendingPtyIds.delete(ptyId);
+        // Clear from recently added (it's now legitimately gone)
+        s.recentlyAddedPtyIds.delete(ptyId);
 
-      // Note: deletedPtyIds entry is cleared by refreshPtysOnce when it confirms
-      // the PTY is actually gone from the service (not just marked for deletion).
-      // This prevents race conditions with deferred destruction.
+        // Note: deletedPtyIds entry is cleared by refreshPtysOnce when it confirms
+        // the PTY is actually gone from the service (not just marked for deletion).
+        // This prevents race conditions with deferred destruction.
 
-      const index = s.allPtysIndex.get(ptyId);
-      if (index === undefined) return;
+        const index = s.allPtysIndex.get(ptyId);
+        if (index === undefined) return;
 
-      const pty = s.allPtys[index];
-      if (!pty) return;
+        const pty = s.allPtys[index];
+        if (!pty) return;
 
-      const sessionId = pty.sessionId;
+        const sessionId = pty.sessionId;
 
-      // Get current position in flattened tree BEFORE modifying anything
-      const removedFlattenedIndex = s.flattenedTreeIndex.get(ptyId);
+        // Get current position in flattened tree BEFORE modifying anything
+        const removedFlattenedIndex = s.flattenedTreeIndex.get(ptyId);
 
-      // Remove from allPtys
-      s.allPtys.splice(index, 1);
+        // Remove from allPtys
+        s.allPtys.splice(index, 1);
 
-      // Rebuild index for affected PTYs (indices shifted after removal)
-      s.allPtysIndex = buildPtyIndex(s.allPtys);
+        // Rebuild index for affected PTYs (indices shifted after removal)
+        s.allPtysIndex = buildPtyIndex(s.allPtys);
 
-      // Update session pane count
-      const loadState = s.sessionLoadStates.get(sessionId);
-      if (loadState) {
-        const newPaneCount = Math.max(0, (loadState.paneCount ?? 1) - 1);
-        s.sessionLoadStates.set(sessionId, {
-          ...loadState,
-          paneCount: newPaneCount,
-        });
-      }
-
-      // Handle selection change BEFORE recomputing tree (we need old flattened tree)
-      if (s.selectedPtyId === ptyId && removedFlattenedIndex !== undefined) {
-        // Priority 1: Try to find PTY below in same session
-        let newSelection: { index: number; ptyId: string; sessionId: string } | null = null;
-
-        // Search downward first (below the deleted PTY)
-        for (let i = removedFlattenedIndex + 1; i < s.flattenedTree.length; i++) {
-          const item = s.flattenedTree[i];
-          if (item?.node.type === 'session') break; // Stop at session boundary
-          if (item?.node.type === 'pty' && item.parentSessionId === sessionId) {
-            newSelection = { index: i, ptyId: item.node.ptyInfo.ptyId, sessionId };
-            break;
-          }
+        // Update session pane count
+        const loadState = s.sessionLoadStates.get(sessionId);
+        if (loadState) {
+          const newPaneCount = Math.max(0, (loadState.paneCount ?? 1) - 1);
+          s.sessionLoadStates.set(sessionId, {
+            ...loadState,
+            paneCount: newPaneCount,
+          });
         }
 
-        // Priority 2: If no PTY below, search upward (above the deleted PTY)
-        if (!newSelection) {
-          for (let i = removedFlattenedIndex - 1; i >= 0; i--) {
+        // Handle selection change BEFORE recomputing tree (we need old flattened tree)
+        if (s.selectedPtyId === ptyId && removedFlattenedIndex !== undefined) {
+          // Priority 1: Try to find PTY below in same session
+          let newSelection: { index: number; ptyId: string; sessionId: string } | null = null;
+
+          // Search downward first (below the deleted PTY)
+          for (let i = removedFlattenedIndex + 1; i < s.flattenedTree.length; i++) {
             const item = s.flattenedTree[i];
             if (item?.node.type === 'session') break; // Stop at session boundary
             if (item?.node.type === 'pty' && item.parentSessionId === sessionId) {
@@ -1303,74 +1372,94 @@ export function createLifecycleHandlers(
               break;
             }
           }
-        }
 
-        // Priority 3: If no PTY in same session, try any adjacent PTY
-        if (!newSelection) {
-          // Try below first
-          for (let i = removedFlattenedIndex + 1; i < s.flattenedTree.length; i++) {
-            const item = s.flattenedTree[i];
-            if (item?.node.type === 'pty') {
-              newSelection = { index: i, ptyId: item.node.ptyInfo.ptyId, sessionId: item.node.parentSessionId };
-              break;
-            }
-          }
-          // Then try above
+          // Priority 2: If no PTY below, search upward (above the deleted PTY)
           if (!newSelection) {
             for (let i = removedFlattenedIndex - 1; i >= 0; i--) {
               const item = s.flattenedTree[i];
-              if (item?.node.type === 'pty') {
-                newSelection = { index: i, ptyId: item.node.ptyInfo.ptyId, sessionId: item.node.parentSessionId };
+              if (item?.node.type === 'session') break; // Stop at session boundary
+              if (item?.node.type === 'pty' && item.parentSessionId === sessionId) {
+                newSelection = { index: i, ptyId: item.node.ptyInfo.ptyId, sessionId };
                 break;
               }
             }
           }
+
+          // Priority 3: If no PTY in same session, try any adjacent PTY
+          if (!newSelection) {
+            // Try below first
+            for (let i = removedFlattenedIndex + 1; i < s.flattenedTree.length; i++) {
+              const item = s.flattenedTree[i];
+              if (item?.node.type === 'pty') {
+                newSelection = {
+                  index: i,
+                  ptyId: item.node.ptyInfo.ptyId,
+                  sessionId: item.node.parentSessionId,
+                };
+                break;
+              }
+            }
+            // Then try above
+            if (!newSelection) {
+              for (let i = removedFlattenedIndex - 1; i >= 0; i--) {
+                const item = s.flattenedTree[i];
+                if (item?.node.type === 'pty') {
+                  newSelection = {
+                    index: i,
+                    ptyId: item.node.ptyInfo.ptyId,
+                    sessionId: item.node.parentSessionId,
+                  };
+                  break;
+                }
+              }
+            }
+          }
+
+          if (newSelection) {
+            s.selectedIndex = newSelection.index;
+            s.selectedPtyId = newSelection.ptyId;
+            s.selectedSessionId = newSelection.sessionId;
+          } else {
+            // No other PTY found, select the session header
+            s.selectedPtyId = null;
+            s.selectedIndex = Math.max(0, removedFlattenedIndex - 1);
+            // selectedSessionId stays as the current session
+          }
         }
 
-        if (newSelection) {
-          s.selectedIndex = newSelection.index;
-          s.selectedPtyId = newSelection.ptyId;
-          s.selectedSessionId = newSelection.sessionId;
-        } else {
-          // No other PTY found, select the session header
-          s.selectedPtyId = null;
-          s.selectedIndex = Math.max(0, removedFlattenedIndex - 1);
-          // selectedSessionId stays as the current session
-        }
-      }
-
-      recomputeMatches(s);
-      recomputeTree(s);
-    }));
+        recomputeMatches(s);
+        recomputeTree(s);
+      })
+    );
   };
 
   return { handlePtyCreated, handlePtyDestroyed };
 }
 
-export function createTitleChangeHandler(
-  setState: SetStoreFunction<AggregateViewState>
-) {
+export function createTitleChangeHandler(setState: SetStoreFunction<AggregateViewState>) {
   return (event: { ptyId: string; title: string }) => {
-    setState(produce((s) => {
-      // Update in allPtys using O(1) lookup with ptyId validation
-      const allIndex = s.allPtysIndex.get(event.ptyId);
-      if (allIndex !== undefined && s.allPtys[allIndex]) {
-        const ptyAtIndex = s.allPtys[allIndex];
-        // Validate that the PTY at this index has the correct ID
-        if (ptyAtIndex.ptyId === event.ptyId) {
-          s.allPtys[allIndex] = { ...ptyAtIndex, title: event.title };
+    setState(
+      produce((s) => {
+        // Update in allPtys using O(1) lookup with ptyId validation
+        const allIndex = s.allPtysIndex.get(event.ptyId);
+        if (allIndex !== undefined && s.allPtys[allIndex]) {
+          const ptyAtIndex = s.allPtys[allIndex];
+          // Validate that the PTY at this index has the correct ID
+          if (ptyAtIndex.ptyId === event.ptyId) {
+            s.allPtys[allIndex] = { ...ptyAtIndex, title: event.title };
+          }
         }
-      }
-      // Update in matchedPtys using O(1) lookup with ptyId validation
-      const matchedIndex = s.matchedPtysIndex.get(event.ptyId);
-      if (matchedIndex !== undefined && s.matchedPtys[matchedIndex]) {
-        const ptyAtIndex = s.matchedPtys[matchedIndex];
-        // Validate that the PTY at this index has the correct ID
-        if (ptyAtIndex.ptyId === event.ptyId) {
-          s.matchedPtys[matchedIndex] = { ...ptyAtIndex, title: event.title };
+        // Update in matchedPtys using O(1) lookup with ptyId validation
+        const matchedIndex = s.matchedPtysIndex.get(event.ptyId);
+        if (matchedIndex !== undefined && s.matchedPtys[matchedIndex]) {
+          const ptyAtIndex = s.matchedPtys[matchedIndex];
+          // Validate that the PTY at this index has the correct ID
+          if (ptyAtIndex.ptyId === event.ptyId) {
+            s.matchedPtys[matchedIndex] = { ...ptyAtIndex, title: event.title };
+          }
         }
-      }
-    }));
+      })
+    );
   };
 }
 
@@ -1381,7 +1470,10 @@ export async function setupSubscriptions(
   refreshPtys: () => Promise<void>,
   refreshPtysSubset: (ptyIds: string[]) => Promise<void>,
   handleTitleChange: (event: { ptyId: string; title: string }) => void,
-  lifecycleHandlers: { handlePtyCreated: (ptyId: string) => Promise<void>; handlePtyDestroyed: (ptyId: string) => void }
+  lifecycleHandlers: {
+    handlePtyCreated: (ptyId: string) => Promise<void>;
+    handlePtyDestroyed: (ptyId: string) => void;
+  }
 ): Promise<void> {
   const epoch = ++subscriptionsEpoch.value;
 

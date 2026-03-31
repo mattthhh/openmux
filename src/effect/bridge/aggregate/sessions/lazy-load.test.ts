@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it, mock } from 'bun:test';
 import { ServicesNotInitializedError } from '../../../errors';
+import { aggregateSessionMappings } from '../cache/session-pty-cache';
 
 describe('loadSessionPtysOnDemand (litmus)', () => {
   afterEach(() => {
+    aggregateSessionMappings.clear();
     mock.restore();
   });
 
@@ -17,10 +19,46 @@ describe('loadSessionPtysOnDemand (litmus)', () => {
       },
     }));
 
-    const { loadSessionPtysOnDemand } =
-      (await import('./lazy-load.ts?litmus-services-missing')) as typeof import('./lazy-load');
+    const { loadSessionPtysOnDemand } = await import('./lazy-load.ts?litmus-services-missing');
     const result = await loadSessionPtysOnDemand('session-1');
 
     expect(result).toBeInstanceOf(ServicesNotInitializedError);
+  });
+
+  it('should keep shim mappings authoritative over stale aggregate-local mappings', async () => {
+    aggregateSessionMappings.set('session-1', new Map([['pane-1', 'pty-stale']]));
+
+    mock.module('../../shim-bridge', () => ({
+      getSessionPtyMapping: async () => ({
+        mapping: new Map([['pane-1', 'pty-live']]),
+        stalePaneIds: [],
+      }),
+      registerPtyPane: async () => {},
+    }));
+
+    const { getAggregateSessionPtyMapping } = await import('./lazy-load.ts?litmus-shim-authority');
+    const result = await getAggregateSessionPtyMapping('session-1');
+
+    expect(result?.mapping.get('pane-1')).toBe('pty-live');
+    expect(aggregateSessionMappings.has('session-1')).toBe(false);
+  });
+
+  it('should prune stale aggregate-local mappings reported by the shim', async () => {
+    aggregateSessionMappings.set('session-1', new Map([['pane-1', 'pty-dead']]));
+
+    mock.module('../../shim-bridge', () => ({
+      getSessionPtyMapping: async () => ({
+        mapping: new Map<string, string>(),
+        stalePaneIds: ['pane-1'],
+      }),
+      registerPtyPane: async () => {},
+    }));
+
+    const { getAggregateSessionPtyMapping } =
+      await import('./lazy-load.ts?litmus-prune-stale-local');
+    const result = await getAggregateSessionPtyMapping('session-1');
+
+    expect(result?.mapping.size).toBe(0);
+    expect(aggregateSessionMappings.has('session-1')).toBe(false);
   });
 });

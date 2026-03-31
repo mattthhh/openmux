@@ -3,12 +3,14 @@
  */
 
 import { produce, type SetStoreFunction } from 'solid-js/store';
-import type { PtyInfo, AggregateViewState, SessionLoadState, FlattenedTreeItem, SessionTreeNode } from './aggregate-view-types';
-import {
-  clearPreviewState,
-  recomputeMatches,
-  recomputeTree,
-} from './aggregate-view-helpers';
+import type {
+  PtyInfo,
+  AggregateViewState,
+  SessionLoadState,
+  FlattenedTreeItem,
+  SessionTreeNode,
+} from './aggregate-view-types';
+import { clearPreviewState, recomputeMatches, recomputeTree } from './aggregate-view-helpers';
 import { loadSessionPtysOnDemand } from '../effect/bridge/aggregate-bridge';
 
 export interface AggregateViewActionsParams {
@@ -21,9 +23,7 @@ export interface AggregateViewActionsParams {
   persistSessionOrder?: (order: string[]) => Promise<void>;
 }
 
-export function createAggregateViewActions(
-  params: AggregateViewActionsParams
-) {
+export function createAggregateViewActions(params: AggregateViewActionsParams) {
   const { state, setState, refreshPtys, onCreatePaneInSession, persistSessionOrder } = params;
 
   const getSessionIdForItem = (item: FlattenedTreeItem | undefined): string | null => {
@@ -72,42 +72,50 @@ export function createAggregateViewActions(
   };
 
   const openAggregateView = () => {
-    setState(produce((s) => {
-      s.showAggregateView = true;
-      s.filterQuery = '';
-      s.listScrollOffset = 0;
-      clearPreviewState(s);
-      recomputeMatches(s);
-      recomputeTree(s);
-    }));
+    setState(
+      produce((s) => {
+        s.showAggregateView = true;
+        s.filterQuery = '';
+        s.listScrollOffset = 0;
+        clearPreviewState(s);
+        recomputeMatches(s);
+        recomputeTree(s);
+      })
+    );
   };
 
   const closeAggregateView = () => {
-    setState(produce((s) => {
-      s.showAggregateView = false;
-      s.filterQuery = '';
-      s.selectedIndex = 0;
-      s.selectedPtyId = null;
-      s.selectedSessionId = null;
-      s.listScrollOffset = 0;
-      clearPreviewState(s);
-    }));
+    setState(
+      produce((s) => {
+        s.showAggregateView = false;
+        s.filterQuery = '';
+        s.selectedIndex = 0;
+        s.selectedPtyId = null;
+        s.selectedSessionId = null;
+        s.listScrollOffset = 0;
+        clearPreviewState(s);
+      })
+    );
   };
 
   const setFilterQuery = (query: string) => {
-    setState(produce((s) => {
-      s.filterQuery = query;
-      recomputeMatches(s);
-      recomputeTree(s);
-    }));
+    setState(
+      produce((s) => {
+        s.filterQuery = query;
+        recomputeMatches(s);
+        recomputeTree(s);
+      })
+    );
   };
 
   const toggleShowInactive = () => {
-    setState(produce((s) => {
-      s.showInactive = !s.showInactive;
-      recomputeMatches(s);
-      recomputeTree(s);
-    }));
+    setState(
+      produce((s) => {
+        s.showInactive = !s.showInactive;
+        recomputeMatches(s);
+        recomputeTree(s);
+      })
+    );
   };
 
   // ============================================================================
@@ -123,23 +131,30 @@ export function createAggregateViewActions(
     }
     if (nextIndex < 0) return;
 
-    setState(produce((s) => {
-      applySelection(s, nextIndex);
-    }));
+    setState(
+      produce((s) => {
+        applySelection(s, nextIndex);
+      })
+    );
   };
 
   const navigateDown = () => {
     if (state.flattenedTree.length === 0) return;
 
     let nextIndex = state.selectedIndex + 1;
-    while (nextIndex < state.flattenedTree.length && !isSelectableItem(state.flattenedTree[nextIndex])) {
+    while (
+      nextIndex < state.flattenedTree.length &&
+      !isSelectableItem(state.flattenedTree[nextIndex])
+    ) {
       nextIndex += 1;
     }
     if (nextIndex >= state.flattenedTree.length) return;
 
-    setState(produce((s) => {
-      applySelection(s, nextIndex);
-    }));
+    setState(
+      produce((s) => {
+        applySelection(s, nextIndex);
+      })
+    );
   };
 
   const setSelectedIndex = (index: number) => {
@@ -147,17 +162,21 @@ export function createAggregateViewActions(
     const maxIndex = Math.max(0, state.flattenedTree.length - 1);
     const clamped = Math.min(maxIndex, Math.max(0, index));
 
-    setState(produce((s) => {
-      applySelection(s, clamped);
-    }));
+    setState(
+      produce((s) => {
+        applySelection(s, clamped);
+      })
+    );
   };
 
   const selectPty = (ptyId: string) => {
     const index = state.flattenedTreeIndex.get(ptyId);
     if (index !== undefined) {
-      setState(produce((s) => {
-        applySelection(s, index);
-      }));
+      setState(
+        produce((s) => {
+          applySelection(s, index);
+        })
+      );
     }
   };
 
@@ -178,16 +197,20 @@ export function createAggregateViewActions(
   };
 
   const exitPreviewMode = () => {
-    setState(produce((s) => {
-      clearPreviewState(s);
-    }));
+    setState(
+      produce((s) => {
+        clearPreviewState(s);
+      })
+    );
   };
 
   const togglePreviewZoom = () => {
-    setState(produce((s) => {
-      if (!s.previewMode || !s.selectedPtyId) return;
-      s.previewZoomed = !s.previewZoomed;
-    }));
+    setState(
+      produce((s) => {
+        if (!s.previewMode || !s.selectedPtyId) return;
+        s.previewZoomed = !s.previewZoomed;
+      })
+    );
   };
 
   // ============================================================================
@@ -211,98 +234,106 @@ export function createAggregateViewActions(
         : previousState?.lastActiveWorkspaceId;
     const previousFocusedPaneId = previousState?.focusedPaneId;
 
-    setState(produce((s) => {
-      s.loadingSessionIds.add(sessionId);
-      s.loadAttemptedSessionIds.add(sessionId);
-      s.sessionLoadStates.set(sessionId, {
-        status: 'loading',
-        paneCount: previousPaneCount,
-        lastActiveWorkspaceId: previousWorkspaceId,
-        focusedPaneId: previousFocusedPaneId,
-      });
-      recomputeTree(s);
-    }));
+    setState(
+      produce((s) => {
+        s.loadingSessionIds.add(sessionId);
+        s.loadAttemptedSessionIds.add(sessionId);
+        s.sessionLoadStates.set(sessionId, {
+          status: 'loading',
+          paneCount: previousPaneCount,
+          lastActiveWorkspaceId: previousWorkspaceId,
+          focusedPaneId: previousFocusedPaneId,
+        });
+        recomputeTree(s);
+      })
+    );
 
     const result = await loadSessionPtysOnDemand(sessionId);
 
-    setState(produce((s) => {
-      s.loadingSessionIds.delete(sessionId);
+    setState(
+      produce((s) => {
+        s.loadingSessionIds.delete(sessionId);
 
-      if (result instanceof Error) {
-        s.sessionLoadStates.set(sessionId, {
-          status: 'error',
-          error: result.message,
-          lastActiveWorkspaceId: previousWorkspaceId,
-          focusedPaneId: previousFocusedPaneId,
-          paneCount: previousPaneCount,
-        });
-        recomputeTree(s);
-        return;
-      }
+        if (result instanceof Error) {
+          s.sessionLoadStates.set(sessionId, {
+            status: 'error',
+            error: result.message,
+            lastActiveWorkspaceId: previousWorkspaceId,
+            focusedPaneId: previousFocusedPaneId,
+            paneCount: previousPaneCount,
+          });
+          recomputeTree(s);
+          return;
+        }
 
-      const sessionMetadata = s.allSessions.get(sessionId);
-      const existingIndex = new Map(s.allPtys.map((pty, index) => [pty.ptyId, index] as const));
+        const sessionMetadata = s.allSessions.get(sessionId);
+        const existingIndex = new Map(s.allPtys.map((pty, index) => [pty.ptyId, index] as const));
+        const visiblePtys = result.ptys.filter((pty) => !s.deletedPtyIds.has(pty.ptyId));
 
-      for (const pty of result.ptys) {
-        const nextPty: PtyInfo = {
-          ...pty,
-          sessionId,
-          sessionMetadata,
-        };
-
-        const index = existingIndex.get(pty.ptyId);
-        if (index === undefined) {
-          existingIndex.set(pty.ptyId, s.allPtys.length);
-          s.allPtys.push(nextPty);
-        } else {
-          s.allPtys[index] = {
-            ...s.allPtys[index],
-            ...nextPty,
+        for (const pty of visiblePtys) {
+          const nextPty: PtyInfo = {
+            ...pty,
+            sessionId,
+            sessionMetadata,
           };
+
+          const index = existingIndex.get(pty.ptyId);
+          if (index === undefined) {
+            existingIndex.set(pty.ptyId, s.allPtys.length);
+            s.allPtys.push(nextPty);
+          } else {
+            s.allPtys[index] = {
+              ...s.allPtys[index],
+              ...nextPty,
+            };
+          }
         }
-      }
 
-      if (result.ptys.length > 0) {
-        for (const pty of result.ptys) {
-          s.recentlyAddedPtyIds.add(pty.ptyId);
+        if (visiblePtys.length > 0) {
+          for (const pty of visiblePtys) {
+            s.recentlyAddedPtyIds.add(pty.ptyId);
+          }
+
+          setTimeout(() => {
+            setState(
+              produce((s2) => {
+                for (const pty of visiblePtys) {
+                  s2.recentlyAddedPtyIds.delete(pty.ptyId);
+                }
+              })
+            );
+          }, 5000);
         }
 
-        setTimeout(() => {
-          setState(produce((s2) => {
-            for (const pty of result.ptys) {
-              s2.recentlyAddedPtyIds.delete(pty.ptyId);
-            }
-          }));
-        }, 5000);
-      }
+        s.allPtysIndex = new Map(s.allPtys.map((pty, index) => [pty.ptyId, index] as const));
 
-      s.allPtysIndex = new Map(s.allPtys.map((pty, index) => [pty.ptyId, index] as const));
+        const paneCount =
+          visiblePtys.length > 0
+            ? visiblePtys.length
+            : (previousPaneCount ?? s.sessionLoadStates.get(sessionId)?.paneCount);
 
-      const paneCount = result.ptys.length > 0
-        ? result.ptys.length
-        : (previousPaneCount ?? s.sessionLoadStates.get(sessionId)?.paneCount);
+        if (visiblePtys.length > 0) {
+          s.sessionLoadStates.set(sessionId, {
+            status: 'loaded',
+            lastActiveWorkspaceId: result.lastActiveWorkspaceId ?? previousWorkspaceId,
+            focusedPaneId: previousFocusedPaneId,
+            paneCount,
+          });
+          s.loadAttemptedSessionIds.delete(sessionId);
+        } else {
+          s.sessionLoadStates.set(sessionId, {
+            status: 'unloaded',
+            lastActiveWorkspaceId: result.lastActiveWorkspaceId ?? previousWorkspaceId,
+            focusedPaneId: previousFocusedPaneId,
+            paneCount,
+          });
+          s.loadAttemptedSessionIds.delete(sessionId);
+        }
 
-      if (result.ptys.length > 0) {
-        s.sessionLoadStates.set(sessionId, {
-          status: 'loaded',
-          lastActiveWorkspaceId: result.lastActiveWorkspaceId ?? previousWorkspaceId,
-          focusedPaneId: previousFocusedPaneId,
-          paneCount,
-        });
-        s.loadAttemptedSessionIds.delete(sessionId);
-      } else {
-        s.sessionLoadStates.set(sessionId, {
-          status: 'unloaded',
-          lastActiveWorkspaceId: result.lastActiveWorkspaceId ?? previousWorkspaceId,
-          focusedPaneId: previousFocusedPaneId,
-          paneCount,
-        });
-        s.loadAttemptedSessionIds.delete(sessionId);
-      }
-
-      recomputeMatches(s);
-      recomputeTree(s);
-    }));
+        recomputeMatches(s);
+        recomputeTree(s);
+      })
+    );
 
     if (!(result instanceof Error) && result.ptys.length > 0) {
       void refreshPtys();
@@ -325,34 +356,40 @@ export function createAggregateViewActions(
 
   /** Toggle session expansion (collapse/expand PTYs under a session) */
   const toggleSessionExpanded = (sessionId: string) => {
-    setState(produce((s) => {
-      if (s.expandedSessionIds.has(sessionId)) {
-        s.expandedSessionIds.delete(sessionId);
-      } else {
-        s.expandedSessionIds.add(sessionId);
-      }
-      recomputeTree(s);
-    }));
+    setState(
+      produce((s) => {
+        if (s.expandedSessionIds.has(sessionId)) {
+          s.expandedSessionIds.delete(sessionId);
+        } else {
+          s.expandedSessionIds.add(sessionId);
+        }
+        recomputeTree(s);
+      })
+    );
   };
 
   /** Expand all sessions */
   const expandAllSessions = () => {
-    setState(produce((s) => {
-      for (const node of s.treeRoot) {
-        if (node.type === 'session' && node.loadState.status === 'loaded') {
-          s.expandedSessionIds.add(node.session.id);
+    setState(
+      produce((s) => {
+        for (const node of s.treeRoot) {
+          if (node.type === 'session' && node.loadState.status === 'loaded') {
+            s.expandedSessionIds.add(node.session.id);
+          }
         }
-      }
-      recomputeTree(s);
-    }));
+        recomputeTree(s);
+      })
+    );
   };
 
   /** Collapse all sessions */
   const collapseAllSessions = () => {
-    setState(produce((s) => {
-      s.expandedSessionIds.clear();
-      recomputeTree(s);
-    }));
+    setState(
+      produce((s) => {
+        s.expandedSessionIds.clear();
+        recomputeTree(s);
+      })
+    );
   };
 
   /** Get flattened item at index */
@@ -416,10 +453,7 @@ export function createAggregateViewActions(
     }
 
     const removedItem = flattened[removedIndex];
-    const sessionId =
-      removedItem?.node.type === 'pty'
-        ? removedItem.parentSessionId
-        : null;
+    const sessionId = removedItem?.node.type === 'pty' ? removedItem.parentSessionId : null;
 
     // Try to find replacement in priority order
     let replacement: { index: number; ptyId: string } | null = null;
@@ -527,7 +561,10 @@ export function createAggregateViewActions(
     return true;
   };
 
-  const reorderSessions = async (sourceSessionId: string, targetSessionId: string): Promise<void> => {
+  const reorderSessions = async (
+    sourceSessionId: string,
+    targetSessionId: string
+  ): Promise<void> => {
     if (sourceSessionId === targetSessionId) return;
 
     const currentOrder = state.treeRoot
@@ -546,10 +583,12 @@ export function createAggregateViewActions(
     const insertIndex = movingDown ? targetIndexAfterRemoval + 1 : targetIndexAfterRemoval;
     nextOrder.splice(insertIndex, 0, movedSessionId);
 
-    setState(produce((s) => {
-      s.manualSessionOrder = nextOrder;
-      recomputeTree(s);
-    }));
+    setState(
+      produce((s) => {
+        s.manualSessionOrder = nextOrder;
+        recomputeTree(s);
+      })
+    );
 
     await persistSessionOrder?.(nextOrder);
   };
