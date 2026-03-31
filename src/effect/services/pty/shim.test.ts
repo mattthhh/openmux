@@ -1,10 +1,10 @@
 /**
  * PTY Service Shim Implementation - Litmus Tests
  */
-import { describe, it, expect, vi } from 'bun:test';
+import { describe, it, expect, vi, mock } from 'bun:test';
 
 // Mock shim/client to prevent FFI loading and provide test doubles
-vi.mock('../../../shim/client', () => ({
+mock.module('../../../shim/client', () => ({
   waitForShim: vi.fn().mockResolvedValue(undefined),
   getTitle: vi.fn().mockResolvedValue('test'),
   emitPtyData: vi.fn(),
