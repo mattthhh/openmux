@@ -1,10 +1,54 @@
 /**
  * Test setup - global mocks for safety
  */
-import { mock } from 'bun:test';
+import { mock, vi } from 'bun:test';
 import * as solidJsxRuntime from 'solid-js/h/jsx-runtime';
 import { effectBridgeMocks } from './mocks/effect-bridge';
 import { mockGhostty } from './mocks/ghostty-ffi';
+
+// Polyfill vi methods for Bun compatibility
+type ViCompat = typeof vi & {
+  advanceTimersByTimeAsync?: (ms: number) => Promise<void>;
+  runAllTimersAsync?: () => Promise<void>;
+  mocked?: <T>(value: T) => T;
+  hoisted?: <T>(factory: () => T) => T;
+};
+
+const viCompat = vi as ViCompat;
+
+if (!viCompat.mocked) {
+  viCompat.mocked = (value) => value;
+}
+
+if (!viCompat.hoisted) {
+  viCompat.hoisted = (factory) => factory();
+}
+
+if (!viCompat.advanceTimersByTimeAsync) {
+  viCompat.advanceTimersByTimeAsync = async (ms: number) => {
+    vi.advanceTimersByTime(ms);
+    await Promise.resolve();
+  };
+}
+
+if (!viCompat.runAllTimersAsync) {
+  viCompat.runAllTimersAsync = async () => {
+    let guard = 25;
+    let idleCycles = 0;
+    while (guard > 0 && idleCycles < 5) {
+      const pending = vi.getTimerCount();
+      if (pending > 0) {
+        vi.runOnlyPendingTimers();
+        await Promise.resolve();
+        idleCycles = 0;
+      } else {
+        await Promise.resolve();
+        idleCycles += 1;
+      }
+      guard -= 1;
+    }
+  };
+}
 
 // Mock JSX runtime for SolidJS
 mock.module('@opentui/solid/jsx-runtime', () => solidJsxRuntime);
