@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.41](https://github.com/monotykamary/openmux/compare/v0.3.40...v0.3.41) (2026-03-31)
+
+### Features
+
+- **pty:** suppress pi's full redraw flash pattern ([a07576c](https://github.com/monotykamary/openmux/commit/a07576cdf9b0f55ce52736a11207deeb4f639067))
+
+### Bug Fixes
+
+- **ghostty-vt:** use public eraseHistory API after submodule update ([401cf21](https://github.com/monotykamary/openmux/commit/401cf21135bc1e24f0c79efb3bd099904ef6c817))
+- **test:** restore vi compatibility polyfills for bun:test ([0ddacce](https://github.com/monotykamary/openmux/commit/0ddacce74336ec8f39915412c7ecf38c2f4b9de0))
+
+### Tests
+
+- **bun:** migrate vi-specific APIs to native bun:test with polyfills ([6cc2164](https://github.com/monotykamary/openmux/commit/6cc2164c6813e4f16bc7d8ceb164bde2304d682c))
+- clean up litmus and smoke test naming conventions ([cddc41b](https://github.com/monotykamary/openmux/commit/cddc41be68c1eb724b7193da8a912bb9c66fa4db))
+
+### Refactoring
+
+- **test:** use native mock.module() instead of vi.mock() ([6ea026e](https://github.com/monotykamary/openmux/commit/6ea026eb39a74603612c74cf5727b0bab2ce53f9))
+
 ### [0.3.40](https://github.com/monotykamary/openmux/compare/v0.3.39...v0.3.40) (2026-03-28)
 
 ### Bug Fixes
