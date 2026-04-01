@@ -5,7 +5,7 @@
  * Supports selection, expansion, drag-and-drop reordering, and lazy loading.
  */
 
-import { Show, For, type Component, type JSX, createMemo } from 'solid-js';
+import { Show, For, type Component, type JSX } from 'solid-js';
 import type { MouseEvent as OpenTUIMouseEvent } from '@opentui/core';
 import type { FlattenedTreeItem, TreeNode } from '../../contexts/aggregate-view-types';
 import type { Theme } from '../../contexts/ThemeContext';
@@ -101,34 +101,6 @@ export const ListPane: Component<ListPaneProps> = (props) => {
     return props.flattenedTree.slice(props.viewport.start, props.viewport.end);
   };
 
-  // Compute max git metadata width across ALL PTYs for stable alignment
-  const maxMetaWidth = createMemo(() => {
-    let max = 0;
-    for (const item of props.flattenedTree) {
-      if (item.node.type === 'pty') {
-        const stats = item.node.ptyInfo.gitDiffStats;
-        const parts: string[] = [];
-        if (item.node.ptyInfo.gitDetached) parts.push('@');
-        if (item.node.ptyInfo.gitState && item.node.ptyInfo.gitState !== 'none' && item.node.ptyInfo.gitState !== 'unknown') {
-          parts.push('~');
-        }
-        if (stats && (stats.added > 0 || stats.removed > 0 || stats.binary > 0)) {
-          if (stats.added > 0) parts.push(`+${stats.added}`);
-          if (stats.removed > 0) parts.push(`-${stats.removed}`);
-          if (stats.binary > 0) parts.push(`*${stats.binary}`);
-        }
-        if (item.node.ptyInfo.gitAhead && item.node.ptyInfo.gitAhead > 0) {
-          parts.push(`↑${item.node.ptyInfo.gitAhead}`);
-        }
-        if (item.node.ptyInfo.gitBehind && item.node.ptyInfo.gitBehind > 0) {
-          parts.push(`↓${item.node.ptyInfo.gitBehind}`);
-        }
-        max = Math.max(max, parts.join(' ').length);
-      }
-    }
-    return max;
-  });
-
   // Handle mouse down on session (starts drag)
   const handleSessionMouseDown = (sessionId: string, index: number) => {
     props.onSelectItem(index);
@@ -187,9 +159,7 @@ export const ListPane: Component<ListPaneProps> = (props) => {
         {/* Scroll up indicator */}
         <Show when={props.viewport.showTopIndicator}>
           <box style={{ height: 1, justifyContent: 'center' }}>
-            <text fg={props.subtleColor}>
-              ▲ {props.viewport.hiddenAboveCount} more
-            </text>
+            <text fg={props.subtleColor}>▲ {props.viewport.hiddenAboveCount} more</text>
           </box>
         </Show>
 
@@ -239,9 +209,7 @@ export const ListPane: Component<ListPaneProps> = (props) => {
                           aggregateTheme={props.theme.ui.aggregate}
                           textColors={textColors}
                           isSelected={isSelected()}
-                          label={
-                            (node() as Extract<TreeNode, { type: 'placeholder' }>).message
-                          }
+                          label={(node() as Extract<TreeNode, { type: 'placeholder' }>).message}
                           onClick={() => {
                             props.onSelectItem(item.index);
                             const placeholderNode = node() as Extract<
@@ -258,12 +226,9 @@ export const ListPane: Component<ListPaneProps> = (props) => {
                     >
                       {/* PTY row */}
                       <props.components.PtyTreeRow
-                        pty={
-                          (node() as Extract<TreeNode, { type: 'pty' }>).ptyInfo
-                        }
+                        pty={(node() as Extract<TreeNode, { type: 'pty' }>).ptyInfo}
                         isSelected={isSelected()}
                         maxWidth={props.layout.innerWidth}
-                        maxMetaWidth={maxMetaWidth()}
                         treePrefix={ptyTreePrefix()}
                         indent={ptyIndent()}
                         aggregateTheme={props.theme.ui.aggregate}
@@ -282,18 +247,12 @@ export const ListPane: Component<ListPaneProps> = (props) => {
                 >
                   {/* Session row */}
                   <props.components.SessionTreeNode
-                    sessionName={
-                      (node() as Extract<TreeNode, { type: 'session' }>).session.name
-                    }
-                    paneCount={
-                      (node() as Extract<TreeNode, { type: 'session' }>).ptyCount
-                    }
+                    sessionName={(node() as Extract<TreeNode, { type: 'session' }>).session.name}
+                    paneCount={(node() as Extract<TreeNode, { type: 'session' }>).ptyCount}
                     treePrefix=""
                     indent={sessionIndent()}
                     isSelected={isSelected()}
-                    isExpanded={
-                      (node() as Extract<TreeNode, { type: 'session' }>).isExpanded
-                    }
+                    isExpanded={(node() as Extract<TreeNode, { type: 'session' }>).isExpanded}
                     isActive={
                       (node() as Extract<TreeNode, { type: 'session' }>).session.id ===
                       props.activeSessionId
@@ -328,9 +287,7 @@ export const ListPane: Component<ListPaneProps> = (props) => {
         {/* Scroll down indicator */}
         <Show when={props.viewport.showBottomIndicator}>
           <box style={{ height: 1, justifyContent: 'center' }}>
-            <text fg={props.subtleColor}>
-              ▼ {props.viewport.hiddenBelowCount} more
-            </text>
+            <text fg={props.subtleColor}>▼ {props.viewport.hiddenBelowCount} more</text>
           </box>
         </Show>
       </box>

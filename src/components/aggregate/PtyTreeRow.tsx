@@ -1,9 +1,10 @@
 /**
  * PTY Tree Row - Single line PTY display with shimmer for active PTYs
- * 
+ *
  * Format:   [label] [git metadata]
- * - Left: indent + truncated folder/process label
+ * - Left: indent + truncated folder/process label (uses full width if no metadata)
  * - Right: git metadata (@detached ~state +added -removed *binary ↑ahead ↓behind)
+ * - Per-row: each row only reserves space for its own metadata (no global column alignment)
  */
 
 import { createMemo, createSignal, onCleanup } from 'solid-js';
@@ -24,8 +25,8 @@ export interface PtyTreeRowProps {
   isSelected: boolean;
   /** Max width for rendering */
   maxWidth: number;
-  /** Max git metadata width across all PTYs for alignment */
-  maxMetaWidth: number;
+  /** Max git metadata width across all PTYs for alignment - DEPRECATED, unused */
+  maxMetaWidth?: number;
   /** Tree prefix glyph - IGNORED for cleaner look */
   treePrefix: string;
   /** Indentation string (just spaces, no tree glyphs) */
@@ -99,7 +100,10 @@ function getProcessDisplayName(pty: PtyInfo): string | null {
     return null;
   }
 
-  if (KNOWN_SHELLS.has(normalizedProcessName) || (shellName && normalizedProcessName === shellName)) {
+  if (
+    KNOWN_SHELLS.has(normalizedProcessName) ||
+    (shellName && normalizedProcessName === shellName)
+  ) {
     return null;
   }
 
@@ -173,10 +177,8 @@ export function PtyTreeRow(props: PtyTreeRowProps) {
   const bgColor = () => (props.isSelected ? selectionColors().background : undefined);
 
   // Muted/subtle colors
-  const mutedColor = () =>
-    props.isSelected ? selectionColors().dim : props.textColors.muted;
-  const subtleColor = () =>
-    props.isSelected ? selectionColors().dim : props.textColors.subtle;
+  const mutedColor = () => (props.isSelected ? selectionColors().dim : props.textColors.muted);
+  const subtleColor = () => (props.isSelected ? selectionColors().dim : props.textColors.subtle);
 
   // Show folder + active process, while still letting the label truncate before git metadata.
   const label = createMemo(() => {
@@ -193,26 +195,26 @@ export function PtyTreeRow(props: PtyTreeRowProps) {
     return `${baseLabel} (${processName})`;
   });
 
-  // Git metadata
+  // Git metadata for THIS row only
   const gitMeta = createMemo(() => buildGitMetadata(props.pty));
+  const thisMetaWidth = () => gitMeta().length;
 
   // Calculate layout - clean, no tree glyphs
   const indentWidth = () => props.indent.length;
-  const spacing = 2; // Double space for cleaner look
+  const spacing = 2; // Double space between label and metadata
   const rightGutter = 1; // Minimum right-side padding
 
   // Available width for content.
-  const availableWidth = () =>
-    props.maxWidth - indentWidth() - rightGutter;
+  const availableWidth = () => props.maxWidth - indentWidth() - rightGutter;
 
-  // Use the shared maxMetaWidth for alignment across all rows
-  const reservedMetaWidth = () => props.maxMetaWidth;
+  // Per-row: only reserve space for THIS row's metadata (if any)
+  const reservedMetaWidth = () => (thisMetaWidth() > 0 ? thisMetaWidth() + spacing : 0);
   const labelMaxWidth = () => {
-    const reserved = reservedMetaWidth() > 0 ? reservedMetaWidth() + spacing : 0;
+    const reserved = reservedMetaWidth();
     return Math.max(0, availableWidth() - reserved);
   };
 
-  // Truncate the folder label so git metadata stays aligned
+  // Truncate the folder label, only reserving space for this row's own metadata
   const displayLabel = createMemo(() => {
     const text = label();
     const maxWidth = labelMaxWidth();
@@ -222,25 +224,16 @@ export function PtyTreeRow(props: PtyTreeRowProps) {
     return text.slice(0, maxWidth - 1) + '…';
   });
 
-  // Calculate padding between label and git metadata (fixed alignment with right-aligned metadata)
+  // Padding to right-align the git metadata at the edge with a small gap
+  // Formula: available space - label length - metadata length = padding before metadata
   const padding = createMemo(() => {
-    const labelLen = displayLabel().length;
-    const metaLen = gitMeta().length;
-    const reserved = reservedMetaWidth();
-    
+    const metaLen = thisMetaWidth();
     // If no metadata for this row, no padding needed
     if (metaLen === 0) return '';
-    
-    // Base gap: align to the fixed column based on maxMetaWidth
-    const targetColumn = labelMaxWidth() + spacing;
-    const currentPos = labelLen;
-    const baseGap = Math.max(0, targetColumn - currentPos);
-    
-    // Right-align the metadata within the reserved space
-    // If reserved space is larger than actual metadata, add extra padding
-    const rightAlignPadding = Math.max(0, reserved - metaLen);
-    
-    return ' '.repeat(baseGap + rightAlignPadding);
+    // Calculate padding to right-align metadata (with rightGutter already accounted in availableWidth)
+    const labelLen = displayLabel().length;
+    const padLen = Math.max(0, availableWidth() - labelLen - metaLen);
+    return ' '.repeat(padLen);
   });
 
   // Apply shimmer to label characters if active
@@ -251,7 +244,11 @@ export function PtyTreeRow(props: PtyTreeRowProps) {
     const baseColor = baseFgColor();
 
     if (!isActive() || !isShimmerEnabled()) {
-      return <text fg={baseColor} selectable={false}>{text}</text>;
+      return (
+        <text fg={baseColor} selectable={false}>
+          {text}
+        </text>
+      );
     }
 
     const shimmeredChars: JSX.Element[] = [];
@@ -259,13 +256,18 @@ export function PtyTreeRow(props: PtyTreeRowProps) {
     let currentColor = baseColor;
 
     for (let i = 0; i < text.length; i++) {
-      const nextColor = getShimmerColor(baseColor, i, text.length, {
-        targetColor: props.shimmerTargetColor,
-      }) ?? baseColor;
+      const nextColor =
+        getShimmerColor(baseColor, i, text.length, {
+          targetColor: props.shimmerTargetColor,
+        }) ?? baseColor;
 
       if (nextColor !== currentColor) {
         if (currentRun) {
-          shimmeredChars.push(<text fg={currentColor} selectable={false}>{currentRun}</text>);
+          shimmeredChars.push(
+            <text fg={currentColor} selectable={false}>
+              {currentRun}
+            </text>
+          );
           currentRun = '';
         }
         currentColor = nextColor;
@@ -275,7 +277,11 @@ export function PtyTreeRow(props: PtyTreeRowProps) {
     }
 
     if (currentRun) {
-      shimmeredChars.push(<text fg={currentColor} selectable={false}>{currentRun}</text>);
+      shimmeredChars.push(
+        <text fg={currentColor} selectable={false}>
+          {currentRun}
+        </text>
+      );
     }
 
     return <>{shimmeredChars}</>;
@@ -298,24 +304,46 @@ export function PtyTreeRow(props: PtyTreeRowProps) {
       // Color based on token prefix
       if (token.startsWith('+')) {
         parts.push(
-          <text fg={props.isSelected ? diffColors().addedSelected : diffColors().added} selectable={false}>
+          <text
+            fg={props.isSelected ? diffColors().addedSelected : diffColors().added}
+            selectable={false}
+          >
             {token}
           </text>
         );
       } else if (token.startsWith('-')) {
         parts.push(
-          <text fg={props.isSelected ? diffColors().removedSelected : diffColors().removed} selectable={false}>
+          <text
+            fg={props.isSelected ? diffColors().removedSelected : diffColors().removed}
+            selectable={false}
+          >
             {token}
           </text>
         );
       } else if (token.startsWith('*')) {
-        parts.push(<text fg={subtleColor()} selectable={false}>{token}</text>);
+        parts.push(
+          <text fg={subtleColor()} selectable={false}>
+            {token}
+          </text>
+        );
       } else if (token.startsWith('↑') || token.startsWith('↓')) {
-        parts.push(<text fg={mutedColor()} selectable={false}>{token}</text>);
+        parts.push(
+          <text fg={mutedColor()} selectable={false}>
+            {token}
+          </text>
+        );
       } else if (token === '*' || token === '@' || token === '~') {
-        parts.push(<text fg={subtleColor()} selectable={false}>{token}</text>);
+        parts.push(
+          <text fg={subtleColor()} selectable={false}>
+            {token}
+          </text>
+        );
       } else {
-        parts.push(<text fg={mutedColor()} selectable={false}>{token}</text>);
+        parts.push(
+          <text fg={mutedColor()} selectable={false}>
+            {token}
+          </text>
+        );
       }
     }
 
@@ -334,7 +362,9 @@ export function PtyTreeRow(props: PtyTreeRowProps) {
       onMouseDown={handleClick}
     >
       {/* Indentation only - NO tree prefix */}
-      <text fg={subtleColor()} selectable={false}>{props.indent}</text>
+      <text fg={subtleColor()} selectable={false}>
+        {props.indent}
+      </text>
       {/* Label with optional shimmer */}
       {renderLabel()}
       {/* Padding */}
