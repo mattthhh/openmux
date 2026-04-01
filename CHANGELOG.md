@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.43](https://github.com/monotykamary/openmux/compare/v0.3.42...v0.3.43) (2026-04-01)
+
+
+### Bug Fixes
+
+* **aggregate-view:** per-row metadata width prevents global truncation ([4248692](https://github.com/monotykamary/openmux/commit/42486921a1e79aaa235ec1dcbceebfc8faf766a8))
+
 ### [0.3.42](https://github.com/monotykamary/openmux/compare/v0.3.41...v0.3.42) (2026-03-31)
 
 
