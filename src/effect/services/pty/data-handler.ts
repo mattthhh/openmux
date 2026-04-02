@@ -48,13 +48,11 @@ const CLEAR_SUPPRESSION_WINDOW_MS = 50;
 const CLEAR_SCREEN_REGEX = /\x1b\[2J/g;
 const CLEAR_SCREEN_C1_REGEX = /\x9b2J/g;
 
-// Pi flashing prevention: detect full redraw within synchronized output block
-const PI_SYNC_START = '\x1b[?2026h';
-const PI_SYNC_END = '\x1b[?2026l';
-const PI_SYNC_PROBE_LEN = 512;
-
-// Pattern: CSI ? 2026 h [content including clears] CSI ? 2026 l
-const PI_FULL_REDRAW_REGEX = /\x1b\[\?2026h([\s\S]*?)\x1b\[\?2026l/g;
+// Pi full redraws reach data-handler after sync-mode-parser has already stripped
+// CSI ? 2026 h/l. Normalize the post-sync payload instead of looking for sync markers.
+const CURSOR_HOME_SEQUENCE = '\x1b[H';
+const PI_FULL_REDRAW_PREFIX_REGEX =
+  /^(?:\x1b\[2J|\x9b2J)(?:\x1b\[(?:H|1;1H)|\x9b(?:H|1;1H))(?:\x1b\[3J|\x9b3J)/;
 
 function normalizeProcessName(value: string | null | undefined): string | null {
   if (!value) return null;
@@ -97,46 +95,17 @@ function shouldSuppressClearScreen(session: InternalPtySession): boolean {
 }
 
 /**
- * Detect if data contains pi's full redraw pattern within synchronized output.
- * Pi sends: CSI ? 2026 h CSI 2 J CSI H CSI 3 J [content] CSI ? 2026 l
- * This causes a flash - we can detect and smooth it out.
- */
-function detectPiFullRedrawPattern(data: string): {
-  hasPattern: boolean;
-  contentStart: number;
-  contentEnd: number;
-} {
-  const syncStartIdx = data.indexOf(PI_SYNC_START);
-  if (syncStartIdx === -1) return { hasPattern: false, contentStart: -1, contentEnd: -1 };
-
-  const syncEndIdx = data.indexOf(PI_SYNC_END, syncStartIdx + PI_SYNC_START.length);
-  if (syncEndIdx === -1) return { hasPattern: false, contentStart: -1, contentEnd: -1 };
-
-  // Check if there's a clear-screen sequence within the sync block
-  const syncContent = data.slice(syncStartIdx + PI_SYNC_START.length, syncEndIdx);
-  const hasClearInSync =
-    CLEAR_SCREEN_REGEX.test(syncContent) || CLEAR_SCREEN_C1_REGEX.test(syncContent);
-
-  return {
-    hasPattern: hasClearInSync,
-    contentStart: syncStartIdx + PI_SYNC_START.length,
-    contentEnd: syncEndIdx,
-  };
-}
-
-/**
- * Suppress clear sequences within a synchronized output block.
- * Removes CSI 2 J, CSI H, CSI 3 J but preserves content.
+ * Replace pi's destructive full-redraw prefix with a non-destructive cursor-home.
+ *
+ * sync-mode-parser strips CSI ? 2026 h/l before ready segments reach data-handler, so
+ * the real payload we see here starts with CSI 2 J, home, CSI 3 J, then the new frame.
+ * Rewriting that prefix to just CSI H keeps the redraw anchored at the top-left without
+ * clearing the visible screen or scrollback, which avoids the flash inside openmux.
+ *
  * @internal Exported for testing
  */
-export function suppressPiClearSequences(content: string): string {
-  return content
-    .replace(CLEAR_SCREEN_REGEX, '') // CSI 2 J
-    .replace(CLEAR_SCREEN_C1_REGEX, '') // C1 CSI 2 J
-    .replace(/\x1b\[H/g, '') // CSI H (home)
-    .replace(/\x9bH/g, '') // C1 CSI H
-    .replace(SCROLLBACK_CLEAR_REGEX, '') // CSI 3 J
-    .replace(SCROLLBACK_CLEAR_C1_REGEX, ''); // C1 CSI 3 J
+export function normalizePiFullRedrawSegment(segment: string): string {
+  return segment.replace(PI_FULL_REDRAW_PREFIX_REGEX, CURSOR_HOME_SEQUENCE);
 }
 
 /**
@@ -232,62 +201,6 @@ export function createDataHandler(options: DataHandlerOptions) {
   let kittyProbeBuffer = '';
   let focusProbeBuffer = '';
   let scrollbackClearBuffer = '';
-  let piSyncProbeBuffer = '';
-
-  /**
-   * Detect and suppress pi's full redraw flash pattern.
-   * Pi sends: CSI ? 2026 h CSI 2 J CSI H CSI 3 J [content] CSI ? 2026 l
-   * We detect the sync start and suppress clear sequences within the block.
-   */
-  const suppressPiFlashPattern = (data: string): string => {
-    // Fast path: check if we have any sync start marker
-    if (!data.includes(PI_SYNC_START) && !piSyncProbeBuffer.includes(PI_SYNC_START)) {
-      return data;
-    }
-
-    // Combine with probe buffer to handle split sequences
-    const combined = piSyncProbeBuffer + data;
-
-    // Find sync block boundaries
-    const syncStartIdx = combined.indexOf(PI_SYNC_START);
-    if (syncStartIdx === -1) {
-      piSyncProbeBuffer = combined.slice(-PI_SYNC_PROBE_LEN);
-      return data;
-    }
-
-    const syncEndIdx = combined.indexOf(PI_SYNC_END, syncStartIdx + PI_SYNC_START.length);
-
-    // If we have a complete sync block with clears inside, suppress them
-    if (syncEndIdx !== -1) {
-      const beforeSync = combined.slice(0, syncStartIdx);
-      const syncContent = combined.slice(syncStartIdx + PI_SYNC_START.length, syncEndIdx);
-      const afterSync = combined.slice(syncEndIdx + PI_SYNC_END.length);
-
-      // Check if there's a clear sequence within the sync block (indicates pi full redraw)
-      const hasClearInSync =
-        CLEAR_SCREEN_REGEX.test(syncContent) ||
-        CLEAR_SCREEN_C1_REGEX.test(syncContent) ||
-        /\x1b\[3J/.test(syncContent) ||
-        /\x9b3J/.test(syncContent);
-
-      if (hasClearInSync) {
-        // Suppress clears but keep content - let OpenTUI's double-buffering handle smooth update
-        const cleanContent = suppressPiClearSequences(syncContent);
-        // Rebuild without sync markers (let content flow naturally)
-        const result = beforeSync + cleanContent + afterSync;
-        piSyncProbeBuffer = '';
-        return result;
-      }
-
-      // Sync block but no clears - not pi's flash pattern, pass through normally
-      piSyncProbeBuffer = '';
-      return combined;
-    }
-
-    // Incomplete sync block - buffer for next chunk
-    piSyncProbeBuffer = combined.slice(-PI_SYNC_PROBE_LEN);
-    return data;
-  };
 
   const analyzeKitty = (data: string): { hasKittyApc: boolean; hasKittyQuery: boolean } => {
     if (data.length === 0) return { hasKittyApc: false, hasKittyQuery: false };
@@ -403,9 +316,6 @@ export function createDataHandler(options: DataHandlerOptions) {
       while (state.pendingSegments.length > 0) {
         let segment = state.pendingSegments.shift() ?? '';
         if (segment.length === 0) continue;
-        // Suppress pi's full redraw flash pattern (bash completion flash)
-        segment = suppressPiFlashPattern(segment);
-        if (segment.length === 0) continue;
         // Suppress ALL clear sequences during resize suppression window
         if (shouldSuppressClearScreen(session)) {
           segment = segment
@@ -451,8 +361,6 @@ export function createDataHandler(options: DataHandlerOptions) {
       }
 
       if (batch.length > 0) {
-        // Suppress pi's full redraw flash pattern (bash completion flash)
-        batch = suppressPiFlashPattern(batch);
         // Suppress ALL clear sequences during resize suppression window (both CSI 2 J and CSI 3 J)
         // Shells send these during SIGWINCH handling - dropping them preserves reflowed content
         if (shouldSuppressClearScreen(session)) {
@@ -538,7 +446,7 @@ export function createDataHandler(options: DataHandlerOptions) {
       if (!state.syncTimeout) {
         state.syncTimeout = setTimeout(() => {
           // Safety flush - sync mode took too long (app may have crashed)
-          const flushed = syncParser.flush();
+          const flushed = normalizePiFullRedrawSegment(syncParser.flush());
           if (flushed.length > 0) {
             state.pendingSegments.push(flushed);
             scheduleNotify();
@@ -553,7 +461,8 @@ export function createDataHandler(options: DataHandlerOptions) {
 
     // Add ready segments to pending queue
     let segmentsAdded = 0;
-    for (const segment of readySegments) {
+    for (const rawSegment of readySegments) {
+      const segment = normalizePiFullRedrawSegment(rawSegment);
       if (segment.length > 0) {
         state.pendingSegments.push(segment);
         segmentsAdded += 1;

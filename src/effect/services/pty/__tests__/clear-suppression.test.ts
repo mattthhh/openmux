@@ -3,46 +3,176 @@
  */
 
 import { describe, it, expect } from 'bun:test';
-import { suppressPiClearSequences, suppressClearScreenSequences } from '../data-handler';
+import type { InternalPtySession } from '../types';
+import type { ITerminalEmulator } from '../../../../terminal/emulator-interface';
+import { createSyncModeParser } from '../../../../terminal/sync-mode-parser';
+import {
+  createDataHandler,
+  normalizePiFullRedrawSegment,
+  suppressClearScreenSequences,
+} from '../data-handler';
 
-describe('suppressPiClearSequences', () => {
-  it('removes CSI 2 J (clear screen)', () => {
-    const input = 'hello\x1b[2Jworld';
-    expect(suppressPiClearSequences(input)).toBe('helloworld');
+function createMockSession() {
+  const emulatorWrites: string[] = [];
+  const ptyWrites: string[] = [];
+  let scrollbackArchiveResetCount = 0;
+  let scrollbackArchiverResetCount = 0;
+  let scrollbackScheduleCount = 0;
+
+  const emulator = {
+    cols: 80,
+    rows: 24,
+    isDisposed: false,
+    write(data: string | Uint8Array) {
+      emulatorWrites.push(typeof data === 'string' ? data : Buffer.from(data).toString('utf8'));
+    },
+    resize() {},
+    reset() {},
+    dispose() {},
+    getScrollbackLength() {
+      return 0;
+    },
+    getScrollbackLine() {
+      return null;
+    },
+    getDirtyUpdate() {
+      return {} as never;
+    },
+    getTerminalState() {
+      return {} as never;
+    },
+    getCursor() {
+      return { x: 0, y: 0, visible: true };
+    },
+    getCursorKeyMode() {
+      return 'normal' as const;
+    },
+    getKittyKeyboardFlags() {
+      return 0;
+    },
+    isMouseTrackingEnabled() {
+      return false;
+    },
+    isAlternateScreen() {
+      return false;
+    },
+    getMode() {
+      return false;
+    },
+    getColors() {
+      return { foreground: 0, background: 0 } as never;
+    },
+    getTitle() {
+      return '';
+    },
+    onTitleChange() {
+      return () => {};
+    },
+    onUpdate() {
+      return () => {};
+    },
+    onModeChange() {
+      return () => {};
+    },
+    drainResponses() {
+      return [];
+    },
+    search() {
+      return Promise.resolve([] as never);
+    },
+  } satisfies Partial<ITerminalEmulator> as ITerminalEmulator;
+
+  const session = {
+    id: 'test-pty',
+    pty: {
+      write(data: string) {
+        ptyWrites.push(data);
+      },
+      getForegroundProcessName() {
+        return null;
+      },
+    },
+    emulator,
+    liveEmulator: emulator,
+    scrollbackArchive: {
+      reset() {
+        scrollbackArchiveResetCount += 1;
+      },
+    },
+    scrollbackArchiver: {
+      reset() {
+        scrollbackArchiverResetCount += 1;
+      },
+      schedule() {
+        scrollbackScheduleCount += 1;
+      },
+    },
+    queryPassthrough: {
+      process(data: string) {
+        return data;
+      },
+    },
+    cols: 80,
+    rows: 24,
+    pixelWidth: 800,
+    pixelHeight: 600,
+    cellWidth: 10,
+    cellHeight: 25,
+    cwd: '/tmp',
+    shell: 'bash',
+    closing: false,
+    subscribers: new Set(),
+    scrollSubscribers: new Set(),
+    unifiedSubscribers: new Set(),
+    exitCallbacks: new Set(),
+    titleSubscribers: new Set(),
+    lastCommand: null,
+    focusTrackingEnabled: false,
+    focusState: false,
+    focusTrackingOwnerProcess: null,
+    pendingNotify: false,
+    scrollState: {
+      viewportOffset: 0,
+      lastScrollbackLength: 0,
+      lastIsAtBottom: true,
+    },
+    lastResizeTime: 0,
+  } as unknown as InternalPtySession;
+
+  return {
+    session,
+    emulatorWrites,
+    ptyWrites,
+    getScrollbackArchiveResetCount: () => scrollbackArchiveResetCount,
+    getScrollbackArchiverResetCount: () => scrollbackArchiverResetCount,
+    getScrollbackScheduleCount: () => scrollbackScheduleCount,
+  };
+}
+
+async function waitForDrain() {
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+describe('normalizePiFullRedrawSegment', () => {
+  it('rewrites pi full redraw prefix to a non-destructive cursor home', () => {
+    const input = '\x1b[2J\x1b[H\x1b[3Jhello';
+    expect(normalizePiFullRedrawSegment(input)).toBe('\x1b[Hhello');
   });
 
-  it('removes CSI H (home cursor)', () => {
-    const input = 'hello\x1b[Hworld';
-    expect(suppressPiClearSequences(input)).toBe('helloworld');
+  it('supports 1;1H and C1 variants', () => {
+    const input = '\x9b2J\x9b1;1H\x9b3Jhello';
+    expect(normalizePiFullRedrawSegment(input)).toBe('\x1b[Hhello');
   });
 
-  it('removes CSI 3 J (clear scrollback)', () => {
-    const input = 'hello\x1b[3Jworld';
-    expect(suppressPiClearSequences(input)).toBe('helloworld');
+  it('only rewrites the destructive prefix at the start of the segment', () => {
+    const input = 'prefix\x1b[2J\x1b[H\x1b[3Jhello';
+    expect(normalizePiFullRedrawSegment(input)).toBe(input);
   });
 
-  it('removes C1 CSI sequences', () => {
-    const input = 'a\x9b2J\x9bH\x9b3Jb';
-    expect(suppressPiClearSequences(input)).toBe('ab');
-  });
-
-  it('removes multiple clear sequences', () => {
-    const input = 'a\x1b[2J\x1b[H\x1b[3Jb';
-    expect(suppressPiClearSequences(input)).toBe('ab');
-  });
-
-  it('preserves other CSI sequences', () => {
-    const input = '\x1b[31mred\x1b[0m\x1b[2J\x1b[10;20H';
-    expect(suppressPiClearSequences(input)).toBe('\x1b[31mred\x1b[0m\x1b[10;20H');
-  });
-
-  it('handles empty string', () => {
-    expect(suppressPiClearSequences('')).toBe('');
-  });
-
-  it('handles content without clear sequences', () => {
-    const input = 'hello world\x1b[31mred\x1b[0m';
-    expect(suppressPiClearSequences(input)).toBe(input);
+  it('preserves non-pi clear sequences', () => {
+    const input = '\x1b[2J\x1b[Hhello';
+    expect(normalizePiFullRedrawSegment(input)).toBe(input);
   });
 });
 
@@ -64,5 +194,53 @@ describe('suppressClearScreenSequences', () => {
 
   it('handles empty string', () => {
     expect(suppressClearScreenSequences('')).toBe('');
+  });
+});
+
+describe('createDataHandler pi redraw integration', () => {
+  it('normalizes pi full redraws after sync parsing before writing to the emulator', async () => {
+    const {
+      session,
+      emulatorWrites,
+      getScrollbackArchiveResetCount,
+      getScrollbackArchiverResetCount,
+    } = createMockSession();
+    const { handleData } = createDataHandler({
+      session,
+      syncParser: createSyncModeParser(),
+    });
+
+    handleData('\x1b[?2026h\x1b[2J\x1b[H\x1b[3Jhello\x1b[?2026l');
+    await waitForDrain();
+
+    expect(emulatorWrites).toEqual(['\x1b[Hhello']);
+    expect(getScrollbackArchiveResetCount()).toBe(0);
+    expect(getScrollbackArchiverResetCount()).toBe(0);
+  });
+
+  it('still schedules scrollback archiving for the normalized redraw', async () => {
+    const { session, getScrollbackScheduleCount } = createMockSession();
+    const { handleData } = createDataHandler({
+      session,
+      syncParser: createSyncModeParser(),
+    });
+
+    handleData('\x1b[?2026h\x1b[2J\x1b[H\x1b[3Jhello\x1b[?2026l');
+    await waitForDrain();
+
+    expect(getScrollbackScheduleCount()).toBe(1);
+  });
+
+  it('leaves normal synchronized output untouched', async () => {
+    const { session, emulatorWrites } = createMockSession();
+    const { handleData } = createDataHandler({
+      session,
+      syncParser: createSyncModeParser(),
+    });
+
+    handleData('\x1b[?2026hplain output\x1b[?2026l');
+    await waitForDrain();
+
+    expect(emulatorWrites).toEqual(['plain output']);
   });
 });
