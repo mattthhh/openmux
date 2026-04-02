@@ -251,6 +251,10 @@ export interface AggregateViewContextValue {
   toggleShowInactive: () => void;
   navigateUp: () => void;
   navigateDown: () => void;
+  /** Navigate to previous PTY only (skips session headers, for preview mode) */
+  navigateToPrevPty: () => void;
+  /** Navigate to next PTY only (skips session headers, for preview mode) */
+  navigateToNextPty: () => void;
   setSelectedIndex: (index: number) => void;
   selectPty: (ptyId: string) => void;
   getSelectedPty: () => PtyInfo | null;

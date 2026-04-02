@@ -157,6 +157,46 @@ export function createAggregateViewActions(params: AggregateViewActionsParams) {
     );
   };
 
+  /** Navigate to previous PTY only (skips session headers/placeholders).
+   * Used in preview mode to stay in preview while switching panes. */
+  const navigateToPrevPty = () => {
+    if (state.flattenedTree.length === 0) return;
+
+    let nextIndex = state.selectedIndex - 1;
+    while (nextIndex >= 0) {
+      const item = state.flattenedTree[nextIndex];
+      if (item?.node.type === 'pty') break;
+      nextIndex -= 1;
+    }
+    if (nextIndex < 0) return;
+
+    setState(
+      produce((s) => {
+        applySelection(s, nextIndex);
+      })
+    );
+  };
+
+  /** Navigate to next PTY only (skips session headers/placeholders).
+   * Used in preview mode to stay in preview while switching panes. */
+  const navigateToNextPty = () => {
+    if (state.flattenedTree.length === 0) return;
+
+    let nextIndex = state.selectedIndex + 1;
+    while (nextIndex < state.flattenedTree.length) {
+      const item = state.flattenedTree[nextIndex];
+      if (item?.node.type === 'pty') break;
+      nextIndex += 1;
+    }
+    if (nextIndex >= state.flattenedTree.length) return;
+
+    setState(
+      produce((s) => {
+        applySelection(s, nextIndex);
+      })
+    );
+  };
+
   const setSelectedIndex = (index: number) => {
     if (state.flattenedTree.length === 0) return;
     const maxIndex = Math.max(0, state.flattenedTree.length - 1);
@@ -609,6 +649,8 @@ export function createAggregateViewActions(params: AggregateViewActionsParams) {
     toggleShowInactive,
     navigateUp,
     navigateDown,
+    navigateToPrevPty,
+    navigateToNextPty,
     setSelectedIndex,
     selectPty,
     getSelectedPty,

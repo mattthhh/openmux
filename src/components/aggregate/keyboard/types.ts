@@ -39,6 +39,8 @@ export interface AggregateKeyboardDeps {
   closeAggregateView: () => void;
   navigateUp: () => void;
   navigateDown: () => void;
+  navigateToPrevPty: () => void;
+  navigateToNextPty: () => void;
   enterPreviewMode: () => void;
   exitPreviewMode: () => void;
   togglePreviewZoom: () => void;

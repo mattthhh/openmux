@@ -3,7 +3,12 @@
  * Provides dimension calculations for the aggregate layout
  */
 
-import { formatComboSet, formatKeyCombo, type ResolvedKeybindingMap, type ResolvedKeybindings } from '../../core/keybindings';
+import {
+  formatComboSet,
+  formatKeyCombo,
+  type ResolvedKeybindingMap,
+  type ResolvedKeybindings,
+} from '../../core/keybindings';
 import type { VimInputMode } from '../../core/vim-sequences';
 
 export { borderStyleMap } from '../Pane';
@@ -124,17 +129,31 @@ export function getHintsText(
 
   if (previewMode) {
     const back = formatHintComboSet(getCombos(aggregateBindings.preview, 'aggregate.preview.exit'));
-    const search = formatHintComboSet(getCombos(aggregateBindings.preview, 'aggregate.preview.search'));
+    const search = formatHintComboSet(
+      getCombos(aggregateBindings.preview, 'aggregate.preview.search')
+    );
     const zoom = formatGlobalActionHint(keybindings, 'pane.zoom');
     const kill = formatHintComboSet(getCombos(aggregateBindings.preview, 'aggregate.kill'));
+    const newPane = formatHintComboSet(
+      getCombos(aggregateBindings.preview, 'aggregate.preview.new.pane')
+    );
+    const navCombos = [
+      ...getCombos(aggregateBindings.preview, 'aggregate.preview.up'),
+      ...getCombos(aggregateBindings.preview, 'aggregate.preview.down'),
+    ];
+    const navigate = formatHintComboSet(navCombos);
     const zoomLabel = previewZoomed ? 'unzoom' : 'zoom';
-    return `${back}:back ${search}:search ${zoom}:${zoomLabel} ${kill}:kill`;
+    return `${back}:back ${search}:search ${navigate}:nav ${newPane}:new ${zoom}:${zoomLabel} ${kill}:kill`;
   }
 
   if (vimEnabled) {
     const jump = formatHintComboSet(getCombos(aggregateBindings.list, 'aggregate.list.jump'));
-    const newPane = formatHintComboSet(getCombos(aggregateBindings.list, 'aggregate.list.new.pane'));
-    const toggleScope = formatHintComboSet(getCombos(aggregateBindings.list, 'aggregate.list.toggle.scope'));
+    const newPane = formatHintComboSet(
+      getCombos(aggregateBindings.list, 'aggregate.list.new.pane')
+    );
+    const toggleScope = formatHintComboSet(
+      getCombos(aggregateBindings.list, 'aggregate.list.toggle.scope')
+    );
     const kill = formatHintComboSet(getCombos(aggregateBindings.list, 'aggregate.kill'));
     const scopeLabel = showInactive ? 'all' : 'active';
     const modeHint = vimMode === 'insert' ? 'esc:normal' : 'i:filter';
@@ -149,7 +168,9 @@ export function getHintsText(
   const interact = formatHintComboSet(getCombos(aggregateBindings.list, 'aggregate.list.preview'));
   const jump = formatHintComboSet(getCombos(aggregateBindings.list, 'aggregate.list.jump'));
   const newPane = formatHintComboSet(getCombos(aggregateBindings.list, 'aggregate.list.new.pane'));
-  const toggleScope = formatHintComboSet(getCombos(aggregateBindings.list, 'aggregate.list.toggle.scope'));
+  const toggleScope = formatHintComboSet(
+    getCombos(aggregateBindings.list, 'aggregate.list.toggle.scope')
+  );
   const kill = formatHintComboSet(getCombos(aggregateBindings.list, 'aggregate.kill'));
   const close = formatHintComboSet(getCombos(aggregateBindings.list, 'aggregate.list.close'));
   const scopeLabel = showInactive ? 'all' : 'active';

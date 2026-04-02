@@ -50,6 +50,23 @@ export function createAggregatePreviewHandler(deps: AggregateKeyboardDeps) {
       return true;
     }
 
+    // New pane creation (alt+n convenience binding)
+    if (action === 'aggregate.preview.new.pane') {
+      void deps.handleNewPaneInSession();
+      return true;
+    }
+
+    // Navigate between panes without exiting preview mode (alt+j/k convenience bindings)
+    if (action === 'aggregate.preview.down') {
+      deps.navigateToNextPty();
+      return true;
+    }
+
+    if (action === 'aggregate.preview.up') {
+      deps.navigateToPrevPty();
+      return true;
+    }
+
     return false;
   };
 
