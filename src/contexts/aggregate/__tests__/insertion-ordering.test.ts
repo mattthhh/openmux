@@ -1,3 +1,10 @@
+/**
+ * Executable spec for aggregate PTY ordering.
+ *
+ * The important invariants are:
+ * - once a PTY is inserted adjacent to a selected PTY, later refreshes must preserve that order
+ * - tombstoned PTYs must be filtered in every load path, including the first aggregate load
+ */
 import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { createStore, produce } from 'solid-js/store';
 
@@ -163,6 +170,7 @@ const createHarness = () => {
   };
 };
 
+/** Visible PTY rows in tree order. */
 const getVisiblePtyIds = (state: AggregateViewState) =>
   state.flattenedTree
     .filter((item) => item.node.type === 'pty')

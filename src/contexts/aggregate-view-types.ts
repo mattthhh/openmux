@@ -174,7 +174,13 @@ export interface AggregateViewState {
   selectedSessionId: string | null;
   /** Map of session IDs to their loading states */
   sessionLoadStates: Map<string, SessionLoadState>;
-  /** Stable pane ordering per session (paneId -> order index) */
+  /**
+   * Aggregate-list ordering per session (paneId -> order index).
+   *
+   * Once aggregate view has shown a session, this becomes the authoritative order for
+   * already-known panes. Refreshes may append newly discovered panes, but they must not
+   * replace the existing order wholesale or newly inserted PTYs will jump to the end.
+   */
   sessionPaneOrders: Map<string, Map<string, number>>;
   /** Persisted manual session ordering for aggregate view */
   manualSessionOrder: string[];
@@ -186,11 +192,21 @@ export interface AggregateViewState {
   allSessions: Map<string, SessionMetadata>;
   /** Set of PTY IDs currently being created (to prevent flickering during creation) */
   pendingPtyIds: Set<string>;
-  /** Set of PTY IDs recently added from initial load (protected from background refresh briefly) */
+  /**
+   * Short-lived keepalive for PTYs introduced by initial load, bootstrap, or lifecycle.
+   * These rows are preserved while the next full refresh catches up with the live service.
+   */
   recentlyAddedPtyIds: Set<string>;
-  /** Set of PTY IDs recently deleted (prevent background refresh from adding them back) */
+  /**
+   * Tombstones for PTYs the user deleted.
+   * These must survive until the raw PTY service no longer reports the PTY, otherwise
+   * deleted rows can be revived by initial load, bootstrap, or refresh.
+   */
   deletedPtyIds: Set<string>;
-  /** PTY ID to insert new PTYs after (for ordering new panes adjacent to selected) */
+  /**
+   * One-shot adjacency hint captured before creating a pane.
+   * The lifecycle handler consumes this after the new PTY resolves to a paneId.
+   */
   insertAfterPtyId: string | null;
   /** Scroll offset for the session/PTY list (0 = top) */
   listScrollOffset: number;

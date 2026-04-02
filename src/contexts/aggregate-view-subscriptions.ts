@@ -206,6 +206,7 @@ function collectSerializedPaneIds(
   result.push(node.id);
 }
 
+/** Build the serialized pane order for a session snapshot. */
 function buildSessionPaneOrder(session: SerializedSession): Map<string, number> {
   const paneIds: string[] = [];
 
@@ -219,6 +220,16 @@ function buildSessionPaneOrder(session: SerializedSession): Map<string, number> 
   return new Map(paneIds.map((paneId, index) => [paneId, index] as const));
 }
 
+/**
+ * Merge a fresh session snapshot into the current aggregate order.
+ *
+ * The key invariant is that existing aggregate ordering wins for panes we already know
+ * about. Refreshes and bootstrap may discover the same panes again from layout/session
+ * storage, but replacing the map wholesale would move previously inserted PTYs back to
+ * the end of the group.
+ *
+ * Newly discovered panes are appended in incoming order.
+ */
 function mergeSessionPaneOrder(
   existing: Map<string, number> | undefined,
   incoming: Map<string, number>
@@ -253,6 +264,12 @@ function mergeSessionPaneOrder(
   return merged;
 }
 
+/**
+ * Compute the order for a newly created pane inserted after an existing pane.
+ *
+ * If another pane already follows `insertAfterPaneId`, we place the new pane between the
+ * two orders. Otherwise we append it to the end of the session.
+ */
 function getInsertedPaneOrder(
   paneOrder: Map<string, number>,
   insertAfterPaneId: string
@@ -474,6 +491,8 @@ export function createAggregateViewRefreshers(
             s.allSessions.set(session.id, session);
           }
 
+          // Deleted PTYs can still be visible in the live layout during the deferred destroy
+          // window, so every load path must filter tombstones at apply-time.
           const visibleQuickPtys = quickPtys.filter((pty) => !s.deletedPtyIds.has(pty.ptyId));
 
           if (currentSessionHints.sessionId && currentSessionPaneOrder) {
@@ -653,6 +672,7 @@ export function createAggregateViewRefreshers(
             );
           }
 
+          // Bootstrap runs from saved session mappings, so it must honor tombstones too.
           const visibleProvisionalPtys = provisionalPtys.filter(
             (pty) => !s.deletedPtyIds.has(pty.ptyId)
           );
@@ -858,6 +878,8 @@ export function createAggregateViewRefreshers(
             s.allSessions.set(session.id, session);
           }
 
+          // Never replace aggregate ordering wholesale. Existing order is authoritative for
+          // panes already shown in the aggregate list; refresh only reconciles and appends.
           const existingSessionPaneOrders = new Map(s.sessionPaneOrders);
           s.sessionPaneOrders.clear();
           for (const [sessionId, paneOrder] of sessionPaneOrders) {
@@ -1362,7 +1384,9 @@ export function createLifecycleHandlers(
         if (existingIndex !== undefined) {
           s.allPtys[existingIndex] = newPty;
 
-          // If insertAfterPtyId is still set, update sessionPaneOrders now that we have paneId
+          // The placeholder may already be visually adjacent in allPtys, but tree rendering is
+          // ultimately driven by sessionPaneOrders. Once the PTY resolves to a paneId, anchor the
+          // aggregate ordering here so later refreshes keep the same adjacency.
           const insertAfterId = s.insertAfterPtyId;
           if (insertAfterId && newPty.paneId) {
             let sessionPaneOrder = s.sessionPaneOrders.get(ownership.sessionId);
