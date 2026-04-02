@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.45](https://github.com/monotykamary/openmux/compare/v0.3.44...v0.3.45) (2026-04-02)
+
+
+### Bug Fixes
+
+* **pty:** normalize pi redraws after sync parsing ([46b33ff](https://github.com/monotykamary/openmux/commit/46b33ff5a4f0956cb3b38074c307e09f574bf3fe))
+
 ### [0.3.44](https://github.com/monotykamary/openmux/compare/v0.3.43...v0.3.44) (2026-04-02)
 
 
