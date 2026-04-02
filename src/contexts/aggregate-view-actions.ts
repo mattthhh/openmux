@@ -593,6 +593,15 @@ export function createAggregateViewActions(params: AggregateViewActionsParams) {
     await persistSessionOrder?.(nextOrder);
   };
 
+  /** Set the PTY ID to insert new PTYs after (for ordering new panes adjacent to selected) */
+  const setInsertAfterPtyId = (ptyId: string | null): void => {
+    setState(
+      produce((s) => {
+        s.insertAfterPtyId = ptyId;
+      })
+    );
+  };
+
   return {
     openAggregateView,
     closeAggregateView,
@@ -625,5 +634,6 @@ export function createAggregateViewActions(params: AggregateViewActionsParams) {
     scrollListUp,
     scrollListDown,
     setListScrollOffset,
+    setInsertAfterPtyId,
   };
 }

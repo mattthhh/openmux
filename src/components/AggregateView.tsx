@@ -54,7 +54,10 @@ import { useOverlayKeyboardHandler } from '../contexts/keyboard/use-overlay-keyb
 import { useOverlayColors } from './overlay-colors';
 import { createCopyModeVimState } from './app/copy-mode-vim';
 import { createCopyModeKeyHandler } from './app/copy-mode-keyboard';
-import { calculateAggregateListViewport, getAggregateListScrollOffsetForSelection } from './aggregate/list-viewport';
+import {
+  calculateAggregateListViewport,
+  getAggregateListScrollOffsetForSelection,
+} from './aggregate/list-viewport';
 import { truncateHint } from './overlay-hints';
 import { loadSessionData, getHostBackgroundColor } from '../effect/bridge';
 import { setShimmerEnabled } from '../core/shimmer';
@@ -107,6 +110,7 @@ export function AggregateView(props: AggregateViewProps) {
     scrollListUp,
     scrollListDown,
     setListScrollOffset,
+    setInsertAfterPtyId,
   } = useAggregateView();
 
   const { state: keyboardState, enterAggregateMode, exitAggregateMode } = keyboard;
@@ -125,7 +129,14 @@ export function AggregateView(props: AggregateViewProps) {
   } = terminal;
 
   const { foreground: overlayFg, muted: overlayMuted, subtle: overlaySubtle } = useOverlayColors();
-  const { clearAllSelections, startSelection, updateSelection, completeSelection, clearSelection, getSelection } = selection;
+  const {
+    clearAllSelections,
+    startSelection,
+    updateSelection,
+    completeSelection,
+    clearSelection,
+    getSelection,
+  } = selection;
 
   // Extracted hooks
   const vim = useVimMode({ isAggregateVisible: () => state.showAggregateView });
@@ -136,7 +147,9 @@ export function AggregateView(props: AggregateViewProps) {
   const [prefixActive, setPrefixActive] = createSignal(false);
   const [inSearchMode, setInSearchMode] = createSignal(false);
   const [aggregateCopyModeActive, setAggregateCopyModeActive] = createSignal(false);
-  const [pendingPaneFocus, setPendingPaneFocus] = createSignal<PendingAggregatePaneFocus | null>(null);
+  const [pendingPaneFocus, setPendingPaneFocus] = createSignal<PendingAggregatePaneFocus | null>(
+    null
+  );
 
   let prefixTimeout: ReturnType<typeof setTimeout> | null = null;
 
@@ -259,7 +272,10 @@ export function AggregateView(props: AggregateViewProps) {
     if (!selectedItem) return;
 
     const sessionId = (() => {
-      if (selectedItem.node.type === 'session' && selectedItem.node.loadState.status === 'unloaded') {
+      if (
+        selectedItem.node.type === 'session' &&
+        selectedItem.node.loadState.status === 'unloaded'
+      ) {
         return selectedItem.node.session.id;
       }
 
@@ -530,8 +546,13 @@ export function AggregateView(props: AggregateViewProps) {
 
     if (!selectedSessionId && !selectedPtyId) return;
 
+    // Set insert position to place new PTY adjacent to selected one
+    setInsertAfterPtyId(selectedPtyId);
+
     const targetSessionId =
-      selectedSessionId ?? findSessionForPty(selectedPtyId!)?.sessionId ?? sessionState.activeSessionId;
+      selectedSessionId ??
+      findSessionForPty(selectedPtyId!)?.sessionId ??
+      sessionState.activeSessionId;
     if (!targetSessionId) return;
 
     setPendingPaneFocus(null);

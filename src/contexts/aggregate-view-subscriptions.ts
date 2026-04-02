@@ -1133,9 +1133,24 @@ export function createLifecycleHandlers(
             sessionId: '', // Will be filled in when ownership resolved
             sessionMetadata: undefined,
           };
-          const newIndex = s.allPtys.length;
-          s.allPtys.push(placeholderPty);
-          s.allPtysIndex.set(ptyId, newIndex);
+
+          // Check if we should insert after a specific PTY (for ordering new panes adjacent to selected)
+          const insertAfterId = s.insertAfterPtyId;
+          const insertAfterIndex = insertAfterId ? s.allPtysIndex.get(insertAfterId) : undefined;
+
+          if (insertAfterIndex !== undefined) {
+            // Insert after the specified PTY
+            const insertIndex = insertAfterIndex + 1;
+            s.allPtys.splice(insertIndex, 0, placeholderPty);
+            // Rebuild index for affected PTYs
+            s.allPtysIndex = buildPtyIndex(s.allPtys);
+          } else {
+            // Add to the end of allPtys
+            const newIndex = s.allPtys.length;
+            s.allPtys.push(placeholderPty);
+            s.allPtysIndex.set(ptyId, newIndex);
+          }
+
           recomputeMatches(s);
           recomputeTree(s);
         }
@@ -1262,6 +1277,23 @@ export function createLifecycleHandlers(
         const existingIndex = s.allPtysIndex.get(ptyId);
         if (existingIndex !== undefined) {
           s.allPtys[existingIndex] = newPty;
+
+          // If insertAfterPtyId is still set, update sessionPaneOrders now that we have paneId
+          const insertAfterId = s.insertAfterPtyId;
+          if (insertAfterId && newPty.paneId) {
+            const sessionPaneOrder = s.sessionPaneOrders.get(ownership.sessionId);
+            const insertAfterPty = s.allPtys.find((p) => p.ptyId === insertAfterId);
+            if (sessionPaneOrder && insertAfterPty?.paneId) {
+              const insertAfterPaneOrder = sessionPaneOrder.get(insertAfterPty.paneId);
+              if (insertAfterPaneOrder !== undefined) {
+                // Create new order entry between insertAfterPaneOrder and the next order
+                const newOrder = insertAfterPaneOrder + 0.5;
+                sessionPaneOrder.set(newPty.paneId, newOrder);
+              }
+            }
+            // Clear the insert marker - only use it once
+            s.insertAfterPtyId = null;
+          }
         } else {
           // Add to the end of allPtys
           const newIndex = s.allPtys.length;

@@ -26,7 +26,7 @@ export interface PtyInfo {
   gitAhead: number | undefined;
   gitBehind: number | undefined;
   gitStashCount: number | undefined;
-  gitState: GitInfo["state"] | undefined;
+  gitState: GitInfo['state'] | undefined;
   gitDetached: boolean;
   gitRepoKey: string | undefined;
   foregroundProcess: string | undefined;
@@ -44,11 +44,27 @@ export interface PtyInfo {
 }
 
 /** Loading state for a session */
-export type SessionLoadState = 
-  | { status: 'unloaded'; lastActiveWorkspaceId?: number; focusedPaneId?: string; paneCount?: number }
-  | { status: 'loading'; lastActiveWorkspaceId?: number; focusedPaneId?: string; paneCount?: number }
+export type SessionLoadState =
+  | {
+      status: 'unloaded';
+      lastActiveWorkspaceId?: number;
+      focusedPaneId?: string;
+      paneCount?: number;
+    }
+  | {
+      status: 'loading';
+      lastActiveWorkspaceId?: number;
+      focusedPaneId?: string;
+      paneCount?: number;
+    }
   | { status: 'loaded'; lastActiveWorkspaceId?: number; focusedPaneId?: string; paneCount?: number }
-  | { status: 'error'; error: string; lastActiveWorkspaceId?: number; focusedPaneId?: string; paneCount?: number };
+  | {
+      status: 'error';
+      error: string;
+      lastActiveWorkspaceId?: number;
+      focusedPaneId?: string;
+      paneCount?: number;
+    };
 
 /** Session node in the tree */
 export interface SessionTreeNode {
@@ -174,6 +190,8 @@ export interface AggregateViewState {
   recentlyAddedPtyIds: Set<string>;
   /** Set of PTY IDs recently deleted (prevent background refresh from adding them back) */
   deletedPtyIds: Set<string>;
+  /** PTY ID to insert new PTYs after (for ordering new panes adjacent to selected) */
+  insertAfterPtyId: string | null;
   /** Scroll offset for the session/PTY list (0 = top) */
   listScrollOffset: number;
 }
@@ -205,6 +223,7 @@ export const initialState: AggregateViewState = {
   pendingPtyIds: new Set(),
   recentlyAddedPtyIds: new Set(),
   deletedPtyIds: new Set(),
+  insertAfterPtyId: null,
   listScrollOffset: 0,
 };
 
@@ -247,4 +266,6 @@ export interface AggregateViewContextValue {
   scrollListDown: (pageSize?: number) => void;
   /** Scroll the list to a specific offset */
   setListScrollOffset: (offset: number) => void;
+  /** Set the PTY ID to insert new PTYs after (for ordering new panes adjacent to selected) */
+  setInsertAfterPtyId: (ptyId: string | null) => void;
 }
