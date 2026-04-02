@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.46](https://github.com/monotykamary/openmux/compare/v0.3.45...v0.3.46) (2026-04-02)
+
+
+### Bug Fixes
+
+* **pty:** clear visible rows on pi redraw normalization ([2e4e044](https://github.com/monotykamary/openmux/commit/2e4e044e8c51d78cab0e86640b218f38e738b1e1))
+
+
+### Refactoring
+
+* **aggregate-view:** simplify PTY insertion flow ([dcd00ab](https://github.com/monotykamary/openmux/commit/dcd00ab4c46a85e70ecd32435e15e7b87fbd6a65))
+
+
+### Tests
+
+* **aggregate-view:** cover session autoload and insertion flow ([39a4644](https://github.com/monotykamary/openmux/commit/39a4644e18fed22fd8b4dfc0ed336a46d37073ba))
+
+
+### Performance
+
+* **aggregate-view:** avoid blocking PTY creation on git cache ([04737c1](https://github.com/monotykamary/openmux/commit/04737c1ca28af4af2dea1a7d888fd6baf45882d0))
+
 ### [0.3.45](https://github.com/monotykamary/openmux/compare/v0.3.44...v0.3.45) (2026-04-02)
 
 
