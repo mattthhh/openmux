@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.44](https://github.com/monotykamary/openmux/compare/v0.3.43...v0.3.44) (2026-04-02)
+
+
+### Features
+
+* **aggregate-view:** add alt+ keybindings for pane navigation and creation ([b2cb5da](https://github.com/monotykamary/openmux/commit/b2cb5dae8ed356d618a885281ae788900aff43a3))
+
+
+### Bug Fixes
+
+* **aggregate-view:** insert new PTYs adjacent to selected PTY in session list ([d00ea91](https://github.com/monotykamary/openmux/commit/d00ea919609f5c5943381730f884132d7afa2899))
+* **aggregate-view:** preserve PTY insertion order and tombstones ([8a73f6a](https://github.com/monotykamary/openmux/commit/8a73f6ab0d81f0ddc3f2510097254f59ecd25cb5))
+
+
+### Documentation
+
+* **aggregate-view:** clarify PTY ordering invariants ([cce0e92](https://github.com/monotykamary/openmux/commit/cce0e92b9d0cc8a7211bb0ad952a70af5f6e069b))
+
 ### [0.3.43](https://github.com/monotykamary/openmux/compare/v0.3.42...v0.3.43) (2026-04-01)
 
 
