@@ -219,6 +219,66 @@ function buildSessionPaneOrder(session: SerializedSession): Map<string, number> 
   return new Map(paneIds.map((paneId, index) => [paneId, index] as const));
 }
 
+function mergeSessionPaneOrder(
+  existing: Map<string, number> | undefined,
+  incoming: Map<string, number>
+): Map<string, number> {
+  if (!existing || existing.size === 0) {
+    return new Map(incoming);
+  }
+
+  const incomingPaneIds = new Set(incoming.keys());
+  const merged = new Map<string, number>();
+  const existingEntries = [...existing.entries()]
+    .filter(([paneId]) => incomingPaneIds.has(paneId))
+    .sort(([, aOrder], [, bOrder]) => aOrder - bOrder);
+
+  for (const [paneId, order] of existingEntries) {
+    merged.set(paneId, order);
+  }
+
+  let nextOrder = existingEntries.reduce((maxOrder, [, order]) => Math.max(maxOrder, order), -1);
+
+  for (const [paneId] of [...incoming.entries()].sort(
+    ([, aOrder], [, bOrder]) => aOrder - bOrder
+  )) {
+    if (merged.has(paneId)) {
+      continue;
+    }
+
+    nextOrder = Math.floor(nextOrder) + 1;
+    merged.set(paneId, nextOrder);
+  }
+
+  return merged;
+}
+
+function getInsertedPaneOrder(
+  paneOrder: Map<string, number>,
+  insertAfterPaneId: string
+): number | null {
+  const insertAfterOrder = paneOrder.get(insertAfterPaneId);
+  if (insertAfterOrder === undefined) {
+    return null;
+  }
+
+  let nextOrder: number | undefined;
+  for (const order of paneOrder.values()) {
+    if (order <= insertAfterOrder) {
+      continue;
+    }
+    if (nextOrder === undefined || order < nextOrder) {
+      nextOrder = order;
+    }
+  }
+
+  if (nextOrder === undefined) {
+    return Math.floor(insertAfterOrder) + 1;
+  }
+
+  return insertAfterOrder + (nextOrder - insertAfterOrder) / 2;
+}
+
 function countSerializedPanes(node: SerializedLayoutNode | null | undefined): number {
   if (!node) return 0;
   if ('type' in node && node.type === 'split') {
@@ -357,6 +417,7 @@ export function createAggregateViewRefreshers(
 
       // Get current session hints for quick PTY access
       const currentSessionHints = getCurrentSessionHints();
+      const currentSessionPaneOrder = getCurrentSessionPaneOrder();
       const currentSessionPtys = getCurrentSessionPtys?.() ?? [];
 
       // Build minimal PTY info from current session (we already have this data)
@@ -413,8 +474,20 @@ export function createAggregateViewRefreshers(
             s.allSessions.set(session.id, session);
           }
 
+          const visibleQuickPtys = quickPtys.filter((pty) => !s.deletedPtyIds.has(pty.ptyId));
+
+          if (currentSessionHints.sessionId && currentSessionPaneOrder) {
+            s.sessionPaneOrders.set(
+              currentSessionHints.sessionId,
+              mergeSessionPaneOrder(
+                s.sessionPaneOrders.get(currentSessionHints.sessionId),
+                currentSessionPaneOrder
+              )
+            );
+          }
+
           // Mark all current PTYs as recently added (protected from background refresh)
-          for (const pty of quickPtys) {
+          for (const pty of visibleQuickPtys) {
             s.recentlyAddedPtyIds.add(pty.ptyId);
           }
 
@@ -431,7 +504,7 @@ export function createAggregateViewRefreshers(
 
           // Merge with any existing PTYs (in case of refresh)
           const existingPtyIds = new Set(s.allPtys.map((p) => p.ptyId));
-          const newPtys = quickPtys.filter((p) => !existingPtyIds.has(p.ptyId));
+          const newPtys = visibleQuickPtys.filter((p) => !existingPtyIds.has(p.ptyId));
 
           if (newPtys.length > 0) {
             s.allPtys = [...s.allPtys, ...newPtys];
@@ -505,7 +578,6 @@ export function createAggregateViewRefreshers(
       const currentSessionPaneOrder = getCurrentSessionPaneOrder();
       const sessionPaneOrders = new Map<string, Map<string, number>>();
       const provisionalPtys: PtyInfo[] = [];
-      const provisionalPaneCountBySession = new Map<string, number>();
 
       for (const [sessionId, sessionDetails] of sessionDetailsEntries) {
         if (sessionDetails instanceof Error) {
@@ -560,10 +632,7 @@ export function createAggregateViewRefreshers(
             sessionId,
             sessionMetadata,
           });
-          provisionalPaneCountBySession.set(
-            sessionId,
-            (provisionalPaneCountBySession.get(sessionId) ?? 0) + 1
-          );
+          // Pane counts are derived from visibleProvisionalPtys inside the state update.
         }
       }
 
@@ -578,11 +647,18 @@ export function createAggregateViewRefreshers(
           }
 
           for (const [sessionId, paneOrder] of sessionPaneOrders) {
-            s.sessionPaneOrders.set(sessionId, paneOrder);
+            s.sessionPaneOrders.set(
+              sessionId,
+              mergeSessionPaneOrder(s.sessionPaneOrders.get(sessionId), paneOrder)
+            );
           }
 
+          const visibleProvisionalPtys = provisionalPtys.filter(
+            (pty) => !s.deletedPtyIds.has(pty.ptyId)
+          );
+          const visiblePaneCountBySession = new Map<string, number>();
           const existingIndex = new Map(s.allPtys.map((pty, index) => [pty.ptyId, index] as const));
-          for (const pty of provisionalPtys) {
+          for (const pty of visibleProvisionalPtys) {
             const index = existingIndex.get(pty.ptyId);
             if (index === undefined) {
               existingIndex.set(pty.ptyId, s.allPtys.length);
@@ -594,13 +670,17 @@ export function createAggregateViewRefreshers(
               };
             }
             s.recentlyAddedPtyIds.add(pty.ptyId);
+            visiblePaneCountBySession.set(
+              pty.sessionId,
+              (visiblePaneCountBySession.get(pty.sessionId) ?? 0) + 1
+            );
           }
 
-          if (provisionalPtys.length > 0) {
+          if (visibleProvisionalPtys.length > 0) {
             setTimeout(() => {
               setState(
                 produce((s2) => {
-                  for (const pty of provisionalPtys) {
+                  for (const pty of visibleProvisionalPtys) {
                     s2.recentlyAddedPtyIds.delete(pty.ptyId);
                   }
                 })
@@ -608,7 +688,7 @@ export function createAggregateViewRefreshers(
             }, 5000);
           }
 
-          for (const [sessionId, paneCount] of provisionalPaneCountBySession) {
+          for (const [sessionId, paneCount] of visiblePaneCountBySession) {
             const sessionDetails = sessionDetailsById.get(sessionId);
             const detailValue = sessionDetails instanceof Error ? undefined : sessionDetails;
             const detailWorkspaceId = detailValue?.activeWorkspaceId;
@@ -778,9 +858,13 @@ export function createAggregateViewRefreshers(
             s.allSessions.set(session.id, session);
           }
 
+          const existingSessionPaneOrders = new Map(s.sessionPaneOrders);
           s.sessionPaneOrders.clear();
           for (const [sessionId, paneOrder] of sessionPaneOrders) {
-            s.sessionPaneOrders.set(sessionId, paneOrder);
+            s.sessionPaneOrders.set(
+              sessionId,
+              mergeSessionPaneOrder(existingSessionPaneOrders.get(sessionId), paneOrder)
+            );
           }
 
           s.manualSessionOrder = s.manualSessionOrder.filter((sessionId) =>
@@ -1281,13 +1365,21 @@ export function createLifecycleHandlers(
           // If insertAfterPtyId is still set, update sessionPaneOrders now that we have paneId
           const insertAfterId = s.insertAfterPtyId;
           if (insertAfterId && newPty.paneId) {
-            const sessionPaneOrder = s.sessionPaneOrders.get(ownership.sessionId);
+            let sessionPaneOrder = s.sessionPaneOrders.get(ownership.sessionId);
+            if (!sessionPaneOrder) {
+              const sessionPaneIds = s.allPtys
+                .filter((pty) => pty.sessionId === ownership.sessionId && !!pty.paneId)
+                .map((pty) => pty.paneId as string);
+              sessionPaneOrder = new Map(
+                sessionPaneIds.map((paneId, index) => [paneId, index] as const)
+              );
+              s.sessionPaneOrders.set(ownership.sessionId, sessionPaneOrder);
+            }
+
             const insertAfterPty = s.allPtys.find((p) => p.ptyId === insertAfterId);
-            if (sessionPaneOrder && insertAfterPty?.paneId) {
-              const insertAfterPaneOrder = sessionPaneOrder.get(insertAfterPty.paneId);
-              if (insertAfterPaneOrder !== undefined) {
-                // Create new order entry between insertAfterPaneOrder and the next order
-                const newOrder = insertAfterPaneOrder + 0.5;
+            if (insertAfterPty?.paneId) {
+              const newOrder = getInsertedPaneOrder(sessionPaneOrder, insertAfterPty.paneId);
+              if (newOrder !== null) {
                 sessionPaneOrder.set(newPty.paneId, newOrder);
               }
             }
