@@ -51,6 +51,7 @@ const CLEAR_SCREEN_C1_REGEX = /\x9b2J/g;
 // Pi full redraws reach data-handler after sync-mode-parser has already stripped
 // CSI ? 2026 h/l. Normalize the post-sync payload instead of looking for sync markers.
 const CURSOR_HOME_SEQUENCE = '\x1b[H';
+const ERASE_TO_END_OF_SCREEN_SEQUENCE = '\x1b[J';
 const PI_FULL_REDRAW_PREFIX_REGEX =
   /^(?:\x1b\[2J|\x9b2J)(?:\x1b\[(?:H|1;1H)|\x9b(?:H|1;1H))(?:\x1b\[3J|\x9b3J)/;
 
@@ -95,17 +96,21 @@ function shouldSuppressClearScreen(session: InternalPtySession): boolean {
 }
 
 /**
- * Replace pi's destructive full-redraw prefix with a non-destructive cursor-home.
+ * Replace pi's destructive full-redraw prefix with a non-destructive visible clear.
  *
  * sync-mode-parser strips CSI ? 2026 h/l before ready segments reach data-handler, so
  * the real payload we see here starts with CSI 2 J, home, CSI 3 J, then the new frame.
- * Rewriting that prefix to just CSI H keeps the redraw anchored at the top-left without
- * clearing the visible screen or scrollback, which avoids the flash inside openmux.
+ * Rewriting that prefix to cursor-home + erase-to-end clears the visible viewport from
+ * the top-left without clearing scrollback, which avoids the flash while still removing
+ * stale rows from shorter redraws like /new.
  *
  * @internal Exported for testing
  */
 export function normalizePiFullRedrawSegment(segment: string): string {
-  return segment.replace(PI_FULL_REDRAW_PREFIX_REGEX, CURSOR_HOME_SEQUENCE);
+  return segment.replace(
+    PI_FULL_REDRAW_PREFIX_REGEX,
+    `${CURSOR_HOME_SEQUENCE}${ERASE_TO_END_OF_SCREEN_SEQUENCE}`
+  );
 }
 
 /**

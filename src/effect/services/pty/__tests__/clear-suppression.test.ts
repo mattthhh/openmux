@@ -155,14 +155,14 @@ async function waitForDrain() {
 }
 
 describe('normalizePiFullRedrawSegment', () => {
-  it('rewrites pi full redraw prefix to a non-destructive cursor home', () => {
+  it('rewrites pi full redraw prefix to a non-destructive visible clear', () => {
     const input = '\x1b[2J\x1b[H\x1b[3Jhello';
-    expect(normalizePiFullRedrawSegment(input)).toBe('\x1b[Hhello');
+    expect(normalizePiFullRedrawSegment(input)).toBe('\x1b[H\x1b[Jhello');
   });
 
   it('supports 1;1H and C1 variants', () => {
     const input = '\x9b2J\x9b1;1H\x9b3Jhello';
-    expect(normalizePiFullRedrawSegment(input)).toBe('\x1b[Hhello');
+    expect(normalizePiFullRedrawSegment(input)).toBe('\x1b[H\x1b[Jhello');
   });
 
   it('only rewrites the destructive prefix at the start of the segment', () => {
@@ -213,7 +213,7 @@ describe('createDataHandler pi redraw integration', () => {
     handleData('\x1b[?2026h\x1b[2J\x1b[H\x1b[3Jhello\x1b[?2026l');
     await waitForDrain();
 
-    expect(emulatorWrites).toEqual(['\x1b[Hhello']);
+    expect(emulatorWrites).toEqual(['\x1b[H\x1b[Jhello']);
     expect(getScrollbackArchiveResetCount()).toBe(0);
     expect(getScrollbackArchiverResetCount()).toBe(0);
   });
