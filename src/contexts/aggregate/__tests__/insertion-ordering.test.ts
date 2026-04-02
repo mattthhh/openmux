@@ -37,10 +37,13 @@ vi.mock('../../../effect/services/pty/helpers', () => ({
   getGitDiffStats: vi.fn(),
 }));
 
+const getMetadataMock = vi.fn(() => Promise.resolve(undefined));
+const getMetadataBatchMock = vi.fn(() => Promise.resolve(new Map()));
+
 vi.mock('../../git-metadata-cache', () => ({
   getGlobalGitMetadataCache: vi.fn(() => ({
-    getMetadata: vi.fn(() => Promise.resolve(undefined)),
-    getMetadataBatch: vi.fn(() => Promise.resolve(new Map())),
+    getMetadata: getMetadataMock,
+    getMetadataBatch: getMetadataBatchMock,
   })),
 }));
 
@@ -187,6 +190,8 @@ const createDeferred = <T>() => {
 describe('aggregate insertion ordering', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    getMetadataMock.mockClear();
+    getMetadataBatchMock.mockClear();
 
     vi.mocked(listSessionsResult).mockResolvedValue([session]);
     vi.mocked(getSessionSummaryResult).mockResolvedValue({
@@ -486,6 +491,7 @@ describe('aggregate insertion ordering', () => {
 
     await lifecycleHandlers.handlePtyCreated('pty-new');
 
+    expect(getMetadataMock).not.toHaveBeenCalled();
     expect(state.sessionPaneOrders.get('session-1')?.get('pane-3')).toBe(0.5);
     expect(getVisiblePtyIds(state)).toEqual(['pty-1', 'pty-new', 'pty-2']);
 

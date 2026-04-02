@@ -1224,11 +1224,6 @@ export function createLifecycleHandlers(
     focusedPaneId?: string;
   }
 ) {
-  const gitCache = getGlobalGitMetadataCache({
-    fetchGitInfo: (cwd) => getGitInfo(cwd, { force: false }),
-    fetchDiffStats: getGitDiffStats,
-  });
-
   /** Get session metadata for a session ID */
   const getSessionMetadata = (sessionId: string): SessionMetadata | undefined => {
     return state.allSessions.get(sessionId);
@@ -1379,27 +1374,25 @@ export function createLifecycleHandlers(
       return;
     }
 
-    // Fetch git metadata for the CWD
-    const gitMetadata = await gitCache.getMetadata(metadataResult.cwd);
-    const gitFields = extractGitMetadata(gitMetadata);
-
-    // Build the new PtyInfo
+    // Build the new PtyInfo from bridge metadata immediately.
+    // The bridge already gives us cwd/process/basic git state; richer git metadata can be
+    // backfilled by the normal subset/full refresh path without blocking pane creation.
     const newPty: PtyInfo = {
       ptyId: metadataResult.ptyId,
       cwd: metadataResult.cwd,
-      gitBranch: gitFields.gitBranch,
-      gitDiffStats: gitFields.gitDiffStats,
-      gitDirty: gitFields.gitDirty,
-      gitStaged: gitFields.gitStaged,
-      gitUnstaged: gitFields.gitUnstaged,
-      gitUntracked: gitFields.gitUntracked,
-      gitConflicted: gitFields.gitConflicted,
-      gitAhead: gitFields.gitAhead,
-      gitBehind: gitFields.gitBehind,
-      gitStashCount: gitFields.gitStashCount,
-      gitState: gitFields.gitState,
-      gitDetached: gitFields.gitDetached,
-      gitRepoKey: gitFields.gitRepoKey,
+      gitBranch: metadataResult.gitBranch,
+      gitDiffStats: metadataResult.gitDiffStats,
+      gitDirty: metadataResult.gitDirty,
+      gitStaged: metadataResult.gitStaged,
+      gitUnstaged: metadataResult.gitUnstaged,
+      gitUntracked: metadataResult.gitUntracked,
+      gitConflicted: metadataResult.gitConflicted,
+      gitAhead: metadataResult.gitAhead,
+      gitBehind: metadataResult.gitBehind,
+      gitStashCount: metadataResult.gitStashCount,
+      gitState: metadataResult.gitState,
+      gitDetached: metadataResult.gitDetached,
+      gitRepoKey: metadataResult.gitRepoKey,
       foregroundProcess: metadataResult.foregroundProcess,
       shell: metadataResult.shell,
       title: metadataResult.title,
