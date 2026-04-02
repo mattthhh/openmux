@@ -68,6 +68,7 @@ import {
   resolvePendingAggregatePaneFocus,
   type PendingAggregatePaneFocus,
 } from './aggregate/pending-pane-focus';
+import { getSelectedSessionIdForAutoLoad } from './aggregate/auto-load-selected-session';
 
 interface AggregateViewProps {
   width: number;
@@ -267,31 +268,16 @@ export function AggregateView(props: AggregateViewProps) {
   });
 
   // Auto-load session PTYs when an unloaded session or its placeholder is selected.
+  // Suppressed while aggregate is actively creating/focusing a new pane so transient
+  // selection changes do not materialize unrelated sessions.
   createEffect(() => {
     if (!state.showAggregateView) return;
 
-    const selectedItem = state.flattenedTree[state.selectedIndex];
-    if (!selectedItem) return;
-
-    const sessionId = (() => {
-      if (
-        selectedItem.node.type === 'session' &&
-        selectedItem.node.loadState.status === 'unloaded'
-      ) {
-        return selectedItem.node.session.id;
-      }
-
-      if (
-        selectedItem.node.type === 'placeholder' &&
-        selectedItem.node.message === '...' &&
-        selectedItem.parentSessionId
-      ) {
-        return selectedItem.parentSessionId;
-      }
-
-      return null;
-    })();
-
+    const sessionId = getSelectedSessionIdForAutoLoad({
+      selectedItem: state.flattenedTree[state.selectedIndex],
+      pendingPtyInsertion: state.pendingPtyInsertion,
+      pendingPaneFocus: pendingPaneFocus(),
+    });
     if (!sessionId) return;
 
     const loadState = state.sessionLoadStates.get(sessionId);

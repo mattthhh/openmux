@@ -1,10 +1,11 @@
 import { afterEach, describe, expect, it, mock } from 'bun:test';
 import { ServicesNotInitializedError } from '../../../errors';
-import { aggregateSessionMappings } from '../cache/session-pty-cache';
+import { aggregateSessionMappings, sessionPtyCache } from '../cache/session-pty-cache';
 
 describe('loadSessionPtysOnDemand (litmus)', () => {
   afterEach(() => {
     aggregateSessionMappings.clear();
+    sessionPtyCache.clear();
     mock.restore();
   });
 
@@ -69,6 +70,80 @@ describe('loadSessionPtysOnDemand (litmus)', () => {
 
     expect(result.ptys).toEqual([]);
     expect(createSpy).not.toHaveBeenCalled();
+  });
+
+  it('should create PTYs by default when materializing an unloaded session', async () => {
+    const createSpy = mock(async () => 'pty-created');
+    const registerSpy = mock(async () => {});
+
+    mock.module('../../services-instance', () => ({
+      hasServices: () => true,
+      getPtyService: () => ({ create: createSpy }),
+      getSessionManager: () => ({
+        loadSession: async () => ({
+          id: 'session-1',
+          name: 'Session 1',
+          activeWorkspaceId: 1,
+          workspaces: [
+            {
+              id: 1,
+              layoutMode: 'stacked',
+              focusedPaneId: 'pane-1',
+              mainPane: { id: 'pane-1', cwd: '/tmp', title: 'shell' },
+              stackPanes: [],
+              activeStackIndex: 0,
+            },
+          ],
+          cwdMap: new Map([['pane-1', '/tmp']]),
+          paneToPtyMap: new Map(),
+        }),
+      }),
+    }));
+
+    mock.module('../../shim-bridge', () => ({
+      getSessionPtyMapping: async () => undefined,
+      registerPtyPane: registerSpy,
+    }));
+
+    mock.module('../metadata/fetch', () => ({
+      batchFetchPtyMetadata: async function* (_pty: unknown, ids: Iterable<string>) {
+        for (const id of ids) {
+          yield {
+            ptyId: String(id),
+            cwd: '/tmp',
+            foregroundProcess: 'bash',
+            shell: '/bin/bash',
+            title: 'shell',
+            workspaceId: 1,
+            paneId: undefined,
+            gitBranch: undefined,
+            gitDiffStats: undefined,
+            gitDirty: false,
+            gitStaged: 0,
+            gitUnstaged: 0,
+            gitUntracked: 0,
+            gitConflicted: 0,
+            gitAhead: undefined,
+            gitBehind: undefined,
+            gitStashCount: undefined,
+            gitState: undefined,
+            gitDetached: false,
+            gitRepoKey: undefined,
+          };
+        }
+      },
+    }));
+
+    const { loadSessionPtysOnDemand } = await import('./lazy-load.ts?litmus-create-if-missing');
+    const result = await loadSessionPtysOnDemand('session-1');
+
+    expect(result instanceof Error).toBe(false);
+    if (result instanceof Error) return;
+
+    expect(createSpy).toHaveBeenCalledTimes(1);
+    expect(registerSpy).toHaveBeenCalledTimes(1);
+    expect(result.ptys).toHaveLength(1);
+    expect(result.ptys[0]?.ptyId).toBe('pty-created');
   });
 
   it('should keep shim mappings authoritative over stale aggregate-local mappings', async () => {

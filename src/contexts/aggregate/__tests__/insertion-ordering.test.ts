@@ -355,6 +355,111 @@ describe('aggregate insertion ordering', () => {
     await createPromise;
   });
 
+  it('keeps a pending placeholder adjacent during refresh before metadata resolves', async () => {
+    const { state, setState, refreshers, lifecycleHandlers } = createHarness();
+    const metadataDeferred = createDeferred<Awaited<ReturnType<typeof getPtyMetadata>>>();
+
+    vi.mocked(getPtyMetadata).mockImplementation((ptyId: string) => {
+      if (ptyId !== 'pty-new') {
+        return Promise.resolve(null);
+      }
+      return metadataDeferred.promise;
+    });
+    vi.mocked(listAllPtysWithMetadata).mockResolvedValue([
+      {
+        ptyId: 'pty-1',
+        cwd: '/tmp',
+        foregroundProcess: 'bash',
+        shell: '/bin/bash',
+        title: 'one',
+        workspaceId: 1,
+        paneId: 'pane-1',
+        gitBranch: undefined,
+        gitDiffStats: undefined,
+        gitDirty: false,
+        gitStaged: 0,
+        gitUnstaged: 0,
+        gitUntracked: 0,
+        gitConflicted: 0,
+        gitAhead: undefined,
+        gitBehind: undefined,
+        gitStashCount: undefined,
+        gitState: undefined,
+        gitDetached: false,
+        gitRepoKey: undefined,
+      },
+      {
+        ptyId: 'pty-2',
+        cwd: '/tmp',
+        foregroundProcess: 'bash',
+        shell: '/bin/bash',
+        title: 'two',
+        workspaceId: 1,
+        paneId: 'pane-2',
+        gitBranch: undefined,
+        gitDiffStats: undefined,
+        gitDirty: false,
+        gitStaged: 0,
+        gitUnstaged: 0,
+        gitUntracked: 0,
+        gitConflicted: 0,
+        gitAhead: undefined,
+        gitBehind: undefined,
+        gitStashCount: undefined,
+        gitState: undefined,
+        gitDetached: false,
+        gitRepoKey: undefined,
+      },
+    ]);
+
+    await refreshers.initialLoad();
+
+    setState(
+      produce((s) => {
+        s.pendingPtyInsertion = {
+          sessionId: 'session-1',
+          insertAfterPtyId: 'pty-1',
+          insertAfterPaneId: 'pane-1',
+          pendingPaneId: null,
+        };
+      })
+    );
+
+    const createPromise = lifecycleHandlers.handlePtyCreated('pty-new');
+
+    expect(getVisiblePtyIds(state)).toEqual(['pty-1', 'pty-new', 'pty-2']);
+
+    await refreshers.refreshPtys();
+
+    expect(getVisiblePtyIds(state)).toEqual(['pty-1', 'pty-new', 'pty-2']);
+    expect(state.allPtys.find((pty) => pty.ptyId === 'pty-new')?.title).toBe('...');
+
+    metadataDeferred.resolve({
+      ptyId: 'pty-new',
+      cwd: '/tmp',
+      foregroundProcess: 'bash',
+      shell: '/bin/bash',
+      title: 'new',
+      workspaceId: 1,
+      paneId: 'pane-3',
+      gitBranch: undefined,
+      gitDiffStats: undefined,
+      gitDirty: false,
+      gitStaged: 0,
+      gitUnstaged: 0,
+      gitUntracked: 0,
+      gitConflicted: 0,
+      gitAhead: undefined,
+      gitBehind: undefined,
+      gitStashCount: undefined,
+      gitState: undefined,
+      gitDetached: false,
+      gitRepoKey: undefined,
+    });
+
+    await createPromise;
+  });
+
   it('keeps the first created PTY adjacent after the selected PTY across refreshes', async () => {
     const { state, setState, refreshers, lifecycleHandlers, setCurrentSessionPaneOrder } =
       createHarness();

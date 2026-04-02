@@ -291,7 +291,7 @@ export function createAggregateViewActions(params: AggregateViewActionsParams) {
       })
     );
 
-    const result = await loadSessionPtysOnDemand(sessionId, { createIfMissing: false });
+    const result = await loadSessionPtysOnDemand(sessionId);
 
     setState(
       produce((s) => {
