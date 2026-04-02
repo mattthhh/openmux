@@ -48,8 +48,8 @@ export function filterPtys(ptys: PtyInfo[], query: string): PtyInfo[] | FilterOp
       const cwd = pty.cwd.toLowerCase();
       const branch = pty.gitBranch?.toLowerCase() ?? '';
       const process = pty.foregroundProcess?.toLowerCase() ?? '';
-      return terms.some((term) =>
-        cwd.includes(term) || branch.includes(term) || process.includes(term)
+      return terms.some(
+        (term) => cwd.includes(term) || branch.includes(term) || process.includes(term)
       );
     });
   } catch (cause) {
@@ -85,8 +85,8 @@ export function sortPtysForSession(
   paneOrder: Map<string, number> | undefined
 ): PtyInfo[] {
   return [...ptys].sort((a, b) => {
-    const aOrder = a.paneId ? paneOrder?.get(a.paneId) : undefined;
-    const bOrder = b.paneId ? paneOrder?.get(b.paneId) : undefined;
+    const aOrder = a.paneId ? (paneOrder?.get(a.paneId) ?? a.sortOrderHint) : a.sortOrderHint;
+    const bOrder = b.paneId ? (paneOrder?.get(b.paneId) ?? b.sortOrderHint) : b.sortOrderHint;
 
     const aHasOrder = aOrder !== undefined ? 1 : 0;
     const bHasOrder = bOrder !== undefined ? 1 : 0;
@@ -96,8 +96,7 @@ export function sortPtysForSession(
     }
 
     const workspaceCompare =
-      (a.workspaceId ?? Number.MAX_SAFE_INTEGER) -
-      (b.workspaceId ?? Number.MAX_SAFE_INTEGER);
+      (a.workspaceId ?? Number.MAX_SAFE_INTEGER) - (b.workspaceId ?? Number.MAX_SAFE_INTEGER);
     if (workspaceCompare !== 0) return workspaceCompare;
 
     return (a.paneId ?? a.ptyId).localeCompare(b.paneId ?? b.ptyId);

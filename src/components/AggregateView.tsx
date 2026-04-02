@@ -112,7 +112,7 @@ export function AggregateView(props: AggregateViewProps) {
     scrollListUp,
     scrollListDown,
     setListScrollOffset,
-    setInsertAfterPtyId,
+    setPendingPtyInsertion,
   } = useAggregateView();
 
   const { state: keyboardState, enterAggregateMode, exitAggregateMode } = keyboard;
@@ -548,14 +548,22 @@ export function AggregateView(props: AggregateViewProps) {
 
     if (!selectedSessionId && !selectedPtyId) return;
 
-    // Set insert position to place new PTY adjacent to selected one
-    setInsertAfterPtyId(selectedPtyId);
+    const selectedPty = selectedPtyId
+      ? (state.allPtys[state.allPtysIndex.get(selectedPtyId) ?? -1] ?? null)
+      : null;
 
     const targetSessionId =
       selectedSessionId ??
       findSessionForPty(selectedPtyId!)?.sessionId ??
       sessionState.activeSessionId;
     if (!targetSessionId) return;
+
+    setPendingPtyInsertion({
+      sessionId: targetSessionId,
+      insertAfterPtyId: selectedPtyId,
+      insertAfterPaneId: selectedPty?.paneId ?? null,
+      pendingPaneId: null,
+    });
 
     setPendingPaneFocus(null);
 
@@ -599,6 +607,7 @@ export function AggregateView(props: AggregateViewProps) {
       // Other session - load and switch
       const sessionData = await loadSessionData(targetSessionId);
       if (sessionData instanceof Error) {
+        setPendingPtyInsertion(null);
         console.error('Failed to load session:', sessionData.message);
         return;
       }
@@ -617,13 +626,22 @@ export function AggregateView(props: AggregateViewProps) {
 
     switchWorkspace(targetWorkspaceId);
     setLayoutMode('stacked');
-    const paneId = await createPaneWithPTY(targetCwd, 'shell');
-    if (!paneId) {
+    const createdPane = await createPaneWithPTY(targetCwd, 'shell');
+    if (!createdPane) {
+      setPendingPtyInsertion(null);
       console.error('Failed to create pane in aggregate view');
       return;
     }
 
-    setPendingPaneFocus({ sessionId: targetSessionId, paneId });
+    const currentInsertion = state.pendingPtyInsertion;
+    if (currentInsertion && currentInsertion.sessionId === targetSessionId) {
+      setPendingPtyInsertion({
+        ...currentInsertion,
+        pendingPaneId: createdPane.paneId,
+      });
+    }
+
+    setPendingPaneFocus({ sessionId: targetSessionId, paneId: createdPane.paneId });
   };
 
   // Keyboard handler

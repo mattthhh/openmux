@@ -15,6 +15,8 @@ export interface GitDiffStats {
 /** PTY info for the aggregate view */
 export interface PtyInfo {
   ptyId: string;
+  /** Temporary aggregate-list sort key used before a paneId is fully anchored. */
+  sortOrderHint?: number;
   cwd: string;
   gitBranch: string | undefined;
   gitDiffStats: GitDiffStats | undefined;
@@ -136,6 +138,17 @@ export const TREE_GLYPHS = {
   INDENT: '   ',
 } as const;
 
+export interface PendingPtyInsertion {
+  /** Session where the new PTY should appear. */
+  sessionId: string;
+  /** Existing PTY the new one should appear after, if pane creation started from a PTY row. */
+  insertAfterPtyId: string | null;
+  /** Stable pane anchor captured from the selected PTY before creation starts. */
+  insertAfterPaneId: string | null;
+  /** Pane created by the layout for this request, filled in after createPaneWithPTY resolves. */
+  pendingPaneId: string | null;
+}
+
 /** Aggregate view state with tree structure support */
 export interface AggregateViewState {
   /** Whether the aggregate view overlay is shown */
@@ -204,10 +217,11 @@ export interface AggregateViewState {
    */
   deletedPtyIds: Set<string>;
   /**
-   * One-shot adjacency hint captured before creating a pane.
-   * The lifecycle handler consumes this after the new PTY resolves to a paneId.
+   * One in-flight aggregate pane creation request.
+   * This keeps placeholder placement and final pane anchoring tied to the specific pane being created
+   * instead of a global one-shot PTY id.
    */
-  insertAfterPtyId: string | null;
+  pendingPtyInsertion: PendingPtyInsertion | null;
   /** Scroll offset for the session/PTY list (0 = top) */
   listScrollOffset: number;
 }
@@ -239,7 +253,7 @@ export const initialState: AggregateViewState = {
   pendingPtyIds: new Set(),
   recentlyAddedPtyIds: new Set(),
   deletedPtyIds: new Set(),
-  insertAfterPtyId: null,
+  pendingPtyInsertion: null,
   listScrollOffset: 0,
 };
 
@@ -286,6 +300,6 @@ export interface AggregateViewContextValue {
   scrollListDown: (pageSize?: number) => void;
   /** Scroll the list to a specific offset */
   setListScrollOffset: (offset: number) => void;
-  /** Set the PTY ID to insert new PTYs after (for ordering new panes adjacent to selected) */
-  setInsertAfterPtyId: (ptyId: string | null) => void;
+  /** Set or clear the current pending aggregate pane insertion request */
+  setPendingPtyInsertion: (insertion: PendingPtyInsertion | null) => void;
 }

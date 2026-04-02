@@ -3,7 +3,7 @@
  */
 
 import { produce, type SetStoreFunction } from 'solid-js/store';
-import type { PtyInfo, AggregateViewState } from './aggregate-view-types';
+import type { PtyInfo, AggregateViewState, PendingPtyInsertion } from './aggregate-view-types';
 import type { SessionMetadata, SerializedLayoutNode, SerializedSession } from '../effect/models';
 import { buildPtyIndex, recomputeMatches, recomputeTree } from './aggregate-view-helpers';
 import { runStream, streamFromSubscription, tap, repeatWithInterval } from '../effect/stream-utils';
@@ -169,6 +169,7 @@ export function didPtyInfoChange(prev: PtyInfo, next: PtyInfo): boolean {
 function ptyMetadataToInfo(metadata: AggregatePtyMetadata, existing?: PtyInfo): PtyInfo {
   return {
     ptyId: metadata.ptyId,
+    sortOrderHint: existing?.sortOrderHint,
     cwd: metadata.cwd,
     gitBranch: metadata.gitBranch,
     gitDiffStats: metadata.gitDiffStats,
@@ -294,6 +295,50 @@ function getInsertedPaneOrder(
   }
 
   return insertAfterOrder + (nextOrder - insertAfterOrder) / 2;
+}
+
+function getAppendedPaneOrder(paneOrder: Map<string, number>): number {
+  return [...paneOrder.values()].reduce((maxOrder, order) => Math.max(maxOrder, order), -1) + 1;
+}
+
+function buildSessionPaneOrderFromState(
+  state: AggregateViewState,
+  sessionId: string
+): Map<string, number> {
+  const existingOrder = state.sessionPaneOrders.get(sessionId);
+  if (existingOrder) {
+    return existingOrder;
+  }
+
+  const sessionPaneIds = state.allPtys
+    .filter((pty) => pty.sessionId === sessionId && !!pty.paneId)
+    .sort((a, b) => {
+      const aOrder = a.sortOrderHint ?? Number.MAX_SAFE_INTEGER;
+      const bOrder = b.sortOrderHint ?? Number.MAX_SAFE_INTEGER;
+      if (aOrder !== bOrder) {
+        return aOrder - bOrder;
+      }
+      return (a.paneId ?? a.ptyId).localeCompare(b.paneId ?? b.ptyId);
+    })
+    .map((pty) => pty.paneId as string);
+
+  const nextOrder = new Map(sessionPaneIds.map((paneId, index) => [paneId, index] as const));
+  state.sessionPaneOrders.set(sessionId, nextOrder);
+  return nextOrder;
+}
+
+function getPendingInsertionOrder(
+  state: AggregateViewState,
+  insertion: PendingPtyInsertion
+): number {
+  const paneOrder = buildSessionPaneOrderFromState(state, insertion.sessionId);
+  if (!insertion.insertAfterPaneId) {
+    return getAppendedPaneOrder(paneOrder);
+  }
+
+  return (
+    getInsertedPaneOrder(paneOrder, insertion.insertAfterPaneId) ?? getAppendedPaneOrder(paneOrder)
+  );
 }
 
 function countSerializedPanes(node: SerializedLayoutNode | null | undefined): number {
@@ -1195,6 +1240,8 @@ export function createLifecycleHandlers(
    * Retries if ownership isn't available yet (race condition on creation).
    */
   const handlePtyCreated = async (ptyId: string, retryCount = 0): Promise<void> => {
+    const initialOwnership = resolvePtyOwnership(ptyId);
+
     // Check if this PTY was recently deleted (race condition: create->destroy->create handler runs)
     if (state.deletedPtyIds.has(ptyId) && retryCount === 0) {
       // Wait for deleted tracking to clear before creating
@@ -1215,8 +1262,17 @@ export function createLifecycleHandlers(
         // If this is the first attempt, add a placeholder PTY immediately
         // This ensures the pane appears in the list while we fetch metadata
         if (retryCount === 0 && !s.allPtysIndex.has(ptyId)) {
+          const pendingInsertion =
+            s.pendingPtyInsertion &&
+            (!s.pendingPtyInsertion.pendingPaneId ||
+              s.pendingPtyInsertion.pendingPaneId === initialOwnership?.paneId)
+              ? s.pendingPtyInsertion
+              : null;
           const placeholderPty: PtyInfo = {
             ptyId,
+            sortOrderHint: pendingInsertion
+              ? getPendingInsertionOrder(s, pendingInsertion)
+              : undefined,
             cwd: '',
             gitBranch: undefined,
             gitDiffStats: undefined,
@@ -1233,29 +1289,18 @@ export function createLifecycleHandlers(
             gitRepoKey: undefined,
             foregroundProcess: undefined,
             shell: undefined,
-            title: '...', // Loading indicator
+            title: '...',
             workspaceId: undefined,
             paneId: undefined,
-            sessionId: '', // Will be filled in when ownership resolved
-            sessionMetadata: undefined,
+            sessionId: pendingInsertion?.sessionId ?? '',
+            sessionMetadata: pendingInsertion?.sessionId
+              ? s.allSessions.get(pendingInsertion.sessionId)
+              : undefined,
           };
 
-          // Check if we should insert after a specific PTY (for ordering new panes adjacent to selected)
-          const insertAfterId = s.insertAfterPtyId;
-          const insertAfterIndex = insertAfterId ? s.allPtysIndex.get(insertAfterId) : undefined;
-
-          if (insertAfterIndex !== undefined) {
-            // Insert after the specified PTY
-            const insertIndex = insertAfterIndex + 1;
-            s.allPtys.splice(insertIndex, 0, placeholderPty);
-            // Rebuild index for affected PTYs
-            s.allPtysIndex = buildPtyIndex(s.allPtys);
-          } else {
-            // Add to the end of allPtys
-            const newIndex = s.allPtys.length;
-            s.allPtys.push(placeholderPty);
-            s.allPtysIndex.set(ptyId, newIndex);
-          }
+          const newIndex = s.allPtys.length;
+          s.allPtys.push(placeholderPty);
+          s.allPtysIndex.set(ptyId, newIndex);
 
           recomputeMatches(s);
           recomputeTree(s);
@@ -1263,7 +1308,7 @@ export function createLifecycleHandlers(
       })
     );
 
-    const ownership = resolvePtyOwnership(ptyId);
+    const ownership = initialOwnership ?? resolvePtyOwnership(ptyId);
 
     // If ownership not available yet, retry with backoff
     if (!ownership) {
@@ -1300,6 +1345,9 @@ export function createLifecycleHandlers(
       setState(
         produce((s) => {
           s.pendingPtyIds.delete(ptyId);
+          if (s.pendingPtyInsertion?.pendingPaneId === ownership.paneId) {
+            s.pendingPtyInsertion = null;
+          }
         })
       );
       return;
@@ -1311,6 +1359,9 @@ export function createLifecycleHandlers(
       setState(
         produce((s) => {
           s.pendingPtyIds.delete(ptyId);
+          if (s.pendingPtyInsertion?.pendingPaneId === ownership.paneId) {
+            s.pendingPtyInsertion = null;
+          }
           // Keep placeholder but mark as error
           const index = s.allPtysIndex.get(ptyId);
           if (index !== undefined) {
@@ -1376,45 +1427,55 @@ export function createLifecycleHandlers(
             recomputeTree(s);
           }
 
+          if (s.pendingPtyInsertion?.pendingPaneId === ownership.paneId) {
+            s.pendingPtyInsertion = null;
+          }
+
           return; // PTY was destroyed while we were fetching metadata, don't add it
         }
 
         // Check if PTY already exists
         const existingIndex = s.allPtysIndex.get(ptyId);
+        const existingPty = existingIndex !== undefined ? s.allPtys[existingIndex] : undefined;
+        const nextPty: PtyInfo = {
+          ...newPty,
+          sortOrderHint: existingPty?.sortOrderHint,
+        };
+
         if (existingIndex !== undefined) {
-          s.allPtys[existingIndex] = newPty;
-
-          // The placeholder may already be visually adjacent in allPtys, but tree rendering is
-          // ultimately driven by sessionPaneOrders. Once the PTY resolves to a paneId, anchor the
-          // aggregate ordering here so later refreshes keep the same adjacency.
-          const insertAfterId = s.insertAfterPtyId;
-          if (insertAfterId && newPty.paneId) {
-            let sessionPaneOrder = s.sessionPaneOrders.get(ownership.sessionId);
-            if (!sessionPaneOrder) {
-              const sessionPaneIds = s.allPtys
-                .filter((pty) => pty.sessionId === ownership.sessionId && !!pty.paneId)
-                .map((pty) => pty.paneId as string);
-              sessionPaneOrder = new Map(
-                sessionPaneIds.map((paneId, index) => [paneId, index] as const)
-              );
-              s.sessionPaneOrders.set(ownership.sessionId, sessionPaneOrder);
-            }
-
-            const insertAfterPty = s.allPtys.find((p) => p.ptyId === insertAfterId);
-            if (insertAfterPty?.paneId) {
-              const newOrder = getInsertedPaneOrder(sessionPaneOrder, insertAfterPty.paneId);
-              if (newOrder !== null) {
-                sessionPaneOrder.set(newPty.paneId, newOrder);
-              }
-            }
-            // Clear the insert marker - only use it once
-            s.insertAfterPtyId = null;
-          }
+          s.allPtys[existingIndex] = nextPty;
         } else {
-          // Add to the end of allPtys
           const newIndex = s.allPtys.length;
-          s.allPtys.push(newPty);
+          s.allPtys.push(nextPty);
           s.allPtysIndex.set(ptyId, newIndex);
+        }
+
+        // Tree rendering is driven by sessionPaneOrders. Once the PTY resolves to its new pane,
+        // anchor the aggregate order to the specific pane created by this request so later refreshes
+        // preserve the same adjacency.
+        const pendingInsertion = s.pendingPtyInsertion;
+        if (
+          pendingInsertion &&
+          pendingInsertion.pendingPaneId &&
+          pendingInsertion.pendingPaneId === nextPty.paneId &&
+          pendingInsertion.sessionId === ownership.sessionId &&
+          nextPty.paneId
+        ) {
+          const sessionPaneOrder = buildSessionPaneOrderFromState(s, ownership.sessionId);
+          const newOrder = pendingInsertion.insertAfterPaneId
+            ? (getInsertedPaneOrder(sessionPaneOrder, pendingInsertion.insertAfterPaneId) ??
+              getAppendedPaneOrder(sessionPaneOrder))
+            : getAppendedPaneOrder(sessionPaneOrder);
+
+          sessionPaneOrder.set(nextPty.paneId, newOrder);
+          const nextIndex = s.allPtysIndex.get(ptyId);
+          if (nextIndex !== undefined && s.allPtys[nextIndex]) {
+            s.allPtys[nextIndex] = {
+              ...s.allPtys[nextIndex],
+              sortOrderHint: newOrder,
+            };
+          }
+          s.pendingPtyInsertion = null;
         }
 
         // Clear pending status
@@ -1484,6 +1545,14 @@ export function createLifecycleHandlers(
 
         const pty = s.allPtys[index];
         if (!pty) return;
+
+        if (
+          s.pendingPtyInsertion &&
+          (s.pendingPtyInsertion.insertAfterPtyId === ptyId ||
+            s.pendingPtyInsertion.pendingPaneId === pty.paneId)
+        ) {
+          s.pendingPtyInsertion = null;
+        }
 
         const sessionId = pty.sessionId;
 

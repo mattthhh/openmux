@@ -6,6 +6,7 @@ import { produce, type SetStoreFunction } from 'solid-js/store';
 import type {
   PtyInfo,
   AggregateViewState,
+  PendingPtyInsertion,
   SessionLoadState,
   FlattenedTreeItem,
   SessionTreeNode,
@@ -76,6 +77,7 @@ export function createAggregateViewActions(params: AggregateViewActionsParams) {
       produce((s) => {
         s.showAggregateView = true;
         s.filterQuery = '';
+        s.pendingPtyInsertion = null;
         s.listScrollOffset = 0;
         clearPreviewState(s);
         recomputeMatches(s);
@@ -92,6 +94,7 @@ export function createAggregateViewActions(params: AggregateViewActionsParams) {
         s.selectedIndex = 0;
         s.selectedPtyId = null;
         s.selectedSessionId = null;
+        s.pendingPtyInsertion = null;
         s.listScrollOffset = 0;
         clearPreviewState(s);
       })
@@ -288,7 +291,7 @@ export function createAggregateViewActions(params: AggregateViewActionsParams) {
       })
     );
 
-    const result = await loadSessionPtysOnDemand(sessionId);
+    const result = await loadSessionPtysOnDemand(sessionId, { createIfMissing: false });
 
     setState(
       produce((s) => {
@@ -633,11 +636,11 @@ export function createAggregateViewActions(params: AggregateViewActionsParams) {
     await persistSessionOrder?.(nextOrder);
   };
 
-  /** Set the PTY ID to insert new PTYs after (for ordering new panes adjacent to selected) */
-  const setInsertAfterPtyId = (ptyId: string | null): void => {
+  /** Set or clear the current pending aggregate pane insertion request */
+  const setPendingPtyInsertion = (insertion: PendingPtyInsertion | null): void => {
     setState(
       produce((s) => {
-        s.insertAfterPtyId = ptyId;
+        s.pendingPtyInsertion = insertion;
       })
     );
   };
@@ -676,6 +679,6 @@ export function createAggregateViewActions(params: AggregateViewActionsParams) {
     scrollListUp,
     scrollListDown,
     setListScrollOffset,
-    setInsertAfterPtyId,
+    setPendingPtyInsertion,
   };
 }

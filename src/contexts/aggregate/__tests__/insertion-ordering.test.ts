@@ -176,6 +176,14 @@ const getVisiblePtyIds = (state: AggregateViewState) =>
     .filter((item) => item.node.type === 'pty')
     .map((item) => item.node.ptyInfo.ptyId);
 
+const createDeferred = <T>() => {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+};
+
 describe('aggregate insertion ordering', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -292,6 +300,61 @@ describe('aggregate insertion ordering', () => {
     ]);
   });
 
+  it('shows the placeholder adjacent before metadata resolves', async () => {
+    const { state, setState, refreshers, lifecycleHandlers } = createHarness();
+    const metadataDeferred = createDeferred<Awaited<ReturnType<typeof getPtyMetadata>>>();
+
+    vi.mocked(getPtyMetadata).mockImplementation((ptyId: string) => {
+      if (ptyId !== 'pty-new') {
+        return Promise.resolve(null);
+      }
+      return metadataDeferred.promise;
+    });
+
+    await refreshers.initialLoad();
+
+    setState(
+      produce((s) => {
+        s.pendingPtyInsertion = {
+          sessionId: 'session-1',
+          insertAfterPtyId: 'pty-1',
+          insertAfterPaneId: 'pane-1',
+          pendingPaneId: null,
+        };
+      })
+    );
+
+    const createPromise = lifecycleHandlers.handlePtyCreated('pty-new');
+
+    expect(getVisiblePtyIds(state)).toEqual(['pty-1', 'pty-new', 'pty-2']);
+    expect(state.allPtys.find((pty) => pty.ptyId === 'pty-new')?.title).toBe('...');
+
+    metadataDeferred.resolve({
+      ptyId: 'pty-new',
+      cwd: '/tmp',
+      foregroundProcess: 'bash',
+      shell: '/bin/bash',
+      title: 'new',
+      workspaceId: 1,
+      paneId: 'pane-3',
+      gitBranch: undefined,
+      gitDiffStats: undefined,
+      gitDirty: false,
+      gitStaged: 0,
+      gitUnstaged: 0,
+      gitUntracked: 0,
+      gitConflicted: 0,
+      gitAhead: undefined,
+      gitBehind: undefined,
+      gitStashCount: undefined,
+      gitState: undefined,
+      gitDetached: false,
+      gitRepoKey: undefined,
+    });
+
+    await createPromise;
+  });
+
   it('keeps the first created PTY adjacent after the selected PTY across refreshes', async () => {
     const { state, setState, refreshers, lifecycleHandlers, setCurrentSessionPaneOrder } =
       createHarness();
@@ -307,7 +370,12 @@ describe('aggregate insertion ordering', () => {
 
     setState(
       produce((s) => {
-        s.insertAfterPtyId = 'pty-1';
+        s.pendingPtyInsertion = {
+          sessionId: 'session-1',
+          insertAfterPtyId: 'pty-1',
+          insertAfterPaneId: 'pane-1',
+          pendingPaneId: 'pane-3',
+        };
       })
     );
 

@@ -15,6 +15,8 @@ export interface GitDiffStats {
 /** PTY info for the aggregate view */
 export interface PtyInfo {
   ptyId: string;
+  /** Temporary aggregate-list sort key used before pane ordering is fully anchored. */
+  sortOrderHint?: number;
   cwd: string;
   gitBranch: string | undefined;
   gitDiffStats: GitDiffStats | undefined;
@@ -40,10 +42,26 @@ export interface PtyInfo {
 
 /** Loading state for a session */
 export type SessionLoadState =
-  | { status: 'unloaded'; lastActiveWorkspaceId?: number; focusedPaneId?: string; paneCount?: number }
-  | { status: 'loading'; lastActiveWorkspaceId?: number; focusedPaneId?: string; paneCount?: number }
+  | {
+      status: 'unloaded';
+      lastActiveWorkspaceId?: number;
+      focusedPaneId?: string;
+      paneCount?: number;
+    }
+  | {
+      status: 'loading';
+      lastActiveWorkspaceId?: number;
+      focusedPaneId?: string;
+      paneCount?: number;
+    }
   | { status: 'loaded'; lastActiveWorkspaceId?: number; focusedPaneId?: string; paneCount?: number }
-  | { status: 'error'; error: string; lastActiveWorkspaceId?: number; focusedPaneId?: string; paneCount?: number };
+  | {
+      status: 'error';
+      error: string;
+      lastActiveWorkspaceId?: number;
+      focusedPaneId?: string;
+      paneCount?: number;
+    };
 
 /** Session node in the tree */
 export interface SessionTreeNode {

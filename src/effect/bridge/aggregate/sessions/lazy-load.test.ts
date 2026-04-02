@@ -25,6 +25,52 @@ describe('loadSessionPtysOnDemand (litmus)', () => {
     expect(result).toBeInstanceOf(ServicesNotInitializedError);
   });
 
+  it('should not create PTYs when aggregate view only peeks an unloaded session', async () => {
+    const createSpy = mock(async () => 'pty-created');
+
+    mock.module('../../services-instance', () => ({
+      hasServices: () => true,
+      getPtyService: () => ({ create: createSpy }),
+      getSessionManager: () => ({
+        loadSession: async () => ({
+          id: 'session-1',
+          name: 'Session 1',
+          activeWorkspaceId: 1,
+          workspaces: [
+            {
+              id: 1,
+              layoutMode: 'stacked',
+              focusedPaneId: 'pane-1',
+              mainPane: { id: 'pane-1', cwd: '/tmp', title: 'shell' },
+              stackPanes: [],
+              activeStackIndex: 0,
+            },
+          ],
+          cwdMap: new Map([['pane-1', '/tmp']]),
+          paneToPtyMap: new Map(),
+        }),
+      }),
+    }));
+
+    mock.module('../../shim-bridge', () => ({
+      getSessionPtyMapping: async () => undefined,
+      registerPtyPane: async () => {},
+    }));
+
+    mock.module('../metadata/fetch', () => ({
+      batchFetchPtyMetadata: async function* () {},
+    }));
+
+    const { loadSessionPtysOnDemand } = await import('./lazy-load.ts?litmus-no-create-if-missing');
+    const result = await loadSessionPtysOnDemand('session-1', { createIfMissing: false });
+
+    expect(result instanceof Error).toBe(false);
+    if (result instanceof Error) return;
+
+    expect(result.ptys).toEqual([]);
+    expect(createSpy).not.toHaveBeenCalled();
+  });
+
   it('should keep shim mappings authoritative over stale aggregate-local mappings', async () => {
     aggregateSessionMappings.set('session-1', new Map([['pane-1', 'pty-stale']]));
 

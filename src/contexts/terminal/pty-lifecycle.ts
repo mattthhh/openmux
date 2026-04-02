@@ -3,11 +3,7 @@
  * Handles creation, destruction, and exit events for PTY sessions
  */
 
-import {
-  createPtySession,
-  destroyPty,
-  destroyAllPtys,
-} from '../../effect/bridge';
+import { createPtySession, destroyPty, destroyAllPtys } from '../../effect/bridge';
 import { PtySpawnError } from '../../effect/errors';
 import { getActiveSessionIdForShim, registerPtyPane } from '../../effect/bridge';
 import {
@@ -87,7 +83,7 @@ export function createPtyLifecycleHandlers(deps: PtyLifecycleDeps) {
         try {
           this.cleanups[i]();
         } catch (error) {
-          console.warn("Cleanup failed:", error);
+          console.warn('Cleanup failed:', error);
         }
       }
       this.cleanups = [];
@@ -233,13 +229,11 @@ export function createPtyLifecycleHandlers(deps: PtyLifecycleDeps) {
         return;
       }
       const unsubResult = await errore.tryAsync<() => void, Error>({
-        try: () => subscribeToPtyWithCaches(
-          ptyId,
-          paneId,
-          ptyCaches,
-          handlePtyExit,
-          { cacheScrollState: shouldCacheScrollState, skipExit: true }
-        ),
+        try: () =>
+          subscribeToPtyWithCaches(ptyId, paneId, ptyCaches, handlePtyExit, {
+            cacheScrollState: shouldCacheScrollState,
+            skipExit: true,
+          }),
         catch: (e) => new Error('Failed to subscribe to PTY', { cause: e }),
       });
       if (unsubResult instanceof Error) {
@@ -265,7 +259,10 @@ export function createPtyLifecycleHandlers(deps: PtyLifecycleDeps) {
    * @param cwd - Optional working directory for the PTY
    * @param title - Optional title for the pane
    */
-  const createPaneWithPTY = async (cwd?: string, title?: string): Promise<string> => {
+  const createPaneWithPTY = async (
+    cwd?: string,
+    title?: string
+  ): Promise<{ paneId: string; ptyId: string } | null> => {
     // Get estimated dimensions for the new pane
     const { cols, rows } = getNewPaneDimensions();
     const metrics = getCellMetrics?.() ?? null;
@@ -276,7 +273,7 @@ export function createPtyLifecycleHandlers(deps: PtyLifecycleDeps) {
     const result = await createPtySession({ cols, rows, cwd, pixelWidth, pixelHeight });
     if (result instanceof PtySpawnError) {
       console.error('Failed to create PTY:', result.message);
-      return '';
+      return null;
     }
     const ptyId = result;
 
@@ -292,7 +289,7 @@ export function createPtyLifecycleHandlers(deps: PtyLifecycleDeps) {
     });
     if (exitUnsubResult instanceof Error) {
       cleanupPty(ptyId, { paneId, closePane: true, destroy: true });
-      return '';
+      return null;
     }
     const exitUnsub = exitUnsubResult;
     unsubscribeFns.set(ptyId, exitUnsub);
@@ -314,13 +311,11 @@ export function createPtyLifecycleHandlers(deps: PtyLifecycleDeps) {
         return;
       }
       const unsubResult = await errore.tryAsync<() => void, Error>({
-        try: () => subscribeToPtyWithCaches(
-          ptyId,
-          paneId,
-          ptyCaches,
-          handlePtyExit,
-          { cacheScrollState: shouldCacheScrollState, skipExit: true }
-        ),
+        try: () =>
+          subscribeToPtyWithCaches(ptyId, paneId, ptyCaches, handlePtyExit, {
+            cacheScrollState: shouldCacheScrollState,
+            skipExit: true,
+          }),
         catch: (e) => new Error('Failed to subscribe to PTY', { cause: e }),
       });
       if (unsubResult instanceof Error) {
@@ -337,7 +332,7 @@ export function createPtyLifecycleHandlers(deps: PtyLifecycleDeps) {
       });
     });
 
-    return paneId;
+    return { paneId, ptyId };
   };
 
   /**

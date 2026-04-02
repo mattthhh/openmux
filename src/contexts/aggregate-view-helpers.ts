@@ -27,8 +27,8 @@ export function filterPtys(ptys: PtyInfo[], query: string): PtyInfo[] {
     const branch = pty.gitBranch?.toLowerCase() ?? '';
     const process = pty.foregroundProcess?.toLowerCase() ?? '';
     // OR logic: match if ANY term matches ANY field
-    return terms.some((term) =>
-      cwd.includes(term) || branch.includes(term) || process.includes(term)
+    return terms.some(
+      (term) => cwd.includes(term) || branch.includes(term) || process.includes(term)
     );
   });
 }
@@ -99,8 +99,8 @@ function sortPtysForSession(
   paneOrder: Map<string, number> | undefined
 ): PtyInfo[] {
   return [...ptys].sort((a, b) => {
-    const aOrder = a.paneId ? paneOrder?.get(a.paneId) : undefined;
-    const bOrder = b.paneId ? paneOrder?.get(b.paneId) : undefined;
+    const aOrder = a.paneId ? (paneOrder?.get(a.paneId) ?? a.sortOrderHint) : a.sortOrderHint;
+    const bOrder = b.paneId ? (paneOrder?.get(b.paneId) ?? b.sortOrderHint) : b.sortOrderHint;
 
     const aHasOrder = aOrder !== undefined ? 1 : 0;
     const bHasOrder = bOrder !== undefined ? 1 : 0;
@@ -110,8 +110,7 @@ function sortPtysForSession(
     }
 
     const workspaceCompare =
-      (a.workspaceId ?? Number.MAX_SAFE_INTEGER) -
-      (b.workspaceId ?? Number.MAX_SAFE_INTEGER);
+      (a.workspaceId ?? Number.MAX_SAFE_INTEGER) - (b.workspaceId ?? Number.MAX_SAFE_INTEGER);
     if (workspaceCompare !== 0) return workspaceCompare;
 
     return (a.paneId ?? a.ptyId).localeCompare(b.paneId ?? b.ptyId);
@@ -233,10 +232,7 @@ export function flattenTree(
   const query = filterQuery.trim().toLowerCase();
   const hasFilter = query.length > 0;
 
-  const sessionGroups = new Map<
-    string,
-    { sessionNode: TreeNode; childNodes: TreeNode[] }
-  >();
+  const sessionGroups = new Map<string, { sessionNode: TreeNode; childNodes: TreeNode[] }>();
 
   let currentSessionId: string | null = null;
 
@@ -275,9 +271,7 @@ export function flattenTree(
         const cwd = pty.cwd.toLowerCase();
         const branch = pty.gitBranch?.toLowerCase() ?? '';
         const process = pty.foregroundProcess?.toLowerCase() ?? '';
-        return (
-          cwd.includes(query) || branch.includes(query) || process.includes(query)
-        );
+        return cwd.includes(query) || branch.includes(query) || process.includes(query);
       });
     }
 
@@ -338,9 +332,7 @@ export function flattenTree(
         }
       }
       item.isLast = nextSessionIndex === -1;
-      item.prefix = item.isLast
-        ? TREE_GLYPHS.BRANCH_LAST
-        : TREE_GLYPHS.BRANCH_MIDDLE;
+      item.prefix = item.isLast ? TREE_GLYPHS.BRANCH_LAST : TREE_GLYPHS.BRANCH_MIDDLE;
     }
   }
 
@@ -348,9 +340,7 @@ export function flattenTree(
 }
 
 /** Build index map from ptyId to flattened tree index */
-export function buildFlattenedTreeIndex(
-  flattenedTree: FlattenedTreeItem[]
-): Map<string, number> {
+export function buildFlattenedTreeIndex(flattenedTree: FlattenedTreeItem[]): Map<string, number> {
   const index = new Map<string, number>();
   for (const item of flattenedTree) {
     if (item.node.type === 'pty') {
@@ -428,11 +418,7 @@ export function recomputeTree(state: AggregateViewState): void {
     state.sessionPaneOrders
   );
 
-  state.flattenedTree = flattenTree(
-    state.treeRoot,
-    state.filterQuery,
-    state.showInactive
-  );
+  state.flattenedTree = flattenTree(state.treeRoot, state.filterQuery, state.showInactive);
   state.flattenedTreeIndex = buildFlattenedTreeIndex(state.flattenedTree);
 
   if (state.flattenedTree.length === 0) {
@@ -465,7 +451,8 @@ export function recomputeTree(state: AggregateViewState): void {
       ) {
         state.selectedIndex = previousSelectedIndex;
         state.selectedSessionId = previousSelectedSessionId;
-        state.selectedPtyId = sameRowItem.node.type === 'pty' ? sameRowItem.node.ptyInfo.ptyId : null;
+        state.selectedPtyId =
+          sameRowItem.node.type === 'pty' ? sameRowItem.node.ptyInfo.ptyId : null;
         return;
       }
     }
@@ -481,9 +468,10 @@ export function recomputeTree(state: AggregateViewState): void {
     if (preferredIndex !== -1) {
       state.selectedIndex = preferredIndex;
       state.selectedSessionId = getSessionIdForItem(state.flattenedTree[preferredIndex]);
-      state.selectedPtyId = state.flattenedTree[preferredIndex]?.node.type === 'pty'
-        ? state.flattenedTree[preferredIndex].node.ptyInfo.ptyId
-        : null;
+      state.selectedPtyId =
+        state.flattenedTree[preferredIndex]?.node.type === 'pty'
+          ? state.flattenedTree[preferredIndex].node.ptyInfo.ptyId
+          : null;
       return;
     }
 
@@ -502,7 +490,9 @@ export function recomputeTree(state: AggregateViewState): void {
   const fallbackIndex = Math.max(0, clampedIndex);
   const fallbackItem = state.flattenedTree[fallbackIndex];
   if (fallbackItem?.node.type === 'spacer') {
-    const nextSelectableIndex = state.flattenedTree.findIndex((item) => item.node.type !== 'spacer');
+    const nextSelectableIndex = state.flattenedTree.findIndex(
+      (item) => item.node.type !== 'spacer'
+    );
     state.selectedIndex = nextSelectableIndex === -1 ? 0 : nextSelectableIndex;
   } else {
     state.selectedIndex = fallbackIndex;
@@ -542,10 +532,7 @@ export function createLoadingPlaceholder(parentSessionId: string): TreeNode {
 }
 
 /** Create an error placeholder node */
-export function createErrorPlaceholder(
-  parentSessionId: string,
-  error: string
-): TreeNode {
+export function createErrorPlaceholder(parentSessionId: string, error: string): TreeNode {
   return {
     type: 'placeholder',
     parentSessionId,

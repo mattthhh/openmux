@@ -48,7 +48,10 @@ export interface TerminalContextValue {
   /** Create a new PTY session for a pane */
   createPTY: (paneId: string, cols: number, rows: number, cwd?: string) => Promise<string>;
   /** Create a new pane with PTY in single render (no stutter) */
-  createPaneWithPTY: (cwd?: string, title?: string) => Promise<string>;
+  createPaneWithPTY: (
+    cwd?: string,
+    title?: string
+  ) => Promise<{ paneId: string; ptyId: string } | null>;
   /** Destroy a PTY session. Set skipPaneClose=true if pane is already closed. */
   destroyPTY: (ptyId: string, options?: { skipPaneClose?: boolean }) => void;
   /** Destroy all PTY sessions */
@@ -56,10 +59,13 @@ export interface TerminalContextValue {
   /** Suspend a session (save PTY mapping, unsubscribe without destroying) */
   suspendSession: (sessionId: string) => void;
   /** Resume a session (resubscribe to saved PTYs, returns paneId→ptyId map + missing panes) */
-  resumeSession: (sessionId: string) => Promise<{
-    mapping: Map<string, string>;
-    missingPaneIds: string[];
-  } | undefined>;
+  resumeSession: (sessionId: string) => Promise<
+    | {
+        mapping: Map<string, string>;
+        missingPaneIds: string[];
+      }
+    | undefined
+  >;
   /** Cleanup PTYs for a deleted session */
   cleanupSessionPtys: (sessionId: string) => void;
   /** Write input to the focused pane's PTY */
@@ -69,7 +75,13 @@ export interface TerminalContextValue {
   /** Paste from clipboard to the focused pane's PTY */
   pasteToFocused: () => Promise<boolean>;
   /** Resize a PTY session */
-  resizePTY: (ptyId: string, cols: number, rows: number, pixelWidth?: number, pixelHeight?: number) => void;
+  resizePTY: (
+    ptyId: string,
+    cols: number,
+    rows: number,
+    pixelWidth?: number,
+    pixelHeight?: number
+  ) => void;
   /** Get the current working directory of the focused pane */
   getFocusedCwd: () => Promise<string | null>;
   /** Get the CWD for a specific PTY session */
@@ -101,7 +113,11 @@ export interface TerminalContextValue {
   /** Check if ghostty-vt is initialized */
   isInitialized: boolean;
   /** Refresh cached host terminal colors and apply to emulators */
-  refreshHostColors: (options?: { timeoutMs?: number; forceApply?: boolean; oscMode?: 'fast' | 'full' }) => Promise<boolean>;
+  refreshHostColors: (options?: {
+    timeoutMs?: number;
+    forceApply?: boolean;
+    oscMode?: 'fast' | 'full';
+  }) => Promise<boolean>;
   /** Version counter for host color changes */
   hostColorsVersion: number;
   /** Find which session owns a PTY (returns sessionId and paneId, or null if not found) */
@@ -177,8 +193,10 @@ export function TerminalProvider(props: TerminalProviderProps) {
     getCellMetrics: () => {
       const rendererAny = renderer as any;
       const resolution = rendererAny?.resolution ?? null;
-      const terminalWidth = dimensions().width || rendererAny?.terminalWidth || rendererAny?.width || 0;
-      const terminalHeight = dimensions().height || rendererAny?.terminalHeight || rendererAny?.height || 0;
+      const terminalWidth =
+        dimensions().width || rendererAny?.terminalWidth || rendererAny?.width || 0;
+      const terminalHeight =
+        dimensions().height || rendererAny?.terminalHeight || rendererAny?.height || 0;
       if (!resolution || terminalWidth <= 0 || terminalHeight <= 0) return null;
       return {
         cellWidth: Math.max(1, Math.floor(resolution.width / terminalWidth)),
@@ -471,18 +489,18 @@ export function TerminalProvider(props: TerminalProviderProps) {
     getEmulatorSync: cacheAccessors.getEmulatorSync,
     getFocusedEmulator: cacheAccessors.getFocusedEmulator,
     getTerminalStateSync: cacheAccessors.getTerminalStateSync,
-    get isInitialized() { return isInitialized(); },
+    get isInitialized() {
+      return isInitialized();
+    },
     refreshHostColors,
-    get hostColorsVersion() { return hostColorsVersion(); },
+    get hostColorsVersion() {
+      return hostColorsVersion();
+    },
     findSessionForPty: cacheAccessors.findSessionForPty,
     isPtyActive,
   };
 
-  return (
-    <TerminalContext.Provider value={value}>
-      {props.children}
-    </TerminalContext.Provider>
-  );
+  return <TerminalContext.Provider value={value}>{props.children}</TerminalContext.Provider>;
 }
 
 export function useTerminal(): TerminalContextValue {

@@ -222,7 +222,8 @@ export async function loadSessionPtysWithService(
  * @returns Load result with PTYs or error
  */
 export async function loadSessionPtysOnDemand(
-  sessionId: string
+  sessionId: string,
+  options?: { createIfMissing?: boolean }
 ): Promise<
   LoadSessionPtysResult | SessionError | AggregateBridgeError | ServicesNotInitializedError
 > {
@@ -242,7 +243,9 @@ export async function loadSessionPtysOnDemand(
     skipGitDiffStats: true,
   });
 
-  if ((ptys?.length ?? 0) === 0) {
+  const createIfMissing = options?.createIfMissing ?? true;
+
+  if (createIfMissing && (ptys?.length ?? 0) === 0) {
     const paneRecords = getActiveWorkspacePaneRecords(sessionResult);
     const existingMapping = await getStoredSessionPtyMapping(sessionId);
     const nextMapping = new Map<string, string>(existingMapping?.mapping ?? []);
