@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.48](https://github.com/monotykamary/openmux/compare/v0.3.47...v0.3.48) (2026-04-03)
+
+
+### Bug Fixes
+
+* **aggregate-view:** harden PTY creation and removal races ([10c662e](https://github.com/monotykamary/openmux/commit/10c662ebc99f5ce0e416576e10244430bb667a09))
+
 ### [0.3.47](https://github.com/monotykamary/openmux/compare/v0.3.46...v0.3.47) (2026-04-03)
 
 
