@@ -342,6 +342,77 @@ describe('PTY destruction race condition', () => {
     expect(state.deletedPtyIds.has('pty-orphaned-live')).toBe(false);
   });
 
+  it('keeps tombstones while saved mappings still reference a deleted PTY', async () => {
+    const { state, refreshPtys, lifecycleHandlers } = createTestHarness();
+
+    state.allPtys.push(createMockPty({ ptyId: 'pty-stale-mapping', paneId: 'pane-1' }));
+    state.allPtysIndex = buildPtyIndex(state.allPtys);
+
+    vi.mocked(listSessionsResult).mockResolvedValue([createMockSession()]);
+    vi.mocked(listAllPtyIds).mockResolvedValue([]);
+    vi.mocked(listAllPtysWithMetadata).mockResolvedValue([]);
+    vi.mocked(getAggregateSessionPtyMapping).mockResolvedValue({
+      sessionId: 'session-1',
+      mapping: new Map([['pane-1', 'pty-stale-mapping']]),
+      stalePaneIds: [],
+    });
+    vi.mocked(loadSession).mockResolvedValue({
+      id: 'session-1',
+      name: 'Test Session',
+      activeWorkspaceId: 1,
+      workspaces: [],
+      cwdMap: new Map(),
+      paneToPtyMap: new Map(),
+    });
+    vi.mocked(getSessionSummaryResult).mockResolvedValue({
+      workspaceCount: 1,
+      paneCount: 1,
+    });
+
+    lifecycleHandlers.handlePtyDestroyed('pty-stale-mapping');
+    await refreshPtys();
+
+    expect(state.deletedPtyIds.has('pty-stale-mapping')).toBe(true);
+
+    vi.mocked(getAggregateSessionPtyMapping).mockResolvedValue(undefined);
+    await refreshPtys();
+
+    expect(state.deletedPtyIds.has('pty-stale-mapping')).toBe(false);
+  });
+
+  it('does not bootstrap stale PTYs missing from the raw service list', async () => {
+    const { state, bootstrapPtys } = createTestHarness();
+
+    vi.mocked(listSessionsResult).mockResolvedValue([createMockSession()]);
+    vi.mocked(listAllPtyIds).mockResolvedValue([]);
+    vi.mocked(loadSession).mockResolvedValue({
+      id: 'session-1',
+      name: 'Test Session',
+      activeWorkspaceId: 1,
+      workspaces: [
+        {
+          id: 1,
+          layoutMode: 'vertical',
+          focusedPaneId: 'pane-1',
+          mainPane: { id: 'pane-1', title: 'shell' },
+          stackPanes: [],
+          activeStackIndex: 0,
+        },
+      ],
+      cwdMap: new Map(),
+      paneToPtyMap: new Map([['pane-1', 'pty-stale-bootstrap']]),
+    });
+    vi.mocked(getAggregateSessionPtyMapping).mockResolvedValue({
+      sessionId: 'session-1',
+      mapping: new Map([['pane-1', 'pty-stale-bootstrap']]),
+      stalePaneIds: [],
+    });
+
+    await bootstrapPtys();
+
+    expect(state.allPtys.find((pty) => pty.ptyId === 'pty-stale-bootstrap')).toBeUndefined();
+  });
+
   it('should not bootstrap deleted PTYs back into the list from saved mappings', async () => {
     const { state, bootstrapPtys } = createTestHarness();
 
@@ -479,7 +550,7 @@ describe('PTY destruction race condition', () => {
     expect(newPty?.shell).toBe('/bin/zsh'); // Verify it's the new one
   });
 
-  it('skips the session header and selects the next PTY when removing the first PTY in a session', () => {
+  it('keeps the cursor in place and selects the next PTY when removing the first PTY in a session', () => {
     const { state, setState, lifecycleHandlers } = createTestHarness();
 
     const firstPty = createMockPty({ ptyId: 'pty-first', paneId: 'pane-1' });
@@ -504,7 +575,7 @@ describe('PTY destruction race condition', () => {
     expect(state.flattenedTree[state.selectedIndex]?.node.type).toBe('pty');
   });
 
-  it('does not jump up into the previous session group when removing the only PTY in a session', () => {
+  it('falls back to the current session header when removing the only PTY in a session', () => {
     const { state, setState, lifecycleHandlers } = createTestHarness();
 
     const previousSessionPty = createMockPty({

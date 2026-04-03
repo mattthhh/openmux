@@ -246,7 +246,7 @@ describe('Selection Persistence - current tree behavior', () => {
     expect(state.flattenedTree[state.selectedIndex]?.node.type).toBe('session');
   });
 
-  it('falls back to the current session header when removing the last PTY in a session', () => {
+  it('moves to the previous PTY when removing the last PTY in a session', () => {
     const sessions = [createMockSession('session-a', 'A')];
     const ptys = [
       createMockPty({ ptyId: 'pty-1', sessionId: 'session-a' }),
@@ -261,9 +261,8 @@ describe('Selection Persistence - current tree behavior', () => {
 
     actions.selectAfterPtyRemoval('pty-2');
 
-    expect(state.selectedPtyId).toBeNull();
-    expect(state.selectedSessionId).toBe('session-a');
-    expect(state.flattenedTree[state.selectedIndex]?.node.type).toBe('session');
+    expect(state.selectedPtyId).toBe('pty-1');
+    expect(actions.getSelectedPty()?.ptyId).toBe('pty-1');
   });
 
   it('falls back to the session header when the only PTY is removed from view', () => {

@@ -96,6 +96,25 @@ export function findNearestSelectable(
   return null;
 }
 
+/** Find the previous PTY inside the same session group. */
+export function findNearestPtyInSessionAbove(
+  flattenedTree: FlattenedTreeItem[],
+  startIndex: number,
+  sessionId: string
+): { index: number; item: FlattenedTreeItem } | null {
+  for (let index = startIndex - 1; index >= 0; index--) {
+    const item = flattenedTree[index];
+    if (item?.node.type === 'session') {
+      break;
+    }
+    if (item?.node.type === 'pty' && item.parentSessionId === sessionId) {
+      return { index, item };
+    }
+  }
+
+  return null;
+}
+
 /** Find the session header for the current PTY group. */
 export function findSessionHeader(
   flattenedTree: FlattenedTreeItem[],
@@ -114,7 +133,8 @@ export function findSessionHeader(
 
 /**
  * Select the best row after PTY removal.
- * Keep the cursor in place by preferring the next selectable row below.
+ * Keep the cursor in place by preferring the next selectable row below,
+ * but when nothing is below, move to the previous PTY before the session header.
  */
 export function selectAfterPtyRemoval(
   state: AggregateViewState,
@@ -131,6 +151,9 @@ export function selectAfterPtyRemoval(
 
   const replacement =
     findNearestSelectable(state.flattenedTree, removedIndex, 'down') ??
+    (removedSessionId
+      ? findNearestPtyInSessionAbove(state.flattenedTree, removedIndex, removedSessionId)
+      : null) ??
     (removedSessionId
       ? findSessionHeader(state.flattenedTree, removedIndex, removedSessionId)
       : null) ??

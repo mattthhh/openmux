@@ -472,6 +472,20 @@ export function createAggregateViewActions(params: AggregateViewActionsParams) {
     return null;
   };
 
+  const findNearestPtyInSessionAbove = (startIndex: number, sessionId: string): number | null => {
+    for (let index = startIndex - 1; index >= 0; index--) {
+      const item = state.flattenedTree[index];
+      if (item?.node.type === 'session') {
+        break;
+      }
+      if (item?.node.type === 'pty' && item.parentSessionId === sessionId) {
+        return index;
+      }
+    }
+
+    return null;
+  };
+
   const findSessionHeader = (startIndex: number, sessionId: string): number | null => {
     for (let index = startIndex - 1; index >= 0; index--) {
       const item = state.flattenedTree[index];
@@ -485,7 +499,8 @@ export function createAggregateViewActions(params: AggregateViewActionsParams) {
 
   /**
    * Smart selection after removing a PTY.
-   * Keep the cursor in place by preferring the next selectable row below.
+   * Keep the cursor in place by preferring the next selectable row below,
+   * but when nothing is below, move to the previous PTY before the session header.
    */
   const selectAfterPtyRemoval = (removedPtyId: string): void => {
     const removedIndex = state.flattenedTreeIndex.get(removedPtyId);
@@ -499,6 +514,7 @@ export function createAggregateViewActions(params: AggregateViewActionsParams) {
 
     const replacementIndex =
       findNearestSelectable(removedIndex, 'down')?.index ??
+      (removedSessionId ? findNearestPtyInSessionAbove(removedIndex, removedSessionId) : null) ??
       (removedSessionId ? findSessionHeader(removedIndex, removedSessionId) : null) ??
       findNearestSelectable(removedIndex, 'up')?.index ??
       null;

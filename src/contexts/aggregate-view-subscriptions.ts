@@ -477,6 +477,7 @@ export function createAggregateViewRefreshers(
     fetchGitInfo: (cwd) => getGitInfo(cwd, { force: true }),
     fetchDiffStats: getGitDiffStats,
   });
+  const deletedPtyIdsSeenGoneFromService = new Set<string>();
 
   /**
    * Lightweight initial load - shows sessions immediately with basic PTY info.
@@ -634,6 +635,12 @@ export function createAggregateViewRefreshers(
       }
       const sessions = [...sessionsResult];
 
+      const serviceLivePtyIdsResult = await listAllPtyIds();
+      if (serviceLivePtyIdsResult instanceof Error) {
+        return serviceLivePtyIdsResult;
+      }
+      const serviceLivePtyIds = new Set(serviceLivePtyIdsResult);
+
       const sessionDetailsEntries = await Promise.all(
         sessions.map(
           async (session) => [String(session.id), await loadSession(String(session.id))] as const
@@ -681,7 +688,11 @@ export function createAggregateViewRefreshers(
 
         const stalePaneIds = new Set(mappingInfo.stalePaneIds);
         for (const [paneId, ptyId] of mappingInfo.mapping) {
-          if (stalePaneIds.has(paneId) || state.deletedPtyIds.has(ptyId)) {
+          if (
+            stalePaneIds.has(paneId) ||
+            state.deletedPtyIds.has(ptyId) ||
+            !serviceLivePtyIds.has(ptyId)
+          ) {
             continue;
           }
 
@@ -858,6 +869,9 @@ export function createAggregateViewRefreshers(
 
       const currentSessionHints = getCurrentSessionHints();
       const currentSessionPaneOrder = getCurrentSessionPaneOrder();
+      const currentSessionPtyIds = new Set(
+        (getCurrentSessionPtys?.() ?? []).map((pty) => pty.ptyId)
+      );
       if (currentSessionHints.sessionId && currentSessionPaneOrder) {
         sessionPaneOrders.set(currentSessionHints.sessionId, currentSessionPaneOrder);
       }
@@ -1022,12 +1036,25 @@ export function createAggregateViewRefreshers(
             }
           }
 
-          // Clear deletedPtyIds only after the PTY is gone from the raw service list.
-          // Ownership can disappear before the deferred destroy request completes, so using
-          // freshPtys here would clear the tombstone too early and let the PTY reappear.
+          // Clear deleted tombstones only after the PTY is gone from the raw service list AND
+          // no layout/session mapping still references it. If the same PTY id later reappears
+          // after an observed absence, treat it as a legitimate id reuse and allow it back in.
           for (const deletedPtyId of s.deletedPtyIds) {
             if (!serviceLivePtyIds.has(deletedPtyId)) {
+              deletedPtyIdsSeenGoneFromService.add(deletedPtyId);
+              if (
+                !mappedOwnershipByPtyId.has(deletedPtyId) &&
+                !currentSessionPtyIds.has(deletedPtyId)
+              ) {
+                s.deletedPtyIds.delete(deletedPtyId);
+                deletedPtyIdsSeenGoneFromService.delete(deletedPtyId);
+              }
+              continue;
+            }
+
+            if (deletedPtyIdsSeenGoneFromService.has(deletedPtyId)) {
               s.deletedPtyIds.delete(deletedPtyId);
+              deletedPtyIdsSeenGoneFromService.delete(deletedPtyId);
             }
           }
 
@@ -1586,7 +1613,8 @@ export function createLifecycleHandlers(
   /**
    * Handle PTY destroyed - remove from list instantly.
    * This is synchronous for immediate UI feedback.
-   * Selection prefers the nearest selectable row above so the highlight visibly moves up.
+   * Selection prefers the next row below to keep the cursor in place, but for bottom rows
+   * it falls back to the previous PTY before selecting the session header.
    *
    * The PTY is added to deletedPtyIds, which prevents it from being re-added
    * during background refresh. Entries are only cleared from deletedPtyIds
@@ -1664,6 +1692,23 @@ export function createLifecycleHandlers(
             return null;
           };
 
+          const findNearestPtyInSessionAbove = (
+            startIndex: number,
+            currentSessionId: string
+          ): number | null => {
+            for (let index = startIndex - 1; index >= 0; index--) {
+              const item = s.flattenedTree[index];
+              if (item?.node.type === 'session') {
+                break;
+              }
+              if (item?.node.type === 'pty' && item.parentSessionId === currentSessionId) {
+                return index;
+              }
+            }
+
+            return null;
+          };
+
           const findSessionHeader = (
             startIndex: number,
             currentSessionId: string
@@ -1680,6 +1725,7 @@ export function createLifecycleHandlers(
 
           const replacementIndex =
             findNearestSelectable(removedFlattenedIndex, 'down')?.index ??
+            findNearestPtyInSessionAbove(removedFlattenedIndex, sessionId) ??
             findSessionHeader(removedFlattenedIndex, sessionId) ??
             findNearestSelectable(removedFlattenedIndex, 'up')?.index ??
             null;
