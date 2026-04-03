@@ -1188,7 +1188,11 @@ export function createAggregateViewRefreshers(
     }
 
     const cwds = [...new Set(updates.map((update) => update.cwd))];
-    const gitMetadataMap = await gitCache.getMetadataBatch(cwds, { forceRefresh: true });
+    // NOTE: Do NOT use forceRefresh: true here. The subset refresh is for lightweight
+    // polling updates - forcing a refresh can cause git metadata to temporarily clear
+    // when git commands fail due to race conditions or file locks. Using cached values
+    // ensures stable display of git stats.
+    const gitMetadataMap = await gitCache.getMetadataBatch(cwds, { forceRefresh: false });
     const updatesByRepo = new Map<
       string | undefined,
       Array<{ index: number; update: PtyMetadata; metadata: GitRepoMetadata | undefined }>

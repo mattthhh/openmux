@@ -1,6 +1,6 @@
 /**
  * Subset refresh operation for Aggregate View.
- * 
+ *
  * Performs targeted refresh of specific PTY IDs - used for:
  * - Polling updates on visible PTYs
  * - Incremental updates after lifecycle events
@@ -54,26 +54,26 @@ export async function refreshPtysSubsetOnce(
 
   // Fetch metadata for all requested PTYs in parallel
   const results = await Promise.all(
-    ptyIds.map((id) => 
+    ptyIds.map((id) =>
       getPtyMetadata(id, { skipGitDiffStats: true }).catch(
-        (e) => new PtyMetadataError({ 
-          operation: 'get', 
-          ptyId: id, 
-          reason: String(e) 
-        })
+        (e) =>
+          new PtyMetadataError({
+            operation: 'get',
+            ptyId: id,
+            reason: String(e),
+          })
       )
     )
   );
 
   // Filter to successful results
-  const updates = results.filter((result): result is PtyMetadata => 
-    result !== null && !(result instanceof Error)
+  const updates = results.filter(
+    (result): result is PtyMetadata => result !== null && !(result instanceof Error)
   );
-  
+
   if (updates.length === 0) {
     const firstError = results.find(
-      (result): result is ServicesNotInitializedError =>
-        result instanceof Error
+      (result): result is ServicesNotInitializedError => result instanceof Error
     );
     return firstError;
   }
@@ -85,80 +85,86 @@ export async function refreshPtysSubsetOnce(
   });
 
   // Fetch git metadata for all unique CWDs
+  // NOTE: Do NOT use forceRefresh: true here. The subset refresh is for lightweight
+  // polling updates - forcing a refresh can cause git metadata to temporarily clear
+  // when git commands fail due to race conditions or file locks. Using cached values
+  // ensures stable display of git stats; the cache has its own TTL/staleness logic.
   const cwds = [...new Set(updates.map((update) => update.cwd))];
-  const gitMetadataMap = await gitCache.getMetadataBatch(cwds, { forceRefresh: true });
+  const gitMetadataMap = await gitCache.getMetadataBatch(cwds, { forceRefresh: false });
 
   // Group updates by repository for batch processing
   const updatesByRepo = new Map<string | undefined, RepoGroup['items']>();
 
   let didChange = false;
-  setState(produce((s) => {
-    // First pass: collect indices and group by repo
-    for (const update of updates) {
-      const index = s.allPtysIndex.get(update.ptyId);
-      if (index === undefined || !s.allPtys[index]) continue;
+  setState(
+    produce((s) => {
+      // First pass: collect indices and group by repo
+      for (const update of updates) {
+        const index = s.allPtysIndex.get(update.ptyId);
+        if (index === undefined || !s.allPtys[index]) continue;
 
-      const gitMetadata = gitMetadataMap.get(update.cwd);
-      const repoKey = gitMetadata?.repoKey;
-      const group = updatesByRepo.get(repoKey);
+        const gitMetadata = gitMetadataMap.get(update.cwd);
+        const repoKey = gitMetadata?.repoKey;
+        const group = updatesByRepo.get(repoKey);
 
-      if (group) {
-        group.push({ index, update, metadata: gitMetadata });
-      } else {
-        updatesByRepo.set(repoKey, [{ index, update, metadata: gitMetadata }]);
-      }
-    }
-
-    // Second pass: apply updates
-    for (const [, group] of updatesByRepo) {
-      for (const { index, update, metadata } of group) {
-        const prev = s.allPtys[index];
-        const gitFields = extractGitMetadata(metadata);
-
-        const updated = {
-          ...prev,
-          cwd: update.cwd,
-          foregroundProcess: update.foregroundProcess,
-          shell: update.shell ?? prev.shell,
-          title: update.title ?? prev.title,
-          workspaceId: update.workspaceId ?? prev.workspaceId,
-          paneId: update.paneId ?? prev.paneId,
-          ...gitFields,
-        };
-
-        // Only update if something changed
-        if (
-          prev.cwd !== updated.cwd ||
-          prev.foregroundProcess !== updated.foregroundProcess ||
-          prev.shell !== updated.shell ||
-          prev.title !== updated.title ||
-          prev.workspaceId !== updated.workspaceId ||
-          prev.paneId !== updated.paneId ||
-          prev.gitBranch !== updated.gitBranch ||
-          prev.gitDirty !== updated.gitDirty ||
-          prev.gitStaged !== updated.gitStaged ||
-          prev.gitUnstaged !== updated.gitUnstaged ||
-          prev.gitUntracked !== updated.gitUntracked ||
-          prev.gitConflicted !== updated.gitConflicted ||
-          prev.gitAhead !== updated.gitAhead ||
-          prev.gitBehind !== updated.gitBehind ||
-          prev.gitStashCount !== updated.gitStashCount ||
-          prev.gitState !== updated.gitState ||
-          prev.gitDetached !== updated.gitDetached ||
-          prev.gitRepoKey !== updated.gitRepoKey
-        ) {
-          s.allPtys[index] = updated;
-          didChange = true;
+        if (group) {
+          group.push({ index, update, metadata: gitMetadata });
+        } else {
+          updatesByRepo.set(repoKey, [{ index, update, metadata: gitMetadata }]);
         }
       }
-    }
 
-    // Recompute tree if any changes were made
-    if (didChange) {
-      recomputeMatches(s);
-      recomputeTree(s);
-    }
-  }));
+      // Second pass: apply updates
+      for (const [, group] of updatesByRepo) {
+        for (const { index, update, metadata } of group) {
+          const prev = s.allPtys[index];
+          const gitFields = extractGitMetadata(metadata);
+
+          const updated = {
+            ...prev,
+            cwd: update.cwd,
+            foregroundProcess: update.foregroundProcess,
+            shell: update.shell ?? prev.shell,
+            title: update.title ?? prev.title,
+            workspaceId: update.workspaceId ?? prev.workspaceId,
+            paneId: update.paneId ?? prev.paneId,
+            ...gitFields,
+          };
+
+          // Only update if something changed
+          if (
+            prev.cwd !== updated.cwd ||
+            prev.foregroundProcess !== updated.foregroundProcess ||
+            prev.shell !== updated.shell ||
+            prev.title !== updated.title ||
+            prev.workspaceId !== updated.workspaceId ||
+            prev.paneId !== updated.paneId ||
+            prev.gitBranch !== updated.gitBranch ||
+            prev.gitDirty !== updated.gitDirty ||
+            prev.gitStaged !== updated.gitStaged ||
+            prev.gitUnstaged !== updated.gitUnstaged ||
+            prev.gitUntracked !== updated.gitUntracked ||
+            prev.gitConflicted !== updated.gitConflicted ||
+            prev.gitAhead !== updated.gitAhead ||
+            prev.gitBehind !== updated.gitBehind ||
+            prev.gitStashCount !== updated.gitStashCount ||
+            prev.gitState !== updated.gitState ||
+            prev.gitDetached !== updated.gitDetached ||
+            prev.gitRepoKey !== updated.gitRepoKey
+          ) {
+            s.allPtys[index] = updated;
+            didChange = true;
+          }
+        }
+      }
+
+      // Recompute tree if any changes were made
+      if (didChange) {
+        recomputeMatches(s);
+        recomputeTree(s);
+      }
+    })
+  );
 
   return;
 }
