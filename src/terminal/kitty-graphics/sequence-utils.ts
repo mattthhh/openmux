@@ -1,7 +1,14 @@
+/**
+ * Kitty graphics protocol sequence utilities.
+ * Uses errore for type-safe error handling on I/O operations.
+ */
+
 import { Buffer } from 'buffer';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import * as errore from 'errore';
+import { KittyOffloadError } from '../../effect/errors';
 
 export const ESC = '\x1b';
 export const APC_C1 = '\x9f';
@@ -79,7 +86,12 @@ export function parseTransmitParams(parsed: KittySequence): TransmitParams | nul
   const params = parsed.params;
   const action = params.get('a');
   const hasTransmitFields =
-    params.has('f') || params.has('t') || params.has('s') || params.has('v') || params.has('o') || params.has('m');
+    params.has('f') ||
+    params.has('t') ||
+    params.has('s') ||
+    params.has('v') ||
+    params.has('o') ||
+    params.has('m');
   const resolvedAction = action ?? (hasTransmitFields ? 't' : null);
   if (resolvedAction !== 't' && resolvedAction !== 'T') return null;
 
@@ -96,7 +108,10 @@ export function parseTransmitParams(parsed: KittySequence): TransmitParams | nul
   };
 }
 
-export function mergeTransmitParams(base: TransmitParams | null, next: TransmitParams): TransmitParams {
+export function mergeTransmitParams(
+  base: TransmitParams | null,
+  next: TransmitParams
+): TransmitParams {
   if (!base) return next;
   return {
     action: next.action,
@@ -119,11 +134,19 @@ export function rebuildControl(params: Map<string, string>): string {
   return parts.join(',');
 }
 
-export function buildGuestKey(imageId: string | number | null, imageNumber: string | number | null): string | null {
+export function buildGuestKey(
+  imageId: string | number | null,
+  imageNumber: string | number | null
+): string | null {
   if (imageId !== null && imageId !== undefined && imageId !== '' && imageId !== 0) {
     return `i:${imageId}`;
   }
-  if (imageNumber !== null && imageNumber !== undefined && imageNumber !== '' && imageNumber !== 0) {
+  if (
+    imageNumber !== null &&
+    imageNumber !== undefined &&
+    imageNumber !== '' &&
+    imageNumber !== 0
+  ) {
     return `I:${imageNumber}`;
   }
   return null;
@@ -132,62 +155,82 @@ export function buildGuestKey(imageId: string | number | null, imageNumber: stri
 export function normalizeParamId(value: string | undefined): string | null {
   if (!value) return null;
   if (/^\d+$/.test(value)) {
-    try {
-      const parsed = BigInt(value);
-      if (parsed <= 0n) return null;
-      return parsed.toString();
-    } catch {
-      return null;
-    }
+    const parsed = errore.try<bigint, Error>({
+      try: () => BigInt(value),
+      catch: () => new Error('Invalid BigInt'),
+    });
+    if (parsed instanceof Error) return null;
+    if (parsed <= 0n) return null;
+    return parsed.toString();
   }
   return value;
 }
 
-export function parsePngDimensionsFromBase64(data: string): { width: number; height: number } | null {
+export function parsePngDimensionsFromBase64(
+  data: string
+): { width: number; height: number } | null {
   if (!data) return null;
   const neededChars = 64;
   const sample = data.length > neededChars ? data.slice(0, neededChars) : data;
-  let decoded: Buffer;
-  try {
-    decoded = Buffer.from(sample, 'base64');
-  } catch {
-    return null;
-  }
+
+  const decoded = errore.try<Buffer, Error>({
+    try: () => Buffer.from(sample, 'base64'),
+    catch: () => new Error('Invalid base64'),
+  });
+  if (decoded instanceof Error) return null;
+
   return parsePngDimensionsFromBuffer(decoded);
 }
 
 export function decodeKittyFilePayload(payload: string): string | null {
   if (!payload) return null;
-  try {
-    return Buffer.from(payload, 'base64').toString('utf8');
-  } catch {
-    return null;
-  }
+  const result = errore.try<string, Error>({
+    try: () => Buffer.from(payload, 'base64').toString('utf8'),
+    catch: () => new Error('Invalid base64'),
+  });
+  return result instanceof Error ? null : result;
 }
 
-export function parsePngDimensionsFromFilePath(filePath: string): { width: number; height: number } | null {
+/**
+ * Parse PNG dimensions from a file path using errore for error handling.
+ * @returns Dimensions on success, null on failure (file not found, not readable, not PNG)
+ */
+export function parsePngDimensionsFromFilePath(
+  filePath: string
+): { width: number; height: number } | null {
   if (!filePath) return null;
-  let fd: number | null = null;
-  try {
-    fd = fs.openSync(filePath, 'r');
-    const header = Buffer.alloc(24);
-    const bytesRead = fs.readSync(fd, header, 0, header.length, 0);
-    if (bytesRead < header.length) return null;
-    return parsePngDimensionsFromBuffer(header);
-  } catch {
-    return null;
-  } finally {
-    if (fd !== null) {
+
+  // Use errore for file operations
+  const result = errore.try<{ width: number; height: number } | null, KittyOffloadError>({
+    try: () => {
+      const fd = fs.openSync(filePath, 'r');
       try {
-        fs.closeSync(fd);
-      } catch {
-        // ignore
+        const header = Buffer.alloc(24);
+        const bytesRead = fs.readSync(fd, header, 0, header.length, 0);
+        if (bytesRead < header.length) return null;
+        return parsePngDimensionsFromBuffer(header);
+      } finally {
+        try {
+          fs.closeSync(fd);
+        } catch {
+          // ignore close errors
+        }
       }
-    }
+    },
+    catch: (e) => new KittyOffloadError({ operation: 'read', reason: String(e), cause: e }),
+  });
+
+  if (result instanceof KittyOffloadError) {
+    // Silently return null - this is expected for invalid/unreadable files
+    return null;
   }
+
+  return result;
 }
 
-export function parsePngDimensionsFromFilePayload(payload: string): { width: number; height: number } | null {
+export function parsePngDimensionsFromFilePayload(
+  payload: string
+): { width: number; height: number } | null {
   const filePath = decodeKittyFilePayload(payload);
   if (!filePath) return null;
   return parsePngDimensionsFromFilePath(filePath);

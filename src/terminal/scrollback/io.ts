@@ -4,41 +4,54 @@
  * Uses errore library for type-safe error handling.
  */
 
-import fs from "node:fs"
-import fsp from "node:fs/promises"
-import path from "node:path"
-import * as errore from "errore"
-import { ScrollbackArchiveError } from "../../effect/errors"
-import type { ArchiveChunk, ArchiveMeta } from "./types"
+import fs from 'node:fs';
+import fsp from 'node:fs/promises';
+import path from 'node:path';
+import * as errore from 'errore';
+import { ScrollbackArchiveError } from '../../effect/errors';
+import type { ArchiveChunk, ArchiveMeta } from './types';
 
 /**
  * Ensures the archive directory exists.
  * @param rootDir - Directory to create
  */
 export function ensureDir(rootDir: string): void {
-  fs.mkdirSync(rootDir, { recursive: true })
+  fs.mkdirSync(rootDir, { recursive: true });
 }
 
 /**
- * Loads archive metadata from disk.
- * Handles version checking and backward compatibility.
+ * Loads archive metadata from disk using errore for error handling.
  * @param metaPath - Path to meta.json file
- * @returns ArchiveMeta if valid, null otherwise
+ * @returns ArchiveMeta on success, null on failure (file not found, invalid JSON, wrong version)
  */
 export function loadMeta(metaPath: string): ArchiveMeta | null {
-  if (!fs.existsSync(metaPath)) return null
+  if (!fs.existsSync(metaPath)) return null;
 
-  let parsed: ArchiveMeta | null = null
-
-  try {
-    const data = fs.readFileSync(metaPath, "utf8")
-    parsed = JSON.parse(data) as ArchiveMeta
-  } catch {
-    return null
+  // Read file with errore
+  const dataResult = errore.try<string, ScrollbackArchiveError>({
+    try: () => fs.readFileSync(metaPath, 'utf8'),
+    catch: (e) => new ScrollbackArchiveError({ operation: 'read', reason: String(e), cause: e }),
+  });
+  if (dataResult instanceof ScrollbackArchiveError) {
+    return null;
   }
 
-  if (!parsed || parsed.version !== 1) return null
-  return parsed
+  // Parse JSON with errore
+  const parsedResult = errore.try<ArchiveMeta, ScrollbackArchiveError>({
+    try: () => JSON.parse(dataResult) as ArchiveMeta,
+    catch: (e) =>
+      new ScrollbackArchiveError({
+        operation: 'read',
+        reason: `Invalid JSON: ${String(e)}`,
+        cause: e,
+      }),
+  });
+  if (parsedResult instanceof ScrollbackArchiveError) {
+    return null;
+  }
+
+  if (parsedResult.version !== 1) return null;
+  return parsedResult;
 }
 
 /**
@@ -52,15 +65,15 @@ export async function flushMeta(
   meta: ArchiveMeta
 ): Promise<void | ScrollbackArchiveError> {
   const result = await errore.tryAsync<void, ScrollbackArchiveError>({
-    try: () => fsp.writeFile(metaPath, JSON.stringify(meta), "utf8"),
+    try: () => fsp.writeFile(metaPath, JSON.stringify(meta), 'utf8'),
     catch: (e) =>
       new ScrollbackArchiveError({
-        operation: "write",
+        operation: 'write',
         reason: String(e),
         cause: e,
       }),
-  })
-  return result
+  });
+  return result;
 }
 
 /**
@@ -77,12 +90,12 @@ export async function appendChunkData(
     try: () => fsp.appendFile(chunkPath, data),
     catch: (e) =>
       new ScrollbackArchiveError({
-        operation: "write",
+        operation: 'write',
         reason: String(e),
         cause: e,
       }),
-  })
-  return result
+  });
+  return result;
 }
 
 /**
@@ -96,11 +109,11 @@ export async function deleteChunkFiles(chunk: ArchiveChunk): Promise<void> {
     try: () => fsp.unlink(chunk.path),
     catch: (e) =>
       new ScrollbackArchiveError({
-        operation: "delete",
+        operation: 'delete',
         reason: String(e),
         cause: e,
       }),
-  })
+  });
 
   if (cellResult instanceof ScrollbackArchiveError) {
     // Continue to try deleting placement file
@@ -112,11 +125,11 @@ export async function deleteChunkFiles(chunk: ArchiveChunk): Promise<void> {
       try: () => fsp.unlink(chunk.placementPath!),
       catch: (e) =>
         new ScrollbackArchiveError({
-          operation: "delete",
+          operation: 'delete',
           reason: String(e),
           cause: e,
         }),
-    })
+    });
     if (placementResult instanceof ScrollbackArchiveError) {
       // Ignore errors for placement file - it may not exist
     }
@@ -124,20 +137,21 @@ export async function deleteChunkFiles(chunk: ArchiveChunk): Promise<void> {
 }
 
 /**
- * Reads placement data from a chunk file synchronously.
+ * Reads placement data from a chunk file synchronously using errore.
  * @param chunk - Chunk containing placement data
  * @returns Buffer with placement data, or null if not found/error
  */
 export function readPlacementBuffer(chunk: ArchiveChunk): Buffer | null {
   if (!chunk.placementPath || !chunk.placementBytes || chunk.placementBytes === 0) {
-    return null
+    return null;
   }
 
-  try {
-    return fs.readFileSync(chunk.placementPath)
-  } catch {
-    return null
-  }
+  const result = errore.try<Buffer, ScrollbackArchiveError>({
+    try: () => fs.readFileSync(chunk.placementPath!),
+    catch: (e) => new ScrollbackArchiveError({ operation: 'read', reason: String(e), cause: e }),
+  });
+
+  return result instanceof ScrollbackArchiveError ? null : result;
 }
 
 /**
@@ -152,22 +166,22 @@ export async function appendPlacementData(
 ): Promise<void | ScrollbackArchiveError> {
   // Ensure placement file is set up for this chunk
   if (!chunk.placementPath) {
-    chunk.placementFilename = `chunk-${chunk.id}-placements.bin`
-    chunk.placementPath = path.join(path.dirname(chunk.path), chunk.placementFilename)
-    chunk.placementBytes = 0
+    chunk.placementFilename = `chunk-${chunk.id}-placements.bin`;
+    chunk.placementPath = path.join(path.dirname(chunk.path), chunk.placementFilename);
+    chunk.placementBytes = 0;
   }
 
   const result = await errore.tryAsync<void, ScrollbackArchiveError>({
     try: () => fsp.appendFile(chunk.placementPath!, data),
     catch: (e) =>
       new ScrollbackArchiveError({
-        operation: "write",
+        operation: 'write',
         reason: String(e),
         cause: e,
       }),
-  })
+  });
 
-  return result
+  return result;
 }
 
 /**
@@ -179,14 +193,14 @@ export async function appendPlacementData(
  */
 export function buildChunksFromMeta(
   rootDir: string,
-  entries: ArchiveMeta["chunks"]
+  entries: ArchiveMeta['chunks']
 ): ArchiveChunk[] {
-  const chunks: ArchiveChunk[] = []
-  let currentStartOffset = 0
+  const chunks: ArchiveChunk[] = [];
+  let currentStartOffset = 0;
 
   for (const entry of entries) {
-    const chunkPath = path.join(rootDir, entry.filename)
-    if (!fs.existsSync(chunkPath)) continue
+    const chunkPath = path.join(rootDir, entry.filename);
+    if (!fs.existsSync(chunkPath)) continue;
 
     const chunk: ArchiveChunk = {
       id: entry.id,
@@ -205,12 +219,12 @@ export function buildChunksFromMeta(
         ? path.join(rootDir, entry.placementFilename)
         : undefined,
       placementBytes: entry.placementBytes ?? 0,
-    }
-    chunks.push(chunk)
-    currentStartOffset += chunk.lineCount
+    };
+    chunks.push(chunk);
+    currentStartOffset += chunk.lineCount;
   }
 
-  return chunks
+  return chunks;
 }
 
 /**
@@ -223,7 +237,7 @@ export function calculateNextChunkId(
   currentNextId: number,
   chunks: readonly ArchiveChunk[]
 ): number {
-  if (chunks.length === 0) return currentNextId
-  const maxId = Math.max(...chunks.map((chunk) => chunk.id))
-  return Math.max(currentNextId, maxId + 1)
+  if (chunks.length === 0) return currentNextId;
+  const maxId = Math.max(...chunks.map((chunk) => chunk.id));
+  return Math.max(currentNextId, maxId + 1);
 }
