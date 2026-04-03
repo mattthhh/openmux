@@ -194,7 +194,7 @@ describe('Smoke Tests - Aggregate View current behavior', () => {
     expect((newPtyIndex ?? -1) < sessionBHeaderIndex).toBe(true);
   });
 
-  it('smart-selects the previous PTY in the same session after a middle removal', () => {
+  it('keeps the cursor in place after a middle PTY removal', () => {
     const sessions = [createMockSession('session-a', 'Alpha')];
     const ptys = [
       createMockPty({ ptyId: 'pty-1', sessionId: 'session-a' }),
@@ -206,7 +206,7 @@ describe('Smoke Tests - Aggregate View current behavior', () => {
 
     actions.selectAfterPtyRemoval('pty-2');
 
-    expect(actions.getSelectedPty()?.ptyId).toBe('pty-1');
+    expect(actions.getSelectedPty()?.ptyId).toBe('pty-3');
   });
 
   it('keeps stable relative order for existing PTYs when adding another PTY', () => {

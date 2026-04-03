@@ -341,7 +341,7 @@ describe('Full Coverage: Selection Operations', () => {
       expect(result).toBeNull();
     });
 
-    it('selects first available PTY when all else fails', () => {
+    it('prefers the next selectable row below to keep the cursor in place', () => {
       const pty1 = createMockPty({ ptyId: 'pty-1', sessionId: 'session-a' });
       const pty2 = createMockPty({ ptyId: 'pty-2', sessionId: 'session-b' });
 
@@ -412,7 +412,9 @@ describe('Full Coverage: Selection Operations', () => {
 
       selectAfterPtyRemoval(state, 'pty-1');
 
-      expect(state.selectedPtyId).toBe('pty-2');
+      expect(state.selectedPtyId).toBeNull();
+      expect(state.selectedSessionId).toBe('session-b');
+      expect(state.selectedIndex).toBe(3);
     });
   });
 });

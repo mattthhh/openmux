@@ -1664,43 +1664,6 @@ export function createLifecycleHandlers(
             return null;
           };
 
-          const findNearestPty = (startIndex: number, direction: 'up' | 'down'): number | null => {
-            const delta = direction === 'up' ? -1 : 1;
-            let index = startIndex + delta;
-
-            while (index >= 0 && index < s.flattenedTree.length) {
-              const item = s.flattenedTree[index];
-              if (item?.node.type === 'pty') {
-                return index;
-              }
-              index += delta;
-            }
-
-            return null;
-          };
-
-          const findNearestPtyInSession = (
-            startIndex: number,
-            direction: 'up' | 'down',
-            currentSessionId: string
-          ): number | null => {
-            const delta = direction === 'up' ? -1 : 1;
-            let index = startIndex + delta;
-
-            while (index >= 0 && index < s.flattenedTree.length) {
-              const item = s.flattenedTree[index];
-              if (item?.node.type === 'session') {
-                break;
-              }
-              if (item?.node.type === 'pty' && item.parentSessionId === currentSessionId) {
-                return index;
-              }
-              index += delta;
-            }
-
-            return null;
-          };
-
           const findSessionHeader = (
             startIndex: number,
             currentSessionId: string
@@ -1716,11 +1679,9 @@ export function createLifecycleHandlers(
           };
 
           const replacementIndex =
-            findNearestPtyInSession(removedFlattenedIndex, 'up', sessionId) ??
-            findNearestPtyInSession(removedFlattenedIndex, 'down', sessionId) ??
-            findNearestPty(removedFlattenedIndex, 'down') ??
-            findSessionHeader(removedFlattenedIndex, sessionId) ??
             findNearestSelectable(removedFlattenedIndex, 'down')?.index ??
+            findSessionHeader(removedFlattenedIndex, sessionId) ??
+            findNearestSelectable(removedFlattenedIndex, 'up')?.index ??
             null;
 
           if (replacementIndex !== null) {

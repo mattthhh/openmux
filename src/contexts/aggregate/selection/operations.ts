@@ -96,50 +96,6 @@ export function findNearestSelectable(
   return null;
 }
 
-/** Find the nearest PTY row from a given index. */
-export function findNearestPty(
-  flattenedTree: FlattenedTreeItem[],
-  startIndex: number,
-  direction: 'up' | 'down'
-): { index: number; item: FlattenedTreeItem } | null {
-  const delta = direction === 'up' ? -1 : 1;
-  let index = startIndex + delta;
-
-  while (index >= 0 && index < flattenedTree.length) {
-    const item = flattenedTree[index];
-    if (item?.node.type === 'pty') {
-      return { index, item };
-    }
-    index += delta;
-  }
-
-  return null;
-}
-
-/** Find the nearest PTY within the same session group. */
-export function findNearestPtyInSession(
-  flattenedTree: FlattenedTreeItem[],
-  startIndex: number,
-  direction: 'up' | 'down',
-  sessionId: string
-): { index: number; item: FlattenedTreeItem } | null {
-  const delta = direction === 'up' ? -1 : 1;
-  let index = startIndex + delta;
-
-  while (index >= 0 && index < flattenedTree.length) {
-    const item = flattenedTree[index];
-    if (item?.node.type === 'session') {
-      break;
-    }
-    if (item?.node.type === 'pty' && item.parentSessionId === sessionId) {
-      return { index, item };
-    }
-    index += delta;
-  }
-
-  return null;
-}
-
 /** Find the session header for the current PTY group. */
 export function findSessionHeader(
   flattenedTree: FlattenedTreeItem[],
@@ -158,7 +114,7 @@ export function findSessionHeader(
 
 /**
  * Select the best row after PTY removal.
- * Move up only inside the same session group; otherwise prefer staying in-group or moving down.
+ * Keep the cursor in place by preferring the next selectable row below.
  */
 export function selectAfterPtyRemoval(
   state: AggregateViewState,
@@ -174,17 +130,11 @@ export function selectAfterPtyRemoval(
   const removedSessionId = removedItem?.node.type === 'pty' ? removedItem.parentSessionId : null;
 
   const replacement =
-    (removedSessionId
-      ? findNearestPtyInSession(state.flattenedTree, removedIndex, 'up', removedSessionId)
-      : null) ??
-    (removedSessionId
-      ? findNearestPtyInSession(state.flattenedTree, removedIndex, 'down', removedSessionId)
-      : null) ??
-    findNearestPty(state.flattenedTree, removedIndex, 'down') ??
+    findNearestSelectable(state.flattenedTree, removedIndex, 'down') ??
     (removedSessionId
       ? findSessionHeader(state.flattenedTree, removedIndex, removedSessionId)
       : null) ??
-    findNearestSelectable(state.flattenedTree, removedIndex, 'down');
+    findNearestSelectable(state.flattenedTree, removedIndex, 'up');
 
   if (replacement) {
     applySelection(state, replacement.index);

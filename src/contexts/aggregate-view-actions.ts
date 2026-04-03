@@ -472,45 +472,6 @@ export function createAggregateViewActions(params: AggregateViewActionsParams) {
     return null;
   };
 
-  const findNearestPty = (startIndex: number, direction: 'up' | 'down'): number | null => {
-    const flattened = state.flattenedTree;
-    const delta = direction === 'up' ? -1 : 1;
-    let index = startIndex + delta;
-
-    while (index >= 0 && index < flattened.length) {
-      const item = flattened[index];
-      if (item?.node.type === 'pty') {
-        return index;
-      }
-      index += delta;
-    }
-
-    return null;
-  };
-
-  const findNearestPtyInSession = (
-    startIndex: number,
-    direction: 'up' | 'down',
-    sessionId: string
-  ): number | null => {
-    const flattened = state.flattenedTree;
-    const delta = direction === 'up' ? -1 : 1;
-    let index = startIndex + delta;
-
-    while (index >= 0 && index < flattened.length) {
-      const item = flattened[index];
-      if (item?.node.type === 'session') {
-        break;
-      }
-      if (item?.node.type === 'pty' && item.parentSessionId === sessionId) {
-        return index;
-      }
-      index += delta;
-    }
-
-    return null;
-  };
-
   const findSessionHeader = (startIndex: number, sessionId: string): number | null => {
     for (let index = startIndex - 1; index >= 0; index--) {
       const item = state.flattenedTree[index];
@@ -524,7 +485,7 @@ export function createAggregateViewActions(params: AggregateViewActionsParams) {
 
   /**
    * Smart selection after removing a PTY.
-   * Move up only within the same session group; otherwise prefer staying in-group or moving down.
+   * Keep the cursor in place by preferring the next selectable row below.
    */
   const selectAfterPtyRemoval = (removedPtyId: string): void => {
     const removedIndex = state.flattenedTreeIndex.get(removedPtyId);
@@ -537,11 +498,9 @@ export function createAggregateViewActions(params: AggregateViewActionsParams) {
     const removedSessionId = removedItem?.node.type === 'pty' ? removedItem.parentSessionId : null;
 
     const replacementIndex =
-      (removedSessionId ? findNearestPtyInSession(removedIndex, 'up', removedSessionId) : null) ??
-      (removedSessionId ? findNearestPtyInSession(removedIndex, 'down', removedSessionId) : null) ??
-      findNearestPty(removedIndex, 'down') ??
-      (removedSessionId ? findSessionHeader(removedIndex, removedSessionId) : null) ??
       findNearestSelectable(removedIndex, 'down')?.index ??
+      (removedSessionId ? findSessionHeader(removedIndex, removedSessionId) : null) ??
+      findNearestSelectable(removedIndex, 'up')?.index ??
       null;
 
     setState(
