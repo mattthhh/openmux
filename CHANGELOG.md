@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.51](https://github.com/monotykamary/openmux/compare/v0.3.50...v0.3.51) (2026-04-03)
+
+
+### Bug Fixes
+
+* **aggregate-view:** prevent stale PTY revival ([161e21e](https://github.com/monotykamary/openmux/commit/161e21ec92dcdbc542774be67636a32cecb3dcfd))
+
 ### [0.3.50](https://github.com/monotykamary/openmux/compare/v0.3.49...v0.3.50) (2026-04-03)
 
 
