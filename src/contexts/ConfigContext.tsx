@@ -2,12 +2,23 @@
  * Config context - loads ~/.config/openmux/config.toml and watches for changes.
  */
 
-import { createContext, createMemo, createSignal, onCleanup, onMount, useContext, type ParentProps, type Accessor } from 'solid-js';
+import {
+  createContext,
+  createMemo,
+  createSignal,
+  onCleanup,
+  onMount,
+  useContext,
+  type ParentProps,
+  type Accessor,
+} from 'solid-js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { getConfigPath, loadUserConfigSync, type UserConfig } from '../core/user-config';
 import { resolveKeybindings, type ResolvedKeybindings } from '../core/keybindings';
 import { runStream, streamFromSubscription, debounce, tap, filter } from '../effect/stream-utils';
+import * as errore from 'errore';
+import { ConfigError } from '../effect/errors';
 
 interface ConfigContextValue {
   config: Accessor<UserConfig>;
@@ -40,12 +51,17 @@ export function ConfigProvider(props: ParentProps) {
         filter(
           streamFromSubscription<string | null>(({ emit }) => {
             let watcher: fs.FSWatcher | null = null;
-            try {
-              watcher = fs.watch(configDir, { persistent: false }, (_eventType, filename) => {
-                void emit(filename ?? null);
-              });
-            } catch (error) {
-              console.warn('[openmux] Config watch failed:', error);
+            const watchResult = errore.try({
+              try: () => {
+                watcher = fs.watch(configDir, { persistent: false }, (_eventType, filename) => {
+                  void emit(filename ?? null);
+                });
+              },
+              catch: (cause) =>
+                new ConfigError({ reason: `Config watch failed: ${String(cause)}`, cause }),
+            });
+            if (watchResult instanceof ConfigError) {
+              console.warn('[openmux]', watchResult.message);
               return () => {};
             }
             return () => watcher?.close();

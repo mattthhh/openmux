@@ -42,13 +42,9 @@ export async function resolvePaneCwd(params: {
   let pendingCwd = isFocused ? params.pendingCwdRef : null;
 
   if (!params.sessionCwd && isFocused && !pendingCwd && params.pendingCwdPromise) {
-    try {
-      const resolved = await params.pendingCwdPromise;
-      if (resolved) {
-        pendingCwd = resolved;
-      }
-    } catch {
-      // Ignore and fall back to fallback cwd below.
+    const resolved = await params.pendingCwdPromise.catch(() => null);
+    if (resolved) {
+      pendingCwd = resolved;
     }
   }
 
@@ -123,7 +119,7 @@ export function usePtyCreation(params: {
         if (!isSessionInit) return;
         if (isSwitching) return;
 
-        const createPtyForPane = async (pane: typeof panes[number]) => {
+        const createPtyForPane = async (pane: (typeof panes)[number]) => {
           try {
             // SYNC check: verify PTY wasn't created in a previous session/effect run
             const alreadyCreated = isPtyCreated(pane.id);
@@ -157,7 +153,8 @@ export function usePtyCreation(params: {
             markPtyCreated(pane.id);
 
             // Fire-and-forget PTY creation - don't await to avoid blocking
-            params.terminal.createPTY(pane.id, cols, rows, cwd)
+            params.terminal
+              .createPTY(pane.id, cols, rows, cwd)
               .then((result) => {
                 if (result instanceof Error) {
                   console.error(`PTY creation failed for ${pane.id}:`, result.message);

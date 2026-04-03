@@ -23,12 +23,16 @@ import {
 import { buildLayoutFromTemplate } from '../effect/bridge';
 
 export function isLayoutEmpty(workspaces: Workspaces): boolean {
-  return Object.values(workspaces).every((workspace) =>
-    !workspace || (!workspace.mainPane && workspace.stackPanes.length === 0)
+  return Object.values(workspaces).every(
+    (workspace) => !workspace || (!workspace.mainPane && workspace.stackPanes.length === 0)
   );
 }
 
-function normalizeCommand(command: string | undefined, shellPath: string, shellName: string | null | undefined): string | undefined {
+function normalizeCommand(
+  command: string | undefined,
+  shellPath: string,
+  shellName: string | null | undefined
+): string | undefined {
   if (!command) return undefined;
   const trimmed = command.trim();
   if (!trimmed) return undefined;
@@ -95,7 +99,10 @@ function commandMatchesProcess(command: string, processName: string): boolean {
   return base === processName;
 }
 
-function pickTemplateCommand(lastCommand: string | undefined, processName: string | undefined): string | undefined {
+function pickTemplateCommand(
+  lastCommand: string | undefined,
+  processName: string | undefined
+): string | undefined {
   if (lastCommand && !isTrivialShellCommand(lastCommand)) {
     if (!processName || commandMatchesProcess(lastCommand, processName)) {
       return lastCommand;
@@ -139,26 +146,22 @@ export async function buildTemplateFromWorkspaces(params: {
     let cwd = params.fallbackCwd;
     let command: string | undefined;
     if (pane.ptyId) {
-      try {
-        cwd = await params.getCwd(pane.ptyId);
-      } catch (e) {
-        console.warn('[session-templates] Failed to get CWD:', e);
-        cwd = params.fallbackCwd;
-      }
-      let lastCommand: string | undefined;
-      let processName: string | undefined;
-      try {
-        lastCommand = await params.getLastCommand(pane.ptyId);
-      } catch (e) {
-        console.warn('[session-templates] Failed to get last command:', e);
-        lastCommand = undefined;
-      }
-      try {
-        processName = await params.getForegroundProcess(pane.ptyId);
-      } catch (e) {
-        console.warn('[session-templates] Failed to get foreground process:', e);
-        processName = undefined;
-      }
+      const cwdResult = await params.getCwd(pane.ptyId).catch((cause) => {
+        console.warn('[session-templates] Failed to get CWD:', cause);
+        return params.fallbackCwd;
+      });
+      cwd = typeof cwdResult === 'string' ? cwdResult : params.fallbackCwd;
+
+      const lastCommand = await params.getLastCommand(pane.ptyId).catch((cause) => {
+        console.warn('[session-templates] Failed to get last command:', cause);
+        return undefined;
+      });
+
+      const processName = await params.getForegroundProcess(pane.ptyId).catch((cause) => {
+        console.warn('[session-templates] Failed to get foreground process:', cause);
+        return undefined;
+      });
+
       const normalizedLast = normalizeCommand(lastCommand, shellPath, shellName);
       const normalizedProcess = normalizeCommand(processName, shellPath, shellName);
       command = pickTemplateCommand(normalizedLast, normalizedProcess);
