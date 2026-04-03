@@ -9,10 +9,7 @@ import { findNearestSelectableIndex, getSessionIdForItem } from '../tree/flatten
 import { SelectionOperationError } from '../errors';
 
 /** Apply selection to state at given index */
-export function applySelection(
-  state: AggregateViewState,
-  index: number
-): void {
+export function applySelection(state: AggregateViewState, index: number): void {
   const targetIndex = findNearestSelectableIndex(state.flattenedTree, index);
 
   if (targetIndex === null) {
@@ -116,30 +113,20 @@ export function selectAfterPtyRemoval(
   }
 
   const removedItem = flattened[removedIndex];
-  const sessionId =
-    removedItem?.node.type === 'pty'
-      ? removedItem.parentSessionId
-      : null;
+  const sessionId = removedItem?.node.type === 'pty' ? removedItem.parentSessionId : null;
 
   let replacement: { index: number; ptyId: string } | null = null;
 
   if (sessionId) {
-    replacement = findNearestPtyInSession(flattened, sessionId, removedIndex, 'down');
+    // 1. Try above in same session (up)
+    replacement = findNearestPtyInSession(flattened, sessionId, removedIndex, 'up');
+    // 2. Try below in same session (down)
     if (!replacement) {
-      replacement = findNearestPtyInSession(flattened, sessionId, removedIndex, 'up');
+      replacement = findNearestPtyInSession(flattened, sessionId, removedIndex, 'down');
     }
   }
 
-  if (!replacement) {
-    for (let i = removedIndex + 1; i < flattened.length; i++) {
-      const item = flattened[i];
-      if (item?.node.type === 'pty') {
-        replacement = { index: i, ptyId: item.node.ptyInfo.ptyId };
-        break;
-      }
-    }
-  }
-
+  // 3. Try any PTY above (up)
   if (!replacement) {
     for (let i = removedIndex - 1; i >= 0; i--) {
       const item = flattened[i];
@@ -150,6 +137,18 @@ export function selectAfterPtyRemoval(
     }
   }
 
+  // 4. Try any PTY below (down)
+  if (!replacement) {
+    for (let i = removedIndex + 1; i < flattened.length; i++) {
+      const item = flattened[i];
+      if (item?.node.type === 'pty') {
+        replacement = { index: i, ptyId: item.node.ptyInfo.ptyId };
+        break;
+      }
+    }
+  }
+
+  // 5. First available PTY anywhere
   if (!replacement) {
     for (let i = 0; i < flattened.length; i++) {
       const item = flattened[i];
@@ -178,17 +177,21 @@ export function createSelectionActions(
   setState: SetStoreFunction<AggregateViewState>
 ) {
   const setSelectedIndex = (index: number) => {
-    setState(produce((s) => {
-      applySelection(s, index);
-    }));
+    setState(
+      produce((s) => {
+        applySelection(s, index);
+      })
+    );
   };
 
   const selectPty = (ptyId: string) => {
     const index = state.flattenedTreeIndex.get(ptyId);
     if (index !== undefined) {
-      setState(produce((s) => {
-        applySelection(s, index);
-      }));
+      setState(
+        produce((s) => {
+          applySelection(s, index);
+        })
+      );
     }
   };
 
@@ -197,16 +200,20 @@ export function createSelectionActions(
   };
 
   const exitPreviewMode = () => {
-    setState(produce((s) => {
-      clearPreviewState(s);
-    }));
+    setState(
+      produce((s) => {
+        clearPreviewState(s);
+      })
+    );
   };
 
   const togglePreviewZoom = () => {
-    setState(produce((s) => {
-      if (!s.previewMode || !s.selectedPtyId) return;
-      s.previewZoomed = !s.previewZoomed;
-    }));
+    setState(
+      produce((s) => {
+        if (!s.previewMode || !s.selectedPtyId) return;
+        s.previewZoomed = !s.previewZoomed;
+      })
+    );
   };
 
   return {

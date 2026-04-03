@@ -451,7 +451,7 @@ export function createAggregateViewActions(params: AggregateViewActionsParams) {
 
   /**
    * Find the nearest PTY in the same session.
-   * Priority: below first, then above.
+   * Priority: above first (when moving up), then below.
    */
   const findNearestPtyInSession = (
     sessionId: string,
@@ -480,11 +480,12 @@ export function createAggregateViewActions(params: AggregateViewActionsParams) {
   /**
    * Smart selection after removing a PTY.
    * Priority:
-   * 1. Nearest PTY below in same session
-   * 2. Nearest PTY above in same session
-   * 3. Nearest adjacent PTY (any session)
-   * 4. First available PTY
-   * 5. No selection (empty list)
+   * 1. Nearest PTY above in same session (move up)
+   * 2. Nearest PTY below in same session
+   * 3. Nearest adjacent PTY above (any session)
+   * 4. Nearest adjacent PTY below (any session)
+   * 5. First available PTY
+   * 6. No selection (empty list)
    */
   const selectAfterPtyRemoval = (removedPtyId: string): void => {
     const flattened = state.flattenedTree;
@@ -498,21 +499,21 @@ export function createAggregateViewActions(params: AggregateViewActionsParams) {
     const removedItem = flattened[removedIndex];
     const sessionId = removedItem?.node.type === 'pty' ? removedItem.parentSessionId : null;
 
-    // Try to find replacement in priority order
+    // Try to find replacement in priority order (up first, then down)
     let replacement: { index: number; ptyId: string } | null = null;
 
     if (sessionId) {
-      // 1. Try below in same session
-      replacement = findNearestPtyInSession(sessionId, removedIndex, 'down');
-      // 2. Try above in same session
+      // 1. Try above in same session (up)
+      replacement = findNearestPtyInSession(sessionId, removedIndex, 'up');
+      // 2. Try below in same session (down)
       if (!replacement) {
-        replacement = findNearestPtyInSession(sessionId, removedIndex, 'up');
+        replacement = findNearestPtyInSession(sessionId, removedIndex, 'down');
       }
     }
 
-    // 3. Try any PTY below
+    // 3. Try any PTY above (up)
     if (!replacement) {
-      for (let i = removedIndex + 1; i < flattened.length; i++) {
+      for (let i = removedIndex - 1; i >= 0; i--) {
         const item = flattened[i];
         if (item?.node.type === 'pty') {
           replacement = { index: i, ptyId: item.node.ptyInfo.ptyId };
@@ -521,9 +522,9 @@ export function createAggregateViewActions(params: AggregateViewActionsParams) {
       }
     }
 
-    // 4. Try any PTY above
+    // 4. Try any PTY below (down)
     if (!replacement) {
-      for (let i = removedIndex - 1; i >= 0; i--) {
+      for (let i = removedIndex + 1; i < flattened.length; i++) {
         const item = flattened[i];
         if (item?.node.type === 'pty') {
           replacement = { index: i, ptyId: item.node.ptyInfo.ptyId };

@@ -1570,11 +1570,11 @@ export function createLifecycleHandlers(
 
         // Handle selection change BEFORE recomputing tree (we need old flattened tree)
         if (s.selectedPtyId === ptyId && removedFlattenedIndex !== undefined) {
-          // Priority 1: Try to find PTY below in same session
+          // Priority 1: Try to find PTY above in same session (move up)
           let newSelection: { index: number; ptyId: string; sessionId: string } | null = null;
 
-          // Search downward first (below the deleted PTY)
-          for (let i = removedFlattenedIndex + 1; i < s.flattenedTree.length; i++) {
+          // Search upward first (above the deleted PTY)
+          for (let i = removedFlattenedIndex - 1; i >= 0; i--) {
             const item = s.flattenedTree[i];
             if (item?.node.type === 'session') break; // Stop at session boundary
             if (item?.node.type === 'pty' && item.parentSessionId === sessionId) {
@@ -1583,9 +1583,9 @@ export function createLifecycleHandlers(
             }
           }
 
-          // Priority 2: If no PTY below, search upward (above the deleted PTY)
+          // Priority 2: If no PTY above, search downward (below the deleted PTY)
           if (!newSelection) {
-            for (let i = removedFlattenedIndex - 1; i >= 0; i--) {
+            for (let i = removedFlattenedIndex + 1; i < s.flattenedTree.length; i++) {
               const item = s.flattenedTree[i];
               if (item?.node.type === 'session') break; // Stop at session boundary
               if (item?.node.type === 'pty' && item.parentSessionId === sessionId) {
@@ -1595,10 +1595,10 @@ export function createLifecycleHandlers(
             }
           }
 
-          // Priority 3: If no PTY in same session, try any adjacent PTY
+          // Priority 3: If no PTY in same session, try any adjacent PTY (above first, then below)
           if (!newSelection) {
-            // Try below first
-            for (let i = removedFlattenedIndex + 1; i < s.flattenedTree.length; i++) {
+            // Try above first
+            for (let i = removedFlattenedIndex - 1; i >= 0; i--) {
               const item = s.flattenedTree[i];
               if (item?.node.type === 'pty') {
                 newSelection = {
@@ -1609,9 +1609,9 @@ export function createLifecycleHandlers(
                 break;
               }
             }
-            // Then try above
+            // Then try below
             if (!newSelection) {
-              for (let i = removedFlattenedIndex - 1; i >= 0; i--) {
+              for (let i = removedFlattenedIndex + 1; i < s.flattenedTree.length; i++) {
                 const item = s.flattenedTree[i];
                 if (item?.node.type === 'pty') {
                   newSelection = {
