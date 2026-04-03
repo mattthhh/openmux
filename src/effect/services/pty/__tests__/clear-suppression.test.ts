@@ -2,7 +2,7 @@
  * Tests for clear sequence suppression in PTY data handler.
  */
 
-import { describe, it, expect } from 'bun:test';
+import { afterEach, describe, expect, it, vi } from 'bun:test';
 import type { InternalPtySession } from '../types';
 import type { ITerminalEmulator } from '../../../../terminal/emulator-interface';
 import { createSyncModeParser } from '../../../../terminal/sync-mode-parser';
@@ -154,25 +154,42 @@ async function waitForDrain() {
   await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
+async function flushFakeTimers() {
+  vi.runAllTimers();
+  await Promise.resolve();
+  await Promise.resolve();
+}
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 describe('normalizePiFullRedrawSegment', () => {
-  it('rewrites pi full redraw prefix to a non-destructive visible clear', () => {
+  it('rewrites short pi full redraws to a non-destructive visible clear', () => {
     const input = '\x1b[2J\x1b[H\x1b[3Jhello';
-    expect(normalizePiFullRedrawSegment(input)).toBe('\x1b[H\x1b[Jhello');
+    expect(normalizePiFullRedrawSegment(input, 10)).toBe('\x1b[H\x1b[Jhello');
+  });
+
+  it('preserves tall pi full redraw frames so scrollback survives', () => {
+    const input = '\x1b[2J\x1b[H\x1b[3Jline 1\r\nline 2\r\nline 3\r\nline 4';
+    expect(normalizePiFullRedrawSegment(input, 2)).toBe(
+      '\x1b[H\x1b[Jline 1\r\nline 2\r\nline 3\r\nline 4'
+    );
   });
 
   it('supports 1;1H and C1 variants', () => {
     const input = '\x9b2J\x9b1;1H\x9b3Jhello';
-    expect(normalizePiFullRedrawSegment(input)).toBe('\x1b[H\x1b[Jhello');
+    expect(normalizePiFullRedrawSegment(input, 10)).toBe('\x1b[H\x1b[Jhello');
   });
 
   it('only rewrites the destructive prefix at the start of the segment', () => {
     const input = 'prefix\x1b[2J\x1b[H\x1b[3Jhello';
-    expect(normalizePiFullRedrawSegment(input)).toBe(input);
+    expect(normalizePiFullRedrawSegment(input, 10)).toBe(input);
   });
 
   it('preserves non-pi clear sequences', () => {
     const input = '\x1b[2J\x1b[Hhello';
-    expect(normalizePiFullRedrawSegment(input)).toBe(input);
+    expect(normalizePiFullRedrawSegment(input, 10)).toBe(input);
   });
 });
 
@@ -231,6 +248,20 @@ describe('createDataHandler pi redraw integration', () => {
     expect(getScrollbackScheduleCount()).toBe(1);
   });
 
+  it('preserves tall full redraw frames so the emulator keeps scrollback', async () => {
+    const { session, emulatorWrites } = createMockSession();
+    session.rows = 2;
+    const { handleData } = createDataHandler({
+      session,
+      syncParser: createSyncModeParser(),
+    });
+
+    handleData('\x1b[?2026h\x1b[2J\x1b[H\x1b[3Jline 1\r\nline 2\r\nline 3\r\nline 4\x1b[?2026l');
+    await waitForDrain();
+
+    expect(emulatorWrites).toEqual(['\x1b[H\x1b[Jline 1\r\nline 2\r\nline 3\r\nline 4']);
+  });
+
   it('leaves normal synchronized output untouched', async () => {
     const { session, emulatorWrites } = createMockSession();
     const { handleData } = createDataHandler({
@@ -242,5 +273,49 @@ describe('createDataHandler pi redraw integration', () => {
     await waitForDrain();
 
     expect(emulatorWrites).toEqual(['plain output']);
+  });
+
+  it('resets the sync timeout while a large synchronized frame is still streaming', async () => {
+    vi.useFakeTimers();
+    const { session, emulatorWrites } = createMockSession();
+    const { handleData } = createDataHandler({
+      session,
+      syncParser: createSyncModeParser(),
+      syncTimeoutMs: 100,
+    });
+
+    handleData('\x1b[?2026h\x1b[2J\x1b[H\x1b[3Jhello');
+    vi.advanceTimersByTime(50);
+    handleData(' world');
+    vi.advanceTimersByTime(60);
+    await Promise.resolve();
+
+    expect(emulatorWrites).toEqual([]);
+
+    handleData('\x1b[?2026l');
+    await flushFakeTimers();
+
+    expect(emulatorWrites).toEqual(['\x1b[H\x1b[Jhello world']);
+  });
+
+  it('gives pi full redraw sync frames a longer idle timeout before force-flushing', async () => {
+    vi.useFakeTimers();
+    const { session, emulatorWrites } = createMockSession();
+    const { handleData } = createDataHandler({
+      session,
+      syncParser: createSyncModeParser(),
+      syncTimeoutMs: 100,
+    });
+
+    handleData('\x1b[?2026h\x1b[2J\x1b[H\x1b[3Jhello');
+    vi.advanceTimersByTime(200);
+    await Promise.resolve();
+
+    expect(emulatorWrites).toEqual([]);
+
+    vi.advanceTimersByTime(550);
+    await flushFakeTimers();
+
+    expect(emulatorWrites).toEqual(['\x1b[H\x1b[Jhello']);
   });
 });

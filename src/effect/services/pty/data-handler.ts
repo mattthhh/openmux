@@ -25,6 +25,7 @@ interface DataHandlerOptions {
 interface DataHandlerState {
   pendingSegments: string[];
   syncTimeout: ReturnType<typeof setTimeout> | null;
+  syncLikelyPiFullRedraw: boolean;
   pendingResponses: { fence: number; responses: string[] }[];
   segmentCounter: number;
   processedCounter: number;
@@ -54,6 +55,9 @@ const CURSOR_HOME_SEQUENCE = '\x1b[H';
 const ERASE_TO_END_OF_SCREEN_SEQUENCE = '\x1b[J';
 const PI_FULL_REDRAW_PREFIX_REGEX =
   /^(?:\x1b\[2J|\x9b2J)(?:\x1b\[(?:H|1;1H)|\x9b(?:H|1;1H))(?:\x1b\[3J|\x9b3J)/;
+const RAW_PI_SYNC_FULL_REDRAW_START_REGEX =
+  /\x1b\[\?2026h(?:\x1b\[2J|\x9b2J)(?:\x1b\[(?:H|1;1H)|\x9b(?:H|1;1H))(?:\x1b\[3J|\x9b3J)/;
+const PI_SYNC_TIMEOUT_MS = 750;
 
 function normalizeProcessName(value: string | null | undefined): string | null {
   if (!value) return null;
@@ -96,21 +100,23 @@ function shouldSuppressClearScreen(session: InternalPtySession): boolean {
 }
 
 /**
- * Replace pi's destructive full-redraw prefix with a non-destructive visible clear.
+ * Replace pi's destructive full-redraw prefix with a scrollback-preserving clear.
  *
  * sync-mode-parser strips CSI ? 2026 h/l before ready segments reach data-handler, so
  * the real payload we see here starts with CSI 2 J, home, CSI 3 J, then the new frame.
- * Rewriting that prefix to cursor-home + erase-to-end clears the visible viewport from
- * the top-left without clearing scrollback, which avoids the flash while still removing
- * stale rows from shorter redraws like /new.
+ *
+ * Preserve the full frame so the emulator keeps the transcript in scrollback. We only
+ * replace the destructive prefix with cursor-home + erase-to-end, which clears the
+ * visible viewport without wiping history.
  *
  * @internal Exported for testing
  */
-export function normalizePiFullRedrawSegment(segment: string): string {
-  return segment.replace(
-    PI_FULL_REDRAW_PREFIX_REGEX,
-    `${CURSOR_HOME_SEQUENCE}${ERASE_TO_END_OF_SCREEN_SEQUENCE}`
-  );
+export function normalizePiFullRedrawSegment(segment: string, _terminalRows: number): string {
+  const match = segment.match(PI_FULL_REDRAW_PREFIX_REGEX);
+  if (!match) return segment;
+
+  const frame = segment.slice(match[0].length);
+  return `${CURSOR_HOME_SEQUENCE}${ERASE_TO_END_OF_SCREEN_SEQUENCE}${frame}`;
 }
 
 /**
@@ -199,6 +205,7 @@ export function createDataHandler(options: DataHandlerOptions) {
   const state: DataHandlerState = {
     pendingSegments: [],
     syncTimeout: null,
+    syncLikelyPiFullRedraw: false,
     pendingResponses: [],
     segmentCounter: 0,
     processedCounter: 0,
@@ -447,27 +454,44 @@ export function createDataHandler(options: DataHandlerOptions) {
     const { readySegments, isBuffering } = syncParser.process(textData);
 
     // Handle sync buffering timeout (safety valve)
+    // Reset the timer on every buffered chunk so large synchronized frames
+    // don't get flushed midway through active streaming.
     if (isBuffering) {
-      if (!state.syncTimeout) {
-        state.syncTimeout = setTimeout(() => {
-          // Safety flush - sync mode took too long (app may have crashed)
-          const flushed = normalizePiFullRedrawSegment(syncParser.flush());
-          if (flushed.length > 0) {
-            state.pendingSegments.push(flushed);
-            scheduleNotify();
-          }
-          state.syncTimeout = null;
-        }, syncTimeoutMs);
+      state.syncLikelyPiFullRedraw ||= RAW_PI_SYNC_FULL_REDRAW_START_REGEX.test(data);
+      if (state.syncTimeout) {
+        clearTimeout(state.syncTimeout);
       }
-    } else if (state.syncTimeout) {
-      clearTimeout(state.syncTimeout);
-      state.syncTimeout = null;
+      const timeoutMs = state.syncLikelyPiFullRedraw
+        ? Math.max(syncTimeoutMs, PI_SYNC_TIMEOUT_MS)
+        : syncTimeoutMs;
+      state.syncTimeout = setTimeout(() => {
+        // Safety flush - sync mode went idle for too long (app may have crashed)
+        const flushed = normalizePiFullRedrawSegment(syncParser.flush(), session.rows);
+        tracePtyEvent('pty-sync-timeout-flush', {
+          ptyId: session.id,
+          timeoutMs,
+          piFullRedraw: state.syncLikelyPiFullRedraw,
+          flushedLen: flushed.length,
+        });
+        if (flushed.length > 0) {
+          state.pendingSegments.push(flushed);
+          scheduleNotify();
+        }
+        state.syncTimeout = null;
+        state.syncLikelyPiFullRedraw = false;
+      }, timeoutMs);
+    } else {
+      if (state.syncTimeout) {
+        clearTimeout(state.syncTimeout);
+        state.syncTimeout = null;
+      }
+      state.syncLikelyPiFullRedraw = false;
     }
 
     // Add ready segments to pending queue
     let segmentsAdded = 0;
     for (const rawSegment of readySegments) {
-      const segment = normalizePiFullRedrawSegment(rawSegment);
+      const segment = normalizePiFullRedrawSegment(rawSegment, session.rows);
       if (segment.length > 0) {
         state.pendingSegments.push(segment);
         segmentsAdded += 1;
