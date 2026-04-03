@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.49](https://github.com/monotykamary/openmux/compare/v0.3.48...v0.3.49) (2026-04-03)
+
+
+### Bug Fixes
+
+* **aggregate-view:** simplify close selection behavior ([0228862](https://github.com/monotykamary/openmux/commit/02288625efbe1c983171582eb824bf584fa6a13f))
+
 ### [0.3.48](https://github.com/monotykamary/openmux/compare/v0.3.47...v0.3.48) (2026-04-03)
 
 
