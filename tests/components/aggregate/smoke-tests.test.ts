@@ -22,7 +22,9 @@ function createMockSession(id: string, name = id): SessionMetadata {
   };
 }
 
-function createMockPty(overrides: Partial<PtyInfo> & { ptyId: string; sessionId: string }): PtyInfo {
+function createMockPty(
+  overrides: Partial<PtyInfo> & { ptyId: string; sessionId: string }
+): PtyInfo {
   return {
     ptyId: overrides.ptyId,
     cwd: `/home/user/${overrides.ptyId}`,
@@ -78,8 +80,14 @@ function seedState(
       sessions.map((session) => [
         session.id,
         unloaded.has(session.id)
-          ? { status: 'unloaded' as const, paneCount: ptys.filter((pty) => pty.sessionId === session.id).length }
-          : { status: 'loaded' as const, paneCount: ptys.filter((pty) => pty.sessionId === session.id).length },
+          ? {
+              status: 'unloaded' as const,
+              paneCount: ptys.filter((pty) => pty.sessionId === session.id).length,
+            }
+          : {
+              status: 'loaded' as const,
+              paneCount: ptys.filter((pty) => pty.sessionId === session.id).length,
+            },
       ])
     ),
     sessionPaneOrders: paneOrders(ptys),
@@ -89,7 +97,7 @@ function seedState(
     produce((s) => {
       s.selectedPtyId = options.selectedPtyId ?? null;
       s.selectedSessionId = options.selectedPtyId
-        ? ptys.find((pty) => pty.ptyId === options.selectedPtyId)?.sessionId ?? null
+        ? (ptys.find((pty) => pty.ptyId === options.selectedPtyId)?.sessionId ?? null)
         : null;
       recomputeMatches(s);
       recomputeTree(s);
@@ -116,7 +124,9 @@ function measureTime<T>(fn: () => T): { result: T; elapsedMs: number } {
 
 describe('Smoke Tests - Aggregate View current behavior', () => {
   it(`recomputes a large session tree in under ${PERF_THRESHOLD_MS}ms`, () => {
-    const sessions = Array.from({ length: 50 }, (_, index) => createMockSession(`session-${index}`));
+    const sessions = Array.from({ length: 50 }, (_, index) =>
+      createMockSession(`session-${index}`)
+    );
     const ptys = sessions.flatMap((session, sessionIndex) =>
       Array.from({ length: 4 }, (_, index) =>
         createMockPty({ ptyId: `pty-${sessionIndex}-${index}`, sessionId: session.id })
@@ -184,7 +194,7 @@ describe('Smoke Tests - Aggregate View current behavior', () => {
     expect((newPtyIndex ?? -1) < sessionBHeaderIndex).toBe(true);
   });
 
-  it('smart-selects the next PTY in the same session after a middle removal', () => {
+  it('smart-selects the previous PTY in the same session after a middle removal', () => {
     const sessions = [createMockSession('session-a', 'Alpha')];
     const ptys = [
       createMockPty({ ptyId: 'pty-1', sessionId: 'session-a' }),
@@ -196,7 +206,7 @@ describe('Smoke Tests - Aggregate View current behavior', () => {
 
     actions.selectAfterPtyRemoval('pty-2');
 
-    expect(actions.getSelectedPty()?.ptyId).toBe('pty-3');
+    expect(actions.getSelectedPty()?.ptyId).toBe('pty-1');
   });
 
   it('keeps stable relative order for existing PTYs when adding another PTY', () => {

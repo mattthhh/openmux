@@ -20,7 +20,9 @@ function createMockSession(id: string, name = id): SessionMetadata {
   };
 }
 
-function createMockPty(overrides: Partial<PtyInfo> & { ptyId: string; sessionId: string }): PtyInfo {
+function createMockPty(
+  overrides: Partial<PtyInfo> & { ptyId: string; sessionId: string }
+): PtyInfo {
   return {
     ptyId: overrides.ptyId,
     cwd: '/home/user/project',
@@ -70,8 +72,14 @@ function loadStates(sessions: SessionMetadata[], ptys: PtyInfo[], unloadedIds: s
     sessions.map((session) => [
       session.id,
       unloaded.has(session.id)
-        ? { status: 'unloaded' as const, paneCount: ptys.filter((pty) => pty.sessionId === session.id).length }
-        : { status: 'loaded' as const, paneCount: ptys.filter((pty) => pty.sessionId === session.id).length },
+        ? {
+            status: 'unloaded' as const,
+            paneCount: ptys.filter((pty) => pty.sessionId === session.id).length,
+          }
+        : {
+            status: 'loaded' as const,
+            paneCount: ptys.filter((pty) => pty.sessionId === session.id).length,
+          },
     ])
   );
 }
@@ -100,7 +108,11 @@ function createAggregateState(params: {
   setState(
     produce((s) => {
       s.selectedPtyId = selectedPtyId ?? null;
-      s.selectedSessionId = selectedSessionId ?? (selectedPtyId ? ptys.find((pty) => pty.ptyId === selectedPtyId)?.sessionId ?? null : null);
+      s.selectedSessionId =
+        selectedSessionId ??
+        (selectedPtyId
+          ? (ptys.find((pty) => pty.ptyId === selectedPtyId)?.sessionId ?? null)
+          : null);
       recomputeMatches(s);
       recomputeTree(s);
     })
@@ -147,10 +159,7 @@ describe('Selection Persistence - current tree behavior', () => {
   });
 
   it('preserves selected PTY when an unrelated session is removed', () => {
-    const sessions = [
-      createMockSession('session-a', 'A'),
-      createMockSession('session-b', 'B'),
-    ];
+    const sessions = [createMockSession('session-a', 'A'), createMockSession('session-b', 'B')];
     const ptys = [
       createMockPty({ ptyId: 'pty-1', sessionId: 'session-a' }),
       createMockPty({ ptyId: 'pty-2', sessionId: 'session-b' }),
@@ -178,7 +187,7 @@ describe('Selection Persistence - current tree behavior', () => {
     expect(state.selectedIndex).toBe(state.flattenedTreeIndex.get('pty-2'));
   });
 
-  it('moves smart selection to the next PTY in the same session after removal', () => {
+  it('moves smart selection to the previous PTY in the same session after removal', () => {
     const sessions = [createMockSession('session-a', 'A')];
     const ptys = [
       createMockPty({ ptyId: 'pty-1', sessionId: 'session-a' }),
@@ -194,8 +203,8 @@ describe('Selection Persistence - current tree behavior', () => {
 
     actions.selectAfterPtyRemoval('pty-2');
 
-    expect(state.selectedPtyId).toBe('pty-3');
-    expect(actions.getSelectedPty()?.ptyId).toBe('pty-3');
+    expect(state.selectedPtyId).toBe('pty-1');
+    expect(actions.getSelectedPty()?.ptyId).toBe('pty-1');
   });
 
   it('moves smart selection to the previous PTY when the last PTY is removed', () => {
