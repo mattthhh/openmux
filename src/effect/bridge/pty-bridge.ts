@@ -266,13 +266,9 @@ export async function getPtyForegroundProcessWithService(
   pty: PtyService,
   ptyId: string
 ): Promise<string | undefined> {
-  try {
-    const result = await pty.getForegroundProcess(asPtyId(ptyId));
-    if (result instanceof Error) return undefined;
-    return result;
-  } catch {
-    return undefined;
-  }
+  const result = await pty.getForegroundProcess(asPtyId(ptyId));
+  if (result instanceof Error) return undefined;
+  return result;
 }
 
 /** Get last command with a specific service */
@@ -280,13 +276,9 @@ export async function getPtyLastCommandWithService(
   pty: PtyService,
   ptyId: string
 ): Promise<string | undefined> {
-  try {
-    const result = await pty.getLastCommand(asPtyId(ptyId));
-    if (result instanceof Error) return undefined;
-    return result;
-  } catch {
-    return undefined;
-  }
+  const result = await pty.getLastCommand(asPtyId(ptyId));
+  if (result instanceof Error) return undefined;
+  return result;
 }
 
 /** Destroy PTY with a specific service */
@@ -310,20 +302,15 @@ export async function getTerminalStateWithService(
   options?: { force?: boolean }
 ): Promise<TerminalState | null> {
   if (options?.force && isShimClient()) {
-    try {
-      return await ShimClient.getTerminalState(ptyId, { force: true });
-    } catch {
+    return ShimClient.getTerminalState(ptyId, { force: true }).catch((e) => {
+      console.warn('Failed to get terminal state from shim:', e);
       return null;
-    }
+    });
   }
 
-  try {
-    const result = await pty.getTerminalState(asPtyId(ptyId));
-    if (result instanceof Error) return null;
-    return result;
-  } catch {
-    return null;
-  }
+  const result = await pty.getTerminalState(asPtyId(ptyId));
+  if (result instanceof Error) return null;
+  return result;
 }
 
 /** Register exit callback with a specific service */
@@ -332,13 +319,12 @@ export async function onPtyExitWithService(
   ptyId: string,
   callback: (exitCode: number) => void
 ): Promise<() => void> {
-  try {
-    const result = await pty.onExit(asPtyId(ptyId), callback);
-    if (result instanceof Error) return () => {};
-    return result;
-  } catch {
+  const result = await pty.onExit(asPtyId(ptyId), callback);
+  if (result instanceof Error) {
+    console.warn('Failed to register PTY exit callback:', result.message);
     return () => {};
   }
+  return result;
 }
 
 /** Get scroll state with a specific service */
@@ -348,20 +334,15 @@ export async function getScrollStateWithService(
   options?: { force?: boolean }
 ): Promise<TerminalScrollState | null> {
   if (options?.force && isShimClient()) {
-    try {
-      return await ShimClient.getScrollState(ptyId, { force: true });
-    } catch {
+    return ShimClient.getScrollState(ptyId, { force: true }).catch((e) => {
+      console.warn('Failed to get scroll state from shim:', e);
       return null;
-    }
+    });
   }
 
-  try {
-    const result = await pty.getScrollState(asPtyId(ptyId));
-    if (result instanceof Error) return null;
-    return result as TerminalScrollState;
-  } catch {
-    return null;
-  }
+  const result = await pty.getScrollState(asPtyId(ptyId));
+  if (result instanceof Error) return null;
+  return result as TerminalScrollState;
 }
 
 /** Capture PTY with a specific service */
@@ -374,11 +355,10 @@ export async function capturePtyWithService(
     return null;
   }
 
-  try {
-    return await ShimClient.capturePty(ptyId, options);
-  } catch {
+  return ShimClient.capturePty(ptyId, options).catch((e) => {
+    console.warn('Failed to capture PTY:', e);
     return null;
-  }
+  });
 }
 
 /** Get scrollback lines with a specific service */
@@ -393,7 +373,10 @@ export async function getScrollbackLinesWithService(
   if (safeCount === 0) return new Map();
 
   if (isShimClient()) {
-    return ShimClient.getScrollbackLines(ptyId, safeStart, safeCount).catch(() => new Map());
+    return ShimClient.getScrollbackLines(ptyId, safeStart, safeCount).catch((e) => {
+      console.warn('Failed to get scrollback lines from shim:', e);
+      return new Map();
+    });
   }
 
   const emulator = await getEmulatorWithService(pty, ptyId);
@@ -418,7 +401,7 @@ export async function setScrollOffsetWithService(
 ): Promise<void> {
   const result = await pty.setScrollOffset(asPtyId(ptyId), offset);
   if (result instanceof Error) {
-    // Fire-and-forget
+    console.warn('Failed to set scroll offset:', result.message);
   }
 }
 
@@ -433,13 +416,12 @@ export async function subscribeUnifiedToPtyWithService(
   ptyId: string,
   callback: (update: UnifiedTerminalUpdate) => void
 ): Promise<() => void> {
-  try {
-    const result = await pty.subscribeUnified(asPtyId(ptyId), callback);
-    if (result instanceof Error) return () => {};
-    return result;
-  } catch {
+  const result = await pty.subscribeUnified(asPtyId(ptyId), callback);
+  if (result instanceof Error) {
+    console.warn('Failed to subscribe to unified PTY updates:', result.message);
     return () => {};
   }
+  return result;
 }
 
 /** Get emulator with a specific service */
@@ -447,13 +429,9 @@ export async function getEmulatorWithService(
   pty: PtyService,
   ptyId: string
 ): Promise<ITerminalEmulator | null> {
-  try {
-    const result = await pty.getEmulator(asPtyId(ptyId));
-    if (result instanceof Error) return null;
-    return result;
-  } catch {
-    return null;
-  }
+  const result = await pty.getEmulator(asPtyId(ptyId));
+  if (result instanceof Error) return null;
+  return result;
 }
 
 /** Get emulator synchronously (may return null if not cached/available) */
@@ -466,11 +444,9 @@ export function getEmulatorSyncWithService(
   pty: PtyService,
   ptyId: string
 ): ITerminalEmulator | null {
-  try {
-    return pty.getEmulatorSync(asPtyId(ptyId));
-  } catch {
-    return null;
-  }
+  const result = pty.getEmulatorSync(asPtyId(ptyId));
+  if (result instanceof Error) return null;
+  return result;
 }
 
 /** Set update enabled with a specific service */
@@ -479,13 +455,9 @@ export async function setPtyUpdateEnabledWithService(
   ptyId: string,
   enabled: boolean
 ): Promise<void> {
-  try {
-    const result = await pty.setUpdateEnabled(asPtyId(ptyId), enabled);
-    if (result instanceof Error) {
-      // Ignore
-    }
-  } catch {
-    // Ignore
+  const result = await pty.setUpdateEnabled(asPtyId(ptyId), enabled);
+  if (result instanceof Error) {
+    console.warn('Failed to set PTY update enabled:', result.message);
   }
 }
 
@@ -496,13 +468,12 @@ export async function refreshPty(ptyId: string): Promise<void> {
 
 /** Refresh PTY with a specific service */
 export async function refreshPtyWithService(pty: PtyService, ptyId: string): Promise<void> {
-  try {
-    const emulator = await pty.getEmulator(asPtyId(ptyId));
-    if (emulator instanceof Error) return;
-    emulator.refresh?.();
-  } catch {
-    // Ignore
+  const emulator = await pty.getEmulator(asPtyId(ptyId));
+  if (emulator instanceof Error) {
+    console.warn('Failed to refresh PTY:', emulator.message);
+    return;
   }
+  emulator.refresh?.();
 }
 
 /** Apply host colors with a specific service */
@@ -511,15 +482,14 @@ export async function applyHostColorsWithService(
   colors: TerminalColors
 ): Promise<void> {
   if (isShimClient()) {
-    try {
-      await ShimClient.setHostColors(colors);
-    } catch {
-      // Ignore
-    }
-    return;
+    return ShimClient.setHostColors(colors).catch((e) => {
+      console.warn('Failed to apply host colors via shim:', e);
+    });
   }
 
-  await pty.setHostColors(colors);
+  const result = await pty.setHostColors(colors);
+  // setHostColors returns void, not Error | void
+  void result;
 }
 
 /** Subscribe to lifecycle with a specific service */
@@ -544,11 +514,10 @@ export function subscribeToAllTitleChangesWithService(
 
 /** Get PTY title with a specific service */
 export async function getPtyTitleWithService(pty: PtyService, ptyId: string): Promise<string> {
-  try {
-    const result = await pty.getTitle(asPtyId(ptyId));
-    if (result instanceof Error) return '';
-    return result;
-  } catch {
+  const result = await pty.getTitle(asPtyId(ptyId));
+  if (result instanceof Error) {
+    console.warn('Failed to get PTY title:', result.message);
     return '';
   }
+  return result;
 }

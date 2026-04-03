@@ -38,6 +38,7 @@ import {
 import { getGitInfo, getGitDiffStats } from '../effect/services/pty/helpers';
 import type { GitDiffStats } from './aggregate-view-types';
 import type { GitInfo } from '../effect/services/pty/helpers';
+import { AggregateBridgeError } from '../effect/errors';
 
 export interface SubscriptionManager {
   lifecycle: (() => void) | null;
@@ -623,7 +624,14 @@ export function createAggregateViewRefreshers(
 
       return;
     } catch (error) {
-      return error instanceof Error ? error : new Error(String(error));
+      return error instanceof AggregateBridgeError
+        ? error
+        : new AggregateBridgeError({
+            operation: 'initialLoadOnce',
+            target: 'aggregate-view',
+            reason: String(error),
+            cause: error instanceof Error ? error : undefined,
+          });
     }
   };
 
@@ -814,7 +822,14 @@ export function createAggregateViewRefreshers(
 
       return;
     } catch (error) {
-      return error instanceof Error ? error : new Error(String(error));
+      return error instanceof AggregateBridgeError
+        ? error
+        : new AggregateBridgeError({
+            operation: 'bootstrapPtysOnce',
+            target: 'aggregate-view',
+            reason: String(error),
+            cause: error instanceof Error ? error : undefined,
+          });
     }
   };
 
@@ -1118,7 +1133,14 @@ export function createAggregateViewRefreshers(
 
       return;
     } catch (error) {
-      return error instanceof Error ? error : new Error(String(error));
+      return error instanceof AggregateBridgeError
+        ? error
+        : new AggregateBridgeError({
+            operation: 'fullRefreshOnce',
+            target: 'aggregate-view',
+            reason: String(error),
+            cause: error instanceof Error ? error : undefined,
+          });
     } finally {
       setState('isLoading', false);
     }
