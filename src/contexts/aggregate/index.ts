@@ -5,16 +5,30 @@
  * into a clean, modular structure with errore patterns and atomic state updates.
  *
  * Structure:
- * - errors/: Error definitions using errore patterns (RedKnight)
- * - types/: Core types (PtyInfo, AggregateViewState, TreeNode, etc.) (RedKnight)
- * - filter/: Filter operations (filterPtys, isActivePty, sorting) (RedKnight)
- * - tree/: Tree operations (buildTreeRoot, flattenTree, navigation) (RedKnight)
- * - selection/: Selection logic (applySelection, restore after removal) (RedKnight)
- * - session/: Session management (expand/collapse, reordering) (RedKnight)
- * - subscriptions/: Lifecycle handlers, title changes, polling (SwiftGrove)
- * - refresh/: Full refresh, subset refresh, initial load (SwiftGrove)
- * - git/: Git metadata extraction and comparison (SwiftGrove)
+ * - pending/: Pending PTY insertion tracking (new)
+ * - errors/: Error definitions using errore patterns
+ * - types/: Core types (PtyInfo, AggregateViewState, TreeNode, etc.)
+ * - filter/: Filter operations (filterPtys, isActivePty, sorting)
+ * - tree/: Tree operations (buildTreeRoot, flattenTree, navigation)
+ * - selection/: Selection logic (applySelection, restore after removal)
+ * - session/: Session management (expand/collapse, reordering)
+ * - subscriptions/: Lifecycle handlers, title changes, polling
+ * - refresh/: Full refresh, subset refresh, initial load
+ * - git/: Git metadata extraction and comparison
  */
+
+/** Pending insertion tracking */
+export {
+  getCurrentPendingPtyInsertion,
+  setPendingPtyInsertions,
+  upsertPendingPtyInsertion,
+  removePendingPtyInsertions,
+  findPendingPtyInsertion,
+  getInsertedPaneOrder,
+  getAppendedPaneOrder,
+  getNextPendingPtyInsertionOrder,
+  findPendingPtyInsertionForLifecycle,
+} from './pending';
 
 /** SwiftGrove's modules */
 export * from './subscriptions';
@@ -33,6 +47,8 @@ export type {
   SpacerTreeNode,
   TreeNode,
   FlattenedTreeItem,
+  PendingPtyInsertion,
+  AggregateViewContextValue,
 } from './types';
 
 export { TREE_GLYPHS, createInitialState } from './types';
