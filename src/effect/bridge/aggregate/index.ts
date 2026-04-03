@@ -56,6 +56,8 @@ export {
 export {
   getPtyMetadata,
   getPtyMetadataWithService,
+  listAllPtyIds,
+  listAllPtyIdsWithService,
   listAllPtysWithMetadata,
   listAllPtysWithMetadataWithService,
 } from './api/backward-compat';

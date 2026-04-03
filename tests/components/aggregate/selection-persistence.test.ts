@@ -207,6 +207,45 @@ describe('Selection Persistence - current tree behavior', () => {
     expect(actions.getSelectedPty()?.ptyId).toBe('pty-1');
   });
 
+  it('skips the session header and moves to the next PTY when the first PTY is removed', () => {
+    const sessions = [createMockSession('session-a', 'A')];
+    const ptys = [
+      createMockPty({ ptyId: 'pty-1', sessionId: 'session-a' }),
+      createMockPty({ ptyId: 'pty-2', sessionId: 'session-a' }),
+    ];
+    const { state, setState } = createAggregateState({
+      sessions,
+      ptys,
+      selectedPtyId: 'pty-1',
+    });
+    const actions = createActions(state, setState);
+
+    actions.selectAfterPtyRemoval('pty-1');
+
+    expect(state.selectedPtyId).toBe('pty-2');
+    expect(actions.getSelectedPty()?.ptyId).toBe('pty-2');
+  });
+
+  it('falls back to the current session header instead of moving up into another session group', () => {
+    const sessions = [createMockSession('session-a', 'A'), createMockSession('session-b', 'B')];
+    const ptys = [
+      createMockPty({ ptyId: 'pty-a1', sessionId: 'session-a' }),
+      createMockPty({ ptyId: 'pty-b1', sessionId: 'session-b' }),
+    ];
+    const { state, setState } = createAggregateState({
+      sessions,
+      ptys,
+      selectedPtyId: 'pty-b1',
+    });
+    const actions = createActions(state, setState);
+
+    actions.selectAfterPtyRemoval('pty-b1');
+
+    expect(state.selectedPtyId).toBeNull();
+    expect(state.selectedSessionId).toBe('session-b');
+    expect(state.flattenedTree[state.selectedIndex]?.node.type).toBe('session');
+  });
+
   it('moves smart selection to the previous PTY when the last PTY is removed', () => {
     const sessions = [createMockSession('session-a', 'A')];
     const ptys = [

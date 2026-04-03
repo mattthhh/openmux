@@ -87,7 +87,7 @@ export {
   getSelectedPty,
   getSelectedItem,
   getSelectedSessionId,
-  findNearestPtyInSession,
+  findNearestSelectable,
   selectAfterPtyRemoval,
   createSelectionActions,
 } from './selection';

@@ -84,6 +84,7 @@ export {
 
 // Aggregate bridge
 export {
+  listAllPtyIds,
   listAllPtysWithMetadata,
   getPtyMetadata,
   listSessionsWithPtys,

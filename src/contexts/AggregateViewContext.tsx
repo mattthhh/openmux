@@ -3,14 +3,7 @@
  * Allows filtering and viewing PTYs across all workspaces.
  */
 
-import {
-  createContext,
-  useContext,
-  createEffect,
-  on,
-  onCleanup,
-  type ParentProps,
-} from 'solid-js';
+import { createContext, useContext, createEffect, on, onCleanup, type ParentProps } from 'solid-js';
 import { createStore, produce } from 'solid-js/store';
 import { setShimmerEnabled } from '../core/shimmer';
 
@@ -43,14 +36,17 @@ import { useSession } from './SessionContext';
 import { useTerminal } from './TerminalContext';
 import { findPaneLocation, findPtyLocation } from '../components/aggregate/utils';
 import { collectPanes } from '../core/layout-tree';
-import { getAggregateSessionOrderResult, setAggregateSessionOrder } from '../effect/bridge/session-bridge';
+import {
+  getAggregateSessionOrderResult,
+  setAggregateSessionOrder,
+} from '../effect/bridge/session-bridge';
 import { getSessionCwd as getStoredSessionCwd } from '../effect/bridge';
 
 const AggregateViewContext = createContext<AggregateViewContextValue | null>(null);
 
 interface AggregateViewProviderProps extends ParentProps {}
 
-  export function AggregateViewProvider(props: AggregateViewProviderProps) {
+export function AggregateViewProvider(props: AggregateViewProviderProps) {
   const [state, setState] = createStore<AggregateViewState>(initialState);
   const layout = useLayout();
   const session = useSession();
@@ -120,7 +116,13 @@ interface AggregateViewProviderProps extends ParentProps {}
     const sessionId = session.state.activeSessionId;
     if (!sessionId) return [];
 
-    const ptys: Array<{ ptyId: string; paneId: string; workspaceId: number; title?: string; cwd?: string }> = [];
+    const ptys: Array<{
+      ptyId: string;
+      paneId: string;
+      workspaceId: number;
+      title?: string;
+      cwd?: string;
+    }> = [];
 
     for (const [wsId, workspace] of Object.entries(layout.state.workspaces)) {
       if (!workspace) continue;
@@ -139,7 +141,7 @@ interface AggregateViewProviderProps extends ParentProps {}
         if (n.type === 'split') {
           collectPtys(n.first);
           collectPtys(n.second);
-        } else if (n.id && n.ptyId) {
+        } else if (n.id && n.ptyId && terminal.isPtyActive(n.ptyId)) {
           ptys.push({
             ptyId: n.ptyId,
             paneId: n.id,
@@ -189,10 +191,12 @@ interface AggregateViewProviderProps extends ParentProps {}
       return;
     }
 
-    setState(produce((s) => {
-      s.manualSessionOrder = persistedOrder;
-      recomputeTree(s);
-    }));
+    setState(
+      produce((s) => {
+        s.manualSessionOrder = persistedOrder;
+        recomputeTree(s);
+      })
+    );
   };
 
   const persistSessionOrder = async (order: string[]): Promise<void> => {
@@ -215,43 +219,51 @@ interface AggregateViewProviderProps extends ParentProps {}
     persistSessionOrder,
   });
 
-  createEffect(on(() => state.showAggregateView, (showAggregateView) => {
-    if (showAggregateView) {
-      void loadPersistedSessionOrder();
+  createEffect(
+    on(
+      () => state.showAggregateView,
+      (showAggregateView) => {
+        if (showAggregateView) {
+          void loadPersistedSessionOrder();
 
-      // Initial load: instant with current session PTYs, then background full refresh
-      void (async () => {
-        // First, do instant initial load (shows current session immediately)
-        await initialLoad();
+          // Initial load: instant with current session PTYs, then background full refresh
+          void (async () => {
+            // First, do instant initial load (shows current session immediately)
+            await initialLoad();
 
-        // Then set up subscriptions for live updates (before full refresh)
-        // This ensures lifecycle events are captured during the full refresh
-        await setupSubscriptions(
-          state,
-          subscriptions,
-          subscriptionsEpoch,
-          refreshPtys,
-          refreshPtysSubset,
-          handleTitleChange,
-          lifecycleHandlers
-        );
+            // Then set up subscriptions for live updates (before full refresh)
+            // This ensures lifecycle events are captured during the full refresh
+            await setupSubscriptions(
+              state,
+              subscriptions,
+              subscriptionsEpoch,
+              refreshPtys,
+              refreshPtysSubset,
+              handleTitleChange,
+              lifecycleHandlers
+            );
 
-        // Bootstrap mapped PTYs from saved session data so rows appear quickly,
-        // then hydrate live metadata in the background.
-        void bootstrapPtys();
-        void refreshPtys();
-      })();
-    } else {
-      cleanupSubscriptions(subscriptions, subscriptionsEpoch);
-    }
-  }));
+            // Bootstrap mapped PTYs from saved session data so rows appear quickly,
+            // then hydrate live metadata in the background.
+            void bootstrapPtys();
+            void refreshPtys();
+          })();
+        } else {
+          cleanupSubscriptions(subscriptions, subscriptionsEpoch);
+        }
+      }
+    )
+  );
 
   createEffect(() => {
     if (!state.showAggregateView) return;
 
     const activeSessionId = session.state.activeSessionId;
     const sessionSignature = session.state.sessions
-      .map((sessionMetadata) => `${sessionMetadata.id}:${sessionMetadata.name}:${sessionMetadata.lastSwitchedAt}`)
+      .map(
+        (sessionMetadata) =>
+          `${sessionMetadata.id}:${sessionMetadata.name}:${sessionMetadata.lastSwitchedAt}`
+      )
       .join('|');
 
     void activeSessionId;
@@ -276,9 +288,7 @@ interface AggregateViewProviderProps extends ParentProps {}
   };
 
   return (
-    <AggregateViewContext.Provider value={value}>
-      {props.children}
-    </AggregateViewContext.Provider>
+    <AggregateViewContext.Provider value={value}>{props.children}</AggregateViewContext.Provider>
   );
 }
 

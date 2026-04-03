@@ -3,15 +3,15 @@ import type { PendingAggregatePaneFocus } from './pending-pane-focus';
 
 export function getSelectedSessionIdForAutoLoad(params: {
   selectedItem: FlattenedTreeItem | undefined;
-  pendingPtyInsertion: PendingPtyInsertion | null;
+  pendingPtyInsertions: PendingPtyInsertion[];
   pendingPaneFocus: PendingAggregatePaneFocus | null;
 }): string | null {
-  const { selectedItem, pendingPtyInsertion, pendingPaneFocus } = params;
+  const { selectedItem, pendingPtyInsertions, pendingPaneFocus } = params;
 
   // While aggregate is in the middle of creating/focusing a new pane, selection may
   // transiently land on session headers/placeholders. Treat those as bookkeeping, not
   // as user intent to materialize some other session.
-  if (pendingPtyInsertion || pendingPaneFocus) {
+  if (pendingPtyInsertions.length > 0 || pendingPaneFocus) {
     return null;
   }
 

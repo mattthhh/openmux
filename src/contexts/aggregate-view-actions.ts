@@ -12,6 +12,10 @@ import type {
   SessionTreeNode,
 } from './aggregate-view-types';
 import { clearPreviewState, recomputeMatches, recomputeTree } from './aggregate-view-helpers';
+import {
+  removePendingPtyInsertions,
+  upsertPendingPtyInsertion,
+} from './aggregate-view-pending-insertions';
 import { loadSessionPtysOnDemand } from '../effect/bridge/aggregate-bridge';
 
 export interface AggregateViewActionsParams {
@@ -77,7 +81,7 @@ export function createAggregateViewActions(params: AggregateViewActionsParams) {
       produce((s) => {
         s.showAggregateView = true;
         s.filterQuery = '';
-        s.pendingPtyInsertion = null;
+        s.pendingPtyInsertions = [];
         s.listScrollOffset = 0;
         clearPreviewState(s);
         recomputeMatches(s);
@@ -94,7 +98,7 @@ export function createAggregateViewActions(params: AggregateViewActionsParams) {
         s.selectedIndex = 0;
         s.selectedPtyId = null;
         s.selectedSessionId = null;
-        s.pendingPtyInsertion = null;
+        s.pendingPtyInsertions = [];
         s.listScrollOffset = 0;
         clearPreviewState(s);
       })
@@ -449,27 +453,18 @@ export function createAggregateViewActions(params: AggregateViewActionsParams) {
   // Smart Selection on Close/Kill
   // ============================================================================
 
-  /**
-   * Find the nearest PTY in the same session.
-   * Priority: above first (when moving up), then below.
-   */
-  const findNearestPtyInSession = (
-    sessionId: string,
+  const findNearestSelectable = (
     startIndex: number,
     direction: 'up' | 'down'
-  ): { index: number; ptyId: string } | null => {
+  ): { index: number; item: FlattenedTreeItem } | null => {
     const flattened = state.flattenedTree;
     const delta = direction === 'up' ? -1 : 1;
     let index = startIndex + delta;
 
     while (index >= 0 && index < flattened.length) {
       const item = flattened[index];
-      if (item?.node.type === 'pty' && item.parentSessionId === sessionId) {
-        return { index, ptyId: item.node.ptyInfo.ptyId };
-      }
-      // Stop if we hit another session header
-      if (item?.node.type === 'session') {
-        break;
+      if (item && item.node.type !== 'spacer') {
+        return { index, item };
       }
       index += delta;
     }
@@ -477,83 +472,89 @@ export function createAggregateViewActions(params: AggregateViewActionsParams) {
     return null;
   };
 
+  const findNearestPty = (startIndex: number, direction: 'up' | 'down'): number | null => {
+    const flattened = state.flattenedTree;
+    const delta = direction === 'up' ? -1 : 1;
+    let index = startIndex + delta;
+
+    while (index >= 0 && index < flattened.length) {
+      const item = flattened[index];
+      if (item?.node.type === 'pty') {
+        return index;
+      }
+      index += delta;
+    }
+
+    return null;
+  };
+
+  const findNearestPtyInSession = (
+    startIndex: number,
+    direction: 'up' | 'down',
+    sessionId: string
+  ): number | null => {
+    const flattened = state.flattenedTree;
+    const delta = direction === 'up' ? -1 : 1;
+    let index = startIndex + delta;
+
+    while (index >= 0 && index < flattened.length) {
+      const item = flattened[index];
+      if (item?.node.type === 'session') {
+        break;
+      }
+      if (item?.node.type === 'pty' && item.parentSessionId === sessionId) {
+        return index;
+      }
+      index += delta;
+    }
+
+    return null;
+  };
+
+  const findSessionHeader = (startIndex: number, sessionId: string): number | null => {
+    for (let index = startIndex - 1; index >= 0; index--) {
+      const item = state.flattenedTree[index];
+      if (item?.node.type === 'session' && item.node.session.id === sessionId) {
+        return index;
+      }
+    }
+
+    return null;
+  };
+
   /**
    * Smart selection after removing a PTY.
-   * Priority:
-   * 1. Nearest PTY above in same session (move up)
-   * 2. Nearest PTY below in same session
-   * 3. Nearest adjacent PTY above (any session)
-   * 4. Nearest adjacent PTY below (any session)
-   * 5. First available PTY
-   * 6. No selection (empty list)
+   * Move up only within the same session group; otherwise prefer staying in-group or moving down.
    */
   const selectAfterPtyRemoval = (removedPtyId: string): void => {
-    const flattened = state.flattenedTree;
     const removedIndex = state.flattenedTreeIndex.get(removedPtyId);
 
     if (removedIndex === undefined) {
-      // PTY wasn't in the current view, no selection change needed
       return;
     }
 
-    const removedItem = flattened[removedIndex];
-    const sessionId = removedItem?.node.type === 'pty' ? removedItem.parentSessionId : null;
+    const removedItem = state.flattenedTree[removedIndex];
+    const removedSessionId = removedItem?.node.type === 'pty' ? removedItem.parentSessionId : null;
 
-    // Try to find replacement in priority order (up first, then down)
-    let replacement: { index: number; ptyId: string } | null = null;
-
-    if (sessionId) {
-      // 1. Try above in same session (up)
-      replacement = findNearestPtyInSession(sessionId, removedIndex, 'up');
-      // 2. Try below in same session (down)
-      if (!replacement) {
-        replacement = findNearestPtyInSession(sessionId, removedIndex, 'down');
-      }
-    }
-
-    // 3. Try any PTY above (up)
-    if (!replacement) {
-      for (let i = removedIndex - 1; i >= 0; i--) {
-        const item = flattened[i];
-        if (item?.node.type === 'pty') {
-          replacement = { index: i, ptyId: item.node.ptyInfo.ptyId };
-          break;
-        }
-      }
-    }
-
-    // 4. Try any PTY below (down)
-    if (!replacement) {
-      for (let i = removedIndex + 1; i < flattened.length; i++) {
-        const item = flattened[i];
-        if (item?.node.type === 'pty') {
-          replacement = { index: i, ptyId: item.node.ptyInfo.ptyId };
-          break;
-        }
-      }
-    }
-
-    // 5. First available PTY anywhere
-    if (!replacement) {
-      for (let i = 0; i < flattened.length; i++) {
-        const item = flattened[i];
-        if (item?.node.type === 'pty') {
-          replacement = { index: i, ptyId: item.node.ptyInfo.ptyId };
-          break;
-        }
-      }
-    }
+    const replacementIndex =
+      (removedSessionId ? findNearestPtyInSession(removedIndex, 'up', removedSessionId) : null) ??
+      (removedSessionId ? findNearestPtyInSession(removedIndex, 'down', removedSessionId) : null) ??
+      findNearestPty(removedIndex, 'down') ??
+      (removedSessionId ? findSessionHeader(removedIndex, removedSessionId) : null) ??
+      findNearestSelectable(removedIndex, 'down')?.index ??
+      null;
 
     setState(
       produce((s) => {
-        if (replacement) {
-          applySelection(s, replacement.index);
-        } else {
-          s.selectedIndex = 0;
-          s.selectedPtyId = null;
-          s.selectedSessionId = null;
-          clearPreviewState(s);
+        if (replacementIndex !== null) {
+          applySelection(s, replacementIndex);
+          return;
         }
+
+        s.selectedIndex = 0;
+        s.selectedPtyId = null;
+        s.selectedSessionId = null;
+        clearPreviewState(s);
       })
     );
   };
@@ -637,11 +638,29 @@ export function createAggregateViewActions(params: AggregateViewActionsParams) {
     await persistSessionOrder?.(nextOrder);
   };
 
-  /** Set or clear the current pending aggregate pane insertion request */
-  const setPendingPtyInsertion = (insertion: PendingPtyInsertion | null): void => {
+  /** Add or update a pending aggregate pane insertion request */
+  const upsertAggregatePendingPtyInsertion = (insertion: PendingPtyInsertion): void => {
     setState(
       produce((s) => {
-        s.pendingPtyInsertion = insertion;
+        upsertPendingPtyInsertion(s, insertion);
+      })
+    );
+  };
+
+  /** Remove a specific pending aggregate pane insertion request */
+  const removePendingPtyInsertion = (id: string): void => {
+    setState(
+      produce((s) => {
+        removePendingPtyInsertions(s, (insertion) => insertion.id === id);
+      })
+    );
+  };
+
+  /** Clear all pending aggregate pane insertion requests */
+  const clearPendingPtyInsertions = (): void => {
+    setState(
+      produce((s) => {
+        s.pendingPtyInsertions = [];
       })
     );
   };
@@ -680,6 +699,8 @@ export function createAggregateViewActions(params: AggregateViewActionsParams) {
     scrollListUp,
     scrollListDown,
     setListScrollOffset,
-    setPendingPtyInsertion,
+    upsertPendingPtyInsertion: upsertAggregatePendingPtyInsertion,
+    removePendingPtyInsertion,
+    clearPendingPtyInsertions,
   };
 }

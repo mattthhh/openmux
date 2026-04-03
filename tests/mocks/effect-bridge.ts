@@ -23,6 +23,7 @@ export const effectBridgeMocks = {
   readFromClipboard: vi.fn(),
   setPtyUpdateEnabled: vi.fn(),
   // Aggregate view functions
+  listAllPtyIds: vi.fn(),
   listAllPtysWithMetadata: vi.fn(),
   getPtyMetadata: vi.fn(),
   subscribeToPtyLifecycle: vi.fn(),

@@ -261,7 +261,10 @@ export function createPtyLifecycleHandlers(deps: PtyLifecycleDeps) {
    */
   const createPaneWithPTY = async (
     cwd?: string,
-    title?: string
+    title?: string,
+    options?: {
+      onCreated?: (created: { paneId: string; ptyId: string }) => void;
+    }
   ): Promise<{ paneId: string; ptyId: string } | null> => {
     // Get estimated dimensions for the new pane
     const { cols, rows } = getNewPaneDimensions();
@@ -282,6 +285,7 @@ export function createPtyLifecycleHandlers(deps: PtyLifecycleDeps) {
 
     // Track the mapping
     ptyToPaneMap.set(ptyId, paneId);
+    options?.onCreated?.({ paneId, ptyId });
 
     const exitUnsubResult = await errore.tryAsync<() => void, Error>({
       try: () => subscribeToPtyExit(ptyId, paneId, handlePtyExit),

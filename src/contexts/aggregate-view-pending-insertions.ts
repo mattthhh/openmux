@@ -1,0 +1,198 @@
+import type { AggregateViewState, PendingPtyInsertion } from './aggregate-view-types';
+
+type PendingInsertionCollectionState = Pick<AggregateViewState, 'pendingPtyInsertions'>;
+
+type PendingInsertionOrderState = Pick<
+  AggregateViewState,
+  'allPtys' | 'sessionPaneOrders' | 'pendingPtyInsertions'
+>;
+
+export function getCurrentPendingPtyInsertion(
+  state: PendingInsertionCollectionState
+): PendingPtyInsertion | null {
+  return state.pendingPtyInsertions[state.pendingPtyInsertions.length - 1] ?? null;
+}
+
+export function setPendingPtyInsertions(
+  state: PendingInsertionCollectionState,
+  insertions: PendingPtyInsertion[]
+): void {
+  state.pendingPtyInsertions = insertions;
+}
+
+export function upsertPendingPtyInsertion(
+  state: PendingInsertionCollectionState,
+  insertion: PendingPtyInsertion
+): void {
+  const nextInsertions = state.pendingPtyInsertions.filter(
+    (candidate) => candidate.id !== insertion.id
+  );
+  nextInsertions.push(insertion);
+  setPendingPtyInsertions(state, nextInsertions);
+}
+
+export function removePendingPtyInsertions(
+  state: PendingInsertionCollectionState,
+  predicate: (insertion: PendingPtyInsertion) => boolean
+): void {
+  setPendingPtyInsertions(
+    state,
+    state.pendingPtyInsertions.filter((insertion) => !predicate(insertion))
+  );
+}
+
+export function findPendingPtyInsertion(
+  state: PendingInsertionCollectionState,
+  predicate: (insertion: PendingPtyInsertion) => boolean
+): PendingPtyInsertion | null {
+  return state.pendingPtyInsertions.find(predicate) ?? null;
+}
+
+function buildSessionPaneOrderFromState(
+  state: Pick<AggregateViewState, 'allPtys' | 'sessionPaneOrders'>,
+  sessionId: string
+): Map<string, number> {
+  const existingOrder = state.sessionPaneOrders.get(sessionId);
+  if (existingOrder) {
+    return existingOrder;
+  }
+
+  const sessionPaneIds = state.allPtys
+    .filter((pty) => pty.sessionId === sessionId && !!pty.paneId)
+    .sort((a, b) => {
+      const aOrder = a.sortOrderHint ?? Number.MAX_SAFE_INTEGER;
+      const bOrder = b.sortOrderHint ?? Number.MAX_SAFE_INTEGER;
+      if (aOrder !== bOrder) {
+        return aOrder - bOrder;
+      }
+      return (a.paneId ?? a.ptyId).localeCompare(b.paneId ?? b.ptyId);
+    })
+    .map((pty) => pty.paneId as string);
+
+  return new Map(sessionPaneIds.map((paneId, index) => [paneId, index] as const));
+}
+
+export function getInsertedPaneOrder(
+  paneOrder: Map<string, number>,
+  insertAfterPaneId: string
+): number | null {
+  const insertAfterOrder = paneOrder.get(insertAfterPaneId);
+  if (insertAfterOrder === undefined) {
+    return null;
+  }
+
+  let nextOrder: number | undefined;
+  for (const order of paneOrder.values()) {
+    if (order <= insertAfterOrder) {
+      continue;
+    }
+    if (nextOrder === undefined || order < nextOrder) {
+      nextOrder = order;
+    }
+  }
+
+  if (nextOrder === undefined) {
+    return Math.floor(insertAfterOrder) + 1;
+  }
+
+  return insertAfterOrder + (nextOrder - insertAfterOrder) / 2;
+}
+
+export function getAppendedPaneOrder(paneOrder: Map<string, number>): number {
+  return [...paneOrder.values()].reduce((maxOrder, order) => Math.max(maxOrder, order), -1) + 1;
+}
+
+export function getNextPendingPtyInsertionOrder(
+  state: PendingInsertionOrderState,
+  params: { sessionId: string; insertAfterPaneId: string | null }
+): number {
+  const paneOrder = buildSessionPaneOrderFromState(state, params.sessionId);
+  const existingPendingOrders = state.pendingPtyInsertions
+    .filter(
+      (insertion) =>
+        insertion.sessionId === params.sessionId &&
+        insertion.insertAfterPaneId === params.insertAfterPaneId
+    )
+    .map((insertion) => insertion.sortOrderHint)
+    .filter((order): order is number => order !== undefined);
+
+  if (!params.insertAfterPaneId) {
+    const appendedOrder = getAppendedPaneOrder(paneOrder);
+    if (existingPendingOrders.length === 0) {
+      return appendedOrder;
+    }
+    return Math.max(appendedOrder - 1, ...existingPendingOrders) + 1;
+  }
+
+  const insertAfterOrder = paneOrder.get(params.insertAfterPaneId);
+  if (insertAfterOrder === undefined) {
+    const appendedOrder = getAppendedPaneOrder(paneOrder);
+    if (existingPendingOrders.length === 0) {
+      return appendedOrder;
+    }
+    return Math.max(appendedOrder - 1, ...existingPendingOrders) + 1;
+  }
+
+  let upperOrder: number | undefined;
+  for (const order of paneOrder.values()) {
+    if (order <= insertAfterOrder) {
+      continue;
+    }
+    if (upperOrder === undefined || order < upperOrder) {
+      upperOrder = order;
+    }
+  }
+
+  const boundedPendingOrders = existingPendingOrders.filter(
+    (order) => order > insertAfterOrder && (upperOrder === undefined || order < upperOrder)
+  );
+  const lowerOrder =
+    boundedPendingOrders.length > 0 ? Math.max(...boundedPendingOrders) : insertAfterOrder;
+
+  if (upperOrder === undefined) {
+    return Math.floor(lowerOrder) + 1;
+  }
+
+  return lowerOrder + (upperOrder - lowerOrder) / 2;
+}
+
+export function findPendingPtyInsertionForLifecycle(
+  state: PendingInsertionCollectionState,
+  params: { ptyId?: string | null; sessionId?: string | null; paneId?: string | null }
+): PendingPtyInsertion | null {
+  if (params.ptyId) {
+    const matchingPtyInsertion = state.pendingPtyInsertions.find(
+      (insertion) => insertion.pendingPtyId === params.ptyId
+    );
+    if (matchingPtyInsertion) {
+      return matchingPtyInsertion;
+    }
+  }
+
+  const sessionInsertions = state.pendingPtyInsertions.filter(
+    (insertion) => !params.sessionId || insertion.sessionId === params.sessionId
+  );
+
+  if (params.paneId) {
+    const matchingPaneInsertion = sessionInsertions.find(
+      (insertion) => insertion.pendingPaneId === params.paneId
+    );
+    if (matchingPaneInsertion) {
+      return matchingPaneInsertion;
+    }
+  }
+
+  const unresolvedInsertions = sessionInsertions
+    .map((insertion, index) => ({ insertion, index }))
+    .filter(({ insertion }) => !insertion.pendingPaneId && !insertion.pendingPtyId)
+    .sort((a, b) => {
+      const aOrder = a.insertion.sortOrderHint ?? Number.MAX_SAFE_INTEGER;
+      const bOrder = b.insertion.sortOrderHint ?? Number.MAX_SAFE_INTEGER;
+      if (aOrder !== bOrder) {
+        return aOrder - bOrder;
+      }
+      return a.index - b.index;
+    });
+
+  return unresolvedInsertions[0]?.insertion ?? null;
+}

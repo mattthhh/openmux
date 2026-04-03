@@ -139,14 +139,20 @@ export const TREE_GLYPHS = {
 } as const;
 
 export interface PendingPtyInsertion {
+  /** Stable request identifier so multiple concurrent creations can be tracked independently. */
+  id: string;
   /** Session where the new PTY should appear. */
   sessionId: string;
   /** Existing PTY the new one should appear after, if pane creation started from a PTY row. */
   insertAfterPtyId: string | null;
   /** Stable pane anchor captured from the selected PTY before creation starts. */
   insertAfterPaneId: string | null;
-  /** Pane created by the layout for this request, filled in after createPaneWithPTY resolves. */
+  /** PTY created for this request, filled in once createPaneWithPTY returns. */
+  pendingPtyId: string | null;
+  /** Pane created by the layout for this request, filled in once createPaneWithPTY resolves. */
   pendingPaneId: string | null;
+  /** Precomputed aggregate sort hint used for placeholders and final pane anchoring. */
+  sortOrderHint?: number;
 }
 
 /** Aggregate view state with tree structure support */
@@ -217,11 +223,10 @@ export interface AggregateViewState {
    */
   deletedPtyIds: Set<string>;
   /**
-   * One in-flight aggregate pane creation request.
-   * This keeps placeholder placement and final pane anchoring tied to the specific pane being created
-   * instead of a global one-shot PTY id.
+   * All unresolved aggregate pane creation requests.
+   * Multiple create commands can overlap, so lifecycle matching must track each request separately.
    */
-  pendingPtyInsertion: PendingPtyInsertion | null;
+  pendingPtyInsertions: PendingPtyInsertion[];
   /** Scroll offset for the session/PTY list (0 = top) */
   listScrollOffset: number;
 }
@@ -253,7 +258,7 @@ export const initialState: AggregateViewState = {
   pendingPtyIds: new Set(),
   recentlyAddedPtyIds: new Set(),
   deletedPtyIds: new Set(),
-  pendingPtyInsertion: null,
+  pendingPtyInsertions: [],
   listScrollOffset: 0,
 };
 
@@ -300,6 +305,10 @@ export interface AggregateViewContextValue {
   scrollListDown: (pageSize?: number) => void;
   /** Scroll the list to a specific offset */
   setListScrollOffset: (offset: number) => void;
-  /** Set or clear the current pending aggregate pane insertion request */
-  setPendingPtyInsertion: (insertion: PendingPtyInsertion | null) => void;
+  /** Add or update a pending aggregate pane insertion request */
+  upsertPendingPtyInsertion: (insertion: PendingPtyInsertion) => void;
+  /** Remove a specific pending aggregate pane insertion request */
+  removePendingPtyInsertion: (id: string) => void;
+  /** Clear all pending aggregate pane insertion requests */
+  clearPendingPtyInsertions: () => void;
 }

@@ -16,11 +16,12 @@ import {
   createLifecycleHandlers,
 } from '../../aggregate-view-subscriptions';
 import { initialState, type AggregateViewState, type PtyInfo } from '../../aggregate-view-types';
-import { buildPtyIndex } from '../../aggregate-view-helpers';
+import { buildPtyIndex, recomputeMatches, recomputeTree } from '../../aggregate-view-helpers';
 import type { SessionMetadata } from '../../../effect/models';
 
 // Mock the bridge functions
 vi.mock('../../../effect/bridge/aggregate-bridge', () => ({
+  listAllPtyIds: vi.fn(),
   listAllPtysWithMetadata: vi.fn(),
   getAggregateSessionPtyMapping: vi.fn(),
 }));
@@ -49,6 +50,7 @@ vi.mock('../../../contexts/git-metadata-cache', () => ({
 }));
 
 import {
+  listAllPtyIds,
   listAllPtysWithMetadata,
   getAggregateSessionPtyMapping,
 } from '../../../effect/bridge/aggregate-bridge';
@@ -61,6 +63,7 @@ import {
 describe('PTY destruction race condition', () => {
   beforeEach(() => {
     vi.useFakeTimers();
+    vi.mocked(listAllPtyIds).mockResolvedValue([]);
   });
 
   afterEach(() => {
@@ -169,6 +172,7 @@ describe('PTY destruction race condition', () => {
 
     // Mock the services to return the PTY (simulating deferred destruction)
     vi.mocked(listSessionsResult).mockResolvedValue([createMockSession()]);
+    vi.mocked(listAllPtyIds).mockResolvedValue(['pty-to-destroy']);
     vi.mocked(listAllPtysWithMetadata).mockResolvedValue([
       {
         ptyId: 'pty-to-destroy',
@@ -240,6 +244,43 @@ describe('PTY destruction race condition', () => {
     expect(stillThere).toBeUndefined();
   });
 
+  it('keeps tombstones when raw PTY ids still exist even if metadata fetch drops the PTY', async () => {
+    const { state, refreshPtys, lifecycleHandlers } = createTestHarness();
+
+    state.allPtys.push(createMockPty({ ptyId: 'pty-metadata-gap', paneId: 'pane-1' }));
+    state.allPtysIndex = buildPtyIndex(state.allPtys);
+
+    vi.mocked(listSessionsResult).mockResolvedValue([createMockSession()]);
+    vi.mocked(listAllPtyIds).mockResolvedValue(['pty-metadata-gap']);
+    vi.mocked(listAllPtysWithMetadata).mockResolvedValue([]);
+    vi.mocked(getAggregateSessionPtyMapping).mockResolvedValue(undefined);
+    vi.mocked(loadSession).mockResolvedValue({
+      id: 'session-1',
+      name: 'Test Session',
+      activeWorkspaceId: 1,
+      workspaces: [],
+      cwdMap: new Map(),
+      paneToPtyMap: new Map(),
+    });
+    vi.mocked(getSessionSummaryResult).mockResolvedValue({
+      workspaceCount: 1,
+      paneCount: 1,
+    });
+
+    lifecycleHandlers.handlePtyDestroyed('pty-metadata-gap');
+    expect(state.deletedPtyIds.has('pty-metadata-gap')).toBe(true);
+
+    await refreshPtys();
+
+    expect(state.deletedPtyIds.has('pty-metadata-gap')).toBe(true);
+    expect(state.allPtys.find((pty) => pty.ptyId === 'pty-metadata-gap')).toBeUndefined();
+
+    vi.mocked(listAllPtyIds).mockResolvedValue([]);
+    await refreshPtys();
+
+    expect(state.deletedPtyIds.has('pty-metadata-gap')).toBe(false);
+  });
+
   it('should keep deleted PTY tombstones until the raw service list is clear', async () => {
     const { state, refreshPtys, lifecycleHandlers } = createTestHarness();
 
@@ -247,6 +288,7 @@ describe('PTY destruction race condition', () => {
     state.allPtysIndex = buildPtyIndex(state.allPtys);
 
     vi.mocked(listSessionsResult).mockResolvedValue([createMockSession()]);
+    vi.mocked(listAllPtyIds).mockResolvedValue(['pty-orphaned-live']);
     vi.mocked(listAllPtysWithMetadata).mockResolvedValue([
       {
         ptyId: 'pty-orphaned-live',
@@ -293,6 +335,7 @@ describe('PTY destruction race condition', () => {
     expect(state.deletedPtyIds.has('pty-orphaned-live')).toBe(true);
     expect(state.allPtys.find((pty) => pty.ptyId === 'pty-orphaned-live')).toBeUndefined();
 
+    vi.mocked(listAllPtyIds).mockResolvedValue([]);
     vi.mocked(listAllPtysWithMetadata).mockResolvedValue([]);
     await refreshPtys();
 
@@ -343,6 +386,7 @@ describe('PTY destruction race condition', () => {
 
     // First mock: PTY exists
     vi.mocked(listSessionsResult).mockResolvedValue([createMockSession()]);
+    vi.mocked(listAllPtyIds).mockResolvedValue(['pty-recreate']);
     vi.mocked(listAllPtysWithMetadata).mockResolvedValue([
       {
         ptyId: 'pty-recreate',
@@ -389,6 +433,7 @@ describe('PTY destruction race condition', () => {
     expect(state.deletedPtyIds.has('pty-recreate')).toBe(true);
 
     // Step 2: Service confirms PTY is actually gone (empty list)
+    vi.mocked(listAllPtyIds).mockResolvedValue([]);
     vi.mocked(listAllPtysWithMetadata).mockResolvedValue([]);
 
     // Step 3: Refresh - PTY should stay deleted, deletedPtyIds should clear
@@ -400,6 +445,7 @@ describe('PTY destruction race condition', () => {
 
     // Step 5: A new PTY with same ID is created (edge case)
     // This is rare but possible with ID reuse - should be allowed
+    vi.mocked(listAllPtyIds).mockResolvedValue(['pty-recreate']);
     vi.mocked(listAllPtysWithMetadata).mockResolvedValue([
       {
         ptyId: 'pty-recreate', // Same ID, but this is a NEW PTY
@@ -431,6 +477,70 @@ describe('PTY destruction race condition', () => {
     const newPty = state.allPtys.find((p) => p.ptyId === 'pty-recreate');
     expect(newPty).toBeDefined();
     expect(newPty?.shell).toBe('/bin/zsh'); // Verify it's the new one
+  });
+
+  it('skips the session header and selects the next PTY when removing the first PTY in a session', () => {
+    const { state, setState, lifecycleHandlers } = createTestHarness();
+
+    const firstPty = createMockPty({ ptyId: 'pty-first', paneId: 'pane-1' });
+    const secondPty = createMockPty({ ptyId: 'pty-second', paneId: 'pane-2' });
+
+    setState({
+      allPtys: [firstPty, secondPty],
+      allPtysIndex: buildPtyIndex([firstPty, secondPty]),
+      matchedPtys: [firstPty, secondPty],
+      matchedPtysIndex: buildPtyIndex([firstPty, secondPty]),
+      selectedPtyId: 'pty-first',
+      selectedSessionId: 'session-1',
+    });
+    state.sessionLoadStates.set('session-1', { status: 'loaded', paneCount: 2 });
+    recomputeMatches(state);
+    recomputeTree(state);
+
+    lifecycleHandlers.handlePtyDestroyed('pty-first');
+
+    expect(state.selectedPtyId).toBe('pty-second');
+    expect(state.selectedSessionId).toBe('session-1');
+    expect(state.flattenedTree[state.selectedIndex]?.node.type).toBe('pty');
+  });
+
+  it('does not jump up into the previous session group when removing the only PTY in a session', () => {
+    const { state, setState, lifecycleHandlers } = createTestHarness();
+
+    const previousSessionPty = createMockPty({
+      ptyId: 'pty-previous',
+      paneId: 'pane-prev',
+      sessionId: 'session-0',
+    });
+    const currentSessionPty = createMockPty({
+      ptyId: 'pty-current',
+      paneId: 'pane-current',
+      sessionId: 'session-1',
+    });
+
+    setState({
+      allSessions: new Map([
+        ['session-0', createMockSession({ id: 'session-0', name: 'Previous Session' })],
+        ['session-1', createMockSession({ id: 'session-1', name: 'Test Session' })],
+      ]),
+      allPtys: [previousSessionPty, currentSessionPty],
+      allPtysIndex: buildPtyIndex([previousSessionPty, currentSessionPty]),
+      matchedPtys: [previousSessionPty, currentSessionPty],
+      matchedPtysIndex: buildPtyIndex([previousSessionPty, currentSessionPty]),
+      selectedPtyId: 'pty-current',
+      selectedSessionId: 'session-1',
+      expandedSessionIds: new Set(['session-0', 'session-1']),
+    });
+    state.sessionLoadStates.set('session-0', { status: 'loaded', paneCount: 1 });
+    state.sessionLoadStates.set('session-1', { status: 'loaded', paneCount: 1 });
+    recomputeMatches(state);
+    recomputeTree(state);
+
+    lifecycleHandlers.handlePtyDestroyed('pty-current');
+
+    expect(state.selectedPtyId).toBeNull();
+    expect(state.selectedSessionId).toBe('session-1');
+    expect(state.flattenedTree[state.selectedIndex]?.node.type).toBe('session');
   });
 
   it('should clean up placeholder when PTY is destroyed during creation', async () => {

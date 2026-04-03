@@ -5,7 +5,12 @@
 import { produce, type SetStoreFunction } from 'solid-js/store';
 import type { PtyInfo, AggregateViewState, PendingPtyInsertion } from './aggregate-view-types';
 import type { SessionMetadata, SerializedLayoutNode, SerializedSession } from '../effect/models';
-import { buildPtyIndex, recomputeMatches, recomputeTree } from './aggregate-view-helpers';
+import {
+  buildPtyIndex,
+  clearPreviewState,
+  recomputeMatches,
+  recomputeTree,
+} from './aggregate-view-helpers';
 import { runStream, streamFromSubscription, tap, repeatWithInterval } from '../effect/stream-utils';
 import {
   listSessionsResult,
@@ -13,6 +18,7 @@ import {
   loadSession,
 } from '../effect/bridge/session-bridge';
 import {
+  listAllPtyIds,
   listAllPtysWithMetadata,
   getPtyMetadata,
   getAggregateSessionPtyMapping,
@@ -25,6 +31,10 @@ import {
   type PtyTitleChangeEvent,
 } from '../effect/bridge/pty-bridge';
 import { getGlobalGitMetadataCache, type GitRepoMetadata } from './git-metadata-cache';
+import {
+  findPendingPtyInsertionForLifecycle,
+  removePendingPtyInsertions,
+} from './aggregate-view-pending-insertions';
 import { getGitInfo, getGitDiffStats } from '../effect/services/pty/helpers';
 import type { GitDiffStats } from './aggregate-view-types';
 import type { GitInfo } from '../effect/services/pty/helpers';
@@ -331,6 +341,10 @@ function getPendingInsertionOrder(
   state: AggregateViewState,
   insertion: PendingPtyInsertion
 ): number {
+  if (insertion.sortOrderHint !== undefined) {
+    return insertion.sortOrderHint;
+  }
+
   const paneOrder = buildSessionPaneOrderFromState(state, insertion.sessionId);
   if (!insertion.insertAfterPaneId) {
     return getAppendedPaneOrder(paneOrder);
@@ -803,12 +817,17 @@ export function createAggregateViewRefreshers(
       }
       const sessions = [...sessionsResult];
 
+      const serviceLivePtyIdsResult = await listAllPtyIds();
+      if (serviceLivePtyIdsResult instanceof Error) {
+        return serviceLivePtyIdsResult;
+      }
+      const serviceLivePtyIds = new Set(serviceLivePtyIdsResult);
+
       const livePtysResult = await listAllPtysWithMetadata({ skipGitDiffStats: true });
       if (livePtysResult instanceof Error) {
         return livePtysResult;
       }
       const livePtys = livePtysResult;
-      const serviceLivePtyIds = new Set(livePtys.map((pty) => pty.ptyId));
 
       const sessionMetadataById = new Map<string, SessionMetadata>(
         sessions.map((session) => [String(session.id), session])
@@ -1229,6 +1248,34 @@ export function createLifecycleHandlers(
     return state.allSessions.get(sessionId);
   };
 
+  const findMatchingPendingInsertion = (
+    aggregateState: AggregateViewState,
+    params: { ptyId: string; sessionId?: string | null; paneId?: string | null }
+  ): PendingPtyInsertion | null => {
+    return findPendingPtyInsertionForLifecycle(aggregateState, params);
+  };
+
+  const removeMatchingPendingInsertions = (
+    aggregateState: AggregateViewState,
+    params: { ptyId: string; sessionId?: string | null; paneId?: string | null }
+  ): void => {
+    const matchingInsertion = findMatchingPendingInsertion(aggregateState, params);
+    if (matchingInsertion) {
+      removePendingPtyInsertions(
+        aggregateState,
+        (insertion) => insertion.id === matchingInsertion.id
+      );
+      return;
+    }
+
+    removePendingPtyInsertions(
+      aggregateState,
+      (insertion) =>
+        insertion.pendingPtyId === params.ptyId ||
+        (!!params.paneId && insertion.pendingPaneId === params.paneId)
+    );
+  };
+
   /**
    * Handle PTY created - add to list instantly.
    * Fetches metadata and inserts the new PTY.
@@ -1257,12 +1304,11 @@ export function createLifecycleHandlers(
         // If this is the first attempt, add a placeholder PTY immediately
         // This ensures the pane appears in the list while we fetch metadata
         if (retryCount === 0 && !s.allPtysIndex.has(ptyId)) {
-          const pendingInsertion =
-            s.pendingPtyInsertion &&
-            (!s.pendingPtyInsertion.pendingPaneId ||
-              s.pendingPtyInsertion.pendingPaneId === initialOwnership?.paneId)
-              ? s.pendingPtyInsertion
-              : null;
+          const pendingInsertion = findMatchingPendingInsertion(s, {
+            ptyId,
+            sessionId: initialOwnership?.sessionId,
+            paneId: initialOwnership?.paneId,
+          });
           const placeholderPty: PtyInfo = {
             ptyId,
             sortOrderHint: pendingInsertion
@@ -1340,13 +1386,44 @@ export function createLifecycleHandlers(
       setState(
         produce((s) => {
           s.pendingPtyIds.delete(ptyId);
-          if (s.pendingPtyInsertion?.pendingPaneId === ownership.paneId) {
-            s.pendingPtyInsertion = null;
-          }
+          removeMatchingPendingInsertions(s, {
+            ptyId,
+            sessionId: ownership.sessionId,
+            paneId: ownership.paneId,
+          });
         })
       );
       return;
     }
+
+    // Once ownership resolves, re-anchor the placeholder to the correct session/order immediately
+    // so fast overlapping creates stay adjacent even before metadata hydration completes.
+    setState(
+      produce((s) => {
+        const placeholderIndex = s.allPtysIndex.get(ptyId);
+        if (placeholderIndex === undefined || !s.allPtys[placeholderIndex]) {
+          return;
+        }
+
+        const pendingInsertion = findMatchingPendingInsertion(s, {
+          ptyId,
+          sessionId: ownership.sessionId,
+          paneId: ownership.paneId,
+        });
+        s.allPtys[placeholderIndex] = {
+          ...s.allPtys[placeholderIndex],
+          sessionId: ownership.sessionId,
+          sessionMetadata,
+          workspaceId: s.allPtys[placeholderIndex].workspaceId ?? ownership.workspaceId,
+          paneId: s.allPtys[placeholderIndex].paneId ?? ownership.paneId,
+          sortOrderHint: pendingInsertion
+            ? getPendingInsertionOrder(s, pendingInsertion)
+            : s.allPtys[placeholderIndex].sortOrderHint,
+        };
+        recomputeMatches(s);
+        recomputeTree(s);
+      })
+    );
 
     // Fetch metadata for the new PTY
     const metadataResult = await getPtyMetadata(ptyId, { skipGitDiffStats: true });
@@ -1354,9 +1431,11 @@ export function createLifecycleHandlers(
       setState(
         produce((s) => {
           s.pendingPtyIds.delete(ptyId);
-          if (s.pendingPtyInsertion?.pendingPaneId === ownership.paneId) {
-            s.pendingPtyInsertion = null;
-          }
+          removeMatchingPendingInsertions(s, {
+            ptyId,
+            sessionId: ownership.sessionId,
+            paneId: ownership.paneId,
+          });
           // Keep placeholder but mark as error
           const index = s.allPtysIndex.get(ptyId);
           if (index !== undefined) {
@@ -1420,9 +1499,11 @@ export function createLifecycleHandlers(
             recomputeTree(s);
           }
 
-          if (s.pendingPtyInsertion?.pendingPaneId === ownership.paneId) {
-            s.pendingPtyInsertion = null;
-          }
+          removeMatchingPendingInsertions(s, {
+            ptyId,
+            sessionId: ownership.sessionId,
+            paneId: ownership.paneId,
+          });
 
           return; // PTY was destroyed while we were fetching metadata, don't add it
         }
@@ -1446,19 +1527,14 @@ export function createLifecycleHandlers(
         // Tree rendering is driven by sessionPaneOrders. Once the PTY resolves to its new pane,
         // anchor the aggregate order to the specific pane created by this request so later refreshes
         // preserve the same adjacency.
-        const pendingInsertion = s.pendingPtyInsertion;
-        if (
-          pendingInsertion &&
-          pendingInsertion.pendingPaneId &&
-          pendingInsertion.pendingPaneId === nextPty.paneId &&
-          pendingInsertion.sessionId === ownership.sessionId &&
-          nextPty.paneId
-        ) {
+        const pendingInsertion = findMatchingPendingInsertion(s, {
+          ptyId,
+          sessionId: ownership.sessionId,
+          paneId: nextPty.paneId,
+        });
+        if (pendingInsertion && nextPty.paneId) {
           const sessionPaneOrder = buildSessionPaneOrderFromState(s, ownership.sessionId);
-          const newOrder = pendingInsertion.insertAfterPaneId
-            ? (getInsertedPaneOrder(sessionPaneOrder, pendingInsertion.insertAfterPaneId) ??
-              getAppendedPaneOrder(sessionPaneOrder))
-            : getAppendedPaneOrder(sessionPaneOrder);
+          const newOrder = getPendingInsertionOrder(s, pendingInsertion);
 
           sessionPaneOrder.set(nextPty.paneId, newOrder);
           const nextIndex = s.allPtysIndex.get(ptyId);
@@ -1468,7 +1544,7 @@ export function createLifecycleHandlers(
               sortOrderHint: newOrder,
             };
           }
-          s.pendingPtyInsertion = null;
+          removePendingPtyInsertions(s, (insertion) => insertion.id === pendingInsertion.id);
         }
 
         // Clear pending status
@@ -1510,7 +1586,7 @@ export function createLifecycleHandlers(
   /**
    * Handle PTY destroyed - remove from list instantly.
    * This is synchronous for immediate UI feedback.
-   * Selection moves to adjacent PTY (below first, then above).
+   * Selection prefers the nearest selectable row above so the highlight visibly moves up.
    *
    * The PTY is added to deletedPtyIds, which prevents it from being re-added
    * during background refresh. Entries are only cleared from deletedPtyIds
@@ -1539,13 +1615,13 @@ export function createLifecycleHandlers(
         const pty = s.allPtys[index];
         if (!pty) return;
 
-        if (
-          s.pendingPtyInsertion &&
-          (s.pendingPtyInsertion.insertAfterPtyId === ptyId ||
-            s.pendingPtyInsertion.pendingPaneId === pty.paneId)
-        ) {
-          s.pendingPtyInsertion = null;
-        }
+        removePendingPtyInsertions(
+          s,
+          (insertion) =>
+            insertion.pendingPtyId === ptyId ||
+            insertion.insertAfterPtyId === ptyId ||
+            (!!pty.paneId && insertion.pendingPaneId === pty.paneId)
+        );
 
         const sessionId = pty.sessionId;
 
@@ -1568,72 +1644,102 @@ export function createLifecycleHandlers(
           });
         }
 
-        // Handle selection change BEFORE recomputing tree (we need old flattened tree)
+        // Handle selection change BEFORE recomputing tree (we need the old flattened tree)
         if (s.selectedPtyId === ptyId && removedFlattenedIndex !== undefined) {
-          // Priority 1: Try to find PTY above in same session (move up)
-          let newSelection: { index: number; ptyId: string; sessionId: string } | null = null;
+          const findNearestSelectable = (
+            startIndex: number,
+            direction: 'up' | 'down'
+          ): { index: number; item: (typeof s.flattenedTree)[number] } | null => {
+            const delta = direction === 'up' ? -1 : 1;
+            let index = startIndex + delta;
 
-          // Search upward first (above the deleted PTY)
-          for (let i = removedFlattenedIndex - 1; i >= 0; i--) {
-            const item = s.flattenedTree[i];
-            if (item?.node.type === 'session') break; // Stop at session boundary
-            if (item?.node.type === 'pty' && item.parentSessionId === sessionId) {
-              newSelection = { index: i, ptyId: item.node.ptyInfo.ptyId, sessionId };
-              break;
-            }
-          }
-
-          // Priority 2: If no PTY above, search downward (below the deleted PTY)
-          if (!newSelection) {
-            for (let i = removedFlattenedIndex + 1; i < s.flattenedTree.length; i++) {
-              const item = s.flattenedTree[i];
-              if (item?.node.type === 'session') break; // Stop at session boundary
-              if (item?.node.type === 'pty' && item.parentSessionId === sessionId) {
-                newSelection = { index: i, ptyId: item.node.ptyInfo.ptyId, sessionId };
-                break;
+            while (index >= 0 && index < s.flattenedTree.length) {
+              const item = s.flattenedTree[index];
+              if (item && item.node.type !== 'spacer') {
+                return { index, item };
               }
+              index += delta;
             }
-          }
 
-          // Priority 3: If no PTY in same session, try any adjacent PTY (above first, then below)
-          if (!newSelection) {
-            // Try above first
-            for (let i = removedFlattenedIndex - 1; i >= 0; i--) {
-              const item = s.flattenedTree[i];
+            return null;
+          };
+
+          const findNearestPty = (startIndex: number, direction: 'up' | 'down'): number | null => {
+            const delta = direction === 'up' ? -1 : 1;
+            let index = startIndex + delta;
+
+            while (index >= 0 && index < s.flattenedTree.length) {
+              const item = s.flattenedTree[index];
               if (item?.node.type === 'pty') {
-                newSelection = {
-                  index: i,
-                  ptyId: item.node.ptyInfo.ptyId,
-                  sessionId: item.node.parentSessionId,
-                };
+                return index;
+              }
+              index += delta;
+            }
+
+            return null;
+          };
+
+          const findNearestPtyInSession = (
+            startIndex: number,
+            direction: 'up' | 'down',
+            currentSessionId: string
+          ): number | null => {
+            const delta = direction === 'up' ? -1 : 1;
+            let index = startIndex + delta;
+
+            while (index >= 0 && index < s.flattenedTree.length) {
+              const item = s.flattenedTree[index];
+              if (item?.node.type === 'session') {
                 break;
               }
+              if (item?.node.type === 'pty' && item.parentSessionId === currentSessionId) {
+                return index;
+              }
+              index += delta;
             }
-            // Then try below
-            if (!newSelection) {
-              for (let i = removedFlattenedIndex + 1; i < s.flattenedTree.length; i++) {
-                const item = s.flattenedTree[i];
-                if (item?.node.type === 'pty') {
-                  newSelection = {
-                    index: i,
-                    ptyId: item.node.ptyInfo.ptyId,
-                    sessionId: item.node.parentSessionId,
-                  };
-                  break;
-                }
+
+            return null;
+          };
+
+          const findSessionHeader = (
+            startIndex: number,
+            currentSessionId: string
+          ): number | null => {
+            for (let index = startIndex - 1; index >= 0; index--) {
+              const item = s.flattenedTree[index];
+              if (item?.node.type === 'session' && item.node.session.id === currentSessionId) {
+                return index;
               }
             }
-          }
 
-          if (newSelection) {
-            s.selectedIndex = newSelection.index;
-            s.selectedPtyId = newSelection.ptyId;
-            s.selectedSessionId = newSelection.sessionId;
+            return null;
+          };
+
+          const replacementIndex =
+            findNearestPtyInSession(removedFlattenedIndex, 'up', sessionId) ??
+            findNearestPtyInSession(removedFlattenedIndex, 'down', sessionId) ??
+            findNearestPty(removedFlattenedIndex, 'down') ??
+            findSessionHeader(removedFlattenedIndex, sessionId) ??
+            findNearestSelectable(removedFlattenedIndex, 'down')?.index ??
+            null;
+
+          if (replacementIndex !== null) {
+            const newSelection = s.flattenedTree[replacementIndex];
+            s.selectedIndex = replacementIndex;
+            s.selectedPtyId =
+              newSelection?.node.type === 'pty' ? newSelection.node.ptyInfo.ptyId : null;
+            s.selectedSessionId =
+              newSelection?.node.type === 'session'
+                ? newSelection.node.session.id
+                : (newSelection?.parentSessionId ?? null);
+            if (s.selectedPtyId === null) {
+              clearPreviewState(s);
+            }
           } else {
-            // No other PTY found, select the session header
             s.selectedPtyId = null;
-            s.selectedIndex = Math.max(0, removedFlattenedIndex - 1);
-            // selectedSessionId stays as the current session
+            s.selectedSessionId = null;
+            s.selectedIndex = 0;
+            clearPreviewState(s);
           }
         }
 

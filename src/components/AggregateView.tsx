@@ -63,7 +63,8 @@ import { loadSessionData, getHostBackgroundColor } from '../effect/bridge';
 import { setShimmerEnabled } from '../core/shimmer';
 import type { Workspace } from '../core/types';
 import { collectPanes } from '../core/layout-tree';
-import type { FlattenedTreeItem } from '../contexts/aggregate-view-types';
+import type { FlattenedTreeItem, PendingPtyInsertion } from '../contexts/aggregate-view-types';
+import { getNextPendingPtyInsertionOrder } from '../contexts/aggregate-view-pending-insertions';
 import {
   resolvePendingAggregatePaneFocus,
   type PendingAggregatePaneFocus,
@@ -113,7 +114,9 @@ export function AggregateView(props: AggregateViewProps) {
     scrollListUp,
     scrollListDown,
     setListScrollOffset,
-    setPendingPtyInsertion,
+    upsertPendingPtyInsertion,
+    removePendingPtyInsertion,
+    clearPendingPtyInsertions,
   } = useAggregateView();
 
   const { state: keyboardState, enterAggregateMode, exitAggregateMode } = keyboard;
@@ -275,7 +278,7 @@ export function AggregateView(props: AggregateViewProps) {
 
     const sessionId = getSelectedSessionIdForAutoLoad({
       selectedItem: state.flattenedTree[state.selectedIndex],
-      pendingPtyInsertion: state.pendingPtyInsertion,
+      pendingPtyInsertions: state.pendingPtyInsertions,
       pendingPaneFocus: pendingPaneFocus(),
     });
     if (!sessionId) return;
@@ -289,6 +292,7 @@ export function AggregateView(props: AggregateViewProps) {
   createEffect(() => {
     if (!state.showAggregateView) {
       setPendingPaneFocus(null);
+      clearPendingPtyInsertions();
       return;
     }
 
@@ -544,12 +548,20 @@ export function AggregateView(props: AggregateViewProps) {
       sessionState.activeSessionId;
     if (!targetSessionId) return;
 
-    setPendingPtyInsertion({
+    const pendingInsertionId = crypto.randomUUID();
+    const pendingInsertion: PendingPtyInsertion = {
+      id: pendingInsertionId,
       sessionId: targetSessionId,
       insertAfterPtyId: selectedPtyId,
       insertAfterPaneId: selectedPty?.paneId ?? null,
+      pendingPtyId: null,
       pendingPaneId: null,
-    });
+      sortOrderHint: getNextPendingPtyInsertionOrder(state, {
+        sessionId: targetSessionId,
+        insertAfterPaneId: selectedPty?.paneId ?? null,
+      }),
+    };
+    upsertPendingPtyInsertion(pendingInsertion);
 
     setPendingPaneFocus(null);
 
@@ -593,7 +605,7 @@ export function AggregateView(props: AggregateViewProps) {
       // Other session - load and switch
       const sessionData = await loadSessionData(targetSessionId);
       if (sessionData instanceof Error) {
-        setPendingPtyInsertion(null);
+        removePendingPtyInsertion(pendingInsertionId);
         console.error('Failed to load session:', sessionData.message);
         return;
       }
@@ -612,20 +624,26 @@ export function AggregateView(props: AggregateViewProps) {
 
     switchWorkspace(targetWorkspaceId);
     setLayoutMode('stacked');
-    const createdPane = await createPaneWithPTY(targetCwd, 'shell');
+    const createdPane = await createPaneWithPTY(targetCwd, 'shell', {
+      onCreated: (created) => {
+        upsertPendingPtyInsertion({
+          ...pendingInsertion,
+          pendingPtyId: created.ptyId,
+          pendingPaneId: created.paneId,
+        });
+      },
+    });
     if (!createdPane) {
-      setPendingPtyInsertion(null);
+      removePendingPtyInsertion(pendingInsertionId);
       console.error('Failed to create pane in aggregate view');
       return;
     }
 
-    const currentInsertion = state.pendingPtyInsertion;
-    if (currentInsertion && currentInsertion.sessionId === targetSessionId) {
-      setPendingPtyInsertion({
-        ...currentInsertion,
-        pendingPaneId: createdPane.paneId,
-      });
-    }
+    upsertPendingPtyInsertion({
+      ...pendingInsertion,
+      pendingPtyId: createdPane.ptyId,
+      pendingPaneId: createdPane.paneId,
+    });
 
     setPendingPaneFocus({ sessionId: targetSessionId, paneId: createdPane.paneId });
   };

@@ -29,7 +29,6 @@ import {
   getSelectedPty,
   getSelectedItem,
   getSelectedSessionId,
-  findNearestPtyInSession,
   selectAfterPtyRemoval,
   // Session
   toggleSessionExpanded,
@@ -197,7 +196,10 @@ describe('Full Coverage: Filter Operations', () => {
         createMockPty({ ptyId: '2', workspaceId: 2, paneId: 'pane-1' }),
       ];
 
-      const paneOrder = new Map([['pane-1', 0], ['pane-2', 1]]);
+      const paneOrder = new Map([
+        ['pane-1', 0],
+        ['pane-2', 1],
+      ]);
       const sorted = sortPtysForSession(ptys, paneOrder);
 
       expect(sorted[0].ptyId).toBe('2');
@@ -225,19 +227,11 @@ describe('Full Coverage: Tree Operations', () => {
         ['c', { status: 'loaded' as const }],
       ]);
 
-      const tree = buildTreeRoot(
-        sessions,
-        ptysBySession,
-        new Set(['c']),
-        loadStates,
-        new Map()
-      );
+      const tree = buildTreeRoot(sessions, ptysBySession, new Set(['c']), loadStates, new Map());
 
       expect(tree.length).toBe(6);
 
-      const loadingPlaceholder = tree.find(
-        (n) => n.type === 'placeholder' && n.isLoading
-      );
+      const loadingPlaceholder = tree.find((n) => n.type === 'placeholder' && n.isLoading);
       expect(loadingPlaceholder).toBeDefined();
 
       const errorPlaceholder = tree.find(
@@ -249,11 +243,14 @@ describe('Full Coverage: Tree Operations', () => {
     it('calculates active PTY count correctly', () => {
       const sessions = [createMockSession({ id: 's1' })];
       const ptysBySession = new Map([
-        ['s1', [
-          createMockPty({ foregroundProcess: 'bash', shell: 'bash' }),
-          createMockPty({ foregroundProcess: 'vim', shell: 'bash' }),
-          createMockPty({ foregroundProcess: 'node', shell: 'zsh' }),
-        ]],
+        [
+          's1',
+          [
+            createMockPty({ foregroundProcess: 'bash', shell: 'bash' }),
+            createMockPty({ foregroundProcess: 'vim', shell: 'bash' }),
+            createMockPty({ foregroundProcess: 'node', shell: 'zsh' }),
+          ],
+        ],
       ]);
 
       const tree = buildTreeRoot(
@@ -288,10 +285,14 @@ describe('Full Coverage: Tree Operations', () => {
       );
 
       const flattenedWithInactive = flattenTree(tree, '', true);
-      const ptyCountWithInactive = flattenedWithInactive.filter((i) => i.node.type === 'pty').length;
+      const ptyCountWithInactive = flattenedWithInactive.filter(
+        (i) => i.node.type === 'pty'
+      ).length;
 
       const flattenedWithoutInactive = flattenTree(tree, '', false);
-      const ptyCountWithoutInactive = flattenedWithoutInactive.filter((i) => i.node.type === 'pty').length;
+      const ptyCountWithoutInactive = flattenedWithoutInactive.filter(
+        (i) => i.node.type === 'pty'
+      ).length;
 
       expect(ptyCountWithInactive).toBe(2);
       expect(ptyCountWithoutInactive).toBe(1);
@@ -369,7 +370,14 @@ describe('Full Coverage: Selection Operations', () => {
             index: 1,
             parentSessionId: 'session-a',
           },
-          { node: { type: 'spacer' }, depth: 0, isLast: false, prefix: '', index: 2, parentSessionId: undefined },
+          {
+            node: { type: 'spacer' },
+            depth: 0,
+            isLast: false,
+            prefix: '',
+            index: 2,
+            parentSessionId: undefined,
+          },
           {
             node: {
               type: 'session',
@@ -394,7 +402,10 @@ describe('Full Coverage: Selection Operations', () => {
             parentSessionId: 'session-b',
           },
         ],
-        flattenedTreeIndex: new Map([['pty-1', 1], ['pty-2', 4]]),
+        flattenedTreeIndex: new Map([
+          ['pty-1', 1],
+          ['pty-2', 4],
+        ]),
         selectedIndex: 1,
         selectedPtyId: 'pty-1',
       });

@@ -76,23 +76,19 @@ export function getSelectedSessionId(
   return null;
 }
 
-/** Find nearest PTY in same session */
-export function findNearestPtyInSession(
+/** Find the nearest selectable non-spacer row from a given index */
+export function findNearestSelectable(
   flattenedTree: FlattenedTreeItem[],
-  sessionId: string,
   startIndex: number,
   direction: 'up' | 'down'
-): { index: number; ptyId: string } | null {
+): { index: number; item: FlattenedTreeItem } | null {
   const delta = direction === 'up' ? -1 : 1;
   let index = startIndex + delta;
 
   while (index >= 0 && index < flattenedTree.length) {
     const item = flattenedTree[index];
-    if (item?.node.type === 'pty' && item.parentSessionId === sessionId) {
-      return { index, ptyId: item.node.ptyInfo.ptyId };
-    }
-    if (item?.node.type === 'session') {
-      break;
+    if (item && item.node.type !== 'spacer') {
+      return { index, item };
     }
     index += delta;
   }
@@ -100,64 +96,95 @@ export function findNearestPtyInSession(
   return null;
 }
 
-/** Select PTY after removal with smart fallback logic */
+/** Find the nearest PTY row from a given index. */
+export function findNearestPty(
+  flattenedTree: FlattenedTreeItem[],
+  startIndex: number,
+  direction: 'up' | 'down'
+): { index: number; item: FlattenedTreeItem } | null {
+  const delta = direction === 'up' ? -1 : 1;
+  let index = startIndex + delta;
+
+  while (index >= 0 && index < flattenedTree.length) {
+    const item = flattenedTree[index];
+    if (item?.node.type === 'pty') {
+      return { index, item };
+    }
+    index += delta;
+  }
+
+  return null;
+}
+
+/** Find the nearest PTY within the same session group. */
+export function findNearestPtyInSession(
+  flattenedTree: FlattenedTreeItem[],
+  startIndex: number,
+  direction: 'up' | 'down',
+  sessionId: string
+): { index: number; item: FlattenedTreeItem } | null {
+  const delta = direction === 'up' ? -1 : 1;
+  let index = startIndex + delta;
+
+  while (index >= 0 && index < flattenedTree.length) {
+    const item = flattenedTree[index];
+    if (item?.node.type === 'session') {
+      break;
+    }
+    if (item?.node.type === 'pty' && item.parentSessionId === sessionId) {
+      return { index, item };
+    }
+    index += delta;
+  }
+
+  return null;
+}
+
+/** Find the session header for the current PTY group. */
+export function findSessionHeader(
+  flattenedTree: FlattenedTreeItem[],
+  startIndex: number,
+  sessionId: string
+): { index: number; item: FlattenedTreeItem } | null {
+  for (let index = startIndex - 1; index >= 0; index--) {
+    const item = flattenedTree[index];
+    if (item?.node.type === 'session' && item.node.session.id === sessionId) {
+      return { index, item };
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Select the best row after PTY removal.
+ * Move up only inside the same session group; otherwise prefer staying in-group or moving down.
+ */
 export function selectAfterPtyRemoval(
   state: AggregateViewState,
   removedPtyId: string
 ): SelectionOperationError | null {
-  const flattened = state.flattenedTree;
   const removedIndex = state.flattenedTreeIndex.get(removedPtyId);
 
   if (removedIndex === undefined) {
     return null;
   }
 
-  const removedItem = flattened[removedIndex];
-  const sessionId = removedItem?.node.type === 'pty' ? removedItem.parentSessionId : null;
+  const removedItem = state.flattenedTree[removedIndex];
+  const removedSessionId = removedItem?.node.type === 'pty' ? removedItem.parentSessionId : null;
 
-  let replacement: { index: number; ptyId: string } | null = null;
-
-  if (sessionId) {
-    // 1. Try above in same session (up)
-    replacement = findNearestPtyInSession(flattened, sessionId, removedIndex, 'up');
-    // 2. Try below in same session (down)
-    if (!replacement) {
-      replacement = findNearestPtyInSession(flattened, sessionId, removedIndex, 'down');
-    }
-  }
-
-  // 3. Try any PTY above (up)
-  if (!replacement) {
-    for (let i = removedIndex - 1; i >= 0; i--) {
-      const item = flattened[i];
-      if (item?.node.type === 'pty') {
-        replacement = { index: i, ptyId: item.node.ptyInfo.ptyId };
-        break;
-      }
-    }
-  }
-
-  // 4. Try any PTY below (down)
-  if (!replacement) {
-    for (let i = removedIndex + 1; i < flattened.length; i++) {
-      const item = flattened[i];
-      if (item?.node.type === 'pty') {
-        replacement = { index: i, ptyId: item.node.ptyInfo.ptyId };
-        break;
-      }
-    }
-  }
-
-  // 5. First available PTY anywhere
-  if (!replacement) {
-    for (let i = 0; i < flattened.length; i++) {
-      const item = flattened[i];
-      if (item?.node.type === 'pty') {
-        replacement = { index: i, ptyId: item.node.ptyInfo.ptyId };
-        break;
-      }
-    }
-  }
+  const replacement =
+    (removedSessionId
+      ? findNearestPtyInSession(state.flattenedTree, removedIndex, 'up', removedSessionId)
+      : null) ??
+    (removedSessionId
+      ? findNearestPtyInSession(state.flattenedTree, removedIndex, 'down', removedSessionId)
+      : null) ??
+    findNearestPty(state.flattenedTree, removedIndex, 'down') ??
+    (removedSessionId
+      ? findSessionHeader(state.flattenedTree, removedIndex, removedSessionId)
+      : null) ??
+    findNearestSelectable(state.flattenedTree, removedIndex, 'down');
 
   if (replacement) {
     applySelection(state, replacement.index);

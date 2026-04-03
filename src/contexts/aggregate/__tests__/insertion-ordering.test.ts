@@ -15,6 +15,7 @@ import {
 import { initialState, type AggregateViewState, type PtyInfo } from '../../aggregate-view-types';
 
 vi.mock('../../../effect/bridge/aggregate-bridge', () => ({
+  listAllPtyIds: vi.fn(),
   listAllPtysWithMetadata: vi.fn(),
   getPtyMetadata: vi.fn(),
   getAggregateSessionPtyMapping: vi.fn(),
@@ -50,6 +51,7 @@ vi.mock('../../git-metadata-cache', () => ({
 import {
   getAggregateSessionPtyMapping,
   getPtyMetadata,
+  listAllPtyIds,
   listAllPtysWithMetadata,
 } from '../../../effect/bridge/aggregate-bridge';
 import {
@@ -125,6 +127,7 @@ const createHarness = () => {
     ['pty-1', { sessionId: 'session-1', paneId: 'pane-1', workspaceId: 1 }],
     ['pty-2', { sessionId: 'session-1', paneId: 'pane-2', workspaceId: 1 }],
     ['pty-new', { sessionId: 'session-1', paneId: 'pane-3', workspaceId: 1 }],
+    ['pty-new-2', { sessionId: 'session-1', paneId: 'pane-4', workspaceId: 1 }],
     ['pty-deleted', { sessionId: 'session-1', paneId: 'pane-deleted', workspaceId: 1 }],
   ]);
 
@@ -207,6 +210,7 @@ describe('aggregate insertion ordering', () => {
       ]),
       stalePaneIds: [],
     });
+    vi.mocked(listAllPtyIds).mockResolvedValue(['pty-1', 'pty-2', 'pty-new']);
     vi.mocked(getPtyMetadata).mockImplementation(async (ptyId: string) => {
       if (ptyId !== 'pty-new') {
         return null;
@@ -320,12 +324,16 @@ describe('aggregate insertion ordering', () => {
 
     setState(
       produce((s) => {
-        s.pendingPtyInsertion = {
-          sessionId: 'session-1',
-          insertAfterPtyId: 'pty-1',
-          insertAfterPaneId: 'pane-1',
-          pendingPaneId: null,
-        };
+        s.pendingPtyInsertions = [
+          {
+            id: 'pending-1',
+            sessionId: 'session-1',
+            insertAfterPtyId: 'pty-1',
+            insertAfterPaneId: 'pane-1',
+            pendingPtyId: null,
+            pendingPaneId: null,
+          },
+        ];
       })
     );
 
@@ -421,12 +429,16 @@ describe('aggregate insertion ordering', () => {
 
     setState(
       produce((s) => {
-        s.pendingPtyInsertion = {
-          sessionId: 'session-1',
-          insertAfterPtyId: 'pty-1',
-          insertAfterPaneId: 'pane-1',
-          pendingPaneId: null,
-        };
+        s.pendingPtyInsertions = [
+          {
+            id: 'pending-1',
+            sessionId: 'session-1',
+            insertAfterPtyId: 'pty-1',
+            insertAfterPaneId: 'pane-1',
+            pendingPtyId: null,
+            pendingPaneId: null,
+          },
+        ];
       })
     );
 
@@ -480,12 +492,16 @@ describe('aggregate insertion ordering', () => {
 
     setState(
       produce((s) => {
-        s.pendingPtyInsertion = {
-          sessionId: 'session-1',
-          insertAfterPtyId: 'pty-1',
-          insertAfterPaneId: 'pane-1',
-          pendingPaneId: 'pane-3',
-        };
+        s.pendingPtyInsertions = [
+          {
+            id: 'pending-1',
+            sessionId: 'session-1',
+            insertAfterPtyId: 'pty-1',
+            insertAfterPaneId: 'pane-1',
+            pendingPtyId: 'pty-new',
+            pendingPaneId: 'pane-3',
+          },
+        ];
       })
     );
 
@@ -507,6 +523,99 @@ describe('aggregate insertion ordering', () => {
 
     expect(state.sessionPaneOrders.get('session-1')?.get('pane-3')).toBe(0.5);
     expect(getVisiblePtyIds(state)).toEqual(['pty-1', 'pty-new', 'pty-2']);
+  });
+
+  it('preserves adjacency for overlapping pane creations in the same session', async () => {
+    const { state, setState, refreshers, lifecycleHandlers } = createHarness();
+
+    vi.mocked(getPtyMetadata).mockImplementation(async (ptyId: string) => {
+      if (ptyId === 'pty-new') {
+        return {
+          ptyId: 'pty-new',
+          cwd: '/tmp',
+          foregroundProcess: 'bash',
+          shell: '/bin/bash',
+          title: 'new',
+          workspaceId: 1,
+          paneId: 'pane-3',
+          gitBranch: undefined,
+          gitDiffStats: undefined,
+          gitDirty: false,
+          gitStaged: 0,
+          gitUnstaged: 0,
+          gitUntracked: 0,
+          gitConflicted: 0,
+          gitAhead: undefined,
+          gitBehind: undefined,
+          gitStashCount: undefined,
+          gitState: undefined,
+          gitDetached: false,
+          gitRepoKey: undefined,
+        };
+      }
+
+      if (ptyId === 'pty-new-2') {
+        return {
+          ptyId: 'pty-new-2',
+          cwd: '/tmp',
+          foregroundProcess: 'bash',
+          shell: '/bin/bash',
+          title: 'new-2',
+          workspaceId: 1,
+          paneId: 'pane-4',
+          gitBranch: undefined,
+          gitDiffStats: undefined,
+          gitDirty: false,
+          gitStaged: 0,
+          gitUnstaged: 0,
+          gitUntracked: 0,
+          gitConflicted: 0,
+          gitAhead: undefined,
+          gitBehind: undefined,
+          gitStashCount: undefined,
+          gitState: undefined,
+          gitDetached: false,
+          gitRepoKey: undefined,
+        };
+      }
+
+      return null;
+    });
+
+    await refreshers.initialLoad();
+
+    setState(
+      produce((s) => {
+        s.pendingPtyInsertions = [
+          {
+            id: 'pending-1',
+            sessionId: 'session-1',
+            insertAfterPtyId: 'pty-1',
+            insertAfterPaneId: 'pane-1',
+            pendingPtyId: 'pty-new',
+            pendingPaneId: 'pane-3',
+            sortOrderHint: 0.5,
+          },
+          {
+            id: 'pending-2',
+            sessionId: 'session-1',
+            insertAfterPtyId: 'pty-1',
+            insertAfterPaneId: 'pane-1',
+            pendingPtyId: 'pty-new-2',
+            pendingPaneId: 'pane-4',
+            sortOrderHint: 0.75,
+          },
+        ];
+      })
+    );
+
+    await lifecycleHandlers.handlePtyCreated('pty-new-2');
+    await lifecycleHandlers.handlePtyCreated('pty-new');
+
+    expect(state.sessionPaneOrders.get('session-1')?.get('pane-3')).toBe(0.5);
+    expect(state.sessionPaneOrders.get('session-1')?.get('pane-4')).toBe(0.75);
+    expect(getVisiblePtyIds(state)).toEqual(['pty-1', 'pty-new', 'pty-new-2', 'pty-2']);
+    expect(state.pendingPtyInsertions).toEqual([]);
   });
 
   it('does not re-add tombstoned PTYs during initial load', async () => {
