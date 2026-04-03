@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.47](https://github.com/monotykamary/openmux/compare/v0.3.46...v0.3.47) (2026-04-03)
+
+
+### Features
+
+* **aggregate-view:** reverse PTY selection direction on close ([07483cd](https://github.com/monotykamary/openmux/commit/07483cdd39aa9fa65593ac7620a4003331b6fa99))
+
+
+### Tests
+
+* **aggregate-view:** update selection tests for move-up behavior ([1099508](https://github.com/monotykamary/openmux/commit/1099508c28c42d2ed6f77d7b71af38d4c6feeb48))
+
 ### [0.3.46](https://github.com/monotykamary/openmux/compare/v0.3.45...v0.3.46) (2026-04-02)
 
 
