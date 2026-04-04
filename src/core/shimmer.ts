@@ -31,6 +31,13 @@ interface ShimmerState {
 }
 
 const shimmerStates = new Map<string, ShimmerState>();
+const shimmerStateListeners = new Set<() => void>();
+
+function notifyShimmerStateListeners(): void {
+  for (const listener of shimmerStateListeners) {
+    listener();
+  }
+}
 
 /** Shimmer configuration */
 interface ShimmerConfig {
@@ -144,6 +151,7 @@ export function recordPtyStdoutActivity(ptyId: string, time = Date.now()): void 
       hasQueuedActivity: false,
       totalStartTime: time, // Track when shimmer first started
     });
+    notifyShimmerStateListeners();
   }
 }
 
@@ -152,7 +160,9 @@ export function recordPtyStdoutActivity(ptyId: string, time = Date.now()): void 
  */
 export function clearPtyStdoutActivity(ptyId: string): void {
   ptyStdoutActivity.delete(ptyId);
-  shimmerStates.delete(ptyId);
+  if (shimmerStates.delete(ptyId)) {
+    notifyShimmerStateListeners();
+  }
 }
 
 /**
@@ -252,6 +262,7 @@ export function getPtyShimmerColor(
   // Check max total duration cap (prevents infinite animation with continuous activity)
   if (totalElapsed > MAX_TOTAL_SHIMMER_MS) {
     shimmerStates.delete(ptyId);
+    notifyShimmerStateListeners();
     return undefined;
   }
 
@@ -268,6 +279,7 @@ export function getPtyShimmerColor(
     } else if (elapsed > state.duration) {
       // No queued activity and main duration expired - clear state
       shimmerStates.delete(ptyId);
+      notifyShimmerStateListeners();
       return undefined;
     }
   }
@@ -275,6 +287,7 @@ export function getPtyShimmerColor(
   // Check if animation has fully expired with no queued activity
   if (elapsed > state.duration && !state.hasQueuedActivity) {
     shimmerStates.delete(ptyId);
+    notifyShimmerStateListeners();
     return undefined;
   }
 
@@ -319,6 +332,7 @@ export function hasActiveShimmer(ptyId: string, now = Date.now()): boolean {
   // Check max total duration cap
   if (totalElapsed > MAX_TOTAL_SHIMMER_MS) {
     shimmerStates.delete(ptyId);
+    notifyShimmerStateListeners();
     return false;
   }
 
@@ -338,6 +352,7 @@ export function hasActiveShimmer(ptyId: string, now = Date.now()): boolean {
   // Check if animation has fully expired
   if (elapsed > state.duration && !state.hasQueuedActivity) {
     shimmerStates.delete(ptyId);
+    notifyShimmerStateListeners();
     return false;
   }
 
@@ -359,6 +374,7 @@ export function getShimmerTimeRemaining(ptyId: string, now = Date.now()): number
   const totalElapsed = now - state.totalStartTime;
   if (totalElapsed > MAX_TOTAL_SHIMMER_MS) {
     shimmerStates.delete(ptyId);
+    notifyShimmerStateListeners();
     return 0;
   }
 
@@ -372,6 +388,7 @@ export function getShimmerTimeRemaining(ptyId: string, now = Date.now()): number
 
   if (remaining <= 0) {
     shimmerStates.delete(ptyId);
+    notifyShimmerStateListeners();
     return 0;
   }
 
@@ -428,6 +445,17 @@ export function isShimmerEnabled(): boolean {
 export function subscribeToShimmer(_callback: (time: number) => void): () => void {
   // No-op in event-based architecture
   return () => {};
+}
+
+/**
+ * Subscribe to shimmer state changes (start/stop).
+ * Fires only when a PTY starts or stops shimmering, not on animation frames.
+ */
+export function subscribeToShimmerStateChange(callback: () => void): () => void {
+  shimmerStateListeners.add(callback);
+  return () => {
+    shimmerStateListeners.delete(callback);
+  };
 }
 
 /**

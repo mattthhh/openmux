@@ -12,11 +12,11 @@
  * - No global polling loop
  */
 
-import { createMemo, createSignal, onCleanup, Show } from 'solid-js';
+import { createEffect, createMemo, createSignal } from 'solid-js';
 import type { PtyInfo } from '../../contexts/aggregate/types';
 import type { AggregateTheme } from '../../core/types';
 import { getPtyShimmerColor, hasActiveShimmer } from '../../core/shimmer';
-import { useShimmerRenderTime } from './hooks/useShimmerRenderTime';
+import { useShimmerRenderTime, useShimmerStateVersion } from './hooks/useShimmerRenderTime';
 import { getDirectoryName } from './utils';
 
 export interface PtyTreeRowProps {
@@ -150,9 +150,22 @@ function buildGitMetadata(pty: PtyInfo): string {
  * EVENT-BASED: Only subscribes to RAF when PTY has active shimmer
  */
 export function PtyTreeRow(props: PtyTreeRowProps) {
-  // Subscribe to render time signal ONLY when PTY is active
-  // This ensures we only pay the RAF cost for PTYs that need animation
-  const renderTime = useShimmerRenderTime();
+  const shimmerStateVersion = useShimmerStateVersion();
+  const [isAnimating, setIsAnimating] = createSignal(hasActiveShimmer(props.pty.ptyId));
+  const renderTime = useShimmerRenderTime(isAnimating);
+
+  createEffect(() => {
+    void shimmerStateVersion();
+    if (isAnimating()) return;
+    setIsAnimating(hasActiveShimmer(props.pty.ptyId));
+  });
+
+  createEffect(() => {
+    if (!isAnimating()) return;
+    const now = renderTime();
+    if (hasActiveShimmer(props.pty.ptyId, now)) return;
+    setIsAnimating(false);
+  });
 
   // Selection colors
   const selectionColors = () => props.aggregateTheme.selection;
@@ -225,16 +238,20 @@ export function PtyTreeRow(props: PtyTreeRowProps) {
     return ' '.repeat(padLen);
   });
 
-  // Apply shimmer to label characters if active
-  // This memo reads renderTime() so it re-evaluates every frame when active
+  // Apply shimmer to label characters only while this row is actively animating.
   const renderLabel = createMemo(() => {
     const text = displayLabel();
     const baseColor = baseFgColor();
-    const now = renderTime(); // Re-evaluates every frame due to RAF signal
 
-    // Check if this PTY has an active shimmer animation
-    // NOTE: We check hasActiveShimmer, NOT hasMeaningfulActivity
-    // This ensures the animation completes even if activity stops mid-sweep
+    if (!isAnimating()) {
+      return (
+        <text fg={baseColor} selectable={false}>
+          {text}
+        </text>
+      );
+    }
+
+    const now = renderTime();
     if (!hasActiveShimmer(props.pty.ptyId, now)) {
       return (
         <text fg={baseColor} selectable={false}>

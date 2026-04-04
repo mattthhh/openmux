@@ -11,4 +11,4 @@ export {
   type ActivitySubscriptionError,
 } from './useActivitySubscriptions';
 export { useSessionDrag, type DragState } from './useSessionDrag';
-export { useShimmerRenderTime } from './useShimmerRenderTime';
+export { useShimmerRenderTime, useShimmerStateVersion } from './useShimmerRenderTime';

@@ -11,7 +11,8 @@
  * - Natural animation via SolidJS reactivity
  */
 
-import { createSignal, onCleanup, type Accessor } from 'solid-js';
+import { createRenderEffect, createSignal, onCleanup, type Accessor } from 'solid-js';
+import { subscribeToShimmerStateChange } from '../../../core/shimmer';
 
 /** Polyfill for requestAnimationFrame in Bun/Node environment */
 const raf =
@@ -66,22 +67,54 @@ function stopRenderLoop(): void {
  * Returns an accessor that reads the current render timestamp.
  * The component will re-render every frame while subscribed.
  */
-export function useShimmerRenderTime(): Accessor<number> {
-  // Track that we have an active subscriber
-  subscriberCount++;
+export function useShimmerRenderTime(enabled: Accessor<boolean> = () => true): Accessor<number> {
+  let retained = false;
 
-  if (subscriberCount === 1) {
-    startRenderLoop();
-  }
+  createRenderEffect(() => {
+    const shouldRetain = enabled();
+    if (shouldRetain === retained) return;
+
+    retained = shouldRetain;
+    if (retained) {
+      subscriberCount++;
+      if (subscriberCount === 1) {
+        startRenderLoop();
+      }
+      return;
+    }
+
+    subscriberCount = Math.max(0, subscriberCount - 1);
+    if (subscriberCount === 0) {
+      stopRenderLoop();
+    }
+  });
 
   onCleanup(() => {
-    subscriberCount--;
+    if (!retained) return;
+    retained = false;
+    subscriberCount = Math.max(0, subscriberCount - 1);
     if (subscriberCount === 0) {
       stopRenderLoop();
     }
   });
 
   return renderTimeSignal;
+}
+
+/**
+ * Subscribe to shimmer state changes (start/stop) without subscribing to RAF.
+ */
+export function useShimmerStateVersion(): Accessor<number> {
+  const [version, setVersion] = createSignal(0);
+  const unsubscribe = subscribeToShimmerStateChange(() => {
+    setVersion((current) => current + 1);
+  });
+
+  onCleanup(() => {
+    unsubscribe();
+  });
+
+  return version;
 }
 
 /**
