@@ -59,9 +59,23 @@ function getLineCells(
   return state.cells[liveIndex] ?? null;
 }
 
-function renderTextLine(cells: TerminalCell[], trimTrailing: boolean): string {
+/** Render cells as plain text with trailing whitespace preserved */
+function renderTextLine(cells: TerminalCell[]): string {
+  return extractLineText(cells);
+}
+
+/** Render cells as plain text with trailing whitespace trimmed */
+function renderTextLineTrimmed(cells: TerminalCell[]): string {
   const raw = extractLineText(cells);
-  return trimTrailing ? raw.replace(/[\s\u00a0]+$/u, '') : raw;
+  return raw.replace(/[\s\u00a0]+$/u, '');
+}
+
+/**
+ * Render cells as plain text
+ * @deprecated Use renderTextLine() or renderTextLineTrimmed() for explicit intent
+ */
+function renderTextLineWithTrim(cells: TerminalCell[], trimTrailing: boolean): string {
+  return trimTrailing ? renderTextLineTrimmed(cells) : renderTextLine(cells);
 }
 
 function buildAnsiCodes(next: StyleState, prev: StyleState | null): string {
@@ -100,12 +114,23 @@ function buildAnsiCodes(next: StyleState, prev: StyleState | null): string {
   return `\u001b[${codes.join(';')}m`;
 }
 
-function renderAnsiLine(cells: TerminalCell[], trimTrailing: boolean): string {
-  const lastContentIndex = trimTrailing ? findLastContentIndex(cells) : cells.length - 1;
+/** Render cells as ANSI with trailing whitespace preserved */
+function renderAnsiLine(cells: TerminalCell[]): string {
+  const lastContentIndex = cells.length - 1;
+  return renderAnsiLineInternal(cells, lastContentIndex);
+}
+
+/** Render cells as ANSI with trailing whitespace trimmed */
+function renderAnsiLineTrimmed(cells: TerminalCell[]): string {
+  const lastContentIndex = findLastContentIndex(cells);
   if (lastContentIndex < 0) {
     return '';
   }
+  return renderAnsiLineInternal(cells, lastContentIndex);
+}
 
+/** Internal ANSI renderer with computed last index */
+function renderAnsiLineInternal(cells: TerminalCell[], lastContentIndex: number): string {
   let output = '';
   let current: StyleState | null = null;
   let usedAnsi = false;
@@ -145,6 +170,14 @@ function renderAnsiLine(cells: TerminalCell[], trimTrailing: boolean): string {
   }
 
   return output;
+}
+
+/**
+ * Render cells as ANSI text
+ * @deprecated Use renderAnsiLine() or renderAnsiLineTrimmed() for explicit intent
+ */
+function renderAnsiLineWithTrim(cells: TerminalCell[], trimTrailing: boolean): string {
+  return trimTrailing ? renderAnsiLineTrimmed(cells) : renderAnsiLine(cells);
 }
 
 export function captureEmulator(emulator: ITerminalEmulator, options: CaptureOptions): string {
@@ -199,9 +232,15 @@ export function captureEmulator(emulator: ITerminalEmulator, options: CaptureOpt
       continue;
     }
 
-    rows.push(format === 'ansi'
-      ? renderAnsiLine(cells, trimTrailing)
-      : renderTextLine(cells, trimTrailing));
+    rows.push(
+      trimTrailing
+        ? format === 'ansi'
+          ? renderAnsiLineTrimmed(cells)
+          : renderTextLineTrimmed(cells)
+        : format === 'ansi'
+          ? renderAnsiLine(cells)
+          : renderTextLine(cells)
+    );
   }
 
   return rows.join('\n');
