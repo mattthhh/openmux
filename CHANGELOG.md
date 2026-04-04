@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.54](https://github.com/monotykamary/openmux/compare/v0.3.53...v0.3.54) (2026-04-04)
+
+
+### Bug Fixes
+
+* **aggregate:** isolate shimmer animation to prevent click interference ([d6429f6](https://github.com/monotykamary/openmux/commit/d6429f69d9cca4705d222de9481d70697e026a91))
+
+
+### Refactoring
+
+* **errors:** convert remaining plain Errors to tagged errore types ([bf7f199](https://github.com/monotykamary/openmux/commit/bf7f199bc829d554166b02a0193bfb9963ab4a35))
+
 ### [0.3.53](https://github.com/monotykamary/openmux/compare/v0.3.52...v0.3.53) (2026-04-04)
 
 
