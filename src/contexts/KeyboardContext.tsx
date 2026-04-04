@@ -8,7 +8,7 @@
 
 import { createContext, useContext, createEffect, onCleanup, type ParentProps } from 'solid-js';
 import { createStore, produce } from 'solid-js/store';
-import type { KeyboardState, ConfirmationType } from '../core/types';
+import type { KeyboardState } from '../core/types';
 import { useLayout } from './LayoutContext';
 import type { KeyboardContextValue, KeyboardHandlerOptions } from './keyboard/types';
 import {
@@ -16,6 +16,11 @@ import {
   handlePrefixModeAction,
   handleMoveModeAction,
 } from './keyboard/handlers';
+import {
+  createConfirmModeHandlers,
+  createModeTransitionHandlers,
+  createPrefixModeHandlers,
+} from './keyboard/mode-transitions';
 import { useConfig } from './ConfigContext';
 import { eventToCombo, matchKeybinding } from '../core/keybindings';
 import type { KeyboardEvent } from '../core/keyboard-event';
@@ -51,109 +56,27 @@ export function KeyboardProvider(props: KeyboardProviderProps) {
     onCleanup(() => clearTimeout(timeout));
   });
 
-  const enterPrefixMode = () => {
-    setState(
-      produce((s) => {
-        s.mode = 'prefix';
-        s.prefixActivatedAt = Date.now();
-      })
-    );
-  };
-
-  const exitPrefixMode = () => {
-    setState(
-      produce((s) => {
-        s.mode = 'normal';
-        s.prefixActivatedAt = undefined;
-      })
-    );
-  };
-
-  const enterSearchMode = () => {
-    setState(
-      produce((s) => {
-        s.mode = 'search';
-        s.prefixActivatedAt = undefined;
-      })
-    );
-  };
-
-  const exitSearchMode = () => {
-    setState('mode', 'normal');
-  };
-
-  const enterCopyMode = () => {
-    setState(
-      produce((s) => {
-        s.mode = 'copy';
-        s.prefixActivatedAt = undefined;
-      })
-    );
-  };
-
-  const exitCopyMode = () => {
-    setState('mode', 'normal');
-  };
-
-  const enterAggregateMode = () => {
-    setState(
-      produce((s) => {
-        s.mode = 'aggregate';
-        s.prefixActivatedAt = undefined;
-      })
-    );
-  };
-
-  const exitAggregateMode = () => {
-    setState('mode', 'normal');
-  };
-
-  const enterMoveMode = () => {
-    setState(
-      produce((s) => {
-        s.mode = 'move';
-        s.prefixActivatedAt = undefined;
-      })
-    );
-  };
-
-  const exitMoveMode = () => {
-    setState('mode', 'normal');
-  };
-
-  const enterConfirmMode = (confirmationType: ConfirmationType) => {
-    setState(
-      produce((s) => {
-        s.mode = 'confirm';
-        s.prefixActivatedAt = undefined;
-        s.confirmationType = confirmationType;
-      })
-    );
-  };
-
-  const exitConfirmMode = () => {
-    setState(
-      produce((s) => {
-        s.mode = 'normal';
-        s.confirmationType = undefined;
-      })
-    );
-  };
+  const prefixMode = createPrefixModeHandlers(setState);
+  const searchMode = createModeTransitionHandlers(setState, 'search');
+  const copyMode = createModeTransitionHandlers(setState, 'copy');
+  const aggregateMode = createModeTransitionHandlers(setState, 'aggregate');
+  const moveMode = createModeTransitionHandlers(setState, 'move');
+  const confirmMode = createConfirmModeHandlers(setState);
 
   const value: KeyboardContextValue = {
     state,
-    enterPrefixMode,
-    exitPrefixMode,
-    enterSearchMode,
-    exitSearchMode,
-    enterCopyMode,
-    exitCopyMode,
-    enterAggregateMode,
-    exitAggregateMode,
-    enterMoveMode,
-    exitMoveMode,
-    enterConfirmMode,
-    exitConfirmMode,
+    enterPrefixMode: prefixMode.enter,
+    exitPrefixMode: prefixMode.exit,
+    enterSearchMode: searchMode.enter,
+    exitSearchMode: searchMode.exit,
+    enterCopyMode: copyMode.enter,
+    exitCopyMode: copyMode.exit,
+    enterAggregateMode: aggregateMode.enter,
+    exitAggregateMode: aggregateMode.exit,
+    enterMoveMode: moveMode.enter,
+    exitMoveMode: moveMode.exit,
+    enterConfirmMode: confirmMode.enter,
+    exitConfirmMode: confirmMode.exit,
   };
 
   return <KeyboardContext.Provider value={value}>{props.children}</KeyboardContext.Provider>;
