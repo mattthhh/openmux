@@ -155,6 +155,7 @@ interface ShimmeringLabelProps {
   baseColor: string;
   ptyId: string;
   shimmerTargetColor: string;
+  isAnimating: boolean;
 }
 
 /**
@@ -202,7 +203,9 @@ function StaticCharacter(props: StaticCharacterProps) {
 }
 
 function ShimmeringLabel(props: ShimmeringLabelProps) {
-  const renderTime = useShimmerRenderTime(() => true);
+  // CRITICAL FIX: Only subscribe to RAF when actually animating
+  // This prevents all visible rows from re-rendering at 60fps
+  const renderTime = useShimmerRenderTime(() => props.isAnimating);
 
   // Batch calculate all shimmer colors once per frame
   const shimmerColors = createMemo(() =>
@@ -347,6 +350,7 @@ export function PtyTreeRow(props: PtyTreeRowProps) {
         baseColor={baseColor}
         ptyId={props.pty.ptyId}
         shimmerTargetColor={props.shimmerTargetColor}
+        isAnimating={true}
       />
     );
   });
