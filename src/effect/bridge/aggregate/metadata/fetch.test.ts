@@ -14,7 +14,11 @@ describe('fetchPtyMetadata (litmus)', () => {
   } as unknown as PtyService;
 
   it('should return null for invalid session', async () => {
-    vi.mocked(mockPtyService.getSession).mockResolvedValue({ pid: 0, shell: '/bin/bash' });
+    vi.mocked(mockPtyService.getSession).mockResolvedValue({
+      pid: 0,
+      shell: '/bin/bash',
+      cwd: '/tmp',
+    });
 
     const result = await fetchPtyMetadata(mockPtyService, 'pty-1' as PtyId);
 
@@ -22,7 +26,11 @@ describe('fetchPtyMetadata (litmus)', () => {
   });
 
   it('should skip defunct processes', async () => {
-    vi.mocked(mockPtyService.getSession).mockResolvedValue({ pid: 123, shell: '/bin/bash' });
+    vi.mocked(mockPtyService.getSession).mockResolvedValue({
+      pid: 123,
+      shell: '/bin/bash',
+      cwd: '/home/user',
+    });
     vi.mocked(mockPtyService.getCwd).mockResolvedValue('/home/user');
     vi.mocked(mockPtyService.getGitInfo).mockResolvedValue(undefined);
     vi.mocked(mockPtyService.getForegroundProcess).mockResolvedValue('node <defunct>');
@@ -33,7 +41,11 @@ describe('fetchPtyMetadata (litmus)', () => {
   });
 
   it('should return valid metadata for active PTY', async () => {
-    vi.mocked(mockPtyService.getSession).mockResolvedValue({ pid: 123, shell: '/bin/zsh' });
+    vi.mocked(mockPtyService.getSession).mockResolvedValue({
+      pid: 123,
+      shell: '/bin/zsh',
+      cwd: '/home/user/project',
+    });
     vi.mocked(mockPtyService.getCwd).mockResolvedValue('/home/user/project');
     vi.mocked(mockPtyService.getGitInfo).mockResolvedValue({
       branch: 'main',
@@ -45,12 +57,16 @@ describe('fetchPtyMetadata (litmus)', () => {
       ahead: 1,
       behind: 0,
       stashCount: 0,
-      state: 'clean',
+      state: 'none',
       detached: false,
       repoKey: 'project-repo',
     });
     vi.mocked(mockPtyService.getForegroundProcess).mockResolvedValue('nvim');
-    vi.mocked(mockPtyService.getGitDiffStats).mockResolvedValue({ added: 10, deleted: 5 });
+    vi.mocked(mockPtyService.getGitDiffStats).mockResolvedValue({
+      added: 10,
+      removed: 5,
+      binary: 0,
+    });
 
     const result = await fetchPtyMetadata(mockPtyService, 'pty-1' as PtyId);
 
@@ -63,6 +79,32 @@ describe('fetchPtyMetadata (litmus)', () => {
       gitDirty: true,
       gitStaged: 1,
     });
+  });
+
+  it('should use the PTY session cwd instead of process.cwd() when cwd lookup fails', async () => {
+    vi.mocked(mockPtyService.getSession).mockResolvedValue({
+      pid: 123,
+      shell: '/bin/zsh',
+      cwd: '/tmp/actual-pty-cwd',
+    });
+    vi.mocked(mockPtyService.getCwd).mockResolvedValue(new Error('pty disappeared mid-refresh'));
+    vi.mocked(mockPtyService.getGitInfo).mockResolvedValue(undefined);
+    vi.mocked(mockPtyService.getForegroundProcess).mockResolvedValue('nvim');
+    vi.mocked(mockPtyService.getGitDiffStats).mockResolvedValue(undefined);
+
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const result = await fetchPtyMetadata(mockPtyService, 'pty-1' as PtyId, {
+      skipGitDiffStats: true,
+    });
+
+    expect(result?.cwd).toBe('/tmp/actual-pty-cwd');
+    expect(result?.cwd).not.toBe(process.cwd());
+    expect(warnSpy).toHaveBeenCalledWith(
+      'Failed to get cwd for PTY pty-1, using session cwd fallback:',
+      expect.any(Error)
+    );
+
+    warnSpy.mockRestore();
   });
 });
 
