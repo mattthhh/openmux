@@ -28,6 +28,7 @@ import {
 import {
   subscribeToPtyLifecycle,
   subscribeToAllTitleChanges,
+  subscribeToAllPtyActivity,
   type PtyTitleChangeEvent,
 } from '../effect/bridge/pty-bridge';
 import { getGlobalGitMetadataCache, type GitRepoMetadata } from './git-metadata-cache';
@@ -1912,17 +1913,90 @@ export async function setupSubscriptions(
   }
   subscriptions.titleChange = titleUnsub;
 
-  // Predictable polling: refresh visible git metadata on one cadence.
+  // Event-driven metadata refresh: refresh PTY metadata when activity is detected
+  // This replaces polling with reactive updates - only refreshes PTYs that had activity
   if (epoch !== subscriptionsEpoch.value || !state.showAggregateView) {
     return;
   }
 
-  const pollMs = 2000;
-  const pollStream = repeatWithInterval(async () => {
-    if (!state.showAggregateView || state.allPtys.length === 0) return;
-    await refreshPtysSubset(state.allPtys.map((pty) => pty.ptyId));
-  }, pollMs);
-  subscriptions.polling = runStream(pollStream, { label: 'aggregate-view-poll' });
+  const activityUnsub = createActivityBasedRefresh(
+    state,
+    subscriptionsEpoch,
+    epoch,
+    refreshPtysSubset
+  );
+  if (epoch !== subscriptionsEpoch.value || !state.showAggregateView) {
+    return;
+  }
+  subscriptions.polling = activityUnsub;
+}
+
+/**
+ * Create an activity-based metadata refresh subscription.
+ *
+ * Instead of polling every N seconds, this watches for PTY activity events
+ * and refreshes metadata only for PTYs that had activity. This provides:
+ * - Zero CPU overhead when PTYs are idle
+ * - Immediate metadata updates when activity occurs
+ * - Batched refreshes to avoid thundering herd
+ */
+export function createActivityBasedRefresh(
+  state: AggregateViewState,
+  subscriptionsEpoch: { value: number },
+  epoch: number,
+  refreshPtysSubset: (ptyIds: string[]) => Promise<void>
+): () => void {
+  // Track PTYs with pending activity for batching
+  const pendingPtyIds = new Set<string>();
+  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+  const DEBOUNCE_MS = 500; // Wait 500ms after last activity before refreshing
+
+  const flushPending = async (): Promise<void> => {
+    debounceTimer = null;
+
+    if (!state.showAggregateView || pendingPtyIds.size === 0) return;
+
+    // Get all pending PTYs and clear the set
+    const ptyIdsToRefresh = Array.from(pendingPtyIds);
+    pendingPtyIds.clear();
+
+    // Check epoch before refreshing
+    if (subscriptionsEpoch.value !== epoch) return;
+
+    await refreshPtysSubset(ptyIdsToRefresh);
+  };
+
+  const scheduleFlush = (): void => {
+    if (debounceTimer) {
+      clearTimeout(debounceTimer);
+    }
+    debounceTimer = setTimeout(() => void flushPending(), DEBOUNCE_MS);
+  };
+
+  const activityStream = streamFromSubscription<{ ptyId: string }>(({ emit }) =>
+    subscribeToAllPtyActivity(emit)
+  );
+
+  const activityUnsub = runStream(
+    tap(activityStream, (event) => {
+      // Only track PTYs that exist in our aggregate view
+      if (!state.allPtysIndex.has(event.ptyId)) return;
+
+      pendingPtyIds.add(event.ptyId);
+      scheduleFlush();
+    }),
+    { label: 'aggregate-view-activity-refresh' }
+  );
+
+  // Return cleanup function that also clears pending timer
+  return () => {
+    if (debounceTimer) {
+      clearTimeout(debounceTimer);
+      debounceTimer = null;
+    }
+    pendingPtyIds.clear();
+    activityUnsub();
+  };
 }
 
 export function cleanupSubscriptions(

@@ -27,6 +27,7 @@ import {
   createLifecycleHandlers,
   setupSubscriptions,
   cleanupSubscriptions,
+  createActivityBasedRefresh,
 } from './aggregate-view-subscriptions';
 
 import { createAggregateViewActions } from './aggregate-view-actions';
