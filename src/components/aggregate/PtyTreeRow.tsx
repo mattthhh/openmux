@@ -349,6 +349,11 @@ export function PtyTreeRow(props: PtyTreeRowProps) {
     );
   });
 
+  const handleClick = (event: { preventDefault: () => void }) => {
+    event.preventDefault();
+    props.onClick?.();
+  };
+
   // Git metadata color mapping
   const renderGitMeta = () => {
     const meta = gitMeta();
@@ -415,11 +420,6 @@ export function PtyTreeRow(props: PtyTreeRowProps) {
         <>{parts}</>
       </box>
     );
-  };
-
-  const handleClick = (event: { preventDefault: () => void }) => {
-    event.preventDefault();
-    props.onClick?.();
   };
 
   return (
