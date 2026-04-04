@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.59](https://github.com/monotykamary/openmux/compare/v0.3.58...v0.3.59) (2026-04-04)
+
+
+### Bug Fixes
+
+* **aggregate:** add type guard for foregroundProcess defunct check ([3c74483](https://github.com/monotykamary/openmux/commit/3c744831296e1381c20e2e0ae9caf36f17a5fe1e))
+* **aggregate:** centralize git metadata hydration ([0434ecd](https://github.com/monotykamary/openmux/commit/0434ecd769f8ed880b3cb96e1af1d899d98a32ed))
+* **aggregate:** conditionally subscribe to RAF only during shimmer animation ([1980b04](https://github.com/monotykamary/openmux/commit/1980b0427b7d11b8c0e5b08015894b5e2708cc38))
+* **aggregate:** refresh git metadata on repo changes ([e6bd134](https://github.com/monotykamary/openmux/commit/e6bd134ff70704d532cb23e6a97731d98e55a6dd))
+* **aggregate:** track shimmer state changes to properly stop RAF loop ([069cb24](https://github.com/monotykamary/openmux/commit/069cb2439dc3bbd8b02d43effa3cfe588549187e))
+
+
+### Performance
+
+* **aggregate:** batch shimmer color calculations to reduce CPU usage ([b0d65cd](https://github.com/monotykamary/openmux/commit/b0d65cd98c99b6e1fedfde9d1da09e76071cb83d))
+* **aggregate:** memoize visibleItems in ListPane to reduce array allocations ([163f4ab](https://github.com/monotykamary/openmux/commit/163f4ab6a61a8de8a3a03b10770037447ec8de5b))
+* **aggregate:** optimize useActivitySubscriptions to reduce render overhead ([17f3bb6](https://github.com/monotykamary/openmux/commit/17f3bb65f46672b65b32bd210545ec5c65245d47))
+* **aggregate:** replace 2s polling with activity-driven metadata refresh ([2e1fdbd](https://github.com/monotykamary/openmux/commit/2e1fdbd659c3ab1cd50ead510122cca9f7bf1972))
+
+
+### Tests
+
+* **aggregate:** update tests for detached git metadata snapshots ([7817267](https://github.com/monotykamary/openmux/commit/781726730f67992f4d5f4d0ca4bb170edac995af))
+
 ### [0.3.58](https://github.com/monotykamary/openmux/compare/v0.3.57...v0.3.58) (2026-04-04)
 
 
