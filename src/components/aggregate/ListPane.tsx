@@ -5,7 +5,7 @@
  * Supports selection, expansion, drag-and-drop reordering, and lazy loading.
  */
 
-import { Show, For, type Component, type JSX } from 'solid-js';
+import { Show, For, createMemo, type Component, type JSX } from 'solid-js';
 import type { MouseEvent as OpenTUIMouseEvent } from '@opentui/core';
 import type { FlattenedTreeItem, TreeNode } from '../../contexts/aggregate-view-types';
 import type { Theme } from '../../contexts/ThemeContext';
@@ -96,10 +96,10 @@ interface ListPaneProps {
  * ListPane component - Displays the session/PTY tree list.
  */
 export const ListPane: Component<ListPaneProps> = (props) => {
-  // Get visible items based on viewport
-  const visibleItems = () => {
+  // Memoize visible items to prevent recreating array on every render
+  const visibleItems = createMemo(() => {
     return props.flattenedTree.slice(props.viewport.start, props.viewport.end);
-  };
+  });
 
   // Handle mouse down on session (starts drag)
   const handleSessionMouseDown = (sessionId: string, index: number) => {
