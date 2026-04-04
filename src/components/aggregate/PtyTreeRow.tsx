@@ -145,6 +145,82 @@ function buildGitMetadata(pty: PtyInfo): string {
 }
 
 /**
+ * ShimmeringLabel - Isolated component for shimmer animation
+ *
+ * This is a separate component to prevent the parent row from re-rendering
+ * on every animation frame, which could interfere with mouse event handling.
+ */
+interface ShimmeringLabelProps {
+  text: string;
+  baseColor: string;
+  ptyId: string;
+  shimmerTargetColor: string;
+}
+
+function ShimmeringLabel(props: ShimmeringLabelProps) {
+  const renderTime = useShimmerRenderTime(() => true);
+
+  // Build shimmered text - character by character
+  // This runs every frame during animation, but only THIS component re-renders
+  const shimmeredText = createMemo(() => {
+    const now = renderTime();
+
+    if (!hasActiveShimmer(props.ptyId, now)) {
+      return (
+        <text fg={props.baseColor} selectable={false}>
+          {props.text}
+        </text>
+      );
+    }
+
+    const shimmeredChars: JSX.Element[] = [];
+    let currentRun = '';
+    let currentColor = props.baseColor;
+
+    for (let i = 0; i < props.text.length; i++) {
+      const shimmerColor = getPtyShimmerColor(
+        props.ptyId,
+        props.baseColor,
+        i,
+        props.text.length,
+        now,
+        {
+          targetColor: props.shimmerTargetColor,
+        }
+      );
+
+      const nextColor = shimmerColor ?? props.baseColor;
+
+      if (nextColor !== currentColor) {
+        if (currentRun) {
+          shimmeredChars.push(
+            <text fg={currentColor} selectable={false}>
+              {currentRun}
+            </text>
+          );
+          currentRun = '';
+        }
+        currentColor = nextColor;
+      }
+
+      currentRun += props.text[i];
+    }
+
+    if (currentRun) {
+      shimmeredChars.push(
+        <text fg={currentColor} selectable={false}>
+          {currentRun}
+        </text>
+      );
+    }
+
+    return <>{shimmeredChars}</>;
+  });
+
+  return <>{shimmeredText()}</>;
+}
+
+/**
  * Single line PTY row with shimmer effect for active PTYs
  *
  * EVENT-BASED: Only subscribes to RAF when PTY has active shimmer
@@ -152,7 +228,6 @@ function buildGitMetadata(pty: PtyInfo): string {
 export function PtyTreeRow(props: PtyTreeRowProps) {
   const shimmerStateVersion = useShimmerStateVersion();
   const [isAnimating, setIsAnimating] = createSignal(hasActiveShimmer(props.pty.ptyId));
-  const renderTime = useShimmerRenderTime(isAnimating);
 
   createEffect(() => {
     void shimmerStateVersion();
@@ -162,7 +237,7 @@ export function PtyTreeRow(props: PtyTreeRowProps) {
 
   createEffect(() => {
     if (!isAnimating()) return;
-    const now = renderTime();
+    const now = Date.now();
     if (hasActiveShimmer(props.pty.ptyId, now)) return;
     setIsAnimating(false);
   });
@@ -239,6 +314,9 @@ export function PtyTreeRow(props: PtyTreeRowProps) {
   });
 
   // Apply shimmer to label characters only while this row is actively animating.
+  // NOTE: The shimmer is rendered as a separate component to isolate the
+  // high-frequency re-renders (~60fps during animation) from the row's event
+  // handlers. This prevents mouse click events from being lost during animation.
   const renderLabel = createMemo(() => {
     const text = displayLabel();
     const baseColor = baseFgColor();
@@ -251,51 +329,16 @@ export function PtyTreeRow(props: PtyTreeRowProps) {
       );
     }
 
-    const now = renderTime();
-    if (!hasActiveShimmer(props.pty.ptyId, now)) {
-      return (
-        <text fg={baseColor} selectable={false}>
-          {text}
-        </text>
-      );
-    }
-
-    // Build shimmered text - character by character
-    const shimmeredChars: JSX.Element[] = [];
-    let currentRun = '';
-    let currentColor = baseColor;
-
-    for (let i = 0; i < text.length; i++) {
-      const shimmerColor = getPtyShimmerColor(props.pty.ptyId, baseColor, i, text.length, now, {
-        targetColor: props.shimmerTargetColor,
-      });
-
-      const nextColor = shimmerColor ?? baseColor;
-
-      if (nextColor !== currentColor) {
-        if (currentRun) {
-          shimmeredChars.push(
-            <text fg={currentColor} selectable={false}>
-              {currentRun}
-            </text>
-          );
-          currentRun = '';
-        }
-        currentColor = nextColor;
-      }
-
-      currentRun += text[i];
-    }
-
-    if (currentRun) {
-      shimmeredChars.push(
-        <text fg={currentColor} selectable={false}>
-          {currentRun}
-        </text>
-      );
-    }
-
-    return <>{shimmeredChars}</>;
+    // Use ShimmeringLabel component to isolate RAF-triggered re-renders.
+    // This prevents the parent row's event handlers from being disrupted.
+    return (
+      <ShimmeringLabel
+        text={text}
+        baseColor={baseColor}
+        ptyId={props.pty.ptyId}
+        shimmerTargetColor={props.shimmerTargetColor}
+      />
+    );
   });
 
   // Git metadata color mapping
