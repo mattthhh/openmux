@@ -7,7 +7,7 @@ import {
   useConfig,
   useLayout,
   useKeyboardHandler,
-  useKeyboardState,
+  useKeyboard,
   useOverlays,
   useTerminal,
   useCopyMode,
@@ -20,12 +20,13 @@ import { useTitle } from './contexts/TitleContext';
 import { PaneContainer } from './components';
 import { getFocusedPane, getFocusedPtyId } from './core/workspace-utils';
 import { type CommandPaletteCommand } from './core/command-palette';
-import { setKeyboardVimMode, type KeyboardVimMode, setKeyboardPrefixOnly } from './core/user-config';
-import { onShimDetached } from './effect/bridge';
 import {
-  createPaneResizeHandlers,
-  createPasteHandler,
-} from './components/app';
+  setKeyboardVimMode,
+  type KeyboardVimMode,
+  setKeyboardPrefixOnly,
+} from './core/user-config';
+import { onShimDetached } from './effect/bridge';
+import { createPaneResizeHandlers, createPasteHandler } from './components/app';
 import { setClipboardPasteHandler } from './terminal/focused-pty-registry';
 import { readFromClipboard } from './effect/bridge';
 import fs from 'node:fs';
@@ -83,8 +84,9 @@ function AppContent() {
   const { enterSearchMode, exitSearchMode, setSearchQuery, nextMatch, prevMatch } = search;
   const copyMode = useCopyMode();
   const { state: aggregateState, openAggregateView, togglePreviewZoom } = useAggregateView();
-  const keyboardState = useKeyboardState();
-  const { exitSearchMode: keyboardExitSearchMode, exitCopyMode: keyboardExitCopyMode } = keyboardState;
+  const keyboardState = useKeyboard();
+  const { exitSearchMode: keyboardExitSearchMode, exitCopyMode: keyboardExitCopyMode } =
+    keyboardState;
   const renderer = useRenderer();
   const overlays = useOverlays();
   const {
@@ -170,7 +172,9 @@ function AppContent() {
 
   const { handleNewPane, handleSplitPane } = usePtyCreation({
     layout: {
-      get panes() { return layout.panes; },
+      get panes() {
+        return layout.panes;
+      },
       getFocusedPaneId: () => layout.activeWorkspace.focusedPaneId,
     },
     terminal,
@@ -187,8 +191,7 @@ function AppContent() {
   const handlePaneRenameOpen = () => {
     const focusedPane = getFocusedPane(layout.activeWorkspace);
     if (!focusedPane) return;
-    const currentTitle =
-      titleContext.getTitle(focusedPane.id) ?? focusedPane.title ?? 'shell';
+    const currentTitle = titleContext.getTitle(focusedPane.id) ?? focusedPane.title ?? 'shell';
     setPaneRenameState({ show: true, paneId: focusedPane.id, value: currentTitle });
   };
 
@@ -290,34 +293,28 @@ function AppContent() {
       return;
     }
 
-    handleNormalModeAction(
-      action,
-      keyboardState,
-      layout,
-      layout.activeWorkspace.layoutMode,
-      {
-        onPaste: handlePaste,
-        onNewPane: handleNewPane,
-        onSplitPane: handleSplitPane,
-        onQuit: handleQuit,
-        onDetach: handleDetach,
-        onRequestQuit: confirmationHandlers.handleRequestQuit,
-        onRequestClosePane: confirmationHandlers.handleRequestClosePane,
-        onToggleSessionPicker: togglePicker,
-        onToggleTemplateOverlay: toggleTemplateOverlay,
-        onEnterSearch: handleEnterSearch,
-        onEnterCopyMode: handleEnterCopyMode,
-        onToggleConsole: handleToggleConsole,
-        onDumpConsoleLogs: handleDumpConsoleLogs,
-        onToggleAggregateView: openAggregateView,
-        onToggleCommandPalette: toggleCommandPalette,
-        onToggleVimMode: handleToggleVimMode,
-        onTogglePrefixOnly: handleTogglePrefixOnly,
-        onRefreshHostColors: handleRefreshHostColors,
-        onRenamePane: handlePaneRenameOpen,
-        onLabelWorkspace: handleWorkspaceLabelOpen,
-      }
-    );
+    handleNormalModeAction(action, keyboardState, layout, layout.activeWorkspace.layoutMode, {
+      onPaste: handlePaste,
+      onNewPane: handleNewPane,
+      onSplitPane: handleSplitPane,
+      onQuit: handleQuit,
+      onDetach: handleDetach,
+      onRequestQuit: confirmationHandlers.handleRequestQuit,
+      onRequestClosePane: confirmationHandlers.handleRequestClosePane,
+      onToggleSessionPicker: togglePicker,
+      onToggleTemplateOverlay: toggleTemplateOverlay,
+      onEnterSearch: handleEnterSearch,
+      onEnterCopyMode: handleEnterCopyMode,
+      onToggleConsole: handleToggleConsole,
+      onDumpConsoleLogs: handleDumpConsoleLogs,
+      onToggleAggregateView: openAggregateView,
+      onToggleCommandPalette: toggleCommandPalette,
+      onToggleVimMode: handleToggleVimMode,
+      onTogglePrefixOnly: handleTogglePrefixOnly,
+      onRefreshHostColors: handleRefreshHostColors,
+      onRenamePane: handlePaneRenameOpen,
+      onLabelWorkspace: handleWorkspaceLabelOpen,
+    });
   };
 
   const handleCommandPaletteExecute = (command: CommandPaletteCommand) => {

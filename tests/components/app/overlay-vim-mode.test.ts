@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from 'bun:test';
 
 import { createOverlayVimMode } from '../../../src/components/app/overlay-vim-mode';
 import type { CommandPaletteState } from '../../../src/components/CommandPalette';
@@ -7,17 +7,17 @@ import type { WorkspaceLabelState } from '../../../src/components/WorkspaceLabel
 import type { SessionState } from '../../../src/core/operations/session-actions';
 import type { VimInputMode } from '../../../src/core/vim-sequences';
 import type { useConfig } from '../../../src/contexts/ConfigContext';
-import type { useKeyboardState } from '../../../src/contexts/KeyboardContext';
+import type { useKeyboard } from '../../../src/contexts/KeyboardContext';
 import type { useSession } from '../../../src/contexts/SessionContext';
 import type { SearchContextValue } from '../../../src/contexts/search/types';
 
 type ConfigContextValue = ReturnType<typeof useConfig>;
-type KeyboardContextValue = ReturnType<typeof useKeyboardState>;
+type KeyboardContextValue = ReturnType<typeof useKeyboard>;
 type SessionContextValue = ReturnType<typeof useSession>;
 
 const buildConfig = (vimMode: 'off' | 'overlays'): ConfigContextValue => ({
-  config: () => ({ keyboard: { vimMode } } as any),
-  keybindings: () => ({} as any),
+  config: () => ({ keyboard: { vimMode } }) as any,
+  keybindings: () => ({}) as any,
   configPath: '',
   reloadConfig: () => {},
 });

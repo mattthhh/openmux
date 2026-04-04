@@ -4,7 +4,7 @@ import { setServices } from '../effect/bridge/services-instance';
 
 export async function runShim(): Promise<void> {
   // Initialize services for shim mode
-  const services = await initializeServices(true);
+  const services = await initializeServices({ mode: 'shim' });
   if (services instanceof Error) {
     throw new Error(`Failed to initialize services: ${services.message}`);
   }

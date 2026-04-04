@@ -5,7 +5,7 @@
 import { Show, createMemo } from 'solid-js';
 import { useTheme } from '../contexts/ThemeContext';
 import { useLayout } from '../contexts/LayoutContext';
-import { useKeyboardState } from '../contexts/KeyboardContext';
+import { useKeyboard } from '../contexts/KeyboardContext';
 import { useSession, useSessionState } from '../contexts/SessionContext';
 import type { KeyMode, WorkspaceId, LayoutMode } from '../core/types';
 import type { Workspaces } from '../core/operations/layout-actions';
@@ -23,7 +23,7 @@ interface StatusBarProps {
 export function StatusBar(props: StatusBarProps) {
   const theme = useTheme();
   const layout = useLayout();
-  const { state: kbState } = useKeyboardState();
+  const { state: kbState } = useKeyboard();
   const session = useSession();
   const sessionState = useSessionState();
   const commandColor = () => theme.searchAccentColor;
@@ -76,7 +76,9 @@ export function StatusBar(props: StatusBarProps) {
           <text fg={sessionColor()}>[TEMPLATES]</text>
         </Show>
         <Show when={props.overlayVimMode}>
-          <text fg={props.overlayVimMode === 'insert' ? theme.statusBar.successColor : sessionColor()}>
+          <text
+            fg={props.overlayVimMode === 'insert' ? theme.statusBar.successColor : sessionColor()}
+          >
             {props.overlayVimMode === 'insert' ? '[INSERT]' : '[NORMAL]'}
           </text>
         </Show>
@@ -122,9 +124,7 @@ function ModeIndicator(props: ModeIndicatorProps) {
 
   return (
     <Show when={props.mode !== 'normal'}>
-      <text fg={modeColor()}>
-        {modeLabels[props.mode]}
-      </text>
+      <text fg={modeColor()}>{modeLabels[props.mode]}</text>
     </Show>
   );
 }
@@ -141,11 +141,7 @@ function LayoutModeIndicator(props: LayoutModeIndicatorProps) {
     stacked: '[STACKED]',
   };
 
-  return (
-    <text fg={theme.ui.mutedText}>
-      {modeLabels[props.mode]}
-    </text>
-  );
+  return <text fg={theme.ui.mutedText}>{modeLabels[props.mode]}</text>;
 }
 
 interface WorkspaceTabsProps {
@@ -160,19 +156,19 @@ function WorkspaceTabs(props: WorkspaceTabsProps) {
   // Memoize tabs string to avoid recomputation on unrelated re-renders
   const tabs = createMemo(() => {
     if (props.populatedWorkspaces.length === 0) return null;
-    return props.populatedWorkspaces.map((id) => {
-      const label = props.workspaces[id]?.label?.trim();
-      const labelSuffix = label ? `:${label}` : '';
-      const isActive = id === props.activeWorkspaceId;
-      return isActive ? `[${id}${labelSuffix}]` : ` ${id}${labelSuffix} `;
-    }).join('');
+    return props.populatedWorkspaces
+      .map((id) => {
+        const label = props.workspaces[id]?.label?.trim();
+        const labelSuffix = label ? `:${label}` : '';
+        const isActive = id === props.activeWorkspaceId;
+        return isActive ? `[${id}${labelSuffix}]` : ` ${id}${labelSuffix} `;
+      })
+      .join('');
   });
 
   return (
     <Show when={tabs()} fallback={<text fg={theme.ui.mutedText}>No workspaces</text>}>
-      <text fg={theme.statusBar.activeTabColor}>
-        {tabs()}
-      </text>
+      <text fg={theme.statusBar.activeTabColor}>{tabs()}</text>
     </Show>
   );
 }

@@ -6,27 +6,23 @@
  * - keyboard/handlers.ts: Key handler functions
  */
 
-import {
-  createContext,
-  useContext,
-  createEffect,
-  onCleanup,
-  type ParentProps,
-} from 'solid-js';
+import { createContext, useContext, createEffect, onCleanup, type ParentProps } from 'solid-js';
 import { createStore, produce } from 'solid-js/store';
 import type { KeyboardState, ConfirmationType } from '../core/types';
 import { useLayout } from './LayoutContext';
 import type { KeyboardContextValue, KeyboardHandlerOptions } from './keyboard/types';
-import { handleNormalModeAction, handlePrefixModeAction, handleMoveModeAction } from './keyboard/handlers';
+import {
+  handleNormalModeAction,
+  handlePrefixModeAction,
+  handleMoveModeAction,
+} from './keyboard/handlers';
 import { useConfig } from './ConfigContext';
 import { eventToCombo, matchKeybinding } from '../core/keybindings';
 import type { KeyboardEvent } from '../core/keyboard-event';
 
 export type { KeyboardContextValue, KeyboardHandlerOptions } from './keyboard/types';
 
-
 const KeyboardContext = createContext<KeyboardContextValue | null>(null);
-
 
 interface KeyboardProviderProps extends ParentProps {}
 
@@ -44,34 +40,42 @@ export function KeyboardProvider(props: KeyboardProviderProps) {
     if (state.mode !== 'prefix' || !state.prefixActivatedAt) return;
 
     const timeout = setTimeout(() => {
-      setState(produce((s) => {
-        s.mode = 'normal';
-        s.prefixActivatedAt = undefined;
-      }));
+      setState(
+        produce((s) => {
+          s.mode = 'normal';
+          s.prefixActivatedAt = undefined;
+        })
+      );
     }, timeoutMs);
 
     onCleanup(() => clearTimeout(timeout));
   });
 
   const enterPrefixMode = () => {
-    setState(produce((s) => {
-      s.mode = 'prefix';
-      s.prefixActivatedAt = Date.now();
-    }));
+    setState(
+      produce((s) => {
+        s.mode = 'prefix';
+        s.prefixActivatedAt = Date.now();
+      })
+    );
   };
 
   const exitPrefixMode = () => {
-    setState(produce((s) => {
-      s.mode = 'normal';
-      s.prefixActivatedAt = undefined;
-    }));
+    setState(
+      produce((s) => {
+        s.mode = 'normal';
+        s.prefixActivatedAt = undefined;
+      })
+    );
   };
 
   const enterSearchMode = () => {
-    setState(produce((s) => {
-      s.mode = 'search';
-      s.prefixActivatedAt = undefined;
-    }));
+    setState(
+      produce((s) => {
+        s.mode = 'search';
+        s.prefixActivatedAt = undefined;
+      })
+    );
   };
 
   const exitSearchMode = () => {
@@ -79,10 +83,12 @@ export function KeyboardProvider(props: KeyboardProviderProps) {
   };
 
   const enterCopyMode = () => {
-    setState(produce((s) => {
-      s.mode = 'copy';
-      s.prefixActivatedAt = undefined;
-    }));
+    setState(
+      produce((s) => {
+        s.mode = 'copy';
+        s.prefixActivatedAt = undefined;
+      })
+    );
   };
 
   const exitCopyMode = () => {
@@ -90,10 +96,12 @@ export function KeyboardProvider(props: KeyboardProviderProps) {
   };
 
   const enterAggregateMode = () => {
-    setState(produce((s) => {
-      s.mode = 'aggregate';
-      s.prefixActivatedAt = undefined;
-    }));
+    setState(
+      produce((s) => {
+        s.mode = 'aggregate';
+        s.prefixActivatedAt = undefined;
+      })
+    );
   };
 
   const exitAggregateMode = () => {
@@ -101,10 +109,12 @@ export function KeyboardProvider(props: KeyboardProviderProps) {
   };
 
   const enterMoveMode = () => {
-    setState(produce((s) => {
-      s.mode = 'move';
-      s.prefixActivatedAt = undefined;
-    }));
+    setState(
+      produce((s) => {
+        s.mode = 'move';
+        s.prefixActivatedAt = undefined;
+      })
+    );
   };
 
   const exitMoveMode = () => {
@@ -112,18 +122,22 @@ export function KeyboardProvider(props: KeyboardProviderProps) {
   };
 
   const enterConfirmMode = (confirmationType: ConfirmationType) => {
-    setState(produce((s) => {
-      s.mode = 'confirm';
-      s.prefixActivatedAt = undefined;
-      s.confirmationType = confirmationType;
-    }));
+    setState(
+      produce((s) => {
+        s.mode = 'confirm';
+        s.prefixActivatedAt = undefined;
+        s.confirmationType = confirmationType;
+      })
+    );
   };
 
   const exitConfirmMode = () => {
-    setState(produce((s) => {
-      s.mode = 'normal';
-      s.confirmationType = undefined;
-    }));
+    setState(
+      produce((s) => {
+        s.mode = 'normal';
+        s.confirmationType = undefined;
+      })
+    );
   };
 
   const value: KeyboardContextValue = {
@@ -142,28 +156,22 @@ export function KeyboardProvider(props: KeyboardProviderProps) {
     exitConfirmMode,
   };
 
-  return (
-    <KeyboardContext.Provider value={value}>
-      {props.children}
-    </KeyboardContext.Provider>
-  );
+  return <KeyboardContext.Provider value={value}>{props.children}</KeyboardContext.Provider>;
 }
 
-
-export function useKeyboardState(): KeyboardContextValue {
+export function useKeyboard(): KeyboardContextValue {
   const context = useContext(KeyboardContext);
   if (!context) {
-    throw new Error('useKeyboardState must be used within KeyboardProvider');
+    throw new Error('useKeyboard must be used within KeyboardProvider');
   }
   return context;
 }
-
 
 /**
  * Hook for handling keyboard input across all modes
  */
 export function useKeyboardHandler(options: KeyboardHandlerOptions = {}) {
-  const keyboard = useKeyboardState();
+  const keyboard = useKeyboard();
   const layout = useLayout();
   const config = useConfig();
 
@@ -172,7 +180,7 @@ export function useKeyboardHandler(options: KeyboardHandlerOptions = {}) {
     const keybindings = config.keybindings();
     const keyEvent = { key, ctrl, alt, shift, meta };
 
-    if (event.eventType === "release") {
+    if (event.eventType === 'release') {
       return false;
     }
 
@@ -192,12 +200,12 @@ export function useKeyboardHandler(options: KeyboardHandlerOptions = {}) {
       const action = matchKeybinding(keybindings.prefix, keyEvent);
       return action
         ? handlePrefixModeAction(
-          action,
-          keyboard,
-          layout,
-          layout.activeWorkspace.layoutMode,
-          options
-        )
+            action,
+            keyboard,
+            layout,
+            layout.activeWorkspace.layoutMode,
+            options
+          )
         : false;
     }
 
@@ -232,5 +240,10 @@ export function useKeyboardHandler(options: KeyboardHandlerOptions = {}) {
     return false;
   };
 
-  return { handleKeyDown, get mode() { return keyboard.state.mode; } };
+  return {
+    handleKeyDown,
+    get mode() {
+      return keyboard.state.mode;
+    },
+  };
 }

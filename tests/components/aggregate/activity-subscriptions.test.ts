@@ -5,7 +5,7 @@ import { clearPtyStdoutActivity, hasRecentPtyStdoutActivity } from '../../../src
 import { effectBridgeMocks } from '../../mocks/effect-bridge';
 
 mock.module('../../../src/effect/bridge', () => effectBridgeMocks);
-import type { PtyInfo } from '../../../src/contexts/aggregate/types';
+import type { PtyInfo } from '../../../src/contexts/aggregate-view-types';
 
 const createPty = (ptyId: string): PtyInfo => ({
   ptyId,

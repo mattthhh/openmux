@@ -6,7 +6,7 @@ import type { VimInputMode } from '../../core/vim-sequences';
 import type { SearchContextValue } from '../../contexts/search/types';
 import type { SessionState } from '../../core/operations/session-actions';
 import type { useConfig } from '../../contexts/ConfigContext';
-import type { useKeyboardState } from '../../contexts';
+import type { useKeyboard } from '../../contexts';
 import type { useSession } from '../../contexts/SessionContext';
 
 export function createOverlayVimMode(params: {
@@ -18,7 +18,7 @@ export function createOverlayVimMode(params: {
   session: ReturnType<typeof useSession>;
   sessionState: SessionState;
   aggregateState: { showAggregateView: boolean };
-  keyboardState: ReturnType<typeof useKeyboardState>;
+  keyboardState: ReturnType<typeof useKeyboard>;
   search: SearchContextValue;
   commandPaletteVimMode: Accessor<VimInputMode>;
   paneRenameVimMode: Accessor<VimInputMode>;

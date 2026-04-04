@@ -12,7 +12,14 @@ export interface GitDiffStats {
   binary: number;
 }
 
-/** PTY info for the aggregate view */
+/**
+ * PTY info for the aggregate view.
+ *
+ * Represents a terminal session (PTY) with its associated metadata including
+ * git status, current working directory, process information, and session
+ * membership details. Used for displaying and navigating PTYs across all
+ * workspaces in the aggregate view overlay.
+ */
 export interface PtyInfo {
   ptyId: string;
   /** Temporary aggregate-list sort key used before a paneId is fully anchored. */
@@ -105,10 +112,29 @@ export interface SpacerTreeNode {
   type: 'spacer';
 }
 
-/** Tree node types for hierarchical session/PTY display */
+/**
+ * Union type for all tree node types in the aggregate view hierarchy.
+ *
+ * TreeNode represents the hierarchical structure of sessions and their PTYs:
+ * - SessionTreeNode: A session header with metadata and expansion state
+ * - PtyTreeNode: A terminal session belonging to a parent session
+ * - PlaceholderTreeNode: Loading or unloaded state indicator
+ * - SpacerTreeNode: Visual separator between session groups
+ *
+ * Used to build the visual tree structure for navigation and rendering.
+ */
 export type TreeNode = SessionTreeNode | PtyTreeNode | PlaceholderTreeNode | SpacerTreeNode;
 
-/** Flattened tree item for visual navigation and rendering */
+/**
+ * Flattened tree item for visual navigation and rendering in the aggregate view.
+ *
+ * Represents a single row in the visual tree display with pre-computed
+ * rendering metadata. The flattened structure allows O(1) indexed access
+ * for keyboard navigation while preserving the visual hierarchy through
+ * depth, prefix, and isLast properties.
+ *
+ * @see TREE_GLYPHS for the visual prefix characters used in tree rendering
+ */
 export interface FlattenedTreeItem {
   /** The tree node data */
   node: TreeNode;
@@ -138,7 +164,7 @@ export const TREE_GLYPHS = {
   INDENT: '   ',
 } as const;
 
-export interface PendingPtyInsertion {
+export interface PendingPaneCreation {
   /** Stable request identifier so multiple concurrent creations can be tracked independently. */
   id: string;
   /** Session where the new PTY should appear. */
@@ -226,7 +252,7 @@ export interface AggregateViewState {
    * All unresolved aggregate pane creation requests.
    * Multiple create commands can overlap, so lifecycle matching must track each request separately.
    */
-  pendingPtyInsertions: PendingPtyInsertion[];
+  pendingPaneCreations: PendingPaneCreation[];
   /** Scroll offset for the session/PTY list (0 = top) */
   listScrollOffset: number;
 }
@@ -258,9 +284,43 @@ export const initialState: AggregateViewState = {
   pendingPtyIds: new Set(),
   recentlyAddedPtyIds: new Set(),
   deletedPtyIds: new Set(),
-  pendingPtyInsertions: [],
+  pendingPaneCreations: [],
   listScrollOffset: 0,
 };
+
+/** Factory function to create initial state (for backward compatibility) */
+export function createInitialState(): AggregateViewState {
+  return {
+    showAggregateView: false,
+    filterQuery: '',
+    showInactive: true,
+    allPtys: [],
+    matchedPtys: [],
+    selectedIndex: 0,
+    selectedPtyId: null,
+    isLoading: false,
+    previewMode: false,
+    previewZoomed: false,
+    allPtysIndex: new Map(),
+    matchedPtysIndex: new Map(),
+    treeRoot: [],
+    flattenedTree: [],
+    flattenedTreeIndex: new Map(),
+    expandedSessionIds: new Set(),
+    selectedSessionId: null,
+    sessionLoadStates: new Map(),
+    sessionPaneOrders: new Map(),
+    manualSessionOrder: [],
+    loadingSessionIds: new Set(),
+    loadAttemptedSessionIds: new Set(),
+    allSessions: new Map(),
+    pendingPtyIds: new Set(),
+    recentlyAddedPtyIds: new Set(),
+    deletedPtyIds: new Set(),
+    pendingPaneCreations: [],
+    listScrollOffset: 0,
+  };
+}
 
 export interface AggregateViewContextValue {
   state: AggregateViewState;
@@ -306,9 +366,9 @@ export interface AggregateViewContextValue {
   /** Scroll the list to a specific offset */
   setListScrollOffset: (offset: number) => void;
   /** Add or update a pending aggregate pane insertion request */
-  upsertPendingPtyInsertion: (insertion: PendingPtyInsertion) => void;
+  upsertPendingPaneCreation: (insertion: PendingPaneCreation) => void;
   /** Remove a specific pending aggregate pane insertion request */
-  removePendingPtyInsertion: (id: string) => void;
+  removePendingPaneCreation: (id: string) => void;
   /** Clear all pending aggregate pane insertion requests */
-  clearPendingPtyInsertions: () => void;
+  clearPendingPaneCreations: () => void;
 }

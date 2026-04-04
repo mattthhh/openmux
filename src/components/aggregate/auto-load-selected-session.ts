@@ -1,17 +1,17 @@
-import type { FlattenedTreeItem, PendingPtyInsertion } from '../../contexts/aggregate-view-types';
+import type { FlattenedTreeItem, PendingPaneCreation } from '../../contexts/aggregate-view-types';
 import type { PendingAggregatePaneFocus } from './pending-pane-focus';
 
 export function getSelectedSessionIdForAutoLoad(params: {
   selectedItem: FlattenedTreeItem | undefined;
-  pendingPtyInsertions: PendingPtyInsertion[];
+  pendingPaneCreations: PendingPaneCreation[];
   pendingPaneFocus: PendingAggregatePaneFocus | null;
 }): string | null {
-  const { selectedItem, pendingPtyInsertions, pendingPaneFocus } = params;
+  const { selectedItem, pendingPaneCreations, pendingPaneFocus } = params;
 
   // While aggregate is in the middle of creating/focusing a new pane, selection may
   // transiently land on session headers/placeholders. Treat those as bookkeeping, not
   // as user intent to materialize some other session.
-  if (pendingPtyInsertions.length > 0 || pendingPaneFocus) {
+  if (pendingPaneCreations.length > 0 || pendingPaneFocus) {
     return null;
   }
 

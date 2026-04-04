@@ -19,15 +19,15 @@
 
 /** Pending insertion tracking */
 export {
-  getCurrentPendingPtyInsertion,
-  setPendingPtyInsertions,
-  upsertPendingPtyInsertion,
-  removePendingPtyInsertions,
-  findPendingPtyInsertion,
+  getCurrentPendingPaneCreation,
+  setPendingPaneCreations,
+  upsertPendingPaneCreation,
+  removePendingPaneCreations,
+  findPendingPaneCreation,
   getInsertedPaneOrder,
   getAppendedPaneOrder,
-  getNextPendingPtyInsertionOrder,
-  findPendingPtyInsertionForLifecycle,
+  getNextPendingPaneCreationOrder,
+  findPendingPaneCreationForLifecycle,
 } from './pending';
 
 /** SwiftGrove's modules */
@@ -47,7 +47,7 @@ export type {
   SpacerTreeNode,
   TreeNode,
   FlattenedTreeItem,
-  PendingPtyInsertion,
+  PendingPaneCreation,
   AggregateViewContextValue,
 } from './types';
 

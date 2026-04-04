@@ -145,3 +145,14 @@ export function disposeServicesSingleton(): void {
     globalServices = null;
   }
 }
+
+/**
+ * Dispose the application runtime (backward compatibility alias).
+ *
+ * Cleans up all services and resources. Call this on application shutdown
+ * to prevent memory leaks from timers, caches, and file watchers.
+ */
+export function disposeRuntime(): Promise<void> {
+  disposeServicesSingleton();
+  return Promise.resolve();
+}

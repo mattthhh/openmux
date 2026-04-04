@@ -8,7 +8,7 @@ import { useRenderer } from '@opentui/solid';
 
 import { useAggregateView } from './AggregateViewContext';
 import { useConfig } from './ConfigContext';
-import { useKeyboardState } from './KeyboardContext';
+import { useKeyboard } from './KeyboardContext';
 import { useLayout } from './LayoutContext';
 import { useSearch } from './SearchContext';
 import { useSession } from './SessionContext';
@@ -25,8 +25,7 @@ import type { PaneRenameState } from '../components/PaneRenameOverlay';
 import type { WorkspaceLabelState } from '../components/WorkspaceLabelOverlay';
 import type { VimInputMode } from '../core/vim-sequences';
 import { getFocusedPtyId } from '../core/workspace-utils';
-import { shutdownShim } from '../effect/bridge';
-import { disposeRuntime } from '../effect/runtime';
+import { shutdownShim, disposeRuntime } from '../effect/bridge';
 
 export interface OverlayContextValue {
   commandPaletteState: CommandPaletteState;
@@ -70,7 +69,7 @@ export function OverlayProvider(props: ParentProps) {
   const config = useConfig();
   const layout = useLayout();
   const terminal = useTerminal();
-  const keyboardState = useKeyboardState();
+  const keyboardState = useKeyboard();
   const session = useSession();
   const search = useSearch();
   const { state: sessionState } = session;
@@ -129,11 +128,7 @@ export function OverlayProvider(props: ParentProps) {
     handleShimDetached: exitHandlers.handleShimDetached,
   };
 
-  return (
-    <OverlayContext.Provider value={value}>
-      {props.children}
-    </OverlayContext.Provider>
-  );
+  return <OverlayContext.Provider value={value}>{props.children}</OverlayContext.Provider>;
 }
 
 export function useOverlays(): OverlayContextValue {

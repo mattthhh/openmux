@@ -10,7 +10,7 @@ import { createRenderEffect, createMemo, onCleanup, type Accessor } from 'solid-
 import * as errore from 'errore';
 import { subscribeToAllPtyActivity } from '../../../effect/bridge';
 import { recordPtyStdoutActivity } from '../../../core/shimmer';
-import type { PtyInfo } from '../../../contexts/aggregate/types';
+import type { PtyInfo } from '../../../contexts/aggregate-view-types';
 
 /** Error when activity subscription fails */
 export class ActivitySubscriptionError extends errore.createTaggedError({

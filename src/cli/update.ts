@@ -190,7 +190,11 @@ export function getPlatformInfo(platform: NodeJS.Platform, arch: string): Platfo
   return null;
 }
 
-export function selectLatestRelease(releases: GitHubRelease[], includePrerelease: boolean): GitHubRelease | null {
+export function selectLatestRelease(
+  releases: GitHubRelease[],
+  options: { includePrerelease: boolean }
+): GitHubRelease | null {
+  const { includePrerelease } = options;
   const candidates = releases.filter((release) => {
     if (release.draft) return false;
     if (!includePrerelease && release.prerelease) return false;
@@ -212,7 +216,10 @@ export function selectLatestRelease(releases: GitHubRelease[], includePrerelease
   return best;
 }
 
-export function findReleaseAsset(release: GitHubRelease, target: string): { name: string; url: string } | null {
+export function findReleaseAsset(
+  release: GitHubRelease,
+  target: string
+): { name: string; url: string } | null {
   const assets = release.assets ?? [];
   const exactName = `openmux-${release.tag_name}-${target}.tar.gz`;
 
@@ -221,7 +228,9 @@ export function findReleaseAsset(release: GitHubRelease, target: string): { name
     return { name: exact.name, url: exact.browser_download_url };
   }
 
-  const fallback = assets.find((asset) => asset.name?.endsWith(`-${target}.tar.gz`) && asset.browser_download_url);
+  const fallback = assets.find(
+    (asset) => asset.name?.endsWith(`-${target}.tar.gz`) && asset.browser_download_url
+  );
   if (!fallback?.name || !fallback.browser_download_url) return null;
   return { name: fallback.name, url: fallback.browser_download_url };
 }
@@ -241,7 +250,11 @@ async function fetchGitHubJson<T>(io: UpdateIO, url: string): Promise<T> {
   return (await response.json()) as T;
 }
 
-async function fetchTargetRelease(io: UpdateIO, includePrerelease: boolean): Promise<GitHubRelease> {
+async function fetchTargetRelease(
+  io: UpdateIO,
+  options: { includePrerelease: boolean }
+): Promise<GitHubRelease> {
+  const { includePrerelease } = options;
   if (!includePrerelease) {
     const release = await fetchGitHubJson<GitHubRelease>(io, `${GITHUB_API_BASE}/releases/latest`);
     if (!release || !release.tag_name) {
@@ -250,8 +263,11 @@ async function fetchTargetRelease(io: UpdateIO, includePrerelease: boolean): Pro
     return release;
   }
 
-  const releases = await fetchGitHubJson<GitHubRelease[]>(io, `${GITHUB_API_BASE}/releases?per_page=30`);
-  const selected = selectLatestRelease(releases, true);
+  const releases = await fetchGitHubJson<GitHubRelease[]>(
+    io,
+    `${GITHUB_API_BASE}/releases?per_page=30`
+  );
+  const selected = selectLatestRelease(releases, { includePrerelease: true });
   if (!selected) {
     throw new Error('No valid GitHub releases were found.');
   }
@@ -271,7 +287,9 @@ function getManagedBinDir(env: NodeJS.ProcessEnv): string | null {
   return env.XDG_BIN_HOME ?? path.join(home, '.local', 'bin');
 }
 
-export async function detectManagedInstall(io: UpdateIO): Promise<{ ok: true; value: ManagedInstall } | { ok: false; error: string }> {
+export async function detectManagedInstall(
+  io: UpdateIO
+): Promise<{ ok: true; value: ManagedInstall } | { ok: false; error: string }> {
   const managedDir = getManagedInstallDir(io.env);
   if (!managedDir) {
     return { ok: false, error: 'Could not determine managed install directory (HOME is not set).' };
@@ -286,7 +304,8 @@ export async function detectManagedInstall(io: UpdateIO): Promise<{ ok: true; va
   if (execName !== 'openmux-bin' && execName !== 'openmux-bin.exe') {
     return {
       ok: false,
-      error: 'This install is not managed by openmux update. Use your package manager or installer to update.',
+      error:
+        'This install is not managed by openmux update. Use your package manager or installer to update.',
     };
   }
 
@@ -362,7 +381,12 @@ function detectPackageManagerFromPath(env: NodeJS.ProcessEnv): PackageManagerIns
 
     const candidates = [path.resolve(wrapperPath), path.resolve(resolvedWrapperPath)];
 
-    if (candidates.some((candidate) => candidate.includes(`${path.sep}.bun${path.sep}`) || candidate.includes('bun/install'))) {
+    if (
+      candidates.some(
+        (candidate) =>
+          candidate.includes(`${path.sep}.bun${path.sep}`) || candidate.includes('bun/install')
+      )
+    ) {
       return { type: 'bun', updateCommand: 'bun update -g openmux' };
     }
 
@@ -377,7 +401,13 @@ function detectPackageManagerFromPath(env: NodeJS.ProcessEnv): PackageManagerIns
     }
 
     if (path.basename(normalizedEntry) === 'bin') {
-      const npmPackagePath = path.join(path.dirname(normalizedEntry), 'lib', 'node_modules', 'openmux', 'package.json');
+      const npmPackagePath = path.join(
+        path.dirname(normalizedEntry),
+        'lib',
+        'node_modules',
+        'openmux',
+        'package.json'
+      );
       if (fileExists(npmPackagePath)) {
         return { type: 'npm', updateCommand: 'npm update -g openmux' };
       }
@@ -387,7 +417,10 @@ function detectPackageManagerFromPath(env: NodeJS.ProcessEnv): PackageManagerIns
   return null;
 }
 
-function detectPackageManager(execPath: string, env: NodeJS.ProcessEnv): PackageManagerInstall | null {
+function detectPackageManager(
+  execPath: string,
+  env: NodeJS.ProcessEnv
+): PackageManagerInstall | null {
   if (execPath.includes(`${path.sep}.bun${path.sep}`) || execPath.includes('bun/install')) {
     return { type: 'bun', updateCommand: 'bun update -g openmux' };
   }
@@ -412,7 +445,13 @@ function detectPackageManager(execPath: string, env: NodeJS.ProcessEnv): Package
 
       const npmGlobalPrefix = path.join(home, '.npm-global');
       const npmGlobalWrapper = path.join(npmGlobalPrefix, 'bin', 'openmux');
-      const npmGlobalPackage = path.join(npmGlobalPrefix, 'lib', 'node_modules', 'openmux', 'package.json');
+      const npmGlobalPackage = path.join(
+        npmGlobalPrefix,
+        'lib',
+        'node_modules',
+        'openmux',
+        'package.json'
+      );
       if (fileExists(npmGlobalWrapper) && fileExists(npmGlobalPackage)) {
         return { type: 'npm', updateCommand: 'npm update -g openmux' };
       }
@@ -565,7 +604,12 @@ async function replaceFileAtomically(
   }
 }
 
-async function installRelease(io: UpdateIO, release: GitHubRelease, installDir: string, platformInfo: PlatformInfo): Promise<string> {
+async function installRelease(
+  io: UpdateIO,
+  release: GitHubRelease,
+  installDir: string,
+  platformInfo: PlatformInfo
+): Promise<string> {
   const tagName = release.tag_name;
   if (!tagName) {
     throw new Error('Selected release has no tag name.');
@@ -604,9 +648,14 @@ async function installRelease(io: UpdateIO, release: GitHubRelease, installDir: 
 
     await io.mkdir(installDir);
 
-    await replaceFileAtomically(io, path.join(extractedPath, 'openmux-bin'), path.join(installDir, 'openmux-bin'), {
-      executable: true,
-    });
+    await replaceFileAtomically(
+      io,
+      path.join(extractedPath, 'openmux-bin'),
+      path.join(installDir, 'openmux-bin'),
+      {
+        executable: true,
+      }
+    );
     await replaceFileAtomically(
       io,
       path.join(extractedPath, `libzig_pty.${platformInfo.libExt}`),
@@ -653,7 +702,12 @@ exec "./openmux-bin" "\$@"
 `;
 }
 
-async function replaceTextFileAtomically(io: UpdateIO, destination: string, content: string, options?: { executable?: boolean }): Promise<void> {
+async function replaceTextFileAtomically(
+  io: UpdateIO,
+  destination: string,
+  content: string,
+  options?: { executable?: boolean }
+): Promise<void> {
   const tempDestination = `${destination}.new-${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`;
   try {
     await io.writeFile(tempDestination, content);
@@ -669,7 +723,13 @@ async function replaceTextFileAtomically(io: UpdateIO, destination: string, cont
   }
 }
 
-async function updateManagedWrapper(io: UpdateIO, wrapperPath: string, installDir: string, platformInfo: PlatformInfo, version: string): Promise<void> {
+async function updateManagedWrapper(
+  io: UpdateIO,
+  wrapperPath: string,
+  installDir: string,
+  platformInfo: PlatformInfo,
+  version: string
+): Promise<void> {
   await io.mkdir(path.dirname(wrapperPath));
   const content = renderManagedWrapper(installDir, platformInfo.libExt, version);
   await replaceTextFileAtomically(io, wrapperPath, content, { executable: true });
@@ -685,7 +745,10 @@ function toCliOutcome(exitCode: number): CliOutcome {
   return { kind: 'handled', exitCode };
 }
 
-export async function runUpdateCommand(command: UpdateCommand, overrides: Partial<UpdateIO> = {}): Promise<CliOutcome> {
+export async function runUpdateCommand(
+  command: UpdateCommand,
+  overrides: Partial<UpdateIO> = {}
+): Promise<CliOutcome> {
   const io = {
     ...createDefaultUpdateIO(),
     ...overrides,
@@ -711,7 +774,9 @@ export async function runUpdateCommand(command: UpdateCommand, overrides: Partia
   }
 
   try {
-    const release = await fetchTargetRelease(io, command.prerelease);
+    const release = await fetchTargetRelease(io, {
+      includePrerelease: command.prerelease,
+    });
     const latestVersion = parseReleaseVersion(release.tag_name);
     if (!latestVersion) {
       io.error(`Latest release tag is not a valid semver: ${release.tag_name ?? '<missing>'}`);
@@ -725,7 +790,9 @@ export async function runUpdateCommand(command: UpdateCommand, overrides: Partia
 
     if (!command.yes) {
       if (!io.stdinIsTTY) {
-        io.error('openmux update requires confirmation in an interactive terminal. Re-run with --yes.');
+        io.error(
+          'openmux update requires confirmation in an interactive terminal. Re-run with --yes.'
+        );
         return toCliOutcome(EXIT_USAGE);
       }
 
@@ -739,9 +806,22 @@ export async function runUpdateCommand(command: UpdateCommand, overrides: Partia
     }
 
     io.log(`Downloading ${formatVersion(latestVersion)} for ${platformInfo.target}...`);
-    const installedVersion = await installRelease(io, release, install.value.installDir, platformInfo);
-    await updateManagedWrapper(io, install.value.wrapperPath, install.value.installDir, platformInfo, installedVersion);
-    io.log(`Updated openmux ${formatVersion(install.value.currentVersion)} -> ${formatVersion(installedVersion)}.`);
+    const installedVersion = await installRelease(
+      io,
+      release,
+      install.value.installDir,
+      platformInfo
+    );
+    await updateManagedWrapper(
+      io,
+      install.value.wrapperPath,
+      install.value.installDir,
+      platformInfo,
+      installedVersion
+    );
+    io.log(
+      `Updated openmux ${formatVersion(install.value.currentVersion)} -> ${formatVersion(installedVersion)}.`
+    );
     return toCliOutcome(EXIT_SUCCESS);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

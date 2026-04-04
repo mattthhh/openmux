@@ -7,9 +7,11 @@ export {
   generateSplitId,
   resetSplitIdCounter,
   syncSplitIdCounter,
+  createIdGenerator,
   createWorkspace,
   getActiveWorkspace,
   updateWorkspace,
+  updatePaneProperty,
   recalculateLayout,
 } from './helpers';
 
@@ -25,6 +27,13 @@ export {
   handleSwitchWorkspace,
   handleSetWorkspaceLabel,
   handleLoadSession,
-  handleClearAll
+  handleClearAll,
 } from './workspace-ops';
-export { handleSetLayoutMode, handleSetPanePty, handleSetPaneTitle, handleSwapMain, handleMovePane, handleToggleZoom } from './pane-ops';
+export {
+  handleSetLayoutMode,
+  handleSetPanePty,
+  handleSetPaneTitle,
+  handleSwapMain,
+  handleMovePane,
+  handleToggleZoom,
+} from './pane-ops';

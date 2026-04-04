@@ -56,9 +56,9 @@ export interface Workspace {
 
 /** Rectangle representing a region in terminal coordinates */
 export interface Rectangle {
-  x: number;      // Column position (0-indexed)
-  y: number;      // Row position (0-indexed)
-  width: number;  // Width in columns
+  x: number; // Column position (0-indexed)
+  y: number; // Row position (0-indexed)
+  width: number; // Width in columns
   height: number; // Height in rows
 }
 
@@ -170,29 +170,49 @@ export interface TerminalScrollState {
 
 /**
  * Dirty terminal update - delivers only changed data for efficient rendering.
- * Instead of rebuilding full TerminalState, subscribers receive only what changed.
+ *
+ * This interface optimizes terminal rendering performance by delivering only
+ * the rows that have changed since the last update, rather than the full
+ * terminal state. Subscribers receive minimal update data for high-frequency
+ * terminal output scenarios.
+ *
+ * Use cases:
+ * - Normal terminal output: Only dirtyRows contains changed lines
+ * - Resize or alt screen switch: isFull=true with complete state in fullState
+ * - Cursor movement: Cursor position included even when no text changes
+ *
+ * @example
+ * // Check if full state refresh is needed
+ * if (update.isFull && update.fullState) {
+ *   renderCompleteState(update.fullState);
+ * } else {
+ *   renderDirtyRows(update.dirtyRows);
+ * }
  */
 export interface DirtyTerminalUpdate {
-  /** Map of row index -> new row cells (only dirty rows included) */
+  /** Map of row index -> new row cells. Only includes rows that changed content or attributes. */
   dirtyRows: Map<number, TerminalCell[]>;
-  /** Current cursor state (always included - cheap) */
+  /** Current cursor position and visibility state. Always included for cursor tracking. */
   cursor: TerminalCursor;
-  /** Scroll state (always included - cheap) */
+  /** Current scroll region and position. Always included for scroll synchronization. */
   scrollState: TerminalScrollState;
-  /** Terminal dimensions */
+  /** Terminal width in columns. */
   cols: number;
+  /** Terminal height in rows. */
   rows: number;
-  /** If true, fullState contains complete terminal state (resize, alt screen switch) */
+  /** If true, fullState contains complete terminal state (used after resize, alt screen switch). */
   isFull: boolean;
-  /** Complete state when isFull=true; otherwise undefined */
+  /** Complete terminal state when isFull=true; undefined for incremental updates. */
   fullState?: TerminalState;
-  /** Terminal mode flags */
+  /** Whether terminal is in alternate screen buffer (e.g., vim, less). */
   alternateScreen: boolean;
+  /** Whether mouse events are sent to the application (e.g., vim mouse mode). */
   mouseTracking: boolean;
+  /** Cursor key mode for application vs normal encoding. */
   cursorKeyMode: 'normal' | 'application';
-  /** Kitty keyboard protocol flags (bitset). */
+  /** Kitty keyboard protocol flags (bitset) for enhanced key reporting. */
   kittyKeyboardFlags?: number;
-  /** DECSET 2048 - in-band resize notifications (used by neovim) */
+  /** DECSET 2048 - in-band resize notifications (used by neovim). */
   inBandResize: boolean;
 }
 
@@ -353,7 +373,6 @@ export interface PTYSession {
   cwd: string;
   shell: string;
 }
-
 
 /** Session ID - unique identifier */
 export type SessionId = string;

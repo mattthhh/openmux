@@ -1,51 +1,51 @@
-import type { AggregateViewState, PendingPtyInsertion } from './aggregate-view-types';
+import type { AggregateViewState, PendingPaneCreation } from './aggregate-view-types';
 
-type PendingInsertionCollectionState = Pick<AggregateViewState, 'pendingPtyInsertions'>;
+type PendingInsertionCollectionState = Pick<AggregateViewState, 'pendingPaneCreations'>;
 
 type PendingInsertionOrderState = Pick<
   AggregateViewState,
-  'allPtys' | 'sessionPaneOrders' | 'pendingPtyInsertions'
+  'allPtys' | 'sessionPaneOrders' | 'pendingPaneCreations'
 >;
 
-export function getCurrentPendingPtyInsertion(
+export function getCurrentPendingPaneCreation(
   state: PendingInsertionCollectionState
-): PendingPtyInsertion | null {
-  return state.pendingPtyInsertions[state.pendingPtyInsertions.length - 1] ?? null;
+): PendingPaneCreation | null {
+  return state.pendingPaneCreations[state.pendingPaneCreations.length - 1] ?? null;
 }
 
-export function setPendingPtyInsertions(
+export function setPendingPaneCreations(
   state: PendingInsertionCollectionState,
-  insertions: PendingPtyInsertion[]
+  insertions: PendingPaneCreation[]
 ): void {
-  state.pendingPtyInsertions = insertions;
+  state.pendingPaneCreations = insertions;
 }
 
-export function upsertPendingPtyInsertion(
+export function upsertPendingPaneCreation(
   state: PendingInsertionCollectionState,
-  insertion: PendingPtyInsertion
+  insertion: PendingPaneCreation
 ): void {
-  const nextInsertions = state.pendingPtyInsertions.filter(
+  const nextInsertions = state.pendingPaneCreations.filter(
     (candidate) => candidate.id !== insertion.id
   );
   nextInsertions.push(insertion);
-  setPendingPtyInsertions(state, nextInsertions);
+  setPendingPaneCreations(state, nextInsertions);
 }
 
-export function removePendingPtyInsertions(
+export function removePendingPaneCreations(
   state: PendingInsertionCollectionState,
-  predicate: (insertion: PendingPtyInsertion) => boolean
+  predicate: (insertion: PendingPaneCreation) => boolean
 ): void {
-  setPendingPtyInsertions(
+  setPendingPaneCreations(
     state,
-    state.pendingPtyInsertions.filter((insertion) => !predicate(insertion))
+    state.pendingPaneCreations.filter((insertion) => !predicate(insertion))
   );
 }
 
-export function findPendingPtyInsertion(
+export function findPendingPaneCreation(
   state: PendingInsertionCollectionState,
-  predicate: (insertion: PendingPtyInsertion) => boolean
-): PendingPtyInsertion | null {
-  return state.pendingPtyInsertions.find(predicate) ?? null;
+  predicate: (insertion: PendingPaneCreation) => boolean
+): PendingPaneCreation | null {
+  return state.pendingPaneCreations.find(predicate) ?? null;
 }
 
 function buildSessionPaneOrderFromState(
@@ -102,12 +102,12 @@ export function getAppendedPaneOrder(paneOrder: Map<string, number>): number {
   return [...paneOrder.values()].reduce((maxOrder, order) => Math.max(maxOrder, order), -1) + 1;
 }
 
-export function getNextPendingPtyInsertionOrder(
+export function getNextPendingPaneCreationOrder(
   state: PendingInsertionOrderState,
   params: { sessionId: string; insertAfterPaneId: string | null }
 ): number {
   const paneOrder = buildSessionPaneOrderFromState(state, params.sessionId);
-  const existingPendingOrders = state.pendingPtyInsertions
+  const existingPendingOrders = state.pendingPaneCreations
     .filter(
       (insertion) =>
         insertion.sessionId === params.sessionId &&
@@ -156,12 +156,12 @@ export function getNextPendingPtyInsertionOrder(
   return lowerOrder + (upperOrder - lowerOrder) / 2;
 }
 
-export function findPendingPtyInsertionForLifecycle(
+export function findPendingPaneCreationForLifecycle(
   state: PendingInsertionCollectionState,
   params: { ptyId?: string | null; sessionId?: string | null; paneId?: string | null }
-): PendingPtyInsertion | null {
+): PendingPaneCreation | null {
   if (params.ptyId) {
-    const matchingPtyInsertion = state.pendingPtyInsertions.find(
+    const matchingPtyInsertion = state.pendingPaneCreations.find(
       (insertion) => insertion.pendingPtyId === params.ptyId
     );
     if (matchingPtyInsertion) {
@@ -169,7 +169,7 @@ export function findPendingPtyInsertionForLifecycle(
     }
   }
 
-  const sessionInsertions = state.pendingPtyInsertions.filter(
+  const sessionInsertions = state.pendingPaneCreations.filter(
     (insertion) => !params.sessionId || insertion.sessionId === params.sessionId
   );
 

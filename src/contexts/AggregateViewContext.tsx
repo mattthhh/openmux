@@ -5,7 +5,6 @@
 
 import { createContext, useContext, createEffect, on, onCleanup, type ParentProps } from 'solid-js';
 import { createStore, produce } from 'solid-js/store';
-import { setShimmerEnabled } from '../core/shimmer';
 
 export type {
   GitDiffStats,
@@ -272,14 +271,8 @@ export function AggregateViewProvider(props: AggregateViewProviderProps) {
     void refreshPtys();
   });
 
-  // Enable shimmer when aggregate view is open, disable when closed
-  createEffect(() => {
-    setShimmerEnabled(state.showAggregateView);
-  });
-
   onCleanup(() => {
     cleanupSubscriptions(subscriptions, subscriptionsEpoch);
-    setShimmerEnabled(false);
   });
 
   const value: AggregateViewContextValue = {

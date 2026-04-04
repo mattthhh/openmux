@@ -36,7 +36,7 @@ describe('title handler (litmus)', () => {
       pendingPtyIds: new Set(),
       recentlyAddedPtyIds: new Set(),
       deletedPtyIds: new Set(),
-      pendingPtyInsertions: [],
+      pendingPaneCreations: [],
       listScrollOffset: 0,
     });
 
@@ -97,7 +97,7 @@ describe('title handler (litmus)', () => {
       pendingPtyIds: new Set(),
       recentlyAddedPtyIds: new Set(),
       deletedPtyIds: new Set(),
-      pendingPtyInsertions: [],
+      pendingPaneCreations: [],
       listScrollOffset: 0,
     });
 

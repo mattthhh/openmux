@@ -5,7 +5,13 @@
 
 import type { Direction, LayoutMode, Workspace } from '../../types';
 import type { LayoutState } from './types';
-import { getActiveWorkspace, getCandidateScore, recalculateLayout, updateWorkspace } from './helpers';
+import {
+  getActiveWorkspace,
+  getCandidateScore,
+  recalculateLayout,
+  updateWorkspace,
+  updatePaneProperty,
+} from './helpers';
 import { getAllWorkspacePanes } from '../master-stack-layout';
 import {
   clearNodeRectangles,
@@ -13,7 +19,6 @@ import {
   findPane,
   swapPaneInDirection,
   swapTwoPanesById,
-  updatePaneInNode,
 } from '../../layout-tree';
 
 /**
@@ -40,25 +45,7 @@ export function handleSetLayoutMode(state: LayoutState, mode: LayoutMode): Layou
  */
 export function handleSetPanePty(state: LayoutState, paneId: string, ptyId: string): LayoutState {
   const workspace = getActiveWorkspace(state);
-
-  let updated: Workspace = workspace;
-
-  if (workspace.mainPane && containsPane(workspace.mainPane, paneId)) {
-    updated = {
-      ...workspace,
-      mainPane: updatePaneInNode(workspace.mainPane, paneId, pane => ({ ...pane, ptyId })),
-    };
-  } else {
-    updated = {
-      ...workspace,
-      stackPanes: workspace.stackPanes.map((pane) =>
-        containsPane(pane, paneId)
-          ? updatePaneInNode(pane, paneId, target => ({ ...target, ptyId }))
-          : pane
-      ),
-    };
-  }
-
+  const updated = updatePaneProperty(workspace, paneId, 'ptyId', ptyId);
   return { ...state, workspaces: updateWorkspace(state, updated) };
 }
 
@@ -68,25 +55,7 @@ export function handleSetPanePty(state: LayoutState, paneId: string, ptyId: stri
  */
 export function handleSetPaneTitle(state: LayoutState, paneId: string, title: string): LayoutState {
   const workspace = getActiveWorkspace(state);
-
-  let updated: Workspace = workspace;
-
-  if (workspace.mainPane && containsPane(workspace.mainPane, paneId)) {
-    updated = {
-      ...workspace,
-      mainPane: updatePaneInNode(workspace.mainPane, paneId, pane => ({ ...pane, title })),
-    };
-  } else {
-    updated = {
-      ...workspace,
-      stackPanes: workspace.stackPanes.map((pane) =>
-        containsPane(pane, paneId)
-          ? updatePaneInNode(pane, paneId, target => ({ ...target, title }))
-          : pane
-      ),
-    };
-  }
-
+  const updated = updatePaneProperty(workspace, paneId, 'title', title);
   return { ...state, workspaces: updateWorkspace(state, updated) };
 }
 
@@ -99,8 +68,8 @@ export function handleSwapMain(state: LayoutState): LayoutState {
   if (!workspace.mainPane || !workspace.focusedPaneId) return state;
   if (containsPane(workspace.mainPane, workspace.focusedPaneId)) return state;
 
-  const focusedStackIndex = workspace.stackPanes.findIndex(
-    p => containsPane(p, workspace.focusedPaneId!)
+  const focusedStackIndex = workspace.stackPanes.findIndex((p) =>
+    containsPane(p, workspace.focusedPaneId!)
   );
   if (focusedStackIndex === -1) return state;
 
@@ -135,7 +104,7 @@ export function handleMovePane(state: LayoutState, direction: Direction): Layout
   if (!workspace.mainPane || !workspace.focusedPaneId) return state;
 
   const focusedId = workspace.focusedPaneId;
-  const stackIndex = workspace.stackPanes.findIndex(p => containsPane(p, focusedId));
+  const stackIndex = workspace.stackPanes.findIndex((p) => containsPane(p, focusedId));
   const focusedRoot = stackIndex >= 0 ? workspace.stackPanes[stackIndex]! : workspace.mainPane;
 
   // Step 1: Try within-tree swap using split direction
@@ -174,10 +143,10 @@ export function handleMovePane(state: LayoutState, direction: Direction): Layout
   }
 
   // Step 2: Geometry-based cross-tree swap
-  const allPanes = getAllWorkspacePanes(workspace).filter(p => p.rectangle);
+  const allPanes = getAllWorkspacePanes(workspace).filter((p) => p.rectangle);
   if (allPanes.length === 0) return state;
 
-  const currentPane = allPanes.find(p => p.id === focusedId);
+  const currentPane = allPanes.find((p) => p.id === focusedId);
   if (!currentPane?.rectangle) return state;
 
   // Find best target pane in the direction using geometry
@@ -198,42 +167,56 @@ export function handleMovePane(state: LayoutState, direction: Direction): Layout
 
   // Find the pane data objects for swapping
   const focusedPaneData = workspace.mainPane
-    ? findPane(workspace.mainPane, focusedId) ??
+    ? (findPane(workspace.mainPane, focusedId) ??
       workspace.stackPanes.reduce<ReturnType<typeof findPane>>(
         (found, node) => found ?? findPane(node, focusedId),
         null
-      )
+      ))
     : null;
 
   const targetPaneData = workspace.mainPane
-    ? findPane(workspace.mainPane, bestPane.id) ??
+    ? (findPane(workspace.mainPane, bestPane.id) ??
       workspace.stackPanes.reduce<ReturnType<typeof findPane>>(
         (found, node) => found ?? findPane(node, bestPane.id),
         null
-      )
+      ))
     : null;
 
   if (!focusedPaneData || !targetPaneData) return state;
 
   // Prepare pane data for swapping (without rectangle - will be recalculated)
-  const pane1Data = { id: focusedPaneData.id, ptyId: focusedPaneData.ptyId, title: focusedPaneData.title };
-  const pane2Data = { id: targetPaneData.id, ptyId: targetPaneData.ptyId, title: targetPaneData.title };
+  const pane1Data = {
+    id: focusedPaneData.id,
+    ptyId: focusedPaneData.ptyId,
+    title: focusedPaneData.title,
+  };
+  const pane2Data = {
+    id: targetPaneData.id,
+    ptyId: targetPaneData.ptyId,
+    title: targetPaneData.title,
+  };
 
   // Swap both panes in a single pass through all trees
   // This handles both same-tree and cross-tree swaps correctly
-  const newMainPane = swapTwoPanesById(workspace.mainPane, focusedId, pane1Data, bestPane.id, pane2Data);
-  const newStackPanes = workspace.stackPanes.map(node =>
+  const newMainPane = swapTwoPanesById(
+    workspace.mainPane,
+    focusedId,
+    pane1Data,
+    bestPane.id,
+    pane2Data
+  );
+  const newStackPanes = workspace.stackPanes.map((node) =>
     swapTwoPanesById(node, focusedId, pane1Data, bestPane.id, pane2Data)
   );
 
   // Update activeStackIndex if target is in a different stack entry
-  const targetStackIndex = workspace.stackPanes.findIndex(p => containsPane(p, bestPane.id));
+  const targetStackIndex = workspace.stackPanes.findIndex((p) => containsPane(p, bestPane.id));
   const newActiveStackIndex = targetStackIndex >= 0 ? targetStackIndex : workspace.activeStackIndex;
 
   // Clear rectangles from all nodes to ensure fresh layout calculation and proper re-renders
   // This prevents the structural sharing optimization from returning the same object reference
   const clearedMainPane = newMainPane ? clearNodeRectangles(newMainPane) : newMainPane;
-  const clearedStackPanes = newStackPanes.map(p => clearNodeRectangles(p)!);
+  const clearedStackPanes = newStackPanes.map((p) => clearNodeRectangles(p)!);
 
   let updated: Workspace = {
     ...workspace,

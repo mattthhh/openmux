@@ -9,9 +9,6 @@ import {
   hasRecentPtyStdoutActivity,
   clearPtyStdoutActivity,
   hasMeaningfulActivity,
-  setShimmerEnabled,
-  isShimmerEnabled,
-  subscribeToShimmer,
 } from '../shimmer';
 import type { PtyInfo } from '../../contexts/aggregate-view-types';
 
@@ -50,8 +47,6 @@ describe('shimmer activity tracking', () => {
     clearPtyStdoutActivity('pty-1');
     clearPtyStdoutActivity('pty-2');
     clearPtyStdoutActivity('pty-3');
-    // Reset shimmer enabled state
-    setShimmerEnabled(true);
   });
 
   describe('recordPtyStdoutActivity', () => {
@@ -257,106 +252,6 @@ describe('shimmer activity tracking', () => {
       recordPtyStdoutActivity(pty.ptyId, now + 100);
 
       expect(hasMeaningfulActivity(pty)).toBe(true);
-    });
-  });
-
-  describe('setShimmerEnabled / isShimmerEnabled', () => {
-    it('setShimmerEnabled / isShimmerEnabled are deprecated no-ops in event-based architecture', () => {
-      // In the new event-based architecture, shimmer is always "enabled"
-      // It just only runs when PTYs have activity. No global toggle needed.
-      setShimmerEnabled(false);
-      expect(isShimmerEnabled()).toBe(true); // Always true in new architecture
-
-      setShimmerEnabled(true);
-      expect(isShimmerEnabled()).toBe(true); // Always true
-    });
-
-    it('defaults to enabled', () => {
-      // Reset to verify default behavior
-      setShimmerEnabled(true);
-      expect(isShimmerEnabled()).toBe(true);
-    });
-  });
-
-  describe('subscribeToShimmer (DEPRECATED)', () => {
-    it('returns unsubscribe function for backwards compatibility', () => {
-      const unsubscribe = subscribeToShimmer(() => {});
-      expect(typeof unsubscribe).toBe('function');
-      unsubscribe();
-    });
-
-    it('does NOT call callback - event-based architecture has no global loop', async () => {
-      // In the new event-based architecture, subscribeToShimmer is a no-op.
-      // Shimmer is calculated at render time via getPtyShimmerColor().
-      setShimmerEnabled(true);
-
-      let callCount = 0;
-      const unsubscribe = subscribeToShimmer(() => {
-        callCount++;
-      });
-
-      // Wait for what would have been animation frames
-      await new Promise((resolve) => setTimeout(resolve, 150));
-
-      // Callback should NOT be called - no global animation loop in event-based arch
-      expect(callCount).toBe(0);
-
-      unsubscribe();
-    });
-
-    it('unsubscribe still works (no-op in new architecture)', () => {
-      const unsubscribe = subscribeToShimmer(() => {});
-      expect(() => unsubscribe()).not.toThrow();
-    });
-
-    it('stops calling callback after unsubscribe', async () => {
-      setShimmerEnabled(true);
-
-      let callCount = 0;
-      const unsubscribe = subscribeToShimmer(() => {
-        callCount++;
-      });
-
-      // Wait for some ticks
-      await new Promise((resolve) => setTimeout(resolve, 150));
-      const countBefore = callCount;
-
-      // Unsubscribe (no-op in new architecture)
-      unsubscribe();
-
-      // Wait again
-      await new Promise((resolve) => setTimeout(resolve, 150));
-
-      // In event-based architecture, callback is never called (no global loop)
-      // Count should remain 0
-      expect(callCount).toBe(countBefore);
-      expect(callCount).toBe(0);
-    });
-
-    it('handles multiple subscribers', async () => {
-      setShimmerEnabled(true);
-
-      let callCount1 = 0;
-      let callCount2 = 0;
-
-      const unsubscribe1 = subscribeToShimmer(() => {
-        callCount1++;
-      });
-
-      const unsubscribe2 = subscribeToShimmer(() => {
-        callCount2++;
-      });
-
-      // Wait for ticks
-      await new Promise((resolve) => setTimeout(resolve, 150));
-
-      // In event-based architecture, callbacks are NOT called
-      // No global animation loop - shimmer is calculated at render time
-      expect(callCount1).toBe(0);
-      expect(callCount2).toBe(0);
-
-      unsubscribe1();
-      unsubscribe2();
     });
   });
 });

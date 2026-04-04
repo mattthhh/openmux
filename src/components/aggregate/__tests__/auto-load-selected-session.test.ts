@@ -2,7 +2,7 @@ import { describe, expect, it } from 'bun:test';
 
 import type {
   FlattenedTreeItem,
-  PendingPtyInsertion,
+  PendingPaneCreation,
 } from '../../../contexts/aggregate-view-types';
 import type { PendingAggregatePaneFocus } from '../pending-pane-focus';
 import { getSelectedSessionIdForAutoLoad } from '../auto-load-selected-session';
@@ -45,7 +45,7 @@ const createPlaceholderItem = (sessionId: string, message = '...'): FlattenedTre
   parentSessionId: sessionId,
 });
 
-const createPendingInsertion = (): PendingPtyInsertion => ({
+const createPendingInsertion = (): PendingPaneCreation => ({
   id: 'pending-1',
   sessionId: 'session-a',
   insertAfterPtyId: 'pty-1',
@@ -63,7 +63,7 @@ describe('getSelectedSessionIdForAutoLoad', () => {
   it('autoloads unloaded session headers', () => {
     const result = getSelectedSessionIdForAutoLoad({
       selectedItem: createSessionItem('session-a'),
-      pendingPtyInsertions: [],
+      pendingPaneCreations: [],
       pendingPaneFocus: null,
     });
 
@@ -73,7 +73,7 @@ describe('getSelectedSessionIdForAutoLoad', () => {
   it('autoloads unloaded session placeholders', () => {
     const result = getSelectedSessionIdForAutoLoad({
       selectedItem: createPlaceholderItem('session-a'),
-      pendingPtyInsertions: [],
+      pendingPaneCreations: [],
       pendingPaneFocus: null,
     });
 
@@ -83,7 +83,7 @@ describe('getSelectedSessionIdForAutoLoad', () => {
   it('does not autoload while a pane creation is pending', () => {
     const result = getSelectedSessionIdForAutoLoad({
       selectedItem: createPlaceholderItem('session-b'),
-      pendingPtyInsertions: [createPendingInsertion()],
+      pendingPaneCreations: [createPendingInsertion()],
       pendingPaneFocus: null,
     });
 
@@ -93,7 +93,7 @@ describe('getSelectedSessionIdForAutoLoad', () => {
   it('does not autoload while pending focus is resolving', () => {
     const result = getSelectedSessionIdForAutoLoad({
       selectedItem: createPlaceholderItem('session-b'),
-      pendingPtyInsertions: [],
+      pendingPaneCreations: [],
       pendingPaneFocus: createPendingPaneFocus(),
     });
 
@@ -103,7 +103,7 @@ describe('getSelectedSessionIdForAutoLoad', () => {
   it('ignores loaded session headers', () => {
     const result = getSelectedSessionIdForAutoLoad({
       selectedItem: createSessionItem('session-a', 'loaded'),
-      pendingPtyInsertions: [],
+      pendingPaneCreations: [],
       pendingPaneFocus: null,
     });
 
@@ -113,7 +113,7 @@ describe('getSelectedSessionIdForAutoLoad', () => {
   it('ignores non-unloaded placeholders', () => {
     const result = getSelectedSessionIdForAutoLoad({
       selectedItem: createPlaceholderItem('session-a', 'Loading...'),
-      pendingPtyInsertions: [],
+      pendingPaneCreations: [],
       pendingPaneFocus: null,
     });
 

@@ -2,12 +2,11 @@
  * Types for subscription management in Aggregate View.
  */
 
-import type { PtyTitleChangeEvent } from '../../../effect/bridge/pty-bridge';
-
 /** Subscription manager holding all active subscription cleanup functions */
 export interface SubscriptionManager {
   lifecycle: (() => void) | null;
   titleChange: (() => void) | null;
+  gitChanges: (() => void) | null;
   polling: (() => void) | null;
 }
 
@@ -82,6 +81,7 @@ export function createSubscriptionManager(): SubscriptionManager {
   return {
     lifecycle: null,
     titleChange: null,
+    gitChanges: null,
     polling: null,
   };
 }

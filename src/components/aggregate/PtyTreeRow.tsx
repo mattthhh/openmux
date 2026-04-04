@@ -13,7 +13,7 @@
  */
 
 import { createEffect, createMemo, createSignal, type Accessor } from 'solid-js';
-import type { PtyInfo } from '../../contexts/aggregate/types';
+import type { PtyInfo } from '../../contexts/aggregate-view-types';
 import type { AggregateTheme } from '../../core/types';
 import { getPtyShimmerColor, hasActiveShimmer } from '../../core/shimmer';
 import { useShimmerRenderTime, useShimmerStateVersion } from './hooks/useShimmerRenderTime';

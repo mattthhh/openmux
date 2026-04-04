@@ -3,7 +3,7 @@
  */
 
 import { produce, type SetStoreFunction } from 'solid-js/store';
-import type { PtyInfo, AggregateViewState, PendingPtyInsertion } from './aggregate-view-types';
+import type { PtyInfo, AggregateViewState, PendingPaneCreation } from './aggregate-view-types';
 import type { SessionMetadata, SerializedLayoutNode, SerializedSession } from '../effect/models';
 import {
   buildPtyIndex,
@@ -11,7 +11,6 @@ import {
   recomputeMatches,
   recomputeTree,
 } from './aggregate-view-helpers';
-import { runStream, streamFromSubscription, tap, repeatWithInterval } from '../effect/stream-utils';
 import {
   listSessionsResult,
   getSessionSummaryResult,
@@ -25,16 +24,10 @@ import {
   removeAggregateSessionMappingForPty,
   type PtyMetadata,
 } from '../effect/bridge/aggregate-bridge';
-import {
-  subscribeToPtyLifecycle,
-  subscribeToAllTitleChanges,
-  subscribeToAllPtyActivity,
-  type PtyTitleChangeEvent,
-} from '../effect/bridge/pty-bridge';
 import { getGlobalGitMetadataCache } from './git-metadata-cache';
 import {
-  findPendingPtyInsertionForLifecycle,
-  removePendingPtyInsertions,
+  findPendingPaneCreationForLifecycle,
+  removePendingPaneCreations,
 } from './aggregate-view-pending-insertions';
 import {
   applyGitMetadataSnapshot,
@@ -43,60 +36,22 @@ import {
 } from './aggregate/git/metadata';
 export { didPtyInfoChange } from './aggregate/git/metadata';
 import { ptyMetadataToInfo } from './aggregate/pty-info';
-import {
-  getGitInfo,
-  getGitDiffStats,
-  subscribeToGitRepoChanges,
-} from '../effect/services/pty/helpers';
+import { getGitInfo, getGitDiffStats } from '../effect/services/pty/helpers';
 import { AggregateBridgeError } from '../effect/errors';
+import {
+  createSubscriptionManager as createAggregateSubscriptionManager,
+  createRefreshState as createAggregateRefreshState,
+  createTitleChangeHandler as createAggregateTitleChangeHandler,
+  setupSubscriptions as setupAggregateSubscriptions,
+  cleanupSubscriptions as cleanupAggregateSubscriptions,
+  type SubscriptionManager,
+  type RefreshState,
+  type PtyOwnership,
+} from './aggregate/subscriptions';
+import { RefreshGuard } from './aggregate/refresh/guard';
 
-export interface SubscriptionManager {
-  lifecycle: (() => void) | null;
-  titleChange: (() => void) | null;
-  gitChanges: (() => void) | null;
-  polling: (() => void) | null;
-}
-
-export interface RefreshState {
-  refreshInProgress: boolean;
-  subsetRefreshInProgress: boolean;
-  pendingFullRefresh: boolean;
-  pendingSubsetPtyIds: Set<string>;
-}
-
-type RefreshFlagKey = 'refreshInProgress' | 'subsetRefreshInProgress';
-
-/** AsyncDisposable guard for refresh state flags */
-class RefreshGuard implements AsyncDisposable {
-  constructor(
-    private state: RefreshState,
-    private key: RefreshFlagKey
-  ) {
-    this.state[this.key] = true;
-  }
-
-  async [Symbol.asyncDispose](): Promise<void> {
-    this.state[this.key] = false;
-  }
-}
-
-export function createSubscriptionManager(): SubscriptionManager {
-  return {
-    lifecycle: null,
-    titleChange: null,
-    gitChanges: null,
-    polling: null,
-  };
-}
-
-export function createRefreshState(): RefreshState {
-  return {
-    refreshInProgress: false,
-    subsetRefreshInProgress: false,
-    pendingFullRefresh: false,
-    pendingSubsetPtyIds: new Set(),
-  };
-}
+export const createSubscriptionManager = createAggregateSubscriptionManager;
+export const createRefreshState = createAggregateRefreshState;
 
 interface AggregatePtyMetadata extends PtyMetadata {
   sessionId?: string;
@@ -238,7 +193,7 @@ function buildSessionPaneOrderFromState(
 
 function getPendingInsertionOrder(
   state: AggregateViewState,
-  insertion: PendingPtyInsertion
+  insertion: PendingPaneCreation
 ): number {
   if (insertion.sortOrderHint !== undefined) {
     return insertion.sortOrderHint;
@@ -345,12 +300,6 @@ function findWorkspaceIdForPane(session: SerializedSession, paneId: string): num
   }
 
   return undefined;
-}
-
-export interface PtyOwnership {
-  sessionId: string;
-  paneId?: string;
-  workspaceId?: number;
 }
 
 export function createAggregateViewRefreshers(
@@ -1190,8 +1139,8 @@ export function createLifecycleHandlers(
   const findMatchingPendingInsertion = (
     aggregateState: AggregateViewState,
     params: { ptyId: string; sessionId?: string | null; paneId?: string | null }
-  ): PendingPtyInsertion | null => {
-    return findPendingPtyInsertionForLifecycle(aggregateState, params);
+  ): PendingPaneCreation | null => {
+    return findPendingPaneCreationForLifecycle(aggregateState, params);
   };
 
   const removeMatchingPendingInsertions = (
@@ -1200,14 +1149,14 @@ export function createLifecycleHandlers(
   ): void => {
     const matchingInsertion = findMatchingPendingInsertion(aggregateState, params);
     if (matchingInsertion) {
-      removePendingPtyInsertions(
+      removePendingPaneCreations(
         aggregateState,
         (insertion) => insertion.id === matchingInsertion.id
       );
       return;
     }
 
-    removePendingPtyInsertions(
+    removePendingPaneCreations(
       aggregateState,
       (insertion) =>
         insertion.pendingPtyId === params.ptyId ||
@@ -1470,7 +1419,7 @@ export function createLifecycleHandlers(
               sortOrderHint: newOrder,
             };
           }
-          removePendingPtyInsertions(s, (insertion) => insertion.id === pendingInsertion.id);
+          removePendingPaneCreations(s, (insertion) => insertion.id === pendingInsertion.id);
         }
 
         // Clear pending status
@@ -1542,7 +1491,7 @@ export function createLifecycleHandlers(
         const pty = s.allPtys[index];
         if (!pty) return;
 
-        removePendingPtyInsertions(
+        removePendingPaneCreations(
           s,
           (insertion) =>
             insertion.pendingPtyId === ptyId ||

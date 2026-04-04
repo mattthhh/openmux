@@ -11,7 +11,7 @@ import { useAggregateView } from '../contexts/AggregateViewContext';
 import { useTitle } from '../contexts/TitleContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useCopyMode } from '../contexts/CopyModeContext';
-import { useKeyboardState } from '../contexts/KeyboardContext';
+import { useKeyboard } from '../contexts/KeyboardContext';
 import { getFocusedPane, isMainPaneFocused } from '../core/workspace-utils';
 import { collectPanes, findPane, getFirstPane } from '../core/layout-tree';
 import { Pane } from './Pane';
@@ -24,7 +24,7 @@ export function PaneContainer() {
   const { state: aggregateState } = useAggregateView();
   const theme = useTheme();
   const copyMode = useCopyMode();
-  const keyboard = useKeyboardState();
+  const keyboard = useKeyboard();
   const { exitCopyMode: keyboardExitCopyMode } = keyboard;
 
   // Memoize workspace properties to prevent cascading re-renders
@@ -51,7 +51,7 @@ export function PaneContainer() {
       if (active) collectPanes(active, panes);
       // Filter out panes without valid rectangles to prevent race condition
       // where layout hasn't recalculated yet after activeStackIndex changes
-      return panes.filter(p => p.rectangle && p.rectangle.width > 0 && p.rectangle.height > 0);
+      return panes.filter((p) => p.rectangle && p.rectangle.width > 0 && p.rectangle.height > 0);
     }
     for (const pane of stackPanes()) {
       collectPanes(pane, panes);
@@ -60,8 +60,10 @@ export function PaneContainer() {
   });
 
   const resolvePaneById = (paneId: string) => {
-    return findPane(mainPane(), paneId) ??
-      stackPanes().reduce<PaneData | null>((found, node) => found ?? findPane(node, paneId), null);
+    return (
+      findPane(mainPane(), paneId) ??
+      stackPanes().reduce<PaneData | null>((found, node) => found ?? findPane(node, paneId), null)
+    );
   };
 
   const handlePaneClick = (paneId: string) => {
@@ -87,7 +89,7 @@ export function PaneContainer() {
       return;
     }
     const focusedId = focusedPaneId();
-    const focusedPtyId = focusedId ? resolvePaneById(focusedId)?.ptyId ?? null : null;
+    const focusedPtyId = focusedId ? (resolvePaneById(focusedId)?.ptyId ?? null) : null;
     if (focusedPtyId !== activeCopyPty) {
       copyMode.exitCopyMode();
       keyboardExitCopyMode();
@@ -281,7 +283,7 @@ function StackedPanesRenderer(props: StackedPanesRendererProps) {
     collectPanes(entry, panes);
     // Filter out panes without valid rectangles to prevent race condition
     // where layout recalculation hasn't completed after activeStackIndex changes
-    return panes.filter(p => p.rectangle && p.rectangle.width > 0 && p.rectangle.height > 0);
+    return panes.filter((p) => p.rectangle && p.rectangle.width > 0 && p.rectangle.height > 0);
   });
 
   const handleTabClick = (paneId: string) => {
@@ -304,7 +306,9 @@ function StackedPanesRenderer(props: StackedPanesRendererProps) {
       const labelPane = props.focusedPaneId ? findPane(pane, props.focusedPaneId) : null;
       const fallbackPane = labelPane ?? getFirstPane(pane);
       const paneId = fallbackPane?.id ?? `stack-${index}`;
-      const title = fallbackPane ? (titleCtx.getTitle(fallbackPane.id) ?? fallbackPane.title ?? 'pane') : 'pane';
+      const title = fallbackPane
+        ? (titleCtx.getTitle(fallbackPane.id) ?? fallbackPane.title ?? 'pane')
+        : 'pane';
       // Use consistent space padding for all tabs (background fill indicates active)
       const label = ` ${title} `;
       return { paneId, label, width: label.length, isActive, index };
@@ -350,7 +354,9 @@ function StackedPanesRenderer(props: StackedPanesRendererProps) {
 
     // Calculate active tab's visual position for the connector
     const activeTabVisualX = activeTab ? Math.max(0, activeTab.start - scrollOffset) : 0;
-    const activeTabVisualWidth = activeTab ? Math.min(activeTab.width, visibleWidth - activeTabVisualX) : 0;
+    const activeTabVisualWidth = activeTab
+      ? Math.min(activeTab.width, visibleWidth - activeTabVisualX)
+      : 0;
 
     return { tabs: result, activeTabVisualX, activeTabVisualWidth };
   });

@@ -2,11 +2,19 @@
  * Helper functions for layout reducer
  */
 
-import type { Direction, Rectangle, Workspace, WorkspaceId, LayoutMode, LayoutNode } from '../../types';
+import type {
+  Direction,
+  Rectangle,
+  Workspace,
+  WorkspaceId,
+  LayoutMode,
+  LayoutNode,
+  PaneData,
+} from '../../types';
 import type { LayoutConfig } from '../../config';
 import type { LayoutState, Workspaces } from './types';
 import { calculateMasterStackLayout } from '../master-stack-layout';
-import { collectPanes, isSplitNode } from '../../layout-tree';
+import { collectPanes, isSplitNode, updatePaneInNode, containsPane } from '../../layout-tree';
 
 /**
  * Geometry helpers for layout-tree aware navigation and movement
@@ -27,28 +35,48 @@ export function getCandidateScore(
   if (direction === 'west') {
     primaryDistance = current.x - (candidate.x + candidate.width);
     if (primaryDistance < 0) return null;
-    overlap = getOverlap(current.y, current.y + current.height, candidate.y, candidate.y + candidate.height);
+    overlap = getOverlap(
+      current.y,
+      current.y + current.height,
+      candidate.y,
+      candidate.y + candidate.height
+    );
     secondaryDistance = Math.abs(
       current.y + current.height / 2 - (candidate.y + candidate.height / 2)
     );
   } else if (direction === 'east') {
     primaryDistance = candidate.x - (current.x + current.width);
     if (primaryDistance < 0) return null;
-    overlap = getOverlap(current.y, current.y + current.height, candidate.y, candidate.y + candidate.height);
+    overlap = getOverlap(
+      current.y,
+      current.y + current.height,
+      candidate.y,
+      candidate.y + candidate.height
+    );
     secondaryDistance = Math.abs(
       current.y + current.height / 2 - (candidate.y + candidate.height / 2)
     );
   } else if (direction === 'north') {
     primaryDistance = current.y - (candidate.y + candidate.height);
     if (primaryDistance < 0) return null;
-    overlap = getOverlap(current.x, current.x + current.width, candidate.x, candidate.x + candidate.width);
+    overlap = getOverlap(
+      current.x,
+      current.x + current.width,
+      candidate.x,
+      candidate.x + candidate.width
+    );
     secondaryDistance = Math.abs(
       current.x + current.width / 2 - (candidate.x + candidate.width / 2)
     );
   } else {
     primaryDistance = candidate.y - (current.y + current.height);
     if (primaryDistance < 0) return null;
-    overlap = getOverlap(current.x, current.x + current.width, candidate.x, candidate.x + candidate.width);
+    overlap = getOverlap(
+      current.x,
+      current.x + current.width,
+      candidate.x,
+      candidate.x + candidate.width
+    );
     secondaryDistance = Math.abs(
       current.x + current.width / 2 - (candidate.x + candidate.width / 2)
     );
@@ -58,28 +86,51 @@ export function getCandidateScore(
   return primaryDistance * 1000 + secondaryDistance + overlapPenalty;
 }
 
-let paneIdCounter = 0;
-let splitIdCounter = 0;
+type IdCounterRef = { value: number };
+
+const paneIdCounter: IdCounterRef = { value: 0 };
+const splitIdCounter: IdCounterRef = { value: 0 };
+
+/**
+ * Create an ID generator factory for a given prefix.
+ * Pass a counter ref to share state across generator, sync, and reset helpers.
+ */
+export function createIdGenerator(
+  prefix: string,
+  counter: IdCounterRef = { value: 0 }
+): () => string {
+  return () => `${prefix}-${++counter.value}`;
+}
+
+const nextPaneId = createIdGenerator('pane', paneIdCounter);
+const nextSplitId = createIdGenerator('split', splitIdCounter);
 
 /**
  * Generate a unique pane ID
  */
 export function generatePaneId(): string {
-  return `pane-${++paneIdCounter}`;
+  return nextPaneId();
+}
+
+/**
+ * Generate a unique split ID
+ */
+export function generateSplitId(): string {
+  return nextSplitId();
 }
 
 /**
  * Reset pane ID counter (for testing)
  */
 export function resetPaneIdCounter(): void {
-  paneIdCounter = 0;
+  paneIdCounter.value = 0;
 }
 
 /**
  * Reset split ID counter (for testing)
  */
 export function resetSplitIdCounter(): void {
-  splitIdCounter = 0;
+  splitIdCounter.value = 0;
 }
 
 /**
@@ -87,7 +138,7 @@ export function resetSplitIdCounter(): void {
  * Called when loading a session with existing pane IDs
  */
 export function syncPaneIdCounter(workspaces: Workspaces): void {
-  let maxId = paneIdCounter;
+  let maxId = paneIdCounter.value;
   for (const workspace of Object.values(workspaces)) {
     if (!workspace) continue;
     const panes: LayoutNode[] = [];
@@ -102,21 +153,14 @@ export function syncPaneIdCounter(workspaces: Workspaces): void {
       }
     }
   }
-  paneIdCounter = maxId;
-}
-
-/**
- * Generate a unique split ID
- */
-export function generateSplitId(): string {
-  return `split-${++splitIdCounter}`;
+  paneIdCounter.value = maxId;
 }
 
 /**
  * Sync split ID counter with loaded splits to avoid ID conflicts
  */
 export function syncSplitIdCounter(workspaces: Workspaces): void {
-  let maxId = splitIdCounter;
+  let maxId = splitIdCounter.value;
   const scan = (node: LayoutNode | null) => {
     if (!node) return;
     if (isSplitNode(node)) {
@@ -137,12 +181,35 @@ export function syncSplitIdCounter(workspaces: Workspaces): void {
     }
   }
 
-  splitIdCounter = maxId;
+  splitIdCounter.value = maxId;
 }
 
 /**
- * Create a new empty workspace
+ * Update a specific property on a pane within a workspace
+ * Handles both mainPane and stackPanes automatically
  */
+export function updatePaneProperty<T extends keyof PaneData>(
+  workspace: Workspace,
+  paneId: string,
+  property: T,
+  value: PaneData[T]
+): Workspace {
+  const updateFn = (pane: PaneData): PaneData => ({ ...pane, [property]: value }) as PaneData;
+
+  if (workspace.mainPane && containsPane(workspace.mainPane, paneId)) {
+    return {
+      ...workspace,
+      mainPane: updatePaneInNode(workspace.mainPane, paneId, updateFn),
+    };
+  }
+
+  return {
+    ...workspace,
+    stackPanes: workspace.stackPanes.map((pane) =>
+      containsPane(pane, paneId) ? updatePaneInNode(pane, paneId, updateFn) : pane
+    ),
+  };
+}
 export function createWorkspace(id: WorkspaceId, layoutMode: LayoutMode): Workspace {
   return {
     id,
@@ -182,6 +249,10 @@ export function updateWorkspace(state: LayoutState, workspace: Workspace): Works
 /**
  * Recalculate layout for a workspace
  */
-export function recalculateLayout(workspace: Workspace, viewport: Rectangle, config: LayoutConfig): Workspace {
+export function recalculateLayout(
+  workspace: Workspace,
+  viewport: Rectangle,
+  config: LayoutConfig
+): Workspace {
   return calculateMasterStackLayout(workspace, viewport, config);
 }

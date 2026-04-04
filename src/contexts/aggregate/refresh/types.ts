@@ -2,7 +2,7 @@
  * Types for refresh operations in Aggregate View.
  */
 
-import type { PtyInfo } from '../types';
+import type { PtyInfo } from '../../../contexts/aggregate-view-types';
 import type { SessionMetadata } from '../../../effect/models';
 import type { PtyMetadata } from '../../../effect/bridge/aggregate/types';
 import type { PtyOwnership, CurrentSessionHints } from '../subscriptions/types';
@@ -31,7 +31,12 @@ export interface RefreshDependencies {
   resolvePtyOwnership: (ptyId: string) => PtyOwnership | null;
   getCurrentSessionHints: () => CurrentSessionHints;
   getCurrentSessionPaneOrder: () => Map<string, number> | null;
-  getCurrentSessionPtys?: () => Array<{ ptyId: string; paneId: string; workspaceId: number; title?: string }>;
+  getCurrentSessionPtys?: () => Array<{
+    ptyId: string;
+    paneId: string;
+    workspaceId: number;
+    title?: string;
+  }>;
 }
 
 /** Result of a refresh operation */
@@ -64,5 +69,10 @@ export interface SubsetRefreshDeps {
 /** Dependencies for initial load */
 export interface InitialLoadDeps {
   getCurrentSessionHints: () => CurrentSessionHints;
-  getCurrentSessionPtys?: () => Array<{ ptyId: string; paneId: string; workspaceId: number; title?: string }>;
+  getCurrentSessionPtys?: () => Array<{
+    ptyId: string;
+    paneId: string;
+    workspaceId: number;
+    title?: string;
+  }>;
 }

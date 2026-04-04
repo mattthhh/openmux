@@ -6,15 +6,15 @@ import { produce, type SetStoreFunction } from 'solid-js/store';
 import type {
   PtyInfo,
   AggregateViewState,
-  PendingPtyInsertion,
+  PendingPaneCreation,
   SessionLoadState,
   FlattenedTreeItem,
   SessionTreeNode,
 } from './aggregate-view-types';
 import { clearPreviewState, recomputeMatches, recomputeTree } from './aggregate-view-helpers';
 import {
-  removePendingPtyInsertions,
-  upsertPendingPtyInsertion,
+  removePendingPaneCreations,
+  upsertPendingPaneCreation,
 } from './aggregate-view-pending-insertions';
 import { mergePtyInfoPreservingGitMetadata } from './aggregate/git/metadata';
 import { loadSessionPtysOnDemand } from '../effect/bridge/aggregate-bridge';
@@ -82,7 +82,7 @@ export function createAggregateViewActions(params: AggregateViewActionsParams) {
       produce((s) => {
         s.showAggregateView = true;
         s.filterQuery = '';
-        s.pendingPtyInsertions = [];
+        s.pendingPaneCreations = [];
         s.listScrollOffset = 0;
         clearPreviewState(s);
         recomputeMatches(s);
@@ -99,7 +99,7 @@ export function createAggregateViewActions(params: AggregateViewActionsParams) {
         s.selectedIndex = 0;
         s.selectedPtyId = null;
         s.selectedSessionId = null;
-        s.pendingPtyInsertions = [];
+        s.pendingPaneCreations = [];
         s.listScrollOffset = 0;
         clearPreviewState(s);
       })
@@ -615,28 +615,28 @@ export function createAggregateViewActions(params: AggregateViewActionsParams) {
   };
 
   /** Add or update a pending aggregate pane insertion request */
-  const upsertAggregatePendingPtyInsertion = (insertion: PendingPtyInsertion): void => {
+  const upsertAggregatePendingPaneCreation = (insertion: PendingPaneCreation): void => {
     setState(
       produce((s) => {
-        upsertPendingPtyInsertion(s, insertion);
+        upsertPendingPaneCreation(s, insertion);
       })
     );
   };
 
   /** Remove a specific pending aggregate pane insertion request */
-  const removePendingPtyInsertion = (id: string): void => {
+  const removePendingPaneCreation = (id: string): void => {
     setState(
       produce((s) => {
-        removePendingPtyInsertions(s, (insertion) => insertion.id === id);
+        removePendingPaneCreations(s, (insertion) => insertion.id === id);
       })
     );
   };
 
   /** Clear all pending aggregate pane insertion requests */
-  const clearPendingPtyInsertions = (): void => {
+  const clearPendingPaneCreations = (): void => {
     setState(
       produce((s) => {
-        s.pendingPtyInsertions = [];
+        s.pendingPaneCreations = [];
       })
     );
   };
@@ -675,8 +675,8 @@ export function createAggregateViewActions(params: AggregateViewActionsParams) {
     scrollListUp,
     scrollListDown,
     setListScrollOffset,
-    upsertPendingPtyInsertion: upsertAggregatePendingPtyInsertion,
-    removePendingPtyInsertion,
-    clearPendingPtyInsertions,
+    upsertPendingPaneCreation: upsertAggregatePendingPaneCreation,
+    removePendingPaneCreation,
+    clearPendingPaneCreations,
   };
 }

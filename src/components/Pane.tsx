@@ -9,7 +9,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useTerminal } from '../contexts/TerminalContext';
 import { useSelection } from '../contexts/SelectionContext';
 import { useCopyMode } from '../contexts/CopyModeContext';
-import { useKeyboardState } from '../contexts/KeyboardContext';
+import { useKeyboard } from '../contexts/KeyboardContext';
 import { useTitle } from '../contexts/TitleContext';
 import { TerminalView } from './TerminalView';
 import { inputHandler } from '../terminal';
@@ -44,11 +44,19 @@ interface PaneProps {
 export function Pane(props: PaneProps) {
   const theme = useTheme();
   const terminal = useTerminal();
-  const { isMouseTrackingEnabled, scrollTerminal, getScrollState, setScrollOffset, getEmulatorSync, getTerminalStateSync } = terminal;
+  const {
+    isMouseTrackingEnabled,
+    scrollTerminal,
+    getScrollState,
+    setScrollOffset,
+    getEmulatorSync,
+    getTerminalStateSync,
+  } = terminal;
   const selection = useSelection();
-  const { startSelection, updateSelection, completeSelection, clearSelection, getSelection } = selection;
+  const { startSelection, updateSelection, completeSelection, clearSelection, getSelection } =
+    selection;
   const copyMode = useCopyMode();
-  const keyboard = useKeyboardState();
+  const keyboard = useKeyboard();
   const { exitCopyMode: keyboardExitCopyMode } = keyboard;
   const titleCtx = useTitle();
 
@@ -119,7 +127,7 @@ export function Pane(props: PaneProps) {
     const scrollState = getScrollState(props.ptyId);
     if (!scrollState || scrollState.scrollbackLength === 0) return 0;
     // relY 0 = top = max offset, relY (innerHeight-1) = bottom = 0 offset
-    const ratio = 1 - (relY / Math.max(1, innerHeight() - 1));
+    const ratio = 1 - relY / Math.max(1, innerHeight() - 1);
     return Math.round(ratio * scrollState.scrollbackLength);
   };
 
@@ -207,7 +215,10 @@ export function Pane(props: PaneProps) {
 
     // Try selection first (shared logic)
     const handled = mouseHandler.handleSelectionMouseDown(
-      props.ptyId, relX, relY, event.modifiers?.shift ?? false
+      props.ptyId,
+      relX,
+      relY,
+      event.modifiers?.shift ?? false
     );
     if (handled) return;
 
@@ -271,9 +282,7 @@ export function Pane(props: PaneProps) {
     const { relX, relY } = getRelativeCoords(event);
 
     // Try selection drag (shared logic)
-    const handled = mouseHandler.handleSelectionMouseDrag(
-      props.ptyId, relX, relY, innerHeight()
-    );
+    const handled = mouseHandler.handleSelectionMouseDrag(props.ptyId, relX, relY, innerHeight());
     if (handled) return;
 
     // Don't forward drag when scrolled back - we're in "history viewing" mode
@@ -366,8 +375,8 @@ export function Pane(props: PaneProps) {
           offsetX={props.x + 1}
           offsetY={props.y + 1}
         />
-      ) : props.children ?? (
-        <box style={{ flexGrow: 1 }} />
+      ) : (
+        (props.children ?? <box style={{ flexGrow: 1 }} />)
       )}
     </box>
   );

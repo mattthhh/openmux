@@ -4,40 +4,20 @@
  * Manages all reactive subscriptions:
  * - PTY lifecycle events (created/destroyed)
  * - Title changes
- * - Periodic polling for git metadata updates
+ * - Git repo change notifications
+ * - Activity-driven metadata refresh
  */
 
 import type { AggregateViewState } from '../types';
-import type {
-  SubscriptionManager,
-  LifecycleHandlers,
-  TitleChangeHandler,
-  LifecycleEvent,
-} from './types';
-import {
-  runStream,
-  streamFromSubscription,
-  tap,
-  repeatWithInterval,
-} from '../../../effect/stream-utils';
+import type { SubscriptionManager, SubscriptionSetupDeps } from './types';
+import { runStream, streamFromSubscription, tap } from '../../../effect/stream-utils';
 import {
   subscribeToPtyLifecycle,
   subscribeToAllTitleChanges,
+  subscribeToAllPtyActivity,
   type PtyTitleChangeEvent,
 } from '../../../effect/bridge/pty-bridge';
-
-/** Dependencies for subscription setup */
-export interface SubscriptionSetupDeps {
-  subscriptions: SubscriptionManager;
-  subscriptionsEpoch: { value: number };
-  refreshPtys: () => Promise<void>;
-  refreshPtysSubset: (ptyIds: string[]) => Promise<void>;
-  handleTitleChange: TitleChangeHandler;
-  lifecycleHandlers: LifecycleHandlers;
-}
-
-/** Polling interval in milliseconds */
-const DEFAULT_POLL_INTERVAL_MS = 5000; // Reduced from 2000ms to 5000ms
+import { subscribeToGitRepoChanges } from '../../../effect/services/pty/helpers';
 
 /**
  * Set up all subscriptions for the aggregate view.
@@ -45,8 +25,7 @@ const DEFAULT_POLL_INTERVAL_MS = 5000; // Reduced from 2000ms to 5000ms
  */
 export async function setupSubscriptions(
   state: AggregateViewState,
-  deps: SubscriptionSetupDeps,
-  options: { pollIntervalMs?: number } = {}
+  deps: SubscriptionSetupDeps
 ): Promise<void> {
   const {
     subscriptions,
@@ -56,22 +35,19 @@ export async function setupSubscriptions(
     lifecycleHandlers,
   } = deps;
 
-  const pollIntervalMs = options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
   const epoch = ++subscriptionsEpoch.value;
 
-  // Subscribe to PTY lifecycle events for instant updates (no debounce)
-  // Use targeted updates instead of full refresh for better performance
-  const lifecycleStream = streamFromSubscription<LifecycleEvent>(({ emit }) =>
-    subscribeToPtyLifecycle(emit)
+  const lifecycleStream = streamFromSubscription<{ type: 'created' | 'destroyed'; ptyId: string }>(
+    ({ emit }) => subscribeToPtyLifecycle(emit)
   );
 
   const lifecycleUnsub = runStream(
     tap(lifecycleStream, (event) => {
       if (event.type === 'created') {
         void lifecycleHandlers.handlePtyCreated(event.ptyId);
-      } else {
-        lifecycleHandlers.handlePtyDestroyed(event.ptyId);
+        return;
       }
+      lifecycleHandlers.handlePtyDestroyed(event.ptyId);
     }),
     { label: 'aggregate-view-lifecycle' }
   );
@@ -82,7 +58,6 @@ export async function setupSubscriptions(
   }
   subscriptions.lifecycle = lifecycleUnsub;
 
-  // Subscribe to title changes - use incremental update instead of full refresh
   const titleStream = tap(
     streamFromSubscription<PtyTitleChangeEvent>(({ emit }) => subscribeToAllTitleChanges(emit)),
     (event) => handleTitleChange(event)
@@ -95,17 +70,113 @@ export async function setupSubscriptions(
   }
   subscriptions.titleChange = titleUnsub;
 
-  // Predictable polling: refresh visible git metadata on one cadence.
+  const gitChangeUnsub = createGitRepoChangeRefresh(
+    state,
+    subscriptionsEpoch,
+    epoch,
+    refreshPtysSubset
+  );
+  if (epoch !== subscriptionsEpoch.value || !state.showAggregateView) {
+    gitChangeUnsub();
+    return;
+  }
+  subscriptions.gitChanges = gitChangeUnsub;
+
   if (epoch !== subscriptionsEpoch.value || !state.showAggregateView) {
     return;
   }
 
-  const pollStream = repeatWithInterval(async () => {
-    if (!state.showAggregateView || state.allPtys.length === 0) return;
-    await refreshPtysSubset(state.allPtys.map((pty) => pty.ptyId));
-  }, pollIntervalMs);
+  const activityUnsub = createActivityBasedRefresh(
+    state,
+    subscriptionsEpoch,
+    epoch,
+    refreshPtysSubset
+  );
+  if (epoch !== subscriptionsEpoch.value || !state.showAggregateView) {
+    activityUnsub();
+    return;
+  }
+  subscriptions.polling = activityUnsub;
+}
 
-  subscriptions.polling = runStream(pollStream, { label: 'aggregate-view-poll' });
+export function createGitRepoChangeRefresh(
+  state: AggregateViewState,
+  subscriptionsEpoch: { value: number },
+  epoch: number,
+  refreshPtysSubset: (ptyIds: string[]) => Promise<void>
+): () => void {
+  return subscribeToGitRepoChanges((event) => {
+    if (!state.showAggregateView || subscriptionsEpoch.value !== epoch) {
+      return;
+    }
+
+    const affectedPtyIds = state.allPtys
+      .filter((pty) => pty.gitRepoKey === event.repoKey)
+      .map((pty) => pty.ptyId);
+
+    if (affectedPtyIds.length === 0) {
+      return;
+    }
+
+    void refreshPtysSubset(affectedPtyIds);
+  });
+}
+
+/**
+ * Create an activity-based metadata refresh subscription.
+ */
+export function createActivityBasedRefresh(
+  state: AggregateViewState,
+  subscriptionsEpoch: { value: number },
+  epoch: number,
+  refreshPtysSubset: (ptyIds: string[]) => Promise<void>
+): () => void {
+  const pendingPtyIds = new Set<string>();
+  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+  const debounceMs = 500;
+
+  const flushPending = async (): Promise<void> => {
+    debounceTimer = null;
+
+    if (!state.showAggregateView || pendingPtyIds.size === 0) return;
+
+    const ptyIdsToRefresh = Array.from(pendingPtyIds);
+    pendingPtyIds.clear();
+
+    if (subscriptionsEpoch.value !== epoch) return;
+
+    await refreshPtysSubset(ptyIdsToRefresh);
+  };
+
+  const scheduleFlush = (): void => {
+    if (debounceTimer) {
+      clearTimeout(debounceTimer);
+    }
+    debounceTimer = setTimeout(() => void flushPending(), debounceMs);
+  };
+
+  const activityStream = streamFromSubscription<{ ptyId: string }>(({ emit }) =>
+    subscribeToAllPtyActivity(emit)
+  );
+
+  const activityUnsub = runStream(
+    tap(activityStream, (event) => {
+      if (!state.allPtysIndex.has(event.ptyId)) return;
+
+      pendingPtyIds.add(event.ptyId);
+      scheduleFlush();
+    }),
+    { label: 'aggregate-view-activity-refresh' }
+  );
+
+  return () => {
+    if (debounceTimer) {
+      clearTimeout(debounceTimer);
+      debounceTimer = null;
+    }
+    pendingPtyIds.clear();
+    activityUnsub();
+  };
 }
 
 /**
@@ -119,8 +190,10 @@ export function cleanupSubscriptions(
   subscriptionsEpoch.value += 1;
   subscriptions.lifecycle?.();
   subscriptions.titleChange?.();
+  subscriptions.gitChanges?.();
   subscriptions.polling?.();
   subscriptions.lifecycle = null;
   subscriptions.titleChange = null;
+  subscriptions.gitChanges = null;
   subscriptions.polling = null;
 }

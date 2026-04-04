@@ -5,7 +5,17 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 
 import { afterEach, describe, expect, test, vi } from 'bun:test';
-import { detectManagedInstall, findReleaseAsset, getPlatformInfo, runUpdateCommand, selectLatestRelease, computeFileSha256, parseChecksumFile, verifyReleaseChecksum, type UpdateIO } from '../../src/cli/update';
+import {
+  detectManagedInstall,
+  findReleaseAsset,
+  getPlatformInfo,
+  runUpdateCommand,
+  selectLatestRelease,
+  computeFileSha256,
+  parseChecksumFile,
+  verifyReleaseChecksum,
+  type UpdateIO,
+} from '../../src/cli/update';
 
 function jsonResponse(payload: unknown, status = 200): Response {
   return new Response(JSON.stringify(payload), {
@@ -36,7 +46,10 @@ async function makeManagedInstall(version: string): Promise<{
   await fs.writeFile(path.join(installDir, 'libzig_pty.so'), 'old-pty');
   await fs.writeFile(path.join(installDir, 'libzig_git.so'), 'old-git');
   await fs.writeFile(path.join(installDir, 'libghostty-vt.so'), 'old-ghostty');
-  await fs.writeFile(wrapperPath, '#!/usr/bin/env bash\nexport OPENMUX_VERSION="${OPENMUX_VERSION:-v0.0.0}"\n');
+  await fs.writeFile(
+    wrapperPath,
+    '#!/usr/bin/env bash\nexport OPENMUX_VERSION="${OPENMUX_VERSION:-v0.0.0}"\n'
+  );
   await fs.chmod(wrapperPath, 0o755);
 
   return { rootDir, dataHome, binHome, installDir, execPath, wrapperPath };
@@ -82,8 +95,8 @@ describe('cli update', () => {
       { tag_name: 'v1.1.9', draft: false, prerelease: false },
     ];
 
-    const stable = selectLatestRelease(releases, false);
-    const any = selectLatestRelease(releases, true);
+    const stable = selectLatestRelease(releases, { includePrerelease: false });
+    const any = selectLatestRelease(releases, { includePrerelease: true });
 
     expect(stable?.tag_name).toBe('v1.2.0');
     expect(any?.tag_name).toBe('v1.3.0-beta.1');
@@ -93,7 +106,10 @@ describe('cli update', () => {
     const release = {
       tag_name: 'v1.0.0',
       assets: [
-        { name: 'openmux-v1.0.0-linux-x64.tar.gz', browser_download_url: 'https://example.com/linux' },
+        {
+          name: 'openmux-v1.0.0-linux-x64.tar.gz',
+          browser_download_url: 'https://example.com/linux',
+        },
       ],
     };
 
@@ -110,17 +126,27 @@ describe('cli update', () => {
     const errors: string[] = [];
     const result = await runUpdateCommand(
       { kind: 'update', yes: false, prerelease: false },
-      createIoForInstall(install, {
-        stdinIsTTY: false,
-        fetch: vi.fn().mockResolvedValue(
-          jsonResponse({
-            tag_name: 'v1.1.0',
-            draft: false,
-            prerelease: false,
-            assets: [{ name: 'openmux-v1.1.0-linux-x64.tar.gz', browser_download_url: 'https://example.com/asset' }],
-          })
-        ),
-      }, [], errors)
+      createIoForInstall(
+        install,
+        {
+          stdinIsTTY: false,
+          fetch: vi.fn().mockResolvedValue(
+            jsonResponse({
+              tag_name: 'v1.1.0',
+              draft: false,
+              prerelease: false,
+              assets: [
+                {
+                  name: 'openmux-v1.1.0-linux-x64.tar.gz',
+                  browser_download_url: 'https://example.com/asset',
+                },
+              ],
+            })
+          ),
+        },
+        [],
+        errors
+      )
     );
 
     expect(result.exitCode).toBe(2);
@@ -134,16 +160,25 @@ describe('cli update', () => {
     const logs: string[] = [];
     const result = await runUpdateCommand(
       { kind: 'update', yes: true, prerelease: false },
-      createIoForInstall(install, {
-        fetch: vi.fn().mockResolvedValue(
-          jsonResponse({
-            tag_name: 'v1.1.0',
-            draft: false,
-            prerelease: false,
-            assets: [{ name: 'openmux-v1.1.0-linux-x64.tar.gz', browser_download_url: 'https://example.com/asset' }],
-          })
-        ),
-      }, logs)
+      createIoForInstall(
+        install,
+        {
+          fetch: vi.fn().mockResolvedValue(
+            jsonResponse({
+              tag_name: 'v1.1.0',
+              draft: false,
+              prerelease: false,
+              assets: [
+                {
+                  name: 'openmux-v1.1.0-linux-x64.tar.gz',
+                  browser_download_url: 'https://example.com/asset',
+                },
+              ],
+            })
+          ),
+        },
+        logs
+      )
     );
 
     expect(result.exitCode).toBe(0);
@@ -161,7 +196,12 @@ describe('cli update', () => {
           tag_name: 'v1.2.0',
           draft: false,
           prerelease: false,
-          assets: [{ name: 'openmux-v1.2.0-linux-x64.tar.gz', browser_download_url: 'https://example.com/asset' }],
+          assets: [
+            {
+              name: 'openmux-v1.2.0-linux-x64.tar.gz',
+              browser_download_url: 'https://example.com/asset',
+            },
+          ],
         });
       }
       if (url === 'https://example.com/asset') {
@@ -185,8 +225,12 @@ describe('cli update', () => {
     );
 
     expect(result.exitCode).toBe(0);
-    await expect(fs.readFile(path.join(install.installDir, '.version'), 'utf8')).resolves.toBe('1.2.0');
-    await expect(fs.readFile(path.join(install.installDir, 'openmux-bin'), 'utf8')).resolves.toBe('new-bin');
+    await expect(fs.readFile(path.join(install.installDir, '.version'), 'utf8')).resolves.toBe(
+      '1.2.0'
+    );
+    await expect(fs.readFile(path.join(install.installDir, 'openmux-bin'), 'utf8')).resolves.toBe(
+      'new-bin'
+    );
     const wrapper = await fs.readFile(install.wrapperPath, 'utf8');
     expect(wrapper).toContain('OPENMUX_VERSION="${OPENMUX_VERSION:-v1.2.0}"');
     expect(wrapper).toContain(`cd "${install.installDir}"`);
@@ -306,15 +350,20 @@ b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3  openmux-v1.0.0
       const release = {
         tag_name: 'v1.0.0',
         assets: [
-          { 
-            name: 'openmux-v1.0.0-linux-x64.tar.gz', 
+          {
+            name: 'openmux-v1.0.0-linux-x64.tar.gz',
             browser_download_url: 'https://example.com/asset',
-            digest: `sha256:${expectedHash}`
+            digest: `sha256:${expectedHash}`,
           },
         ],
       };
 
-      await verifyReleaseChecksum(io as UpdateIO, release, archivePath, 'openmux-v1.0.0-linux-x64.tar.gz');
+      await verifyReleaseChecksum(
+        io as UpdateIO,
+        release,
+        archivePath,
+        'openmux-v1.0.0-linux-x64.tar.gz'
+      );
       // Should not log about using legacy SHA256SUMS
       expect(logs.some((line) => line.includes('legacy'))).toBe(false);
     });
@@ -344,13 +393,16 @@ b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3  openmux-v1.0.0
 
       const release = {
         tag_name: 'v1.0.0',
-        assets: [
-          { name: 'SHA256SUMS', browser_download_url: 'https://example.com/checksums' },
-        ],
+        assets: [{ name: 'SHA256SUMS', browser_download_url: 'https://example.com/checksums' }],
       };
 
       await expect(
-        verifyReleaseChecksum(io as UpdateIO, release, archivePath, 'openmux-v1.0.0-linux-x64.tar.gz')
+        verifyReleaseChecksum(
+          io as UpdateIO,
+          release,
+          archivePath,
+          'openmux-v1.0.0-linux-x64.tar.gz'
+        )
       ).resolves.toBeUndefined();
     });
 
@@ -381,13 +433,16 @@ b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3  openmux-v1.0.0
 
       const release = {
         tag_name: 'v1.0.0',
-        assets: [
-          { name: 'SHA256SUMS', browser_download_url: 'https://example.com/checksums' },
-        ],
+        assets: [{ name: 'SHA256SUMS', browser_download_url: 'https://example.com/checksums' }],
       };
 
       await expect(
-        verifyReleaseChecksum(io as UpdateIO, release, archivePath, 'openmux-v1.0.0-linux-x64.tar.gz')
+        verifyReleaseChecksum(
+          io as UpdateIO,
+          release,
+          archivePath,
+          'openmux-v1.0.0-linux-x64.tar.gz'
+        )
       ).rejects.toThrow('Checksum verification failed');
     });
 
@@ -406,10 +461,20 @@ b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3  openmux-v1.0.0
 
       const release = {
         tag_name: 'v1.0.0',
-        assets: [{ name: 'openmux-v1.0.0-linux-x64.tar.gz', browser_download_url: 'https://example.com/asset' }],
+        assets: [
+          {
+            name: 'openmux-v1.0.0-linux-x64.tar.gz',
+            browser_download_url: 'https://example.com/asset',
+          },
+        ],
       };
 
-      await verifyReleaseChecksum(io as UpdateIO, release, archivePath, 'openmux-v1.0.0-linux-x64.tar.gz');
+      await verifyReleaseChecksum(
+        io as UpdateIO,
+        release,
+        archivePath,
+        'openmux-v1.0.0-linux-x64.tar.gz'
+      );
 
       expect(logs.some((line) => line.includes('Warning: No checksum available'))).toBe(true);
     });
@@ -424,20 +489,21 @@ b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3  openmux-v1.0.0
       const logs: string[] = [];
       const io: Partial<UpdateIO> = {
         log: (message) => logs.push(message),
-        fetch: vi.fn().mockResolvedValue(
-          new Response('Not found', { status: 404 })
-        ),
+        fetch: vi.fn().mockResolvedValue(new Response('Not found', { status: 404 })),
       };
 
       const release = {
         tag_name: 'v1.0.0',
-        assets: [
-          { name: 'SHA256SUMS', browser_download_url: 'https://example.com/checksums' },
-        ],
+        assets: [{ name: 'SHA256SUMS', browser_download_url: 'https://example.com/checksums' }],
       };
 
       await expect(
-        verifyReleaseChecksum(io as UpdateIO, release, archivePath, 'openmux-v1.0.0-linux-x64.tar.gz')
+        verifyReleaseChecksum(
+          io as UpdateIO,
+          release,
+          archivePath,
+          'openmux-v1.0.0-linux-x64.tar.gz'
+        )
       ).rejects.toThrow('Failed to download checksum file');
     });
 
@@ -464,13 +530,16 @@ b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3  openmux-v1.0.0
 
       const release = {
         tag_name: 'v1.0.0',
-        assets: [
-          { name: 'SHA256SUMS', browser_download_url: 'https://example.com/checksums' },
-        ],
+        assets: [{ name: 'SHA256SUMS', browser_download_url: 'https://example.com/checksums' }],
       };
 
       await expect(
-        verifyReleaseChecksum(io as UpdateIO, release, archivePath, 'openmux-v1.0.0-linux-x64.tar.gz')
+        verifyReleaseChecksum(
+          io as UpdateIO,
+          release,
+          archivePath,
+          'openmux-v1.0.0-linux-x64.tar.gz'
+        )
       ).rejects.toThrow('Could not find checksum for openmux-v1.0.0-linux-x64.tar.gz');
     });
 
@@ -499,13 +568,16 @@ b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3  openmux-v1.0.0
 
       const release = {
         tag_name: 'v1.0.0',
-        assets: [
-          { name: 'sha256sums.txt', browser_download_url: 'https://example.com/checksums' },
-        ],
+        assets: [{ name: 'sha256sums.txt', browser_download_url: 'https://example.com/checksums' }],
       };
 
       await expect(
-        verifyReleaseChecksum(io as UpdateIO, release, archivePath, 'openmux-v1.0.0-linux-x64.tar.gz')
+        verifyReleaseChecksum(
+          io as UpdateIO,
+          release,
+          archivePath,
+          'openmux-v1.0.0-linux-x64.tar.gz'
+        )
       ).resolves.toBeUndefined();
     });
   });
@@ -518,10 +590,14 @@ b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3  openmux-v1.0.0
       const logs: string[] = [];
       const result = await runUpdateCommand(
         { kind: 'update', yes: true, prerelease: false },
-        createIoForInstall(install, {
-          execPath: '/usr/local/lib/node_modules/openmux/dist/openmux-bin',
-          fetch: vi.fn(),
-        }, logs)
+        createIoForInstall(
+          install,
+          {
+            execPath: '/usr/local/lib/node_modules/openmux/dist/openmux-bin',
+            fetch: vi.fn(),
+          },
+          logs
+        )
       );
 
       expect(result.exitCode).toBe(0);
@@ -536,10 +612,14 @@ b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3  openmux-v1.0.0
       const logs: string[] = [];
       const result = await runUpdateCommand(
         { kind: 'update', yes: true, prerelease: false },
-        createIoForInstall(install, {
-          execPath: '/home/user/.npm/_npx/openmux/dist/openmux-bin',
-          fetch: vi.fn(),
-        }, logs)
+        createIoForInstall(
+          install,
+          {
+            execPath: '/home/user/.npm/_npx/openmux/dist/openmux-bin',
+            fetch: vi.fn(),
+          },
+          logs
+        )
       );
 
       expect(result.exitCode).toBe(0);
@@ -553,10 +633,14 @@ b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3  openmux-v1.0.0
       const logs: string[] = [];
       const result = await runUpdateCommand(
         { kind: 'update', yes: true, prerelease: false },
-        createIoForInstall(install, {
-          execPath: '/home/user/.bun/install/global/openmux/dist/openmux-bin',
-          fetch: vi.fn(),
-        }, logs)
+        createIoForInstall(
+          install,
+          {
+            execPath: '/home/user/.bun/install/global/openmux/dist/openmux-bin',
+            fetch: vi.fn(),
+          },
+          logs
+        )
       );
 
       expect(result.exitCode).toBe(0);
@@ -663,7 +747,12 @@ b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3  openmux-v1.0.0
             tag_name: 'v1.2.0',
             draft: false,
             prerelease: false,
-            assets: [{ name: 'openmux-v1.2.0-linux-x64.tar.gz', browser_download_url: 'https://example.com/asset' }],
+            assets: [
+              {
+                name: 'openmux-v1.2.0-linux-x64.tar.gz',
+                browser_download_url: 'https://example.com/asset',
+              },
+            ],
           });
         }
         if (url === 'https://example.com/asset') {
@@ -674,16 +763,21 @@ b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3  openmux-v1.0.0
 
       const result = await runUpdateCommand(
         { kind: 'update', yes: true, prerelease: false },
-        createIoForInstall(install, {
-          fetch,
-          extractTarGz: async (_archivePath, destination) => {
-            await fs.writeFile(path.join(destination, 'openmux-bin'), 'new-bin');
-            await fs.writeFile(path.join(destination, 'libzig_pty.so'), 'new-pty');
-            await fs.writeFile(path.join(destination, 'libzig_git.so'), 'new-git');
-            await fs.writeFile(path.join(destination, 'libghostty-vt.so'), 'new-ghostty');
-            await fs.writeFile(path.join(destination, 'bunfig.toml'), '# bunfig');
+        createIoForInstall(
+          install,
+          {
+            fetch,
+            extractTarGz: async (_archivePath, destination) => {
+              await fs.writeFile(path.join(destination, 'openmux-bin'), 'new-bin');
+              await fs.writeFile(path.join(destination, 'libzig_pty.so'), 'new-pty');
+              await fs.writeFile(path.join(destination, 'libzig_git.so'), 'new-git');
+              await fs.writeFile(path.join(destination, 'libghostty-vt.so'), 'new-ghostty');
+              await fs.writeFile(path.join(destination, 'bunfig.toml'), '# bunfig');
+            },
           },
-        }, logs, errors)
+          logs,
+          errors
+        )
       );
 
       expect(result.exitCode).toBe(0);

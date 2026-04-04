@@ -10,7 +10,7 @@
 import { produce, type SetStoreFunction } from 'solid-js/store';
 import { PtyMetadataError, ServicesNotInitializedError } from '../../../effect/errors';
 
-import type { AggregateViewState } from '../types';
+import type { AggregateViewState } from '../../aggregate-view-types';
 import type { PtyMetadata } from '../../../effect/bridge/aggregate/types';
 import { getPtyMetadata } from '../../../effect/bridge/aggregate';
 import { getGlobalGitMetadataCache, type GitRepoMetadata } from '../../git-metadata-cache';

@@ -12,7 +12,7 @@ import { type MouseEvent as OpenTUIMouseEvent } from '@opentui/core';
 
 // Contexts
 import { useAggregateView } from '../contexts/AggregateViewContext';
-import { useKeyboardState } from '../contexts/KeyboardContext';
+import { useKeyboard } from '../contexts/KeyboardContext';
 import { useConfig } from '../contexts/ConfigContext';
 import { useLayout } from '../contexts/LayoutContext';
 import { useSession } from '../contexts/SessionContext';
@@ -60,12 +60,14 @@ import {
 } from './aggregate/list-viewport';
 import { truncateHint } from './overlay-hints';
 import { loadSessionData, getHostBackgroundColor } from '../effect/bridge';
-import { setShimmerEnabled } from '../core/shimmer';
 import type { Workspace } from '../core/types';
 import { collectPanes } from '../core/layout-tree';
-import type { FlattenedTreeItem, PendingPtyInsertion } from '../contexts/aggregate-view-types';
-import type { PtyInfo } from '../contexts/aggregate/types';
-import { getNextPendingPtyInsertionOrder } from '../contexts/aggregate-view-pending-insertions';
+import type {
+  FlattenedTreeItem,
+  PendingPaneCreation,
+  PtyInfo,
+} from '../contexts/aggregate-view-types';
+import { getNextPendingPaneCreationOrder } from '../contexts/aggregate-view-pending-insertions';
 import {
   resolvePendingAggregatePaneFocus,
   type PendingAggregatePaneFocus,
@@ -86,7 +88,7 @@ interface AggregateViewProps {
 export function AggregateView(props: AggregateViewProps) {
   // Contexts
   const config = useConfig();
-  const keyboard = useKeyboardState();
+  const keyboard = useKeyboard();
   const layout = useLayout();
   const session = useSession();
   const terminal = useTerminal();
@@ -115,9 +117,9 @@ export function AggregateView(props: AggregateViewProps) {
     scrollListUp,
     scrollListDown,
     setListScrollOffset,
-    upsertPendingPtyInsertion,
-    removePendingPtyInsertion,
-    clearPendingPtyInsertions,
+    upsertPendingPaneCreation,
+    removePendingPaneCreation,
+    clearPendingPaneCreations,
   } = useAggregateView();
 
   const { state: keyboardState, enterAggregateMode, exitAggregateMode } = keyboard;
@@ -275,7 +277,7 @@ export function AggregateView(props: AggregateViewProps) {
 
     const sessionId = getSelectedSessionIdForAutoLoad({
       selectedItem: state.flattenedTree[state.selectedIndex],
-      pendingPtyInsertions: state.pendingPtyInsertions,
+      pendingPaneCreations: state.pendingPaneCreations,
       pendingPaneFocus: pendingPaneFocus(),
     });
     if (!sessionId) return;
@@ -289,7 +291,7 @@ export function AggregateView(props: AggregateViewProps) {
   createEffect(() => {
     if (!state.showAggregateView) {
       setPendingPaneFocus(null);
-      clearPendingPtyInsertions();
+      clearPendingPaneCreations();
       return;
     }
 
@@ -329,7 +331,6 @@ export function AggregateView(props: AggregateViewProps) {
   onCleanup(() => {
     if (prefixTimeout) clearTimeout(prefixTimeout);
     sessionDrag.cancelDrag();
-    setShimmerEnabled(false);
     // Note: activity subscriptions are cleaned up automatically via onCleanup in the hook
   });
 
@@ -546,19 +547,19 @@ export function AggregateView(props: AggregateViewProps) {
     if (!targetSessionId) return;
 
     const pendingInsertionId = crypto.randomUUID();
-    const pendingInsertion: PendingPtyInsertion = {
+    const pendingInsertion: PendingPaneCreation = {
       id: pendingInsertionId,
       sessionId: targetSessionId,
       insertAfterPtyId: selectedPtyId,
       insertAfterPaneId: selectedPty?.paneId ?? null,
       pendingPtyId: null,
       pendingPaneId: null,
-      sortOrderHint: getNextPendingPtyInsertionOrder(state, {
+      sortOrderHint: getNextPendingPaneCreationOrder(state, {
         sessionId: targetSessionId,
         insertAfterPaneId: selectedPty?.paneId ?? null,
       }),
     };
-    upsertPendingPtyInsertion(pendingInsertion);
+    upsertPendingPaneCreation(pendingInsertion);
 
     setPendingPaneFocus(null);
 
@@ -602,7 +603,7 @@ export function AggregateView(props: AggregateViewProps) {
       // Other session - load and switch
       const sessionData = await loadSessionData(targetSessionId);
       if (sessionData instanceof Error) {
-        removePendingPtyInsertion(pendingInsertionId);
+        removePendingPaneCreation(pendingInsertionId);
         console.error('Failed to load session:', sessionData.message);
         return;
       }
@@ -623,7 +624,7 @@ export function AggregateView(props: AggregateViewProps) {
     setLayoutMode('stacked');
     const createdPane = await createPaneWithPTY(targetCwd, 'shell', {
       onCreated: (created) => {
-        upsertPendingPtyInsertion({
+        upsertPendingPaneCreation({
           ...pendingInsertion,
           pendingPtyId: created.ptyId,
           pendingPaneId: created.paneId,
@@ -631,12 +632,12 @@ export function AggregateView(props: AggregateViewProps) {
       },
     });
     if (!createdPane) {
-      removePendingPtyInsertion(pendingInsertionId);
+      removePendingPaneCreation(pendingInsertionId);
       console.error('Failed to create pane in aggregate view');
       return;
     }
 
-    upsertPendingPtyInsertion({
+    upsertPendingPaneCreation({
       ...pendingInsertion,
       pendingPtyId: createdPane.ptyId,
       pendingPaneId: createdPane.paneId,

@@ -324,7 +324,7 @@ describe('aggregate insertion ordering', () => {
 
     setState(
       produce((s) => {
-        s.pendingPtyInsertions = [
+        s.pendingPaneCreations = [
           {
             id: 'pending-1',
             sessionId: 'session-1',
@@ -429,7 +429,7 @@ describe('aggregate insertion ordering', () => {
 
     setState(
       produce((s) => {
-        s.pendingPtyInsertions = [
+        s.pendingPaneCreations = [
           {
             id: 'pending-1',
             sessionId: 'session-1',
@@ -492,7 +492,7 @@ describe('aggregate insertion ordering', () => {
 
     setState(
       produce((s) => {
-        s.pendingPtyInsertions = [
+        s.pendingPaneCreations = [
           {
             id: 'pending-1',
             sessionId: 'session-1',
@@ -586,7 +586,7 @@ describe('aggregate insertion ordering', () => {
 
     setState(
       produce((s) => {
-        s.pendingPtyInsertions = [
+        s.pendingPaneCreations = [
           {
             id: 'pending-1',
             sessionId: 'session-1',
@@ -615,7 +615,7 @@ describe('aggregate insertion ordering', () => {
     expect(state.sessionPaneOrders.get('session-1')?.get('pane-3')).toBe(0.5);
     expect(state.sessionPaneOrders.get('session-1')?.get('pane-4')).toBe(0.75);
     expect(getVisiblePtyIds(state)).toEqual(['pty-1', 'pty-new', 'pty-new-2', 'pty-2']);
-    expect(state.pendingPtyInsertions).toEqual([]);
+    expect(state.pendingPaneCreations).toEqual([]);
   });
 
   it('does not re-add tombstoned PTYs during initial load', async () => {

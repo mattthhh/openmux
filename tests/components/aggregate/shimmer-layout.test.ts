@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import type { PtyInfo } from '../../../src/contexts/aggregate-view-types';
 import {
-  applyShimmerToText,
   clearPtyStdoutActivity,
   getPtyShimmerColor,
   hasMeaningfulActivity,
@@ -39,20 +38,30 @@ function createMockPty(overrides: Partial<PtyInfo> = {}): PtyInfo {
 describe('Shimmer Layout Stability - current shimmer API', () => {
   beforeEach(() => {
     clearPtyStdoutActivity('pty-1');
+    clearPtyStdoutActivity('pty-test');
   });
 
   it('only returns color changes and never changes text length', () => {
     const text = 'project (codex)';
-    const shimmered = applyShimmerToText(text, '#c0c0c0', { targetColor: '#000000' });
+    const ptyId = 'pty-test';
+    let now = 1000;
 
-    const rebuilt = text.split('');
-    for (const entry of shimmered) {
-      rebuilt[entry.index] = entry.char;
-      expect(entry.color).toMatch(/^#[0-9A-Fa-f]{6}$/);
+    recordPtyStdoutActivity(ptyId, now);
+    recordPtyStdoutActivity(ptyId, now + 100);
+    now += 250;
+
+    const colors = text.split('').map((_, index) =>
+      getPtyShimmerColor(ptyId, '#c0c0c0', index, text.length, now, {
+        targetColor: '#000000',
+      })
+    );
+
+    for (const color of colors.filter((value) => value !== undefined)) {
+      expect(color).toMatch(/^#[0-9A-Fa-f]{6}$/);
     }
 
-    expect(rebuilt.join('')).toBe(text);
     expect(text.length).toBe('project (codex)'.length);
+    expect(colors).toHaveLength(text.length);
   });
 
   it('produces valid hex colors during the shimmer sweep', () => {

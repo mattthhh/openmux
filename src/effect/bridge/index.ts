@@ -110,6 +110,9 @@ export {
   waitForShimClient,
 } from './shim-bridge';
 
+// Runtime cleanup
+export { disposeRuntime } from './services-instance';
+
 // Keyboard router bridge
 export {
   type KeyEvent,
