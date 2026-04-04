@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.57](https://github.com/monotykamary/openmux/compare/v0.3.56...v0.3.57) (2026-04-04)
+
+
+### Bug Fixes
+
+* **aggregate:** move handleClick before renderGitMeta to fix TDZ ([5c4fb14](https://github.com/monotykamary/openmux/commit/5c4fb141c31c0ade6211829afce73ee0d126889b))
+* **aggregate:** move handleClick before renderLabel to fix TDZ ([8ba2b39](https://github.com/monotykamary/openmux/commit/8ba2b39a19c8231e999f0330015a3bfa3d86e980))
+* **aggregate:** stabilize shimmer label hit targets ([0f96c7b](https://github.com/monotykamary/openmux/commit/0f96c7b8ff8935a93f351aafcea80cf298e61d64))
+
 ### [0.3.56](https://github.com/monotykamary/openmux/compare/v0.3.55...v0.3.56) (2026-04-04)
 
 
