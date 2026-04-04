@@ -1607,32 +1607,7 @@ export function createLifecycleHandlers(
   return { handlePtyCreated, handlePtyDestroyed };
 }
 
-export function createTitleChangeHandler(setState: SetStoreFunction<AggregateViewState>) {
-  return (event: { ptyId: string; title: string }) => {
-    setState(
-      produce((s) => {
-        // Update in allPtys using O(1) lookup with ptyId validation
-        const allIndex = s.allPtysIndex.get(event.ptyId);
-        if (allIndex !== undefined && s.allPtys[allIndex]) {
-          const ptyAtIndex = s.allPtys[allIndex];
-          // Validate that the PTY at this index has the correct ID
-          if (ptyAtIndex.ptyId === event.ptyId) {
-            s.allPtys[allIndex] = { ...ptyAtIndex, title: event.title };
-          }
-        }
-        // Update in matchedPtys using O(1) lookup with ptyId validation
-        const matchedIndex = s.matchedPtysIndex.get(event.ptyId);
-        if (matchedIndex !== undefined && s.matchedPtys[matchedIndex]) {
-          const ptyAtIndex = s.matchedPtys[matchedIndex];
-          // Validate that the PTY at this index has the correct ID
-          if (ptyAtIndex.ptyId === event.ptyId) {
-            s.matchedPtys[matchedIndex] = { ...ptyAtIndex, title: event.title };
-          }
-        }
-      })
-    );
-  };
-}
+export const createTitleChangeHandler = createAggregateTitleChangeHandler;
 
 export async function setupSubscriptions(
   state: AggregateViewState,
@@ -1646,175 +1621,21 @@ export async function setupSubscriptions(
     handlePtyDestroyed: (ptyId: string) => void;
   }
 ): Promise<void> {
-  const epoch = ++subscriptionsEpoch.value;
-
-  // Subscribe to PTY lifecycle events for instant updates (no debounce)
-  // Use targeted updates instead of full refresh for better performance
-  const lifecycleStream = streamFromSubscription<{ type: 'created' | 'destroyed'; ptyId: string }>(
-    ({ emit }) => subscribeToPtyLifecycle(emit)
-  );
-
-  const lifecycleUnsub = runStream(
-    tap(lifecycleStream, (event) => {
-      if (event.type === 'created') {
-        void lifecycleHandlers.handlePtyCreated(event.ptyId);
-      } else {
-        lifecycleHandlers.handlePtyDestroyed(event.ptyId);
-      }
-    }),
-    { label: 'aggregate-view-lifecycle' }
-  );
-
-  if (epoch !== subscriptionsEpoch.value || !state.showAggregateView) {
-    lifecycleUnsub();
-    return;
-  }
-  subscriptions.lifecycle = lifecycleUnsub;
-
-  // Subscribe to title changes - use incremental update instead of full refresh
-  const titleStream = tap(
-    streamFromSubscription<PtyTitleChangeEvent>(({ emit }) => subscribeToAllTitleChanges(emit)),
-    (event) => handleTitleChange(event)
-  );
-  const titleUnsub = runStream(titleStream, { label: 'aggregate-view-title' });
-  if (epoch !== subscriptionsEpoch.value || !state.showAggregateView) {
-    titleUnsub();
-    return;
-  }
-  subscriptions.titleChange = titleUnsub;
-
-  const gitChangeUnsub = createGitRepoChangeRefresh(
-    state,
+  return setupAggregateSubscriptions(state, {
+    subscriptions,
     subscriptionsEpoch,
-    epoch,
-    refreshPtysSubset
-  );
-  if (epoch !== subscriptionsEpoch.value || !state.showAggregateView) {
-    gitChangeUnsub();
-    return;
-  }
-  subscriptions.gitChanges = gitChangeUnsub;
-
-  // Event-driven metadata refresh: refresh PTY metadata when activity is detected
-  // This handles cwd/process changes that aren't covered by git file watchers.
-  if (epoch !== subscriptionsEpoch.value || !state.showAggregateView) {
-    return;
-  }
-
-  const activityUnsub = createActivityBasedRefresh(
-    state,
-    subscriptionsEpoch,
-    epoch,
-    refreshPtysSubset
-  );
-  if (epoch !== subscriptionsEpoch.value || !state.showAggregateView) {
-    return;
-  }
-  subscriptions.polling = activityUnsub;
-}
-
-export function createGitRepoChangeRefresh(
-  state: AggregateViewState,
-  subscriptionsEpoch: { value: number },
-  epoch: number,
-  refreshPtysSubset: (ptyIds: string[]) => Promise<void>
-): () => void {
-  return subscribeToGitRepoChanges((event) => {
-    if (!state.showAggregateView || subscriptionsEpoch.value !== epoch) {
-      return;
-    }
-
-    const affectedPtyIds = state.allPtys
-      .filter((pty) => pty.gitRepoKey === event.repoKey)
-      .map((pty) => pty.ptyId);
-
-    if (affectedPtyIds.length === 0) {
-      return;
-    }
-
-    void refreshPtysSubset(affectedPtyIds);
+    refreshPtys,
+    refreshPtysSubset,
+    handleTitleChange,
+    lifecycleHandlers,
   });
 }
 
-/**
- * Create an activity-based metadata refresh subscription.
- *
- * Instead of polling every N seconds, this watches for PTY activity events
- * and refreshes metadata only for PTYs that had activity. This provides:
- * - Zero CPU overhead when PTYs are idle
- * - Immediate metadata updates when activity occurs
- * - Batched refreshes to avoid thundering herd
- */
-export function createActivityBasedRefresh(
-  state: AggregateViewState,
-  subscriptionsEpoch: { value: number },
-  epoch: number,
-  refreshPtysSubset: (ptyIds: string[]) => Promise<void>
-): () => void {
-  // Track PTYs with pending activity for batching
-  const pendingPtyIds = new Set<string>();
-  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
-  const DEBOUNCE_MS = 500; // Wait 500ms after last activity before refreshing
-
-  const flushPending = async (): Promise<void> => {
-    debounceTimer = null;
-
-    if (!state.showAggregateView || pendingPtyIds.size === 0) return;
-
-    // Get all pending PTYs and clear the set
-    const ptyIdsToRefresh = Array.from(pendingPtyIds);
-    pendingPtyIds.clear();
-
-    // Check epoch before refreshing
-    if (subscriptionsEpoch.value !== epoch) return;
-
-    await refreshPtysSubset(ptyIdsToRefresh);
-  };
-
-  const scheduleFlush = (): void => {
-    if (debounceTimer) {
-      clearTimeout(debounceTimer);
-    }
-    debounceTimer = setTimeout(() => void flushPending(), DEBOUNCE_MS);
-  };
-
-  const activityStream = streamFromSubscription<{ ptyId: string }>(({ emit }) =>
-    subscribeToAllPtyActivity(emit)
-  );
-
-  const activityUnsub = runStream(
-    tap(activityStream, (event) => {
-      // Only track PTYs that exist in our aggregate view
-      if (!state.allPtysIndex.has(event.ptyId)) return;
-
-      pendingPtyIds.add(event.ptyId);
-      scheduleFlush();
-    }),
-    { label: 'aggregate-view-activity-refresh' }
-  );
-
-  // Return cleanup function that also clears pending timer
-  return () => {
-    if (debounceTimer) {
-      clearTimeout(debounceTimer);
-      debounceTimer = null;
-    }
-    pendingPtyIds.clear();
-    activityUnsub();
-  };
-}
+export { createGitRepoChangeRefresh, createActivityBasedRefresh } from './aggregate/subscriptions';
 
 export function cleanupSubscriptions(
   subscriptions: SubscriptionManager,
   subscriptionsEpoch: { value: number }
 ): void {
-  subscriptionsEpoch.value += 1;
-  subscriptions.lifecycle?.();
-  subscriptions.titleChange?.();
-  subscriptions.gitChanges?.();
-  subscriptions.polling?.();
-  subscriptions.lifecycle = null;
-  subscriptions.titleChange = null;
-  subscriptions.gitChanges = null;
-  subscriptions.polling = null;
+  cleanupAggregateSubscriptions(subscriptions, subscriptionsEpoch);
 }
