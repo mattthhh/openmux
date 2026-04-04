@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect } from 'bun:test';
-import { createTitleChangeHandler } from '../subscriptions/title-handler';
+import { createTitleChangeHandler } from '../subscriptions';
 import type { AggregateViewState } from '../../aggregate-view-types';
 import { createStore, produce } from 'solid-js/store';
 

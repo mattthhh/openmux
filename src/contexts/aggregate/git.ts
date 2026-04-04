@@ -1,15 +1,32 @@
 /**
- * Git metadata extraction and comparison utilities.
+ * Git metadata utilities for Aggregate View.
  */
 
-import type { GitRepoMetadata } from '../../git-metadata-cache';
-import type { GitDiffStats, PtyInfo } from '../types';
-import type { GitMetadataFields } from './types';
+import type { GitRepoMetadata } from '../git-metadata-cache';
+import type { GitInfo } from '../../effect/services/pty/helpers';
+import type { GitDiffStats, PtyInfo } from './types';
 
-/**
- * Extract git metadata fields from GitRepoMetadata.
- * Returns default empty values if metadata is undefined.
- */
+export interface GitMetadataFields {
+  gitBranch: string | undefined;
+  gitDiffStats: GitDiffStats | undefined;
+  gitDirty: boolean;
+  gitStaged: number;
+  gitUnstaged: number;
+  gitUntracked: number;
+  gitConflicted: number;
+  gitAhead: number | undefined;
+  gitBehind: number | undefined;
+  gitStashCount: number | undefined;
+  gitState: GitInfo['state'] | undefined;
+  gitDetached: boolean;
+  gitRepoKey: string | undefined;
+}
+
+export interface PtyChangeResult {
+  changed: boolean;
+  fields: Array<keyof GitMetadataFields>;
+}
+
 export function extractGitMetadata(metadata: GitRepoMetadata | undefined): GitMetadataFields {
   if (!metadata) {
     return {
@@ -46,10 +63,6 @@ export function extractGitMetadata(metadata: GitRepoMetadata | undefined): GitMe
   };
 }
 
-/**
- * Apply a repo snapshot to a PTY.
- * If the snapshot is missing, the incoming PTY metadata is preserved as-is.
- */
 export function applyGitMetadataSnapshot(
   pty: PtyInfo,
   metadata: GitRepoMetadata | undefined
@@ -64,9 +77,6 @@ export function applyGitMetadataSnapshot(
   };
 }
 
-/**
- * Compare two GitDiffStats for equality.
- */
 export function areGitDiffStatsEqual(
   a: GitDiffStats | undefined,
   b: GitDiffStats | undefined
@@ -76,9 +86,6 @@ export function areGitDiffStatsEqual(
   return a.added === b.added && a.removed === b.removed && a.binary === b.binary;
 }
 
-/**
- * Whether a PTY already carries meaningful git metadata.
- */
 export function hasGitMetadata(pty: PtyInfo): boolean {
   return (
     pty.gitBranch !== undefined ||
@@ -97,10 +104,6 @@ export function hasGitMetadata(pty: PtyInfo): boolean {
   );
 }
 
-/**
- * Preserve existing git metadata when a refresh path only returns partial PTY
- * data. This keeps cwd/process updates cheap without clearing stable git state.
- */
 export function mergePtyInfoPreservingGitMetadata(
   existing: PtyInfo | undefined,
   next: PtyInfo
@@ -137,10 +140,6 @@ export function mergePtyInfoPreservingGitMetadata(
   };
 }
 
-/**
- * Check if PtyInfo has changed between two versions.
- * Compares all fields including git metadata.
- */
 export function didPtyInfoChange(prev: PtyInfo, next: PtyInfo): boolean {
   return (
     prev.cwd !== next.cwd ||

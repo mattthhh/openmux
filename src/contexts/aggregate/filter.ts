@@ -2,21 +2,18 @@
  * Filter operations for aggregate view.
  */
 
-import type { PtyInfo } from '../types';
-import { FilterOperationError } from '../errors';
+import type { PtyInfo } from './types';
+import { FilterOperationError } from './errors';
 
-/** Normalize process names for comparisons (strip paths, lowercase) */
 export function normalizeProcessName(name: string | undefined): string {
   if (!name) return '';
   const trimmed = name.trim();
   if (!trimmed) return '';
-  // Handle both Unix (/) and Windows (\) path separators
   const withUnixSeparators = trimmed.replace(/\\/g, '/');
   const base = withUnixSeparators.split('/').pop() ?? trimmed;
   return base.toLowerCase();
 }
 
-/** Check if PTY has active foreground process (not just shell) */
 export function isActivePty(pty: PtyInfo): boolean {
   const processName = normalizeProcessName(pty.foregroundProcess);
   if (!processName) return false;
@@ -25,17 +22,14 @@ export function isActivePty(pty: PtyInfo): boolean {
   return processName !== shellName;
 }
 
-/** Filter PTYs to only those with active foreground processes */
 export function filterActivePtys(ptys: PtyInfo[]): PtyInfo[] {
   return ptys.filter(isActivePty);
 }
 
-/** Get base PTYs with optional inactive filtering */
 export function getBasePtys(ptys: PtyInfo[], showInactive: boolean): PtyInfo[] {
   return showInactive ? ptys : filterActivePtys(ptys);
 }
 
-/** Filter PTYs by search query (matches cwd, git branch, or process) */
 export function filterPtys(ptys: PtyInfo[], query: string): PtyInfo[] | FilterOperationError {
   const trimmedQuery = query.trim();
   if (!trimmedQuery) return ptys;
@@ -60,26 +54,23 @@ export function filterPtys(ptys: PtyInfo[], query: string): PtyInfo[] | FilterOp
   }
 }
 
-/** Build index map from ptyId to array index for O(1) lookups */
 export function buildPtyIndex(ptys: PtyInfo[]): Map<string, number> {
-  return new Map(ptys.map((p, i) => [p.ptyId, i]));
+  return new Map(ptys.map((pty, index) => [pty.ptyId, index]));
 }
 
-/** Group PTYs by session ID */
 export function groupPtysBySession(ptys: PtyInfo[]): Map<string, PtyInfo[]> {
   const groups = new Map<string, PtyInfo[]>();
   for (const pty of ptys) {
     const existing = groups.get(pty.sessionId);
     if (existing) {
       existing.push(pty);
-    } else {
-      groups.set(pty.sessionId, [pty]);
+      continue;
     }
+    groups.set(pty.sessionId, [pty]);
   }
   return groups;
 }
 
-/** Sort PTYs within a session by pane order, workspace, then ID */
 export function sortPtysForSession(
   ptys: PtyInfo[],
   paneOrder: Map<string, number> | undefined
@@ -103,7 +94,6 @@ export function sortPtysForSession(
   });
 }
 
-/** Extract all unique session IDs from PTYs */
 export function extractSessionIds(ptys: PtyInfo[]): string[] {
-  return [...new Set(ptys.map((p) => p.sessionId))];
+  return [...new Set(ptys.map((pty) => pty.sessionId))];
 }

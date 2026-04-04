@@ -2,13 +2,12 @@
  * Selection operations for aggregate view.
  */
 
-import type { AggregateViewState, FlattenedTreeItem, PtyInfo } from '../types';
-import type { SetStoreFunction } from 'solid-js/store';
-import { produce } from 'solid-js/store';
-import { findNearestSelectableIndex, getSessionIdForItem } from '../tree/flatten';
-import { SelectionOperationError } from '../errors';
+import { produce, type SetStoreFunction } from 'solid-js/store';
 
-/** Apply selection to state at given index */
+import type { AggregateViewState, FlattenedTreeItem, PtyInfo } from './types';
+import { SelectionOperationError } from './errors';
+import { findNearestSelectableIndex, getSessionIdForItem } from './tree';
+
 export function applySelection(state: AggregateViewState, index: number): void {
   const targetIndex = findNearestSelectableIndex(state.flattenedTree, index);
 
@@ -30,7 +29,6 @@ export function applySelection(state: AggregateViewState, index: number): void {
   }
 }
 
-/** Clear preview state */
 export function clearPreviewState(
   state: Pick<AggregateViewState, 'previewMode' | 'previewZoomed'>
 ): void {
@@ -38,7 +36,6 @@ export function clearPreviewState(
   state.previewZoomed = false;
 }
 
-/** Get selected PTY info from flattened tree */
 export function getSelectedPty(
   flattenedTree: FlattenedTreeItem[],
   selectedIndex: number
@@ -50,7 +47,6 @@ export function getSelectedPty(
   return null;
 }
 
-/** Get selected item from flattened tree */
 export function getSelectedItem(
   flattenedTree: FlattenedTreeItem[],
   selectedIndex: number
@@ -58,7 +54,6 @@ export function getSelectedItem(
   return flattenedTree[selectedIndex];
 }
 
-/** Get session ID for selected item */
 export function getSelectedSessionId(
   flattenedTree: FlattenedTreeItem[],
   selectedIndex: number
@@ -68,15 +63,16 @@ export function getSelectedSessionId(
 
   if (item.node.type === 'pty') {
     return item.node.ptyInfo.sessionId;
-  } else if (item.node.type === 'session') {
+  }
+  if (item.node.type === 'session') {
     return item.node.session.id;
-  } else if (item.node.type === 'placeholder') {
+  }
+  if (item.node.type === 'placeholder') {
     return item.node.parentSessionId;
   }
   return null;
 }
 
-/** Find the nearest selectable non-spacer row from a given index */
 export function findNearestSelectable(
   flattenedTree: FlattenedTreeItem[],
   startIndex: number,
@@ -96,7 +92,6 @@ export function findNearestSelectable(
   return null;
 }
 
-/** Find the previous PTY inside the same session group. */
 export function findNearestPtyInSessionAbove(
   flattenedTree: FlattenedTreeItem[],
   startIndex: number,
@@ -115,7 +110,6 @@ export function findNearestPtyInSessionAbove(
   return null;
 }
 
-/** Find the session header for the current PTY group. */
 export function findSessionHeader(
   flattenedTree: FlattenedTreeItem[],
   startIndex: number,
@@ -131,11 +125,6 @@ export function findSessionHeader(
   return null;
 }
 
-/**
- * Select the best row after PTY removal.
- * Keep the cursor in place by preferring the next selectable row below,
- * but when nothing is below, move to the previous PTY before the session header.
- */
 export function selectAfterPtyRemoval(
   state: AggregateViewState,
   removedPtyId: string
@@ -171,7 +160,6 @@ export function selectAfterPtyRemoval(
   return null;
 }
 
-/** Create selection action helpers bound to state */
 export function createSelectionActions(
   state: AggregateViewState,
   setState: SetStoreFunction<AggregateViewState>

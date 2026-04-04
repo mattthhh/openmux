@@ -11,7 +11,7 @@ import {
   buildPtyIndex,
   groupPtysBySession,
   extractSessionIds,
-} from '../filter/operations';
+} from '../filter';
 import type { PtyInfo } from '../types';
 
 const createMockPty = (overrides: Partial<PtyInfo> = {}): PtyInfo => ({

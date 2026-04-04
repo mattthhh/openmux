@@ -15,7 +15,7 @@ import {
   applyGitMetadataSnapshot,
   hasGitMetadata,
   mergePtyInfoPreservingGitMetadata,
-} from '../git/metadata';
+} from '../git';
 import { ptyMetadataToInfo } from '../pty-info';
 
 const sessionMetadata: SessionMetadata = {

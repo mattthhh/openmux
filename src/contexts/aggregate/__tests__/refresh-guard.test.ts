@@ -3,8 +3,7 @@
  */
 
 import { describe, it, expect } from 'bun:test';
-import { RefreshGuard } from '../refresh/guard';
-import { createRefreshState } from '../subscriptions/types';
+import { RefreshGuard, createRefreshState } from '../subscriptions';
 
 describe('RefreshGuard', () => {
   it('sets flag to true on creation', () => {

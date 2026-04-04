@@ -16,7 +16,7 @@ import {
   removePendingPaneCreations,
   upsertPendingPaneCreation,
 } from './aggregate-view-pending-insertions';
-import { mergePtyInfoPreservingGitMetadata } from './aggregate/git/metadata';
+import { mergePtyInfoPreservingGitMetadata } from './aggregate/git';
 import { loadSessionPtysOnDemand } from '../effect/bridge/aggregate-bridge';
 
 export interface AggregateViewActionsParams {

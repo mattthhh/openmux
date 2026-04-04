@@ -7,7 +7,7 @@ import {
   collectSerializedPaneIds,
   buildSessionPaneOrder,
   findWorkspaceIdForPane,
-} from '../refresh/session-utils';
+} from '../refresh';
 import type { SerializedSession, SerializedLayoutNode } from '../../effect/models';
 
 describe('session utils (litmus)', () => {

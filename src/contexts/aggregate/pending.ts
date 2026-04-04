@@ -1,28 +1,21 @@
 /**
  * Pending PTY insertion operations for Aggregate View.
- *
- * Manages temporary state for PTYs that are being created but haven't
- * been assigned a pane ID yet. Used for optimistic UI updates during
- * session restoration and new pane creation.
  */
 
-import type { AggregateViewState, PendingPaneCreation } from '../types';
+import type { AggregateViewState, PendingPaneCreation } from './types';
 
 type PendingInsertionCollectionState = Pick<AggregateViewState, 'pendingPaneCreations'>;
-
 type PendingInsertionOrderState = Pick<
   AggregateViewState,
   'allPtys' | 'sessionPaneOrders' | 'pendingPaneCreations'
 >;
 
-/** Get the most recent pending insertion */
 export function getCurrentPendingPaneCreation(
   state: PendingInsertionCollectionState
 ): PendingPaneCreation | null {
   return state.pendingPaneCreations[state.pendingPaneCreations.length - 1] ?? null;
 }
 
-/** Replace all pending insertions */
 export function setPendingPaneCreations(
   state: PendingInsertionCollectionState,
   insertions: PendingPaneCreation[]
@@ -30,7 +23,6 @@ export function setPendingPaneCreations(
   state.pendingPaneCreations = insertions;
 }
 
-/** Add or update a pending insertion */
 export function upsertPendingPaneCreation(
   state: PendingInsertionCollectionState,
   insertion: PendingPaneCreation
@@ -42,7 +34,6 @@ export function upsertPendingPaneCreation(
   setPendingPaneCreations(state, nextInsertions);
 }
 
-/** Remove pending insertions matching a predicate */
 export function removePendingPaneCreations(
   state: PendingInsertionCollectionState,
   predicate: (insertion: PendingPaneCreation) => boolean
@@ -53,7 +44,6 @@ export function removePendingPaneCreations(
   );
 }
 
-/** Find a pending insertion matching a predicate */
 export function findPendingPaneCreation(
   state: PendingInsertionCollectionState,
   predicate: (insertion: PendingPaneCreation) => boolean
@@ -61,7 +51,6 @@ export function findPendingPaneCreation(
   return state.pendingPaneCreations.find(predicate) ?? null;
 }
 
-/** Build pane order map for a session from current state */
 function buildSessionPaneOrderFromState(
   state: Pick<AggregateViewState, 'allPtys' | 'sessionPaneOrders'>,
   sessionId: string
@@ -86,7 +75,6 @@ function buildSessionPaneOrderFromState(
   return new Map(sessionPaneIds.map((paneId, index) => [paneId, index] as const));
 }
 
-/** Calculate insertion order for a pane inserted after another */
 export function getInsertedPaneOrder(
   paneOrder: Map<string, number>,
   insertAfterPaneId: string
@@ -113,15 +101,10 @@ export function getInsertedPaneOrder(
   return insertAfterOrder + (nextOrder - insertAfterOrder) / 2;
 }
 
-/** Calculate order for appending a pane to the end */
 export function getAppendedPaneOrder(paneOrder: Map<string, number>): number {
   return [...paneOrder.values()].reduce((maxOrder, order) => Math.max(maxOrder, order), -1) + 1;
 }
 
-/**
- * Calculate the next sort order hint for a pending PTY insertion.
- * This ensures proper ordering when multiple PTYs are being created.
- */
 export function getNextPendingPaneCreationOrder(
   state: PendingInsertionOrderState,
   params: { sessionId: string; insertAfterPaneId: string | null }
@@ -176,10 +159,6 @@ export function getNextPendingPaneCreationOrder(
   return lowerOrder + (upperOrder - lowerOrder) / 2;
 }
 
-/**
- * Find a pending insertion for a lifecycle event (PTY created/destroyed).
- * Matches by PTY ID, pane ID, or returns the oldest unresolved insertion.
- */
 export function findPendingPaneCreationForLifecycle(
   state: PendingInsertionCollectionState,
   params: { ptyId?: string | null; sessionId?: string | null; paneId?: string | null }

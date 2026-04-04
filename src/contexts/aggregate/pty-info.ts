@@ -9,7 +9,7 @@
 import type { SessionMetadata } from '../../effect/models';
 import type { GitInfo } from '../../effect/services/pty/helpers';
 import type { GitDiffStats, PtyInfo } from './types';
-import { mergePtyInfoPreservingGitMetadata } from './git/metadata';
+import { mergePtyInfoPreservingGitMetadata } from './git';
 
 export interface AggregatePtyMetadataLike {
   ptyId: string;

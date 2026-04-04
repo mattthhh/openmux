@@ -1,59 +1,7 @@
 /**
  * Aggregate View modular architecture.
- *
- * Unified refactor of aggregate-view-helpers.ts and aggregate-view-actions.ts
- * into a clean, modular structure with errore patterns and atomic state updates.
- *
- * Structure:
- * - pending/: Pending PTY insertion tracking (new)
- * - errors/: Error definitions using errore patterns
- * - types/: Core types (PtyInfo, AggregateViewState, TreeNode, etc.)
- * - filter/: Filter operations (filterPtys, isActivePty, sorting)
- * - tree/: Tree operations (buildTreeRoot, flattenTree, navigation)
- * - selection/: Selection logic (applySelection, restore after removal)
- * - session/: Session management (expand/collapse, reordering)
- * - subscriptions/: Lifecycle handlers, title changes, polling
- * - refresh/: Full refresh, subset refresh, initial load
- * - git/: Git metadata extraction and comparison
  */
 
-/** Pending insertion tracking */
-export {
-  getCurrentPendingPaneCreation,
-  setPendingPaneCreations,
-  upsertPendingPaneCreation,
-  removePendingPaneCreations,
-  findPendingPaneCreation,
-  getInsertedPaneOrder,
-  getAppendedPaneOrder,
-  getNextPendingPaneCreationOrder,
-  findPendingPaneCreationForLifecycle,
-} from './pending';
-
-/** SwiftGrove's modules */
-export * from './subscriptions';
-export * from './refresh';
-export * from './git';
-
-/** Types */
-export type {
-  PtyInfo,
-  GitDiffStats,
-  AggregateViewState,
-  SessionLoadState,
-  SessionTreeNode,
-  PtyTreeNode,
-  PlaceholderTreeNode,
-  SpacerTreeNode,
-  TreeNode,
-  FlattenedTreeItem,
-  PendingPaneCreation,
-  AggregateViewContextValue,
-} from './types';
-
-export { TREE_GLYPHS, createInitialState } from './types';
-
-/** Error definitions */
 export {
   TreeOperationError,
   FilterOperationError,
@@ -62,7 +10,6 @@ export {
   type AggregateViewError,
 } from './errors';
 
-/** Filter operations */
 export {
   normalizeProcessName,
   isActivePty,
@@ -75,7 +22,6 @@ export {
   extractSessionIds,
 } from './filter';
 
-/** Tree operations */
 export {
   getDefaultLoadState,
   createLoadingPlaceholder,
@@ -87,16 +33,23 @@ export {
   getSessionIdForItem,
   isSelectableItem,
   buildFlattenedTreeIndex,
-  flattenTree,
   findNearestSelectableIndex,
+  flattenTree,
   navigateUp,
   navigateDown,
   navigateToIndex,
   findPtyIndex,
   type NavigationResult,
+  type SessionLoadState,
+  type SessionTreeNode,
+  type PtyTreeNode,
+  type PlaceholderTreeNode,
+  type SpacerTreeNode,
+  type TreeNode,
+  type FlattenedTreeItem,
+  TREE_GLYPHS,
 } from './tree';
 
-/** Selection operations */
 export {
   applySelection,
   clearPreviewState,
@@ -104,11 +57,12 @@ export {
   getSelectedItem,
   getSelectedSessionId,
   findNearestSelectable,
+  findNearestPtyInSessionAbove,
+  findSessionHeader,
   selectAfterPtyRemoval,
   createSelectionActions,
 } from './selection';
 
-/** Session operations */
 export {
   toggleSessionExpanded,
   getSortedSessions,
@@ -116,3 +70,73 @@ export {
   recomputeTree,
   createSessionActions,
 } from './session';
+
+export {
+  createSubscriptionManager,
+  createRefreshState,
+  RefreshGuard,
+  createLifecycleHandlers,
+  createTitleChangeHandler,
+  setupSubscriptions,
+  createGitRepoChangeRefresh,
+  createActivityBasedRefresh,
+  cleanupSubscriptions,
+  type SubscriptionManager,
+  type RefreshState,
+  type RefreshFlagKey,
+  type PtyOwnership,
+  type CurrentSessionHints,
+  type CurrentSessionPty,
+  type TitleChangeHandler,
+  type LifecycleEvent,
+  type LifecycleHandlers,
+  type SubscriptionSetupDeps,
+  type LifecycleHandlerDeps,
+  type TitleChangeEvent,
+} from './subscriptions';
+
+export {
+  ptyMetadataToInfo,
+  collectSerializedPaneIds,
+  buildSessionPaneOrder,
+  findWorkspaceIdForPane,
+  createAggregateViewRefreshers,
+  type AggregatePtyMetadata,
+  type ResolvedPty,
+  type SessionSummary,
+  type CreateRefreshersParams,
+  type RefreshersResult,
+} from './refresh';
+
+export {
+  extractGitMetadata,
+  applyGitMetadataSnapshot,
+  areGitDiffStatsEqual,
+  hasGitMetadata,
+  mergePtyInfoPreservingGitMetadata,
+  didPtyInfoChange,
+  type GitMetadataFields,
+  type PtyChangeResult,
+} from './git';
+
+export {
+  getCurrentPendingPaneCreation,
+  setPendingPaneCreations,
+  upsertPendingPaneCreation,
+  removePendingPaneCreations,
+  findPendingPaneCreation,
+  getInsertedPaneOrder,
+  getAppendedPaneOrder,
+  getNextPendingPaneCreationOrder,
+  findPendingPaneCreationForLifecycle,
+} from './pending';
+
+export type {
+  PtyInfo,
+  GitDiffStats,
+  AggregateViewState,
+  PendingPaneCreation,
+  AggregateViewContextValue,
+} from '../aggregate-view-types';
+
+export { TREE_GLYPHS as TREE_GLYPHS_TYPES, createInitialState } from '../aggregate-view-types';

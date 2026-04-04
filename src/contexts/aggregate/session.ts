@@ -2,30 +2,28 @@
  * Session management operations for aggregate view.
  */
 
-import type { AggregateViewState, SessionLoadState, SessionTreeNode } from '../types';
-import type { SessionMetadata } from '../../../effect/models';
-import type { SetStoreFunction } from 'solid-js/store';
-import { produce } from 'solid-js/store';
-import { buildTreeRoot, flattenTree, getDefaultLoadState } from '../tree';
-import { groupPtysBySession, buildPtyIndex, getBasePtys, filterPtys } from '../filter/operations';
-import { applySelection, clearPreviewState } from '../selection/operations';
-import { SessionOperationError } from '../errors';
+import { produce, type SetStoreFunction } from 'solid-js/store';
 
-/** Toggle session expansion */
+import type { SessionMetadata } from '../../effect/models';
+import type { AggregateViewState, SessionTreeNode } from './types';
+import { SessionOperationError } from './errors';
+import { buildPtyIndex, filterPtys, getBasePtys, groupPtysBySession } from './filter';
+import { clearPreviewState } from './selection';
+import { buildTreeRoot, flattenTree } from './tree';
+
 export function toggleSessionExpanded(
   expandedSessionIds: Set<string>,
   sessionId: string
 ): Set<string> {
-  const newSet = new Set(expandedSessionIds);
-  if (newSet.has(sessionId)) {
-    newSet.delete(sessionId);
+  const nextSet = new Set(expandedSessionIds);
+  if (nextSet.has(sessionId)) {
+    nextSet.delete(sessionId);
   } else {
-    newSet.add(sessionId);
+    nextSet.add(sessionId);
   }
-  return newSet;
+  return nextSet;
 }
 
-/** Get sorted sessions based on manual order */
 export function getSortedSessions(
   allSessions: Map<string, SessionMetadata>,
   manualSessionOrder: string[]
@@ -48,7 +46,6 @@ export function getSortedSessions(
   });
 }
 
-/** Recompute matched PTYs after state changes */
 export function recomputeMatches(state: AggregateViewState): void {
   const basePtys = getBasePtys(state.allPtys, state.showInactive);
   const matchedPtysResult = filterPtys(basePtys, state.filterQuery);
@@ -68,8 +65,18 @@ export function recomputeMatches(state: AggregateViewState): void {
   }
 }
 
-/** Get session ID from flattened item */
-function getSessionIdForItem(item: { node: { type: string; session?: { id: string }; ptyInfo?: { sessionId: string }; parentSessionId?: string } } | undefined): string | null {
+function getSessionIdForItem(
+  item:
+    | {
+        node: {
+          type: string;
+          session?: { id: string };
+          ptyInfo?: { sessionId: string };
+          parentSessionId?: string;
+        };
+      }
+    | undefined
+): string | null {
   if (!item) return null;
   if (item.node.type === 'session') return item.node.session?.id ?? null;
   if (item.node.type === 'pty') return item.node.ptyInfo?.sessionId ?? null;
@@ -77,7 +84,6 @@ function getSessionIdForItem(item: { node: { type: string; session?: { id: strin
   return null;
 }
 
-/** Recompute tree structure and flattened navigation */
 export function recomputeTree(state: AggregateViewState): void {
   const previousTree = state.flattenedTree;
   const previousSelectedIndex = state.selectedIndex;
@@ -108,16 +114,12 @@ export function recomputeTree(state: AggregateViewState): void {
     state.sessionPaneOrders
   );
 
-  state.flattenedTree = flattenTree(
-    state.treeRoot,
-    state.filterQuery,
-    state.showInactive
-  );
+  state.flattenedTree = flattenTree(state.treeRoot, state.filterQuery, state.showInactive);
   state.flattenedTreeIndex = new Map();
-  for (let i = 0; i < state.flattenedTree.length; i++) {
-    const item = state.flattenedTree[i];
+  for (let index = 0; index < state.flattenedTree.length; index++) {
+    const item = state.flattenedTree[index];
     if (item.node.type === 'pty') {
-      state.flattenedTreeIndex.set(item.node.ptyInfo.ptyId, i);
+      state.flattenedTreeIndex.set(item.node.ptyInfo.ptyId, index);
     }
   }
 
@@ -150,7 +152,8 @@ export function recomputeTree(state: AggregateViewState): void {
       ) {
         state.selectedIndex = previousSelectedIndex;
         state.selectedSessionId = previousSelectedSessionId;
-        state.selectedPtyId = sameRowItem.node.type === 'pty' ? sameRowItem.node.ptyInfo.ptyId : null;
+        state.selectedPtyId =
+          sameRowItem.node.type === 'pty' ? sameRowItem.node.ptyInfo.ptyId : null;
         return;
       }
     }
@@ -166,9 +169,10 @@ export function recomputeTree(state: AggregateViewState): void {
     if (preferredIndex !== -1) {
       state.selectedIndex = preferredIndex;
       state.selectedSessionId = getSessionIdForItem(state.flattenedTree[preferredIndex]);
-      state.selectedPtyId = state.flattenedTree[preferredIndex]?.node.type === 'pty'
-        ? state.flattenedTree[preferredIndex].node.ptyInfo.ptyId
-        : null;
+      state.selectedPtyId =
+        state.flattenedTree[preferredIndex]?.node.type === 'pty'
+          ? state.flattenedTree[preferredIndex].node.ptyInfo.ptyId
+          : null;
       return;
     }
 
@@ -187,7 +191,9 @@ export function recomputeTree(state: AggregateViewState): void {
   const fallbackIndex = Math.max(0, clampedIndex);
   const fallbackItem = state.flattenedTree[fallbackIndex];
   if (fallbackItem?.node.type === 'spacer') {
-    const nextSelectableIndex = state.flattenedTree.findIndex((item) => item.node.type !== 'spacer');
+    const nextSelectableIndex = state.flattenedTree.findIndex(
+      (item) => item.node.type !== 'spacer'
+    );
     state.selectedIndex = nextSelectableIndex === -1 ? 0 : nextSelectableIndex;
   } else {
     state.selectedIndex = fallbackIndex;
@@ -197,7 +203,6 @@ export function recomputeTree(state: AggregateViewState): void {
   state.selectedPtyId = selectedItem?.node.type === 'pty' ? selectedItem.node.ptyInfo.ptyId : null;
 }
 
-/** Create session action helpers */
 export function createSessionActions(
   state: AggregateViewState,
   setState: SetStoreFunction<AggregateViewState>,
@@ -208,35 +213,44 @@ export function createSessionActions(
   const { persistSessionOrder } = options;
 
   const expandAllSessions = () => {
-    setState(produce((s) => {
-      for (const node of s.treeRoot) {
-        if (node.type === 'session' && node.loadState.status === 'loaded') {
-          s.expandedSessionIds.add(node.session.id);
+    setState(
+      produce((s) => {
+        for (const node of s.treeRoot) {
+          if (node.type === 'session' && node.loadState.status === 'loaded') {
+            s.expandedSessionIds.add(node.session.id);
+          }
         }
-      }
-      recomputeTree(s);
-    }));
+        recomputeTree(s);
+      })
+    );
   };
 
   const collapseAllSessions = () => {
-    setState(produce((s) => {
-      s.expandedSessionIds.clear();
-      recomputeTree(s);
-    }));
+    setState(
+      produce((s) => {
+        s.expandedSessionIds.clear();
+        recomputeTree(s);
+      })
+    );
   };
 
-  const toggleSessionExpanded = (sessionId: string) => {
-    setState(produce((s) => {
-      if (s.expandedSessionIds.has(sessionId)) {
-        s.expandedSessionIds.delete(sessionId);
-      } else {
-        s.expandedSessionIds.add(sessionId);
-      }
-      recomputeTree(s);
-    }));
+  const toggleSession = (sessionId: string) => {
+    setState(
+      produce((s) => {
+        if (s.expandedSessionIds.has(sessionId)) {
+          s.expandedSessionIds.delete(sessionId);
+        } else {
+          s.expandedSessionIds.add(sessionId);
+        }
+        recomputeTree(s);
+      })
+    );
   };
 
-  const reorderSessions = async (sourceSessionId: string, targetSessionId: string): Promise<SessionOperationError | void> => {
+  const reorderSessions = async (
+    sourceSessionId: string,
+    targetSessionId: string
+  ): Promise<SessionOperationError | void> => {
     if (sourceSessionId === targetSessionId) return;
 
     const currentOrder = state.treeRoot
@@ -256,10 +270,12 @@ export function createSessionActions(
     const insertIndex = movingDown ? targetIndexAfterRemoval + 1 : targetIndexAfterRemoval;
     nextOrder.splice(insertIndex, 0, movedSessionId);
 
-    setState(produce((s) => {
-      s.manualSessionOrder = nextOrder;
-      recomputeTree(s);
-    }));
+    setState(
+      produce((s) => {
+        s.manualSessionOrder = nextOrder;
+        recomputeTree(s);
+      })
+    );
 
     if (persistSessionOrder) {
       const result = await persistSessionOrder(nextOrder).catch((cause) => {
@@ -294,7 +310,7 @@ export function createSessionActions(
   return {
     expandAllSessions,
     collapseAllSessions,
-    toggleSessionExpanded,
+    toggleSessionExpanded: toggleSession,
     reorderSessions,
     scrollListUp,
     scrollListDown,
