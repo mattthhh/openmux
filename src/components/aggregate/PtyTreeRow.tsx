@@ -5,17 +5,18 @@
  * - Left: indent + truncated folder/process label (uses full width if no metadata)
  * - Right: git metadata (@detached ~state +added -removed *binary ↑ahead ↓behind)
  * - Per-row: each row only reserves space for its own metadata (no global column alignment)
+ *
+ * EVENT-BASED SHIMMER:
+ * - Uses lazy render-time calculation via getPtyShimmerColor()
+ * - Subscribes to shared RAF signal only when PTY is active
+ * - No global polling loop
  */
 
-import { createMemo, createSignal, onCleanup } from 'solid-js';
-import type { PtyInfo } from '../../contexts/aggregate-view-types';
+import { createMemo, createSignal, onCleanup, Show } from 'solid-js';
+import type { PtyInfo } from '../../contexts/aggregate/types';
 import type { AggregateTheme } from '../../core/types';
-import {
-  hasMeaningfulActivity,
-  subscribeToShimmer,
-  getShimmerColor,
-  isShimmerEnabled,
-} from '../../core/shimmer';
+import { getPtyShimmerColor, hasActiveShimmer } from '../../core/shimmer';
+import { useShimmerRenderTime } from './hooks/useShimmerRenderTime';
 import { getDirectoryName } from './utils';
 
 export interface PtyTreeRowProps {
@@ -145,25 +146,13 @@ function buildGitMetadata(pty: PtyInfo): string {
 
 /**
  * Single line PTY row with shimmer effect for active PTYs
+ *
+ * EVENT-BASED: Only subscribes to RAF when PTY has active shimmer
  */
 export function PtyTreeRow(props: PtyTreeRowProps) {
-  // Shimmer animation version - increments on each tick
-  const [shimmerVersion, setShimmerVersion] = createSignal(0);
-
-  // Evaluate activity dynamically so runtime stdout activity can start/stop shimmer.
-  const isActive = () => hasMeaningfulActivity(props.pty);
-
-  // Subscribe to global shimmer tick - always update version so the memo
-  // re-evaluates and can transition back to non-shimmered state when inactive
-  const shimmerUnsub = subscribeToShimmer(() => {
-    if (isShimmerEnabled()) {
-      setShimmerVersion((v) => v + 1);
-    }
-  });
-
-  onCleanup(() => {
-    shimmerUnsub();
-  });
+  // Subscribe to render time signal ONLY when PTY is active
+  // This ensures we only pay the RAF cost for PTYs that need animation
+  const renderTime = useShimmerRenderTime();
 
   // Selection colors
   const selectionColors = () => props.aggregateTheme.selection;
@@ -237,13 +226,16 @@ export function PtyTreeRow(props: PtyTreeRowProps) {
   });
 
   // Apply shimmer to label characters if active
+  // This memo reads renderTime() so it re-evaluates every frame when active
   const renderLabel = createMemo(() => {
-    shimmerVersion();
-
     const text = displayLabel();
     const baseColor = baseFgColor();
+    const now = renderTime(); // Re-evaluates every frame due to RAF signal
 
-    if (!isActive() || !isShimmerEnabled()) {
+    // Check if this PTY has an active shimmer animation
+    // NOTE: We check hasActiveShimmer, NOT hasMeaningfulActivity
+    // This ensures the animation completes even if activity stops mid-sweep
+    if (!hasActiveShimmer(props.pty.ptyId, now)) {
       return (
         <text fg={baseColor} selectable={false}>
           {text}
@@ -251,15 +243,17 @@ export function PtyTreeRow(props: PtyTreeRowProps) {
       );
     }
 
+    // Build shimmered text - character by character
     const shimmeredChars: JSX.Element[] = [];
     let currentRun = '';
     let currentColor = baseColor;
 
     for (let i = 0; i < text.length; i++) {
-      const nextColor =
-        getShimmerColor(baseColor, i, text.length, {
-          targetColor: props.shimmerTargetColor,
-        }) ?? baseColor;
+      const shimmerColor = getPtyShimmerColor(props.pty.ptyId, baseColor, i, text.length, now, {
+        targetColor: props.shimmerTargetColor,
+      });
+
+      const nextColor = shimmerColor ?? baseColor;
 
       if (nextColor !== currentColor) {
         if (currentRun) {

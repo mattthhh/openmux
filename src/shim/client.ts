@@ -77,7 +77,11 @@ export async function getTerminalState(
   const buffer = bufferToArrayBuffer(response.payloads[0]!);
   const state = unpackTerminalState(buffer);
   const existing = getPtyState(ptyId);
-  const scrollState = existing?.scrollState ?? { viewportOffset: 0, scrollbackLength: 0, isAtBottom: true };
+  const scrollState = existing?.scrollState ?? {
+    viewportOffset: 0,
+    scrollbackLength: 0,
+    isAtBottom: true,
+  };
   setPtyState(ptyId, {
     terminalState: state,
     cachedRows: [...state.cells],
@@ -170,9 +174,29 @@ export async function listAllPtys(): Promise<string[]> {
   return (response.header.result as { ptyIds: string[] }).ptyIds;
 }
 
-export async function getSessionInfo(ptyId: string): Promise<{ id: string; pid: number; cols: number; rows: number; cwd: string; shell: string } | null> {
+export async function getSessionInfo(
+  ptyId: string
+): Promise<{
+  id: string;
+  pid: number;
+  cols: number;
+  rows: number;
+  cwd: string;
+  shell: string;
+} | null> {
   const response = await sendRequest('getSession', { ptyId });
-  return (response.header.result as { session: { id: string; pid: number; cols: number; rows: number; cwd: string; shell: string } | null }).session;
+  return (
+    response.header.result as {
+      session: {
+        id: string;
+        pid: number;
+        cols: number;
+        rows: number;
+        cwd: string;
+        shell: string;
+      } | null;
+    }
+  ).session;
 }
 
 export async function getForegroundProcess(ptyId: string): Promise<string | undefined> {
@@ -187,22 +211,25 @@ export async function getGitBranch(ptyId: string): Promise<string | undefined> {
 
 export async function getGitInfo(ptyId: string): Promise<GitInfo | undefined> {
   const response = await sendRequest('getGitInfo', { ptyId });
-  const info = (response.header.result as {
-    info?: {
-      branch?: string;
-      dirty?: boolean;
-      staged?: number;
-      unstaged?: number;
-      untracked?: number;
-      conflicted?: number;
-      ahead?: number | null;
-      behind?: number | null;
-      stashCount?: number | null;
-      state?: GitInfo["state"];
-      detached?: boolean;
-      repoKey?: string;
-    } | null;
-  }).info ?? undefined;
+  const info =
+    (
+      response.header.result as {
+        info?: {
+          branch?: string;
+          dirty?: boolean;
+          staged?: number;
+          unstaged?: number;
+          untracked?: number;
+          conflicted?: number;
+          ahead?: number | null;
+          behind?: number | null;
+          stashCount?: number | null;
+          state?: GitInfo['state'];
+          detached?: boolean;
+          repoKey?: string;
+        } | null;
+      }
+    ).info ?? undefined;
   if (!info?.repoKey) return undefined;
   return {
     branch: info.branch ?? undefined,
@@ -224,9 +251,11 @@ export async function getGitDiffStats(
   ptyId: string
 ): Promise<{ added: number; removed: number; binary: number } | undefined> {
   const response = await sendRequest('getGitDiffStats', { ptyId });
-  const diff = (response.header.result as {
-    diff?: { added: number; removed: number; binary?: number } | null;
-  }).diff;
+  const diff = (
+    response.header.result as {
+      diff?: { added: number; removed: number; binary?: number } | null;
+    }
+  ).diff;
   if (!diff) return undefined;
   return {
     added: Number(diff.added ?? 0),
@@ -252,7 +281,11 @@ export async function getLastCommand(ptyId: string): Promise<string | undefined>
   return (response.header.result as { command?: string }).command;
 }
 
-export async function registerPaneMapping(sessionId: string, paneId: string, ptyId: string): Promise<void> {
+export async function registerPaneMapping(
+  sessionId: string,
+  paneId: string,
+  ptyId: string
+): Promise<void> {
   await sendRequest('registerPane', { sessionId, paneId, ptyId });
 }
 
@@ -261,10 +294,12 @@ export async function getSessionMapping(sessionId: string): Promise<{
   stalePaneIds: string[];
 }> {
   const response = await sendRequest('getSessionMapping', { sessionId });
-  const result = response.header.result as {
-    entries?: Array<{ paneId: string; ptyId: string }>;
-    stalePaneIds?: string[];
-  } | undefined;
+  const result = response.header.result as
+    | {
+        entries?: Array<{ paneId: string; ptyId: string }>;
+        stalePaneIds?: string[];
+      }
+    | undefined;
   const entries = result?.entries ?? [];
   return {
     mapping: new Map(entries.map((entry) => [entry.paneId, entry.ptyId])),
@@ -285,6 +320,7 @@ registerEmulatorFactory(createRemoteEmulator);
 
 export {
   getEmulator,
+  subscribeToActivity,
   subscribeExit,
   subscribeKittyTransmit,
   subscribeKittyUpdate,

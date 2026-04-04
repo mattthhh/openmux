@@ -4,11 +4,15 @@ import type { TerminalScrollState, UnifiedTerminalUpdate } from '../../core/type
 import type { SerializedDirtyUpdate } from '../../terminal/emulator-interface';
 import { getFocusedPtyId } from '../../terminal/focused-pty-registry';
 import { getHostFocusState } from '../../terminal/host-focus';
-import { sendDesktopNotification, sendMacOsNotification } from '../../terminal/desktop-notifications';
+import {
+  sendDesktopNotification,
+  sendMacOsNotification,
+} from '../../terminal/desktop-notifications';
 import { unpackDirtyUpdate } from '../../terminal/cell-serialization';
 import type { DesktopNotification } from '../../terminal/command-parser';
 import { bufferToArrayBuffer } from './utils';
 import {
+  handlePtyActivity,
   handlePtyExit,
   handlePtyLifecycle,
   handlePtyTitle,
@@ -24,18 +28,20 @@ export type FrameHandlerDeps = {
 };
 
 function buildPackedUpdate(header: ShimHeader, payloads: Buffer[]): SerializedDirtyUpdate | null {
-  const packedMeta = header.packed as {
-    cursor: { x: number; y: number; visible: boolean };
-    cols: number;
-    rows: number;
-    scrollbackLength: number;
-    isFull: boolean;
-    alternateScreen: boolean;
-    mouseTracking: boolean;
-    cursorKeyMode: number;
-    kittyKeyboardFlags?: number;
-    inBandResize: boolean;
-  } | undefined;
+  const packedMeta = header.packed as
+    | {
+        cursor: { x: number; y: number; visible: boolean };
+        cols: number;
+        rows: number;
+        scrollbackLength: number;
+        isFull: boolean;
+        alternateScreen: boolean;
+        mouseTracking: boolean;
+        cursorKeyMode: number;
+        kittyKeyboardFlags?: number;
+        inBandResize: boolean;
+      }
+    | undefined;
 
   if (!packedMeta) {
     return null;
@@ -78,17 +84,13 @@ export function handlePtyNotification(
   },
   deps: {
     sendMacOsNotification: (args: { title: string; subtitle?: string; body: string }) => boolean;
-    sendDesktopNotification: (args: { notification: DesktopNotification; subtitle?: string }) => boolean;
+    sendDesktopNotification: (args: {
+      notification: DesktopNotification;
+      subtitle?: string;
+    }) => boolean;
   }
 ): void {
-  const {
-    notification,
-    subtitle,
-    ptyId,
-    hostFocused,
-    focusedPtyId,
-    allowFocusedPaneOsc,
-  } = params;
+  const { notification, subtitle, ptyId, hostFocused, focusedPtyId, allowFocusedPaneOsc } = params;
   const isUnfocusedPane = Boolean(ptyId && focusedPtyId && ptyId !== focusedPtyId);
   const shouldUseMacOs = hostFocused === true && (isUnfocusedPane || !allowFocusedPaneOsc);
 
@@ -106,7 +108,9 @@ export function handlePtyNotification(
   deps.sendDesktopNotification({ notification, subtitle });
 }
 
-export function createFrameHandler(deps: FrameHandlerDeps): (header: ShimHeader, payloads: Buffer[]) => void {
+export function createFrameHandler(
+  deps: FrameHandlerDeps
+): (header: ShimHeader, payloads: Buffer[]) => void {
   return (header, payloads) => {
     if (deps.onResponse(header, payloads)) {
       return;
@@ -119,7 +123,9 @@ export function createFrameHandler(deps: FrameHandlerDeps): (header: ShimHeader,
         return;
       }
 
-      const scrollStateHeader = header.scrollState as { viewportOffset: number; isAtBottom: boolean } | undefined;
+      const scrollStateHeader = header.scrollState as
+        | { viewportOffset: number; isAtBottom: boolean }
+        | undefined;
       const scrollState: TerminalScrollState = {
         viewportOffset: scrollStateHeader?.viewportOffset ?? 0,
         scrollbackLength: packed.scrollbackLength,
@@ -145,38 +151,40 @@ export function createFrameHandler(deps: FrameHandlerDeps): (header: ShimHeader,
 
     if (header.type === 'ptyKitty') {
       const ptyId = header.ptyId as string;
-      const kitty = header.kitty as {
-        images?: Array<{
-          id: number;
-          number: number;
-          width: number;
-          height: number;
-          dataLength: number;
-          format: number;
-          compression: number;
-          implicitId: boolean;
-          transmitTime: string;
-        }>;
-        placements?: Array<{
-          imageId: number;
-          placementId: number;
-          placementTag: number;
-          screenX: number;
-          screenY: number;
-          xOffset: number;
-          yOffset: number;
-          sourceX: number;
-          sourceY: number;
-          sourceWidth: number;
-          sourceHeight: number;
-          columns: number;
-          rows: number;
-          z: number;
-        }>;
-        removedImageIds?: number[];
-        imageDataIds?: number[];
-        alternateScreen?: boolean;
-      } | undefined;
+      const kitty = header.kitty as
+        | {
+            images?: Array<{
+              id: number;
+              number: number;
+              width: number;
+              height: number;
+              dataLength: number;
+              format: number;
+              compression: number;
+              implicitId: boolean;
+              transmitTime: string;
+            }>;
+            placements?: Array<{
+              imageId: number;
+              placementId: number;
+              placementTag: number;
+              screenX: number;
+              screenY: number;
+              xOffset: number;
+              yOffset: number;
+              sourceX: number;
+              sourceY: number;
+              sourceWidth: number;
+              sourceHeight: number;
+              columns: number;
+              rows: number;
+              z: number;
+            }>;
+            removedImageIds?: number[];
+            imageDataIds?: number[];
+            alternateScreen?: boolean;
+          }
+        | undefined;
 
       if (!kitty) return;
 
@@ -222,6 +230,12 @@ export function createFrameHandler(deps: FrameHandlerDeps): (header: ShimHeader,
       const ptyId = header.ptyId as string;
       const title = (header.title as string) ?? '';
       handlePtyTitle(ptyId, title);
+      return;
+    }
+
+    if (header.type === 'ptyActivity') {
+      const ptyId = header.ptyId as string;
+      handlePtyActivity(ptyId);
       return;
     }
 

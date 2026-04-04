@@ -1,6 +1,6 @@
 /**
  * Subscription setup and cleanup for Aggregate View.
- * 
+ *
  * Manages all reactive subscriptions:
  * - PTY lifecycle events (created/destroyed)
  * - Title changes
@@ -8,22 +8,22 @@
  */
 
 import type { AggregateViewState } from '../types';
-import type { 
-  SubscriptionManager, 
-  LifecycleHandlers, 
+import type {
+  SubscriptionManager,
+  LifecycleHandlers,
   TitleChangeHandler,
-  LifecycleEvent 
+  LifecycleEvent,
 } from './types';
-import { 
-  runStream, 
-  streamFromSubscription, 
-  tap, 
-  repeatWithInterval 
+import {
+  runStream,
+  streamFromSubscription,
+  tap,
+  repeatWithInterval,
 } from '../../../effect/stream-utils';
-import { 
-  subscribeToPtyLifecycle, 
+import {
+  subscribeToPtyLifecycle,
   subscribeToAllTitleChanges,
-  type PtyTitleChangeEvent 
+  type PtyTitleChangeEvent,
 } from '../../../effect/bridge/pty-bridge';
 
 /** Dependencies for subscription setup */
@@ -37,7 +37,7 @@ export interface SubscriptionSetupDeps {
 }
 
 /** Polling interval in milliseconds */
-const DEFAULT_POLL_INTERVAL_MS = 2000;
+const DEFAULT_POLL_INTERVAL_MS = 5000; // Reduced from 2000ms to 5000ms
 
 /**
  * Set up all subscriptions for the aggregate view.
@@ -48,21 +48,21 @@ export async function setupSubscriptions(
   deps: SubscriptionSetupDeps,
   options: { pollIntervalMs?: number } = {}
 ): Promise<void> {
-  const { 
-    subscriptions, 
-    subscriptionsEpoch, 
+  const {
+    subscriptions,
+    subscriptionsEpoch,
     refreshPtysSubset,
-    handleTitleChange, 
-    lifecycleHandlers 
+    handleTitleChange,
+    lifecycleHandlers,
   } = deps;
-  
+
   const pollIntervalMs = options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
   const epoch = ++subscriptionsEpoch.value;
 
   // Subscribe to PTY lifecycle events for instant updates (no debounce)
   // Use targeted updates instead of full refresh for better performance
-  const lifecycleStream = streamFromSubscription<LifecycleEvent>(
-    ({ emit }) => subscribeToPtyLifecycle(emit)
+  const lifecycleStream = streamFromSubscription<LifecycleEvent>(({ emit }) =>
+    subscribeToPtyLifecycle(emit)
   );
 
   const lifecycleUnsub = runStream(
@@ -84,13 +84,11 @@ export async function setupSubscriptions(
 
   // Subscribe to title changes - use incremental update instead of full refresh
   const titleStream = tap(
-    streamFromSubscription<PtyTitleChangeEvent>(
-      ({ emit }) => subscribeToAllTitleChanges(emit)
-    ),
+    streamFromSubscription<PtyTitleChangeEvent>(({ emit }) => subscribeToAllTitleChanges(emit)),
     (event) => handleTitleChange(event)
   );
   const titleUnsub = runStream(titleStream, { label: 'aggregate-view-title' });
-  
+
   if (epoch !== subscriptionsEpoch.value || !state.showAggregateView) {
     titleUnsub();
     return;
@@ -106,7 +104,7 @@ export async function setupSubscriptions(
     if (!state.showAggregateView || state.allPtys.length === 0) return;
     await refreshPtysSubset(state.allPtys.map((pty) => pty.ptyId));
   }, pollIntervalMs);
-  
+
   subscriptions.polling = runStream(pollStream, { label: 'aggregate-view-poll' });
 }
 

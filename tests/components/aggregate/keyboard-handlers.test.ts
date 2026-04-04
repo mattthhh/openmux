@@ -1,21 +1,17 @@
-import { beforeAll, describe, expect, it, vi } from "bun:test";
+import { beforeAll, describe, expect, it, vi } from 'bun:test';
 
-import type { AggregateKeyboardDeps } from "../../../src/components/aggregate/keyboard/types";
-import { DEFAULT_KEYBINDINGS, resolveKeybindings } from "../../../src/core/keybindings";
+import type { AggregateKeyboardDeps } from '../../../src/components/aggregate/keyboard/types';
+import { DEFAULT_KEYBINDINGS, resolveKeybindings } from '../../../src/core/keybindings';
 
-let createAggregateKeyboardHandler: typeof import("../../../src/components/aggregate/keyboard-handlers").createAggregateKeyboardHandler;
+let createAggregateKeyboardHandler: typeof import('../../../src/components/aggregate/keyboard-handlers').createAggregateKeyboardHandler;
 
-vi.mock("../../../src/effect/bridge", () => ({
-  writeToPty: vi.fn(),
-  refreshPty: vi.fn(),
-}));
-
-vi.mock("../../../src/terminal/key-encoder", () => ({
+vi.mock('../../../src/terminal/key-encoder', () => ({
   encodeKeyForEmulator: vi.fn(() => null),
 }));
 
 beforeAll(async () => {
-  ({ createAggregateKeyboardHandler } = await import("../../../src/components/aggregate/keyboard-handlers"));
+  ({ createAggregateKeyboardHandler } =
+    await import('../../../src/components/aggregate/keyboard-handlers'));
 });
 
 function createDeps(overrides: Partial<AggregateKeyboardDeps> = {}) {
@@ -117,117 +113,117 @@ function createDeps(overrides: Partial<AggregateKeyboardDeps> = {}) {
   };
 }
 
-describe("createAggregateKeyboardHandler", () => {
-  it("enters copy mode from the configured prefix binding while previewing", () => {
+describe('createAggregateKeyboardHandler', () => {
+  it('enters copy mode from the configured prefix binding while previewing', () => {
     const setup = createDeps();
     const handler = createAggregateKeyboardHandler(setup.deps);
 
-    expect(handler.handleKeyDown({ key: "b", ctrl: true, eventType: "press" })).toBe(true);
+    expect(handler.handleKeyDown({ key: 'b', ctrl: true, eventType: 'press' })).toBe(true);
     expect(setup.getPrefixActive()).toBe(true);
 
-    expect(handler.handleKeyDown({ key: "[", eventType: "press" })).toBe(true);
+    expect(handler.handleKeyDown({ key: '[', eventType: 'press' })).toBe(true);
     expect(setup.handleEnterCopyMode).toHaveBeenCalledTimes(1);
     expect(setup.getPrefixActive()).toBe(false);
     expect(setup.clearPrefixTimeout).toHaveBeenCalled();
   });
 
-  it("routes aggregate preview keys to copy mode once copy mode is active", () => {
+  it('routes aggregate preview keys to copy mode once copy mode is active', () => {
     const setup = createDeps();
     setup.setCopyModeActive(true);
     const handler = createAggregateKeyboardHandler(setup.deps);
 
-    expect(handler.handleKeyDown({ key: "q", eventType: "press" })).toBe(true);
-    expect(setup.handleCopyModeKeys).toHaveBeenCalledWith({ key: "q", eventType: "press" });
+    expect(handler.handleKeyDown({ key: 'q', eventType: 'press' })).toBe(true);
+    expect(setup.handleCopyModeKeys).toHaveBeenCalledWith({ key: 'q', eventType: 'press' });
     expect(setup.exitPreviewMode).not.toHaveBeenCalled();
   });
 
-  it("enters copy mode via prefix+[ while in preview mode", () => {
+  it('enters copy mode via prefix+[ while in preview mode', () => {
     const setup = createDeps({
       getPreviewMode: () => true,
     });
     const handler = createAggregateKeyboardHandler(setup.deps);
 
     // Step 1: Press prefix key (ctrl+b)
-    const prefixResult = handler.handleKeyDown({ key: "b", ctrl: true, eventType: "press" });
+    const prefixResult = handler.handleKeyDown({ key: 'b', ctrl: true, eventType: 'press' });
     expect(prefixResult).toBe(true);
     expect(setup.getPrefixActive()).toBe(true);
 
     // Step 2: Press [ (while prefix is active)
-    const copyResult = handler.handleKeyDown({ key: "[", eventType: "press" });
+    const copyResult = handler.handleKeyDown({ key: '[', eventType: 'press' });
     expect(copyResult).toBe(true);
     expect(setup.handleEnterCopyMode).toHaveBeenCalledTimes(1);
     expect(setup.getPrefixActive()).toBe(false);
     expect(setup.clearPrefixTimeout).toHaveBeenCalled();
   });
 
-  it("routes Enter in aggregate list mode through the selected-row handler", () => {
+  it('routes Enter in aggregate list mode through the selected-row handler', () => {
     const setup = createDeps({
       getPreviewMode: () => false,
     });
     const handler = createAggregateKeyboardHandler(setup.deps);
 
-    expect(handler.handleKeyDown({ key: "enter", eventType: "press" })).toBe(true);
+    expect(handler.handleKeyDown({ key: 'enter', eventType: 'press' })).toBe(true);
     expect(setup.handleListEnter).toHaveBeenCalledTimes(1);
   });
 
-  it("opens the shared session picker from aggregate list mode via the normal binding", () => {
+  it('opens the shared session picker from aggregate list mode via the normal binding', () => {
     const setup = createDeps({
       getPreviewMode: () => false,
     });
     const handler = createAggregateKeyboardHandler(setup.deps);
 
-    expect(handler.handleKeyDown({ key: "s", alt: true, eventType: "press" })).toBe(true);
+    expect(handler.handleKeyDown({ key: 's', alt: true, eventType: 'press' })).toBe(true);
     expect(setup.onToggleSessionPicker).toHaveBeenCalledTimes(1);
   });
 
-  it("opens the shared session picker from aggregate mode via the prefix binding", () => {
+  it('opens the shared session picker from aggregate mode via the prefix binding', () => {
     const setup = createDeps({
       getPreviewMode: () => false,
     });
     const handler = createAggregateKeyboardHandler(setup.deps);
 
-    expect(handler.handleKeyDown({ key: "b", ctrl: true, eventType: "press" })).toBe(true);
-    expect(handler.handleKeyDown({ key: "s", eventType: "press" })).toBe(true);
+    expect(handler.handleKeyDown({ key: 'b', ctrl: true, eventType: 'press' })).toBe(true);
+    expect(handler.handleKeyDown({ key: 's', eventType: 'press' })).toBe(true);
     expect(setup.onToggleSessionPicker).toHaveBeenCalledTimes(1);
     expect(setup.getPrefixActive()).toBe(false);
   });
 
-  it("opens the shared command palette from aggregate list mode via the normal binding", () => {
+  it('opens the shared command palette from aggregate list mode via the normal binding', () => {
     const setup = createDeps({
       getPreviewMode: () => false,
     });
     const handler = createAggregateKeyboardHandler(setup.deps);
 
-    expect(handler.handleKeyDown({ key: "p", alt: true, eventType: "press" })).toBe(true);
+    expect(handler.handleKeyDown({ key: 'p', alt: true, eventType: 'press' })).toBe(true);
     expect(setup.onToggleCommandPalette).toHaveBeenCalledTimes(1);
   });
 
-  it("opens the shared command palette from aggregate mode via the prefix binding", () => {
+  it('opens the shared command palette from aggregate mode via the prefix binding', () => {
     const setup = createDeps({
       getPreviewMode: () => false,
     });
     const handler = createAggregateKeyboardHandler(setup.deps);
 
-    expect(handler.handleKeyDown({ key: "b", ctrl: true, eventType: "press" })).toBe(true);
-    expect(handler.handleKeyDown({ key: ":", shift: true, eventType: "press" })).toBe(true);
+    expect(handler.handleKeyDown({ key: 'b', ctrl: true, eventType: 'press' })).toBe(true);
+    expect(handler.handleKeyDown({ key: ':', shift: true, eventType: 'press' })).toBe(true);
     expect(setup.onToggleCommandPalette).toHaveBeenCalledTimes(1);
     expect(setup.getPrefixActive()).toBe(false);
   });
 
-  it("toggles aggregate preview zoom from the normal zoom binding while previewing", () => {
+  it('toggles aggregate preview zoom from the normal zoom binding while previewing', () => {
     const setup = createDeps();
     const handler = createAggregateKeyboardHandler(setup.deps);
 
-    expect(handler.handleKeyDown({ key: "z", alt: true, eventType: "press" })).toBe(true);
+    expect(handler.handleKeyDown({ key: 'z', alt: true, eventType: 'press' })).toBe(true);
     expect(setup.togglePreviewZoom).toHaveBeenCalledTimes(1);
   });
 
-  it("toggles aggregate preview zoom from the prefix zoom binding while previewing", () => {
+  it('toggles aggregate preview zoom from the prefix zoom binding while previewing', () => {
     const setup = createDeps();
     const handler = createAggregateKeyboardHandler(setup.deps);
 
-    expect(handler.handleKeyDown({ key: "b", ctrl: true, eventType: "press" })).toBe(true);
-    expect(handler.handleKeyDown({ key: "z", eventType: "press" })).toBe(true);
+    expect(handler.handleKeyDown({ key: 'b', ctrl: true, eventType: 'press' })).toBe(true);
+    expect(handler.handleKeyDown({ key: 'z', eventType: 'press' })).toBe(true);
     expect(setup.togglePreviewZoom).toHaveBeenCalledTimes(1);
     expect(setup.getPrefixActive()).toBe(false);
   });

@@ -1,10 +1,11 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from 'bun:test';
 import type { TerminalCell, TerminalState, UnifiedTerminalUpdate } from '../../src/core/types';
 import {
   deletePtyState,
   getEmulator,
   getKittyState,
   getPtyState,
+  handlePtyActivity,
   handlePtyLifecycle,
   handlePtyKittyTransmit,
   handlePtyKittyUpdate,
@@ -12,6 +13,7 @@ import {
   handleUnifiedUpdate,
   registerEmulatorFactory,
   setPtyState,
+  subscribeToActivity,
   subscribeKittyTransmit,
   subscribeScroll,
   subscribeState,
@@ -108,7 +110,10 @@ describe('shim client state', () => {
       title: 'init',
     });
 
-    const dirtyRow = [{ ...baseCell, char: 'z' }, { ...baseCell, char: 'y' }];
+    const dirtyRow = [
+      { ...baseCell, char: 'z' },
+      { ...baseCell, char: 'y' },
+    ];
     const update: UnifiedTerminalUpdate = {
       terminalUpdate: {
         dirtyRows: new Map([[0, dirtyRow]]),
@@ -155,6 +160,21 @@ describe('shim client state', () => {
     deletePtyState(ptyId);
   });
 
+  test('notifies global activity subscribers', () => {
+    const ptyId = 'pty-activity';
+    let activityCount = 0;
+    const unsubscribe = subscribeToActivity((event) => {
+      expect(event.ptyId).toBe(ptyId);
+      activityCount += 1;
+    });
+
+    handlePtyActivity(ptyId);
+
+    expect(activityCount).toBe(1);
+
+    unsubscribe();
+  });
+
   test('lifecycle destroy removes cached state', () => {
     const ptyId = 'pty-life';
     setPtyState(ptyId, {
@@ -181,12 +201,15 @@ describe('shim client state', () => {
     const ptyId = 'pty-emulator';
     let lastScrollback: number | null = null;
     let lastLimit: boolean | null = null;
-    registerEmulatorFactory(() => ({
-      handleScrollbackChange: (newLength: number, isAtLimit: boolean) => {
-        lastScrollback = newLength;
-        lastLimit = isAtLimit;
-      },
-    }) as any);
+    registerEmulatorFactory(
+      () =>
+        ({
+          handleScrollbackChange: (newLength: number, isAtLimit: boolean) => {
+            lastScrollback = newLength;
+            lastLimit = isAtLimit;
+          },
+        }) as any
+    );
 
     getEmulator(ptyId);
 
@@ -194,7 +217,12 @@ describe('shim client state', () => {
       terminalUpdate: {
         dirtyRows: new Map(),
         cursor: { x: 0, y: 0, visible: true },
-        scrollState: { viewportOffset: 0, scrollbackLength: 3, isAtBottom: true, isAtScrollbackLimit: true },
+        scrollState: {
+          viewportOffset: 0,
+          scrollbackLength: 3,
+          isAtBottom: true,
+          isAtScrollbackLimit: true,
+        },
         cols: 2,
         rows: 1,
         isFull: true,
@@ -204,7 +232,12 @@ describe('shim client state', () => {
         cursorKeyMode: 'normal',
         inBandResize: false,
       },
-      scrollState: { viewportOffset: 0, scrollbackLength: 3, isAtBottom: true, isAtScrollbackLimit: true },
+      scrollState: {
+        viewportOffset: 0,
+        scrollbackLength: 3,
+        isAtBottom: true,
+        isAtScrollbackLimit: true,
+      },
     };
 
     handleUnifiedUpdate(ptyId, update);

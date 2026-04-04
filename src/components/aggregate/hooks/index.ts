@@ -5,12 +5,10 @@
  */
 
 export { useVimMode, type VimHandlers } from './useVimMode';
-export {
-  useEmulatorCache,
-  type EmulatorCacheError,
-} from './useEmulatorCache';
+export { useEmulatorCache, type EmulatorCacheError } from './useEmulatorCache';
 export {
   useActivitySubscriptions,
   type ActivitySubscriptionError,
 } from './useActivitySubscriptions';
 export { useSessionDrag, type DragState } from './useSessionDrag';
+export { useShimmerRenderTime } from './useShimmerRenderTime';

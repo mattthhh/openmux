@@ -58,7 +58,7 @@ describe('shimmer activity tracking', () => {
     it('records activity for a PTY', () => {
       recordPtyStdoutActivity('pty-1', 1000);
       expect(hasRecentPtyStdoutActivity('pty-1', 1000)).toBe(false); // Only 1 event
-      
+
       recordPtyStdoutActivity('pty-1', 1100);
       expect(hasRecentPtyStdoutActivity('pty-1', 1100)).toBe(true); // 2 events
     });
@@ -68,33 +68,33 @@ describe('shimmer activity tracking', () => {
       recordPtyStdoutActivity('pty-1', now);
       recordPtyStdoutActivity('pty-1', now + 100);
       recordPtyStdoutActivity('pty-1', now + 200);
-      
+
       expect(hasRecentPtyStdoutActivity('pty-1', now + 200)).toBe(true);
     });
 
     it('prunes stale entries outside the 2500ms window', () => {
       const baseTime = 10000;
-      
+
       // Add 2 events within window
       recordPtyStdoutActivity('pty-1', baseTime);
       recordPtyStdoutActivity('pty-1', baseTime + 1000);
-      
+
       // Check at the edge of the window (both still valid)
       expect(hasRecentPtyStdoutActivity('pty-1', baseTime + 2500)).toBe(true);
-      
+
       // Check after window expired (both pruned, only 0 left)
       expect(hasRecentPtyStdoutActivity('pty-1', baseTime + 2501)).toBe(false);
     });
 
     it('handles multiple PTYs independently', () => {
       const now = Date.now();
-      
+
       recordPtyStdoutActivity('pty-1', now);
       recordPtyStdoutActivity('pty-1', now + 100);
-      
+
       recordPtyStdoutActivity('pty-2', now);
       recordPtyStdoutActivity('pty-2', now + 100);
-      
+
       expect(hasRecentPtyStdoutActivity('pty-1', now + 100)).toBe(true);
       expect(hasRecentPtyStdoutActivity('pty-2', now + 100)).toBe(true);
     });
@@ -103,11 +103,11 @@ describe('shimmer activity tracking', () => {
   describe('hasRecentPtyStdoutActivity', () => {
     it('requires minimum 2 events for activity', () => {
       const now = Date.now();
-      
+
       // Single event - not enough
       recordPtyStdoutActivity('pty-1', now);
       expect(hasRecentPtyStdoutActivity('pty-1', now)).toBe(false);
-      
+
       // Second event - now active
       recordPtyStdoutActivity('pty-1', now + 100);
       expect(hasRecentPtyStdoutActivity('pty-1', now + 100)).toBe(true);
@@ -119,16 +119,16 @@ describe('shimmer activity tracking', () => {
 
     it('handles mixed old and new events', () => {
       const baseTime = 10000;
-      
+
       // Old events (outside window)
       recordPtyStdoutActivity('pty-1', baseTime);
       recordPtyStdoutActivity('pty-1', baseTime + 100);
-      
+
       // New events (inside window)
       const newTime = baseTime + 3000;
       recordPtyStdoutActivity('pty-1', newTime);
       recordPtyStdoutActivity('pty-1', newTime + 100);
-      
+
       // Should only count new events
       expect(hasRecentPtyStdoutActivity('pty-1', newTime + 200)).toBe(true);
     });
@@ -137,11 +137,11 @@ describe('shimmer activity tracking', () => {
   describe('clearPtyStdoutActivity', () => {
     it('clears all activity for a PTY', () => {
       const now = Date.now();
-      
+
       recordPtyStdoutActivity('pty-1', now);
       recordPtyStdoutActivity('pty-1', now + 100);
       expect(hasRecentPtyStdoutActivity('pty-1', now + 100)).toBe(true);
-      
+
       clearPtyStdoutActivity('pty-1');
       expect(hasRecentPtyStdoutActivity('pty-1', now + 100)).toBe(false);
     });
@@ -156,12 +156,12 @@ describe('shimmer activity tracking', () => {
       const pty = createMockPtyInfo({
         foregroundProcess: 'nvim',
       });
-      
+
       // Record activity
       const now = Date.now();
       recordPtyStdoutActivity(pty.ptyId, now);
       recordPtyStdoutActivity(pty.ptyId, now + 100);
-      
+
       expect(hasMeaningfulActivity(pty)).toBe(true);
     });
 
@@ -169,11 +169,11 @@ describe('shimmer activity tracking', () => {
       const pty = createMockPtyInfo({
         foregroundProcess: undefined,
       });
-      
+
       const now = Date.now();
       recordPtyStdoutActivity(pty.ptyId, now);
       recordPtyStdoutActivity(pty.ptyId, now + 100);
-      
+
       expect(hasMeaningfulActivity(pty)).toBe(false);
     });
 
@@ -181,11 +181,11 @@ describe('shimmer activity tracking', () => {
       const pty = createMockPtyInfo({
         foregroundProcess: 'webpack --watch',
       });
-      
+
       const now = Date.now();
       recordPtyStdoutActivity(pty.ptyId, now);
       recordPtyStdoutActivity(pty.ptyId, now + 100);
-      
+
       expect(hasMeaningfulActivity(pty)).toBe(false);
     });
 
@@ -193,11 +193,11 @@ describe('shimmer activity tracking', () => {
       const pty = createMockPtyInfo({
         foregroundProcess: 'jest --watch',
       });
-      
+
       const now = Date.now();
       recordPtyStdoutActivity(pty.ptyId, now);
       recordPtyStdoutActivity(pty.ptyId, now + 100);
-      
+
       expect(hasMeaningfulActivity(pty)).toBe(false);
     });
 
@@ -205,11 +205,11 @@ describe('shimmer activity tracking', () => {
       const pty = createMockPtyInfo({
         foregroundProcess: 'npm run watch',
       });
-      
+
       const now = Date.now();
       recordPtyStdoutActivity(pty.ptyId, now);
       recordPtyStdoutActivity(pty.ptyId, now + 100);
-      
+
       expect(hasMeaningfulActivity(pty)).toBe(false);
     });
 
@@ -217,11 +217,11 @@ describe('shimmer activity tracking', () => {
       const pty = createMockPtyInfo({
         foregroundProcess: 'vite',
       });
-      
+
       const now = Date.now();
       recordPtyStdoutActivity(pty.ptyId, now);
       recordPtyStdoutActivity(pty.ptyId, now + 100);
-      
+
       expect(hasMeaningfulActivity(pty)).toBe(false);
     });
 
@@ -229,7 +229,7 @@ describe('shimmer activity tracking', () => {
       const pty = createMockPtyInfo({
         foregroundProcess: 'nvim',
       });
-      
+
       // No activity recorded
       expect(hasMeaningfulActivity(pty)).toBe(false);
     });
@@ -239,11 +239,11 @@ describe('shimmer activity tracking', () => {
         foregroundProcess: 'codex',
         title: 'codex - working',
       });
-      
+
       const now = Date.now();
       recordPtyStdoutActivity(pty.ptyId, now);
       recordPtyStdoutActivity(pty.ptyId, now + 100);
-      
+
       expect(hasMeaningfulActivity(pty)).toBe(true);
     });
 
@@ -251,22 +251,24 @@ describe('shimmer activity tracking', () => {
       const pty = createMockPtyInfo({
         foregroundProcess: 'claude-code',
       });
-      
+
       const now = Date.now();
       recordPtyStdoutActivity(pty.ptyId, now);
       recordPtyStdoutActivity(pty.ptyId, now + 100);
-      
+
       expect(hasMeaningfulActivity(pty)).toBe(true);
     });
   });
 
   describe('setShimmerEnabled / isShimmerEnabled', () => {
-    it('enables shimmer globally', () => {
+    it('setShimmerEnabled / isShimmerEnabled are deprecated no-ops in event-based architecture', () => {
+      // In the new event-based architecture, shimmer is always "enabled"
+      // It just only runs when PTYs have activity. No global toggle needed.
       setShimmerEnabled(false);
-      expect(isShimmerEnabled()).toBe(false);
-      
+      expect(isShimmerEnabled()).toBe(true); // Always true in new architecture
+
       setShimmerEnabled(true);
-      expect(isShimmerEnabled()).toBe(true);
+      expect(isShimmerEnabled()).toBe(true); // Always true
     });
 
     it('defaults to enabled', () => {
@@ -276,73 +278,83 @@ describe('shimmer activity tracking', () => {
     });
   });
 
-  describe('subscribeToShimmer', () => {
-    it('returns unsubscribe function', () => {
+  describe('subscribeToShimmer (DEPRECATED)', () => {
+    it('returns unsubscribe function for backwards compatibility', () => {
       const unsubscribe = subscribeToShimmer(() => {});
       expect(typeof unsubscribe).toBe('function');
       unsubscribe();
     });
 
-    it('calls callback on animation tick when enabled', async () => {
+    it('does NOT call callback - event-based architecture has no global loop', async () => {
+      // In the new event-based architecture, subscribeToShimmer is a no-op.
+      // Shimmer is calculated at render time via getPtyShimmerColor().
       setShimmerEnabled(true);
-      
+
       let callCount = 0;
       const unsubscribe = subscribeToShimmer(() => {
         callCount++;
       });
-      
-      // Wait for at least one animation frame (throttled at ~100ms)
+
+      // Wait for what would have been animation frames
       await new Promise((resolve) => setTimeout(resolve, 150));
-      
-      // Should have been called at least once
-      expect(callCount).toBeGreaterThan(0);
-      
+
+      // Callback should NOT be called - no global animation loop in event-based arch
+      expect(callCount).toBe(0);
+
       unsubscribe();
+    });
+
+    it('unsubscribe still works (no-op in new architecture)', () => {
+      const unsubscribe = subscribeToShimmer(() => {});
+      expect(() => unsubscribe()).not.toThrow();
     });
 
     it('stops calling callback after unsubscribe', async () => {
       setShimmerEnabled(true);
-      
+
       let callCount = 0;
       const unsubscribe = subscribeToShimmer(() => {
         callCount++;
       });
-      
+
       // Wait for some ticks
       await new Promise((resolve) => setTimeout(resolve, 150));
       const countBefore = callCount;
-      
-      // Unsubscribe
+
+      // Unsubscribe (no-op in new architecture)
       unsubscribe();
-      
+
       // Wait again
       await new Promise((resolve) => setTimeout(resolve, 150));
-      
-      // Count should not have increased
+
+      // In event-based architecture, callback is never called (no global loop)
+      // Count should remain 0
       expect(callCount).toBe(countBefore);
+      expect(callCount).toBe(0);
     });
 
     it('handles multiple subscribers', async () => {
       setShimmerEnabled(true);
-      
+
       let callCount1 = 0;
       let callCount2 = 0;
-      
+
       const unsubscribe1 = subscribeToShimmer(() => {
         callCount1++;
       });
-      
+
       const unsubscribe2 = subscribeToShimmer(() => {
         callCount2++;
       });
-      
+
       // Wait for ticks
       await new Promise((resolve) => setTimeout(resolve, 150));
-      
-      expect(callCount1).toBeGreaterThan(0);
-      expect(callCount2).toBeGreaterThan(0);
-      expect(callCount1).toBe(callCount2);
-      
+
+      // In event-based architecture, callbacks are NOT called
+      // No global animation loop - shimmer is calculated at render time
+      expect(callCount1).toBe(0);
+      expect(callCount2).toBe(0);
+
       unsubscribe1();
       unsubscribe2();
     });

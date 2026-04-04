@@ -64,6 +64,7 @@ import { setShimmerEnabled } from '../core/shimmer';
 import type { Workspace } from '../core/types';
 import { collectPanes } from '../core/layout-tree';
 import type { FlattenedTreeItem, PendingPtyInsertion } from '../contexts/aggregate-view-types';
+import type { PtyInfo } from '../contexts/aggregate/types';
 import { getNextPendingPtyInsertionOrder } from '../contexts/aggregate-view-pending-insertions';
 import {
   resolvePendingAggregatePaneFocus,
@@ -182,18 +183,14 @@ export function AggregateView(props: AggregateViewProps) {
     })
   );
 
-  // Track activity for ALL PTYs in the aggregate view, not just visible viewport rows.
-  // This ensures shimmer animation appears correctly when scrolling to a PTY that had
-  // output while off-screen or in a collapsed session.
-  const trackedActivityPtys = createMemo(() => {
-    // Use matchedPtys which contains all PTYs currently in the aggregate view tree
-    // (respects filters but includes those scrolled out of view or in collapsed sessions)
-    return state.matchedPtys;
-  });
+  // Track activity for ALL matched PTYs, not just visible ones.
+  // This ensures background PTYs shimmer when they have activity,
+  // so users can see "at a glance" which sessions are active without scrolling.
+  const trackedActivityPtys = createMemo(() => state.matchedPtys);
 
-  // Subscribe to activity updates for all tracked PTYs to enable shimmer effects.
-  // We track all PTYs in the view, not just visible ones, so activity that happens
-  // while a PTY is scrolled out of view or in a collapsed session is still recorded.
+  // Subscribe to activity updates for ALL matched PTYs to enable shimmer effects.
+  // Background PTYs (not in viewport) still track activity so users can see
+  // which sessions are active at a glance without scrolling.
   const activity = useActivitySubscriptions({
     isActive: () => state.showAggregateView,
     getTrackedPtys: trackedActivityPtys,
@@ -333,7 +330,7 @@ export function AggregateView(props: AggregateViewProps) {
     if (prefixTimeout) clearTimeout(prefixTimeout);
     sessionDrag.cancelDrag();
     setShimmerEnabled(false);
-    activity.sync();
+    // Note: activity subscriptions are cleaned up automatically via onCleanup in the hook
   });
 
   // Prefix timeout management

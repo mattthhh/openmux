@@ -1,16 +1,13 @@
-import { beforeEach, describe, expect, it, vi } from 'bun:test';
-import {
-  GitMetadataCache,
-  clearGlobalGitMetadataCache,
-  getGlobalGitMetadataCache,
-} from '../../../src/contexts/git-metadata-cache';
+import { describe, expect, it, vi } from 'bun:test';
+
+const loadGitMetadataCacheModule = (() => {
+  let nonce = 0;
+  return () => import(`../../../src/contexts/git-metadata-cache.ts?git-cache=${nonce++}`);
+})();
 
 describe('Git metadata stability - synchronous aggregate behavior', () => {
-  beforeEach(() => {
-    clearGlobalGitMetadataCache();
-  });
-
   it('shares one metadata object across PTYs in the same repo', async () => {
+    const { GitMetadataCache } = await loadGitMetadataCacheModule();
     const cache = new GitMetadataCache({
       fetchGitInfo: async () => ({
         repoKey: 'repo-1',
@@ -38,6 +35,7 @@ describe('Git metadata stability - synchronous aggregate behavior', () => {
   });
 
   it('returns full diff stats immediately on a full fetch', async () => {
+    const { GitMetadataCache } = await loadGitMetadataCacheModule();
     const fetchGitInfo = vi.fn(async () => ({
       repoKey: 'repo-1',
       branch: 'main',
@@ -67,6 +65,7 @@ describe('Git metadata stability - synchronous aggregate behavior', () => {
   });
 
   it('does not reuse metadata across different repos', async () => {
+    const { GitMetadataCache } = await loadGitMetadataCacheModule();
     const cache = new GitMetadataCache({
       fetchGitInfo: async (cwd) => ({
         repoKey: cwd.includes('repo-a') ? 'repo-a' : 'repo-b',
@@ -94,6 +93,7 @@ describe('Git metadata stability - synchronous aggregate behavior', () => {
   });
 
   it('force refreshes repo metadata immediately when the repo changes', async () => {
+    const { getGlobalGitMetadataCache } = await loadGitMetadataCacheModule();
     let diffValue = { added: 1, removed: 0, binary: 0 };
     const cache = getGlobalGitMetadataCache({
       fetchGitInfo: async () => ({

@@ -43,6 +43,7 @@ type KittyScreenState = {
 export type LifecycleEvent = { type: 'created' | 'destroyed'; ptyId: string };
 
 export type TitleEvent = { ptyId: string; title: string };
+export type ActivityEvent = { ptyId: string };
 
 export type KittyTransmitEvent = { ptyId: string; sequence: string };
 export type KittyUpdateEvent = { ptyId: string };
@@ -55,6 +56,7 @@ const scrollSubscribers = new Map<string, Set<() => void>>();
 const exitSubscribers = new Map<string, Set<(exitCode: number) => void>>();
 const titleSubscribers = new Map<string, Set<(title: string) => void>>();
 const globalTitleSubscribers = new Set<(event: TitleEvent) => void>();
+const activitySubscribers = new Set<(event: ActivityEvent) => void>();
 const lifecycleSubscribers = new Set<(event: LifecycleEvent) => void>();
 const kittyTransmitSubscribers = new Set<(event: KittyTransmitEvent) => void>();
 const kittyUpdateSubscribers = new Set<(event: KittyUpdateEvent) => void>();
@@ -162,6 +164,12 @@ export function handlePtyTitle(ptyId: string, title: string): void {
   }
 }
 
+export function handlePtyActivity(ptyId: string): void {
+  for (const callback of activitySubscribers) {
+    callback({ ptyId });
+  }
+}
+
 export function handlePtyLifecycle(ptyId: string, eventType: 'created' | 'destroyed'): void {
   if (eventType === 'destroyed') {
     deletePtyState(ptyId);
@@ -202,7 +210,10 @@ export function handlePtyKittyUpdate(
     dirty: true,
     seedImageIds: new Set(update.imageData.keys()),
   };
-  const bundle = kittyStates.get(ptyId) ?? { main: createEmptyKittyState(), alt: createEmptyKittyState() };
+  const bundle = kittyStates.get(ptyId) ?? {
+    main: createEmptyKittyState(),
+    alt: createEmptyKittyState(),
+  };
   bundle[screen] = nextState;
   kittyStates.set(ptyId, bundle);
 
@@ -226,7 +237,10 @@ export function handlePtyKittyTransmit(ptyId: string, sequence: string): void {
   if (kittyTransmitSubscribers.size === 0) {
     pendingKittyTransmitEvents.push(event);
     if (pendingKittyTransmitEvents.length > MAX_PENDING_KITTY_TRANSMITS) {
-      pendingKittyTransmitEvents.splice(0, pendingKittyTransmitEvents.length - MAX_PENDING_KITTY_TRANSMITS);
+      pendingKittyTransmitEvents.splice(
+        0,
+        pendingKittyTransmitEvents.length - MAX_PENDING_KITTY_TRANSMITS
+      );
     }
     return;
   }
@@ -236,7 +250,10 @@ export function handlePtyKittyTransmit(ptyId: string, sequence: string): void {
   }
 }
 
-export function getKittyState(ptyId: string, alternateScreen: boolean = false): KittyGraphicsState | undefined {
+export function getKittyState(
+  ptyId: string,
+  alternateScreen: boolean = false
+): KittyGraphicsState | undefined {
   const state = kittyStates.get(ptyId);
   if (!state) return undefined;
   return alternateScreen ? state.alt : state.main;
@@ -279,7 +296,10 @@ export function subscribeUnified(ptyId: string, callback: UnifiedSubscriber): ()
   };
 }
 
-export function subscribeState(ptyId: string, callback: (state: TerminalState) => void): () => void {
+export function subscribeState(
+  ptyId: string,
+  callback: (state: TerminalState) => void
+): () => void {
   const set = stateSubscribers.get(ptyId) ?? new Set<(state: TerminalState) => void>();
   set.add(callback);
   stateSubscribers.set(ptyId, set);
@@ -348,6 +368,13 @@ export function subscribeToAllTitles(callback: (event: TitleEvent) => void): () 
   };
 }
 
+export function subscribeToActivity(callback: (event: ActivityEvent) => void): () => void {
+  activitySubscribers.add(callback);
+  return () => {
+    activitySubscribers.delete(callback);
+  };
+}
+
 export function subscribeToLifecycle(callback: (event: LifecycleEvent) => void): () => void {
   lifecycleSubscribers.add(callback);
   return () => {
@@ -406,7 +433,8 @@ function applyUnifiedUpdate(ptyId: string, update: UnifiedTerminalUpdate): void 
       alternateScreen: update.terminalUpdate.alternateScreen,
       mouseTracking: update.terminalUpdate.mouseTracking,
       cursorKeyMode: update.terminalUpdate.cursorKeyMode,
-      kittyKeyboardFlags: update.terminalUpdate.kittyKeyboardFlags ?? existing.terminalState.kittyKeyboardFlags ?? 0,
+      kittyKeyboardFlags:
+        update.terminalUpdate.kittyKeyboardFlags ?? existing.terminalState.kittyKeyboardFlags ?? 0,
     };
 
     ptyStates.set(ptyId, {
@@ -418,7 +446,9 @@ function applyUnifiedUpdate(ptyId: string, update: UnifiedTerminalUpdate): void 
   } else {
     ptyStates.set(ptyId, {
       terminalState: update.terminalUpdate.fullState ?? null,
-      cachedRows: update.terminalUpdate.fullState?.cells ? [...update.terminalUpdate.fullState.cells] : [],
+      cachedRows: update.terminalUpdate.fullState?.cells
+        ? [...update.terminalUpdate.fullState.cells]
+        : [],
       scrollState: update.scrollState,
       title: existing?.title ?? '',
     });

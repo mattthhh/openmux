@@ -179,12 +179,26 @@ export function createShimPtyService(): PtyService {
       return ShimClient.subscribeToTitle(String(id), callback);
     },
     subscribeToAllTitleChanges: (callback) => {
+      let unsubscribe: (() => void) | null = null;
       void ensureShim().then(() => {
-        ShimClient.subscribeToAllTitles((event) => {
+        unsubscribe = ShimClient.subscribeToAllTitles((event) => {
           callback({ ptyId: event.ptyId as PtyId, title: event.title });
         });
       });
-      return () => {};
+      return () => {
+        unsubscribe?.();
+      };
+    },
+    subscribeToAllActivity: (callback) => {
+      let unsubscribe: (() => void) | null = null;
+      void ensureShim().then(() => {
+        unsubscribe = ShimClient.subscribeToActivity((event: { ptyId: string }) => {
+          callback({ ptyId: event.ptyId as PtyId });
+        });
+      });
+      return () => {
+        unsubscribe?.();
+      };
     },
     dispose: () => {
       // Shim service doesn't need cleanup - it's a proxy

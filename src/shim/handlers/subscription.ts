@@ -34,7 +34,9 @@ export async function subscribeToPty(
 
     state.bootstrappingPtyIds.add(ptyId);
     const { replayPtyState } = await import('./replay');
-    const replayResult = await replayPtyState(state, withPty, sendEvent, kittyHandlers, ptyId, { allowWhileBootstrapping: true });
+    const replayResult = await replayPtyState(state, withPty, sendEvent, kittyHandlers, ptyId, {
+      allowWhileBootstrapping: true,
+    });
     state.bootstrappingPtyIds.delete(ptyId);
     return replayResult;
   }
@@ -45,11 +47,21 @@ export async function subscribeToPty(
   }
 
   // Get emulator
-  const emulatorResult = await errore.tryAsync<import('../../terminal/emulator-interface').ITerminalEmulator, ShimConnectionError>({
-    try: () => withPty((pty) => pty.getEmulator(asPtyId(ptyId))) as Promise<import('../../terminal/emulator-interface').ITerminalEmulator>,
-    catch: (e) => new ShimConnectionError({ reason: `Failed to get emulator for PTY ${ptyId}: ${e}`, cause: e }),
+  const emulatorResult = await errore.tryAsync<
+    import('../../terminal/emulator-interface').ITerminalEmulator,
+    ShimConnectionError
+  >({
+    try: () =>
+      withPty((pty) => pty.getEmulator(asPtyId(ptyId))) as Promise<
+        import('../../terminal/emulator-interface').ITerminalEmulator
+      >,
+    catch: (e) =>
+      new ShimConnectionError({
+        reason: `Failed to get emulator for PTY ${ptyId}: ${e}`,
+        cause: e,
+      }),
   });
-  
+
   if (emulatorResult instanceof ShimConnectionError) {
     if (bootstrap) state.bootstrappingPtyIds.delete(ptyId);
     return emulatorResult;
@@ -59,50 +71,56 @@ export async function subscribeToPty(
 
   // Subscribe to unified updates
   const unifiedUnsubResult = await errore.tryAsync<() => void, ShimConnectionError>({
-    try: () => withPty((pty) =>
-      pty.subscribeUnified(asPtyId(ptyId), (update: UnifiedTerminalUpdate) => {
-        state.ptyScrollStates.set(ptyId, update.scrollState);
+    try: () =>
+      withPty((pty) =>
+        pty.subscribeUnified(asPtyId(ptyId), (update: UnifiedTerminalUpdate) => {
+          state.ptyScrollStates.set(ptyId, update.scrollState);
 
-        const packed = packDirtyUpdate(update.terminalUpdate);
-        const payloads: ArrayBuffer[] = [
-          packed.dirtyRowIndices.buffer.slice(0) as ArrayBuffer,
-          packed.dirtyRowData as ArrayBuffer,
-          (packed.fullStateData ?? new ArrayBuffer(0)) as ArrayBuffer,
-        ];
+          const packed = packDirtyUpdate(update.terminalUpdate);
+          const payloads: ArrayBuffer[] = [
+            packed.dirtyRowIndices.buffer.slice(0) as ArrayBuffer,
+            packed.dirtyRowData as ArrayBuffer,
+            (packed.fullStateData ?? new ArrayBuffer(0)) as ArrayBuffer,
+          ];
 
-        sendEvent({
-          type: 'ptyUpdate',
-          ptyId,
-          packed: {
-            cursor: packed.cursor,
-            cols: packed.cols,
-            rows: packed.rows,
-            scrollbackLength: packed.scrollbackLength,
-            isFull: packed.isFull,
-            alternateScreen: packed.alternateScreen,
-            mouseTracking: packed.mouseTracking,
-            cursorKeyMode: packed.cursorKeyMode,
-            kittyKeyboardFlags: packed.kittyKeyboardFlags,
-            inBandResize: packed.inBandResize,
-          },
-          scrollState: {
-            viewportOffset: update.scrollState.viewportOffset,
-            isAtBottom: update.scrollState.isAtBottom,
-          },
-          payloadLengths: payloads.map((payload) => payload.byteLength),
-        }, payloads, { allowWhileBootstrapping: canBootstrapReplay() });
+          sendEvent(
+            {
+              type: 'ptyUpdate',
+              ptyId,
+              packed: {
+                cursor: packed.cursor,
+                cols: packed.cols,
+                rows: packed.rows,
+                scrollbackLength: packed.scrollbackLength,
+                isFull: packed.isFull,
+                alternateScreen: packed.alternateScreen,
+                mouseTracking: packed.mouseTracking,
+                cursorKeyMode: packed.cursorKeyMode,
+                kittyKeyboardFlags: packed.kittyKeyboardFlags,
+                inBandResize: packed.inBandResize,
+              },
+              scrollState: {
+                viewportOffset: update.scrollState.viewportOffset,
+                isAtBottom: update.scrollState.isAtBottom,
+              },
+              payloadLengths: payloads.map((payload) => payload.byteLength),
+            },
+            payloads,
+            { allowWhileBootstrapping: canBootstrapReplay() }
+          );
 
-        const kittyEmulator = state.ptyEmulators.get(ptyId);
-        if (kittyEmulator) {
-          kittyHandlers.sendKittyUpdate(ptyId, kittyEmulator, false, {
-            allowWhileBootstrapping: canBootstrapReplay(),
-          });
-        }
-      })
-    ),
-    catch: (e) => new ShimConnectionError({ reason: `Failed to subscribe to unified updates: ${e}`, cause: e }),
+          const kittyEmulator = state.ptyEmulators.get(ptyId);
+          if (kittyEmulator) {
+            kittyHandlers.sendKittyUpdate(ptyId, kittyEmulator, false, {
+              allowWhileBootstrapping: canBootstrapReplay(),
+            });
+          }
+        })
+      ),
+    catch: (e) =>
+      new ShimConnectionError({ reason: `Failed to subscribe to unified updates: ${e}`, cause: e }),
   });
-  
+
   if (unifiedUnsubResult instanceof ShimConnectionError) {
     if (bootstrap) state.bootstrappingPtyIds.delete(ptyId);
     return unifiedUnsubResult;
@@ -110,21 +128,26 @@ export async function subscribeToPty(
 
   // Subscribe to exit events
   const exitUnsubResult = await errore.tryAsync<() => void, ShimConnectionError>({
-    try: () => withPty((pty) =>
-      pty.onExit(asPtyId(ptyId), (exitCode: number) => {
-        removeMappingForPty(state, ptyId);
-        sendEvent({ type: 'ptyExit', ptyId, exitCode });
-      })
-    ),
-    catch: (e) => new ShimConnectionError({ reason: `Failed to subscribe to exit events: ${e}`, cause: e }),
+    try: () =>
+      withPty((pty) =>
+        pty.onExit(asPtyId(ptyId), (exitCode: number) => {
+          removeMappingForPty(state, ptyId);
+          sendEvent({ type: 'ptyExit', ptyId, exitCode });
+        })
+      ),
+    catch: (e) =>
+      new ShimConnectionError({ reason: `Failed to subscribe to exit events: ${e}`, cause: e }),
   });
-  
+
   if (exitUnsubResult instanceof ShimConnectionError) {
     if (bootstrap) state.bootstrappingPtyIds.delete(ptyId);
     return exitUnsubResult;
   }
 
-  state.ptySubscriptions.set(ptyId, { unifiedUnsub: unifiedUnsubResult, exitUnsub: exitUnsubResult });
+  state.ptySubscriptions.set(ptyId, {
+    unifiedUnsub: unifiedUnsubResult,
+    exitUnsub: exitUnsubResult,
+  });
   if (bootstrap) {
     state.bootstrappingPtyIds.delete(ptyId);
   }
@@ -146,16 +169,32 @@ export async function unsubscribeFromPty(
   resources.registerSubscription(subs.unifiedUnsub);
   resources.registerSubscription(subs.exitUnsub);
 
-  resources.deferSafe(() => { state.ptySubscriptions.delete(ptyId); });
-  resources.deferSafe(() => { state.ptyEmulators.delete(ptyId); });
-  resources.deferSafe(() => { state.ptyScrollStates.delete(ptyId); });
-  resources.deferSafe(() => { state.bootstrappingPtyIds.delete(ptyId); });
+  resources.deferSafe(() => {
+    state.ptySubscriptions.delete(ptyId);
+  });
+  resources.deferSafe(() => {
+    state.ptyEmulators.delete(ptyId);
+  });
+  resources.deferSafe(() => {
+    state.ptyScrollStates.delete(ptyId);
+  });
+  resources.deferSafe(() => {
+    state.bootstrappingPtyIds.delete(ptyId);
+  });
 
   if (!options?.preserveKittyState) {
-    resources.deferSafe(() => { state.kittyImages.delete(ptyId); });
-    resources.deferSafe(() => { state.kittyTransmitCache.delete(ptyId); });
-    resources.deferSafe(() => { state.kittyTransmitPending.delete(ptyId); });
-    resources.deferSafe(() => { state.kittyTransmitInvalidated.delete(ptyId); });
+    resources.deferSafe(() => {
+      state.kittyImages.delete(ptyId);
+    });
+    resources.deferSafe(() => {
+      state.kittyTransmitCache.delete(ptyId);
+    });
+    resources.deferSafe(() => {
+      state.kittyTransmitPending.delete(ptyId);
+    });
+    resources.deferSafe(() => {
+      state.kittyTransmitInvalidated.delete(ptyId);
+    });
   }
 }
 
@@ -173,18 +212,25 @@ export async function subscribeAllPtys(
     try: () => withPty((pty) => pty.listAll()) as Promise<string[]>,
     catch: (e) => new ShimConnectionError({ reason: `Failed to list PTYs: ${e}`, cause: e }),
   });
-  
+
   if (ptyIdsResult instanceof ShimConnectionError) return ptyIdsResult;
 
   await Promise.all(
     ptyIdsResult.map(async (id) => {
-      const result = await subscribeToPty(state, withPty, sendEvent, kittyHandlers, String(id), options);
+      const result = await subscribeToPty(
+        state,
+        withPty,
+        sendEvent,
+        kittyHandlers,
+        String(id),
+        options
+      );
       if (result instanceof ShimConnectionError) {
         console.warn(`Failed to subscribe to PTY ${id}:`, result.message);
       }
     })
   );
-  
+
   return ptyIdsResult;
 }
 
@@ -200,17 +246,31 @@ export async function cleanupCurrentClientBindings(
   state.bootstrappingPtyIds.clear();
 
   for (const ptyId of [...state.ptySubscriptions.keys()]) {
-    resources.defer(() => unsubscribeFromPty(state, ptyId, { preserveKittyState: options?.preserveKittyState }).catch((e) => {
-      console.warn(`Failed to unsubscribe from PTY ${ptyId}:`, e);
-    }));
+    resources.defer(() =>
+      unsubscribeFromPty(state, ptyId, { preserveKittyState: options?.preserveKittyState }).catch(
+        (e) => {
+          console.warn(`Failed to unsubscribe from PTY ${ptyId}:`, e);
+        }
+      )
+    );
   }
 
   if (state.lifecycleUnsub) {
     resources.registerSubscription(state.lifecycleUnsub);
-    resources.deferSafe(() => { state.lifecycleUnsub = null; });
+    resources.deferSafe(() => {
+      state.lifecycleUnsub = null;
+    });
   }
   if (state.titleUnsub) {
     resources.registerSubscription(state.titleUnsub);
-    resources.deferSafe(() => { state.titleUnsub = null; });
+    resources.deferSafe(() => {
+      state.titleUnsub = null;
+    });
+  }
+  if (state.activityUnsub) {
+    resources.registerSubscription(state.activityUnsub);
+    resources.deferSafe(() => {
+      state.activityUnsub = null;
+    });
   }
 }

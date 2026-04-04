@@ -1,7 +1,7 @@
 import net from 'net';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from 'bun:test';
 import fs from 'fs/promises';
 
 import { encodeFrame, FrameReader, type ShimHeader } from '../../src/shim/protocol';
@@ -119,7 +119,10 @@ async function collectDetachedUntilResponse(
   return { detachedCount, closed: socket.destroyed };
 }
 
-async function drainDetached(reader: ReturnType<typeof createFrameQueue>, limit = 3): Promise<number> {
+async function drainDetached(
+  reader: ReturnType<typeof createFrameQueue>,
+  limit = 3
+): Promise<number> {
   let detachedCount = 0;
   for (let i = 0; i < limit; i++) {
     const frame = await nextFrameSafe(reader, 150);
@@ -142,6 +145,7 @@ describe('shim server', () => {
       listAll: () => [],
       subscribeToLifecycle: () => () => {},
       subscribeToAllTitleChanges: () => () => {},
+      subscribeToAllActivity: () => () => {},
     };
 
     const server = await startShimServer({
@@ -208,6 +212,7 @@ describe('shim server', () => {
       onExit: () => () => {},
       subscribeToLifecycle: () => () => {},
       subscribeToAllTitleChanges: () => () => {},
+      subscribeToAllActivity: () => () => {},
     };
 
     const server = await startShimServer({
@@ -240,19 +245,21 @@ describe('shim server', () => {
     const terminalState = {
       cols: 80,
       rows: 24,
-      cells: Array.from({ length: 24 }, () => Array.from({ length: 80 }, () => ({
-        char: ' ',
-        fg: { r: 255, g: 255, b: 255 },
-        bg: { r: 0, g: 0, b: 0 },
-        bold: false,
-        italic: false,
-        underline: false,
-        strikethrough: false,
-        inverse: false,
-        blink: false,
-        dim: false,
-        width: 1 as const,
-      }))),
+      cells: Array.from({ length: 24 }, () =>
+        Array.from({ length: 80 }, () => ({
+          char: ' ',
+          fg: { r: 255, g: 255, b: 255 },
+          bg: { r: 0, g: 0, b: 0 },
+          bold: false,
+          italic: false,
+          underline: false,
+          strikethrough: false,
+          inverse: false,
+          blink: false,
+          dim: false,
+          width: 1 as const,
+        }))
+      ),
       cursor: { x: 0, y: 0, visible: true, style: 'block' as const },
       alternateScreen: false,
       mouseTracking: false,
@@ -293,6 +300,7 @@ describe('shim server', () => {
       onExit: () => () => {},
       subscribeToLifecycle: () => () => {},
       subscribeToAllTitleChanges: () => () => {},
+      subscribeToAllActivity: () => () => {},
     };
 
     const server = await startShimServer({
@@ -333,6 +341,7 @@ describe('shim server', () => {
       listAll: () => [],
       subscribeToLifecycle: () => () => {},
       subscribeToAllTitleChanges: () => () => {},
+      subscribeToAllActivity: () => () => {},
     };
 
     const server = await startShimServer({
@@ -373,8 +382,8 @@ describe('shim server', () => {
     const resultA = await collectDetachedUntilResponse(clientA, readerA, 3);
     const resultB = await collectDetachedUntilResponse(clientB, readerB, 2);
 
-    const detachedA = resultA.detachedCount + await drainDetached(readerA);
-    const detachedB = resultB.detachedCount + await drainDetached(readerB);
+    const detachedA = resultA.detachedCount + (await drainDetached(readerA));
+    const detachedB = resultB.detachedCount + (await drainDetached(readerB));
 
     expect(resultB.response?.ok).toBe(true);
     if (resultA.response) {
@@ -407,6 +416,7 @@ describe('shim server', () => {
       onExit: () => () => {},
       subscribeToLifecycle: () => () => {},
       subscribeToAllTitleChanges: () => () => {},
+      subscribeToAllActivity: () => () => {},
     };
 
     const server = await startShimServer({
@@ -442,7 +452,9 @@ describe('shim server', () => {
     });
     const mappingResponse = await reader.nextFrame();
     expect(mappingResponse.header.ok).toBe(true);
-    const entries = (mappingResponse.header.result as { entries: Array<{ paneId: string; ptyId: string }> }).entries;
+    const entries = (
+      mappingResponse.header.result as { entries: Array<{ paneId: string; ptyId: string }> }
+    ).entries;
     expect(entries).toEqual([{ paneId: 'pane-1', ptyId: 'pty-1' }]);
 
     client.destroy();
@@ -461,6 +473,7 @@ describe('shim server', () => {
       onExit: () => () => {},
       subscribeToLifecycle: () => () => {},
       subscribeToAllTitleChanges: () => () => {},
+      subscribeToAllActivity: () => () => {},
     };
 
     const server = await startShimServer({

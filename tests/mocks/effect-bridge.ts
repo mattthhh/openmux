@@ -12,6 +12,8 @@ export const effectBridgeMocks = {
   writeToPty: vi.fn(),
   destroyPty: vi.fn(),
   destroyAllPtys: vi.fn(),
+  subscribeUnifiedToPty: vi.fn(),
+  refreshPty: vi.fn(),
   getActiveSessionIdForShim: vi.fn(),
   registerPtyPane: vi.fn(),
   applyHostColors: vi.fn(),
@@ -28,4 +30,5 @@ export const effectBridgeMocks = {
   getPtyMetadata: vi.fn(),
   subscribeToPtyLifecycle: vi.fn(),
   subscribeToAllTitleChanges: vi.fn(),
+  subscribeToAllPtyActivity: vi.fn(),
 };

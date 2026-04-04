@@ -2,7 +2,10 @@ import type net from 'net';
 import { describe, expect, it, vi } from 'bun:test';
 
 import { createServerHandlers } from '../../src/shim/server-handlers';
-import { getKittyTransmitForwarder, setKittyTransmitForwarder } from '../../src/shim/kitty-forwarder';
+import {
+  getKittyTransmitForwarder,
+  setKittyTransmitForwarder,
+} from '../../src/shim/kitty-forwarder';
 import { createShimServerState } from '../../src/shim/server-state';
 import {
   KittyGraphicsCompression,
@@ -28,17 +31,19 @@ describe('createServerHandlers detach behavior', () => {
   it('preserves kitty replay state across detach', async () => {
     const state = createShimServerState();
     const handlers = createServerHandlers(state, {
-      withPty: async (fn) => fn({
-        listAll: () => [],
-        subscribeToLifecycle: () => () => {},
-        subscribeToAllTitleChanges: () => () => {},
-      }),
+      withPty: async (fn) =>
+        fn({
+          listAll: () => [],
+          subscribeToLifecycle: () => () => {},
+          subscribeToAllTitleChanges: () => () => {},
+          subscribeToAllActivity: () => () => {},
+        }),
       setHostColors: () => {},
     });
 
     const socket = { destroyed: false } as unknown as net.Socket;
     state.activeClient = socket;
-    
+
     // Set up a mock forwarder that records transmits
     const recordedTransmits = new Map<string, string[]>();
     setKittyTransmitForwarder((ptyId: string, sequence: string) => {

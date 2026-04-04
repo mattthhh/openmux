@@ -3,7 +3,7 @@ import type { PtyInfo } from '../../../src/contexts/aggregate-view-types';
 import {
   applyShimmerToText,
   clearPtyStdoutActivity,
-  getShimmerColor,
+  getPtyShimmerColor,
   hasMeaningfulActivity,
   recordPtyStdoutActivity,
 } from '../../../src/core/shimmer';
@@ -56,12 +56,19 @@ describe('Shimmer Layout Stability - current shimmer API', () => {
   });
 
   it('produces valid hex colors during the shimmer sweep', () => {
-    vi.useFakeTimers();
+    // Event-based: first record activity to create shimmer state, then calculate
+    let now = 1000;
+    recordPtyStdoutActivity('pty-test', now); // Creates shimmer state
+    recordPtyStdoutActivity('pty-test', now + 100); // 2 events = active
 
     const colors: string[] = [];
+
     for (let index = 0; index < 8; index++) {
-      vi.advanceTimersByTime(120);
-      const color = getShimmerColor('#cccccc', index % 4, 12, { targetColor: '#101010' });
+      now += 120;
+      // Use getPtyShimmerColor with explicit time for event-based architecture
+      const color = getPtyShimmerColor('pty-test', '#cccccc', index % 4, 12, now, {
+        targetColor: '#101010',
+      });
       if (color) {
         colors.push(color);
       }
@@ -71,8 +78,6 @@ describe('Shimmer Layout Stability - current shimmer API', () => {
     for (const color of colors) {
       expect(color).toMatch(/^#[0-9A-Fa-f]{6}$/);
     }
-
-    vi.useRealTimers();
   });
 
   it('does not mark a PTY as shimmer-active without recent stdout activity', () => {

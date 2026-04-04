@@ -43,9 +43,11 @@ export {
   applyHostColors,
   subscribeToPtyLifecycle,
   subscribeToAllTitleChanges,
+  subscribeToAllPtyActivity,
   getPtyTitle,
   type PtyLifecycleEvent,
   type PtyTitleChangeEvent,
+  type PtyActivityEvent,
 } from './pty-bridge';
 
 // Session bridge

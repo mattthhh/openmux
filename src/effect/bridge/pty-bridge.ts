@@ -324,6 +324,11 @@ export interface PtyTitleChangeEvent {
   title: string;
 }
 
+/** PTY stdout activity event */
+export interface PtyActivityEvent {
+  ptyId: string;
+}
+
 /** Subscribe to all PTY title changes */
 export function subscribeToAllTitleChanges(
   callback: (event: PtyTitleChangeEvent) => void
@@ -332,6 +337,18 @@ export function subscribeToAllTitleChanges(
   return Promise.resolve(
     pty.subscribeToAllTitleChanges((event: { ptyId: string; title: string }) => {
       callback({ ptyId: event.ptyId, title: event.title });
+    })
+  );
+}
+
+/** Subscribe to stdout activity across all PTYs */
+export function subscribeToAllPtyActivity(
+  callback: (event: PtyActivityEvent) => void
+): Promise<() => void> {
+  const pty = getPtyService();
+  return Promise.resolve(
+    pty.subscribeToAllActivity((event: { ptyId: string }) => {
+      callback({ ptyId: event.ptyId });
     })
   );
 }

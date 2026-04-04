@@ -136,6 +136,9 @@ export interface PtyService {
     callback: (event: { ptyId: PtyId; title: string }) => void
   ): () => void;
 
+  /** Subscribe to stdout activity events across ALL PTYs */
+  subscribeToAllActivity(callback: (event: { ptyId: PtyId }) => void): () => void;
+
   /** Dispose the PTY service and clean up all resources */
   dispose(): void;
 }

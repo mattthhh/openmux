@@ -121,6 +121,7 @@ export function createTestPtyService(): PtyService {
     getLastCommand: async () => undefined,
     subscribeToTitleChange: async () => () => {},
     subscribeToAllTitleChanges: () => () => {},
+    subscribeToAllActivity: () => () => {},
     dispose: () => {
       ptyIds.clear();
     },

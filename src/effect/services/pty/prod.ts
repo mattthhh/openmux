@@ -43,10 +43,12 @@ export function createPtyService(config: PtyServiceConfig, _fs?: unknown): PtySe
   // Lifecycle event types
   type LifecycleEvent = { type: 'created' | 'destroyed'; ptyId: PtyId };
   type TitleChangeEvent = { ptyId: PtyId; title: string };
+  type ActivityEvent = { ptyId: PtyId };
 
   // Subscription registries with synchronous cleanup support
   const lifecycleRegistry = createSubscriptionRegistry<LifecycleEvent>();
   const globalTitleRegistry = createSubscriptionRegistry<TitleChangeEvent>();
+  const globalActivityRegistry = createSubscriptionRegistry<ActivityEvent>();
   const scrollbackArchiveManager = new ScrollbackArchiveManager(
     SCROLLBACK_ARCHIVE_MAX_BYTES_GLOBAL
   );
@@ -81,6 +83,7 @@ export function createPtyService(config: PtyServiceConfig, _fs?: unknown): PtySe
         scrollbackArchiveRoot,
         onLifecycleEvent: (event) => lifecycleRegistry.notify(event),
         onTitleChange: (ptyId, title) => globalTitleRegistry.notifySync({ ptyId, title }),
+        onActivity: (ptyId) => globalActivityRegistry.notifySync({ ptyId }),
         onExit: handleExit,
       },
       options
@@ -112,6 +115,7 @@ export function createPtyService(config: PtyServiceConfig, _fs?: unknown): PtySe
     },
     lifecycleRegistry,
     globalTitleRegistry,
+    globalActivityRegistry,
   });
 
   async function setHostColors(colors: TerminalColors): Promise<void> {
@@ -161,6 +165,7 @@ export function createPtyService(config: PtyServiceConfig, _fs?: unknown): PtySe
     getLastCommand: operations.getLastCommand,
     subscribeToTitleChange: subscriptions.subscribeToTitleChange,
     subscribeToAllTitleChanges: subscriptions.subscribeToAllTitleChanges,
+    subscribeToAllActivity: subscriptions.subscribeToAllActivity,
     dispose,
   };
 }

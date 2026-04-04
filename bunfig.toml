@@ -3,5 +3,6 @@
 [test]
 preload = ["./tests/setup.ts"]
 timeout = 10000
+pathIgnorePatterns = ["autoresearch/**"]
 coverageReporter = ["text", "lcov"]
 coveragePathIgnorePatterns = ["**/*.test.ts", "**/*.test.tsx", "**/*.d.ts"]

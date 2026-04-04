@@ -12,7 +12,7 @@ import type { ShimServerState } from '../server-state';
 import type { SendEvent, WithPty, AttachContext } from './types';
 import { isCurrentAttach, sendDetached } from './events';
 import { cleanupCurrentClientBindings, subscribeAllPtys } from './subscription';
-import { handleLifecycle, handleTitles } from './lifecycle';
+import { handleActivity, handleLifecycle, handleTitles } from './lifecycle';
 import type { KittyHandlers } from '../server/kitty';
 
 /**
@@ -32,7 +32,7 @@ export function startAttachBootstrap(
       bootstrap: true,
       attach: { socket, clientId, attachEpoch },
     });
-    
+
     if (ptyIdsResult instanceof ShimConnectionError) {
       if (isCurrentAttach(state, socket, clientId, attachEpoch)) {
         console.warn('Failed to subscribe to PTYs:', ptyIdsResult.message);
@@ -41,7 +41,7 @@ export function startAttachBootstrap(
     }
 
     if (!isCurrentAttach(state, socket, clientId, attachEpoch)) return;
-    
+
     // Set up lifecycle handler
     if (!state.lifecycleUnsub) {
       const lifecycleResult = await handleLifecycle(state, withPty, sendEvent, kittyHandlers);
@@ -51,12 +51,21 @@ export function startAttachBootstrap(
     }
 
     if (!isCurrentAttach(state, socket, clientId, attachEpoch)) return;
-    
+
     // Set up titles handler
     if (!state.titleUnsub) {
       const titlesResult = await handleTitles(state, withPty, sendEvent);
       if (titlesResult instanceof ShimConnectionError) {
         console.warn('Failed to subscribe to titles:', titlesResult.message);
+      }
+    }
+
+    if (!isCurrentAttach(state, socket, clientId, attachEpoch)) return;
+
+    if (!state.activityUnsub) {
+      const activityResult = await handleActivity(state, withPty, sendEvent);
+      if (activityResult instanceof ShimConnectionError) {
+        console.warn('Failed to subscribe to activity:', activityResult.message);
       }
     }
   })().catch((e) => {
@@ -79,7 +88,7 @@ export async function attachClient(
   await using resources = new ResourceStack();
 
   const previousClient = state.activeClient;
-  const previousClientId = previousClient ? state.clientIds.get(previousClient) ?? null : null;
+  const previousClientId = previousClient ? (state.clientIds.get(previousClient) ?? null) : null;
 
   // Clean up current bindings
   await cleanupCurrentClientBindings(state, { preserveKittyState: true });
@@ -121,16 +130,21 @@ export async function attachClient(
   });
 
   // Start bootstrap
-  startAttachBootstrap(state, withPty, sendEvent, kittyHandlers, socket, clientId, state.attachEpoch);
+  startAttachBootstrap(
+    state,
+    withPty,
+    sendEvent,
+    kittyHandlers,
+    socket,
+    clientId,
+    state.attachEpoch
+  );
 }
 
 /**
  * Detach current client
  */
-export async function detachClient(
-  state: ShimServerState,
-  socket: net.Socket
-): Promise<void> {
+export async function detachClient(state: ShimServerState, socket: net.Socket): Promise<void> {
   if (state.activeClient !== socket) return;
 
   state.activeClient = null;
@@ -157,7 +171,8 @@ export async function applyHostColors(
   setHostColors(colors);
   const result = await errore.tryAsync<void, ShimConnectionError>({
     try: () => withPty((pty) => pty.setHostColors(colors)),
-    catch: (e) => new ShimConnectionError({ reason: `Failed to apply host colors: ${e}`, cause: e }),
+    catch: (e) =>
+      new ShimConnectionError({ reason: `Failed to apply host colors: ${e}`, cause: e }),
   });
   if (result instanceof ShimConnectionError) {
     console.warn('Failed to apply host colors:', result.message);

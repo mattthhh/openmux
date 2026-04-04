@@ -27,14 +27,13 @@ vi.mock('../../src/shim/client/connection', () => ({
   handlePtyNotification: vi.fn(),
 }));
 
-let getTitle: typeof import('../../src/shim/client').getTitle;
 let getPtyState: typeof import('../../src/shim/client/state').getPtyState;
 let handlePtyTitle: typeof import('../../src/shim/client/state').handlePtyTitle;
 let sendRequest: typeof import('../../src/shim/client/connection').sendRequest;
+let shimClientNonce = 0;
 
 describe('shim client getTitle', () => {
   beforeAll(async () => {
-    ({ getTitle } = await import('../../src/shim/client'));
     ({ getPtyState, handlePtyTitle } = await import('../../src/shim/client/state'));
     ({ sendRequest } = await import('../../src/shim/client/connection'));
   });
@@ -47,6 +46,7 @@ describe('shim client getTitle', () => {
   test('returns cached non-empty titles without requesting', async () => {
     ptyStates.set('pty-1', { title: 'Opencode' });
 
+    const { getTitle } = await import(`../../src/shim/client.ts?title=${shimClientNonce++}`);
     const title = await getTitle('pty-1');
 
     expect(title).toBe('Opencode');
@@ -62,6 +62,7 @@ describe('shim client getTitle', () => {
       payloads: [],
     } as any);
 
+    const { getTitle } = await import(`../../src/shim/client.ts?title=${shimClientNonce++}`);
     const title = await getTitle('pty-2');
 
     expect(title).toBe('shell');
@@ -76,6 +77,7 @@ describe('shim client getTitle', () => {
       payloads: [],
     } as any);
 
+    const { getTitle } = await import(`../../src/shim/client.ts?title=${shimClientNonce++}`);
     const title = await getTitle('pty-3');
 
     expect(title).toBe('shell');

@@ -37,6 +37,7 @@ export interface SessionFactoryDeps {
   scrollbackArchiveRoot?: string;
   onLifecycleEvent: (event: { type: 'created' | 'destroyed'; ptyId: PtyId }) => void;
   onTitleChange: (ptyId: PtyId, title: string) => void;
+  onActivity: (ptyId: PtyId) => void;
   onExit?: (ptyId: PtyId, exitCode: number) => void;
 }
 
@@ -241,7 +242,12 @@ export async function createSession(
   });
 
   // Wire up PTY data handler
-  pty.onData(handleData);
+  pty.onData((data: string) => {
+    if (data.length > 0) {
+      deps.onActivity(id);
+    }
+    handleData(data);
+  });
 
   // Wire up mode change handler for DECSET 2048 (in-band resize notifications)
   emulator.onModeChange((modes, prevModes) => {
