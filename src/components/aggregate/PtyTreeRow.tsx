@@ -248,7 +248,9 @@ export function PtyTreeRow(props: PtyTreeRowProps) {
     setIsAnimating(hasActiveShimmer(props.pty.ptyId));
   });
 
+  // Effect 2: detect when shimmer ENDS (animation timeout)
   createEffect(() => {
+    void shimmerStateVersion(); // Track shimmer state changes to detect end
     if (!isAnimating()) return;
     const now = Date.now();
     if (hasActiveShimmer(props.pty.ptyId, now)) return;
