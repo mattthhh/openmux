@@ -42,12 +42,17 @@ import {
   mergePtyInfoPreservingGitMetadata,
 } from './aggregate/git/metadata';
 import { ptyMetadataToInfo } from './aggregate/pty-info';
-import { getGitInfo, getGitDiffStats } from '../effect/services/pty/helpers';
+import {
+  getGitInfo,
+  getGitDiffStats,
+  subscribeToGitRepoChanges,
+} from '../effect/services/pty/helpers';
 import { AggregateBridgeError } from '../effect/errors';
 
 export interface SubscriptionManager {
   lifecycle: (() => void) | null;
   titleChange: (() => void) | null;
+  gitChanges: (() => void) | null;
   polling: (() => void) | null;
 }
 
@@ -78,6 +83,7 @@ export function createSubscriptionManager(): SubscriptionManager {
   return {
     lifecycle: null,
     titleChange: null,
+    gitChanges: null,
     polling: null,
   };
 }
@@ -1727,8 +1733,20 @@ export async function setupSubscriptions(
   }
   subscriptions.titleChange = titleUnsub;
 
+  const gitChangeUnsub = createGitRepoChangeRefresh(
+    state,
+    subscriptionsEpoch,
+    epoch,
+    refreshPtysSubset
+  );
+  if (epoch !== subscriptionsEpoch.value || !state.showAggregateView) {
+    gitChangeUnsub();
+    return;
+  }
+  subscriptions.gitChanges = gitChangeUnsub;
+
   // Event-driven metadata refresh: refresh PTY metadata when activity is detected
-  // This replaces polling with reactive updates - only refreshes PTYs that had activity
+  // This handles cwd/process changes that aren't covered by git file watchers.
   if (epoch !== subscriptionsEpoch.value || !state.showAggregateView) {
     return;
   }
@@ -1743,6 +1761,29 @@ export async function setupSubscriptions(
     return;
   }
   subscriptions.polling = activityUnsub;
+}
+
+export function createGitRepoChangeRefresh(
+  state: AggregateViewState,
+  subscriptionsEpoch: { value: number },
+  epoch: number,
+  refreshPtysSubset: (ptyIds: string[]) => Promise<void>
+): () => void {
+  return subscribeToGitRepoChanges((event) => {
+    if (!state.showAggregateView || subscriptionsEpoch.value !== epoch) {
+      return;
+    }
+
+    const affectedPtyIds = state.allPtys
+      .filter((pty) => pty.gitRepoKey === event.repoKey)
+      .map((pty) => pty.ptyId);
+
+    if (affectedPtyIds.length === 0) {
+      return;
+    }
+
+    void refreshPtysSubset(affectedPtyIds);
+  });
 }
 
 /**
@@ -1820,8 +1861,10 @@ export function cleanupSubscriptions(
   subscriptionsEpoch.value += 1;
   subscriptions.lifecycle?.();
   subscriptions.titleChange?.();
+  subscriptions.gitChanges?.();
   subscriptions.polling?.();
   subscriptions.lifecycle = null;
   subscriptions.titleChange = null;
+  subscriptions.gitChanges = null;
   subscriptions.polling = null;
 }

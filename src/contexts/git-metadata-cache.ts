@@ -59,11 +59,6 @@ export class GitMetadataCache {
     cwd: string,
     options: GetMetadataOptions = {}
   ): Promise<GitRepoMetadata | undefined> {
-    const cached = this.getCachedMetadata(cwd, options);
-    if (cached) {
-      return cached;
-    }
-
     const requestKey = `${cwd}|skip:${options.skipDiffStats ? '1' : '0'}|force:${options.forceRefresh ? '1' : '0'}`;
     const inFlight = this.inFlight.get(requestKey);
     if (inFlight) {
@@ -90,23 +85,9 @@ export class GitMetadataCache {
       return results;
     }
 
-    if (!options.forceRefresh) {
-      let allSatisfiedFromCache = true;
-      for (const cwd of uniqueCwds) {
-        const cached = this.getCachedMetadata(cwd, options);
-        if (!cached) {
-          allSatisfiedFromCache = false;
-          break;
-        }
-        results.set(cwd, cached);
-      }
-
-      if (allSatisfiedFromCache) {
-        return results;
-      }
-
-      results.clear();
-    }
+    const fallbackByCwd = new Map(
+      uniqueCwds.map((cwd) => [cwd, this.getCachedMetadata(cwd, { skipDiffStats: true })] as const)
+    );
 
     const gitInfoEntries: Array<readonly [string, GitInfo | undefined]> = [];
     for (const cwd of uniqueCwds) {
@@ -120,6 +101,12 @@ export class GitMetadataCache {
 
     for (const [cwd, gitInfo] of gitInfoEntries) {
       if (!gitInfo) {
+        const fallback = fallbackByCwd.get(cwd);
+        if (fallback && (options.skipDiffStats || fallback.diffStats !== undefined)) {
+          results.set(cwd, fallback);
+          continue;
+        }
+
         this.cwdToRepoKey.delete(cwd);
         continue;
       }
