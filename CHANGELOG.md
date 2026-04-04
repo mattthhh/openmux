@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.53](https://github.com/monotykamary/openmux/compare/v0.3.52...v0.3.53) (2026-04-04)
+
+
+### Performance
+
+* **aggregate:** gate shimmer raf to active rows ([0d624ce](https://github.com/monotykamary/openmux/commit/0d624ceba6f2b01d8eed9514b10392a1f89bb696))
+
 ### [0.3.52](https://github.com/monotykamary/openmux/compare/v0.3.51...v0.3.52) (2026-04-04)
 
 
