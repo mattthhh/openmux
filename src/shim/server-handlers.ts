@@ -15,6 +15,7 @@ import { createRequestHandler } from './server-requests';
 import { sendResponse, sendError } from './server/frames';
 import { createKittyHandlers } from './server/kitty';
 import { getPtyService, hasServices } from '../effect/bridge/services-instance';
+import { ServicesNotInitializedError } from '../effect/errors';
 
 // Import modular handlers
 import {
@@ -31,7 +32,7 @@ import {
 // Default PTY accessor
 const defaultWithPty: WithPty = async (fn) => {
   if (!hasServices()) {
-    throw new Error('Services not initialized');
+    return new ServicesNotInitializedError({ operation: 'withPty' });
   }
   const pty = getPtyService();
   const result = fn(pty);
@@ -61,7 +62,8 @@ export function createServerHandlers(state: ShimServerState, options?: ShimServe
     applyHostColors: (colors) => applyHostColors(withPty, setHostColors, colors),
     sendResponse,
     sendError,
-    attachClient: (socket, clientId) => attachClient(state, withPty, sendEvent, kittyHandlers, socket, clientId),
+    attachClient: (socket, clientId) =>
+      attachClient(state, withPty, sendEvent, kittyHandlers, socket, clientId),
     registerMapping: (sessionId, paneId, ptyId) => registerMapping(state, sessionId, paneId, ptyId),
     removeMappingForPty: (ptyId) => removeMappingForPty(state, ptyId),
   });

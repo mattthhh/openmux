@@ -4,7 +4,7 @@
  */
 
 import { createPtySession, destroyPty, destroyAllPtys } from '../../effect/bridge';
-import { PtySpawnError } from '../../effect/errors';
+import { PtySpawnError, TerminalSubscriptionError } from '../../effect/errors';
 import { getActiveSessionIdForShim, registerPtyPane } from '../../effect/bridge';
 import {
   subscribeToPtyWithCaches,
@@ -211,9 +211,15 @@ export function createPtyLifecycleHandlers(deps: PtyLifecycleDeps) {
     // TerminalView has its own subscription, so we can defer the context subscription
     setPanePty(paneId, ptyId);
 
-    const exitUnsubResult = await errore.tryAsync<() => void, Error>({
+    const exitUnsubResult = await errore.tryAsync<() => void, TerminalSubscriptionError>({
       try: () => subscribeToPtyExit(ptyId, paneId, handlePtyExit),
-      catch: (e) => new Error('Failed to subscribe to PTY exit', { cause: e }),
+      catch: (e) =>
+        new TerminalSubscriptionError({
+          operation: 'subscribeExit',
+          ptyId,
+          reason: String(e),
+          cause: e,
+        }),
     });
     if (exitUnsubResult instanceof Error) {
       cleanupPty(ptyId, { paneId, closePane: true, destroy: true });
@@ -228,13 +234,19 @@ export function createPtyLifecycleHandlers(deps: PtyLifecycleDeps) {
       if (!ptyToPaneMap.has(ptyId)) {
         return;
       }
-      const unsubResult = await errore.tryAsync<() => void, Error>({
+      const unsubResult = await errore.tryAsync<() => void, TerminalSubscriptionError>({
         try: () =>
           subscribeToPtyWithCaches(ptyId, paneId, ptyCaches, handlePtyExit, {
             cacheScrollState: shouldCacheScrollState,
             skipExit: true,
           }),
-        catch: (e) => new Error('Failed to subscribe to PTY', { cause: e }),
+        catch: (e) =>
+          new TerminalSubscriptionError({
+            operation: 'subscribe',
+            ptyId,
+            reason: String(e),
+            cause: e,
+          }),
       });
       if (unsubResult instanceof Error) {
         return;
@@ -287,9 +299,15 @@ export function createPtyLifecycleHandlers(deps: PtyLifecycleDeps) {
     ptyToPaneMap.set(ptyId, paneId);
     options?.onCreated?.({ paneId, ptyId });
 
-    const exitUnsubResult = await errore.tryAsync<() => void, Error>({
+    const exitUnsubResult = await errore.tryAsync<() => void, TerminalSubscriptionError>({
       try: () => subscribeToPtyExit(ptyId, paneId, handlePtyExit),
-      catch: (e) => new Error('Failed to subscribe to PTY exit', { cause: e }),
+      catch: (e) =>
+        new TerminalSubscriptionError({
+          operation: 'subscribeExit',
+          ptyId,
+          reason: String(e),
+          cause: e,
+        }),
     });
     if (exitUnsubResult instanceof Error) {
       cleanupPty(ptyId, { paneId, closePane: true, destroy: true });
@@ -314,13 +332,19 @@ export function createPtyLifecycleHandlers(deps: PtyLifecycleDeps) {
       if (!ptyToPaneMap.has(ptyId)) {
         return;
       }
-      const unsubResult = await errore.tryAsync<() => void, Error>({
+      const unsubResult = await errore.tryAsync<() => void, TerminalSubscriptionError>({
         try: () =>
           subscribeToPtyWithCaches(ptyId, paneId, ptyCaches, handlePtyExit, {
             cacheScrollState: shouldCacheScrollState,
             skipExit: true,
           }),
-        catch: (e) => new Error('Failed to subscribe to PTY', { cause: e }),
+        catch: (e) =>
+          new TerminalSubscriptionError({
+            operation: 'subscribe',
+            ptyId,
+            reason: String(e),
+            cause: e,
+          }),
       });
       if (unsubResult instanceof Error) {
         return;

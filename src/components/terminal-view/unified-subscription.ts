@@ -4,6 +4,7 @@ import { subscribeUnifiedToPty, getEmulator } from '../../effect/bridge';
 import { deferMacrotask } from '../../core/scheduling';
 import { getKittyGraphicsRenderer } from '../../terminal/kitty-graphics';
 import * as errore from 'errore';
+import { TerminalSubscriptionError } from '../../effect/errors';
 import {
   attachVisibleEmulator,
   clearVisiblePty,
@@ -67,14 +68,20 @@ export function setupUnifiedSubscription(deps: UnifiedSubscriptionDeps): void {
 
           const currentEmulator = viewState.emulator;
           if (currentEmulator && 'prefetchScrollbackLines' in currentEmulator) {
-            await errore.tryAsync<void, Error>({
+            await errore.tryAsync<void, TerminalSubscriptionError>({
               try: () =>
                 (
                   currentEmulator as {
                     prefetchScrollbackLines: (start: number, count: number) => Promise<void>;
                   }
                 ).prefetchScrollbackLines(start, count),
-              catch: (e) => new Error('Prefetch failed', { cause: e }),
+              catch: (e) =>
+                new TerminalSubscriptionError({
+                  operation: 'prefetch',
+                  ptyId,
+                  reason: String(e),
+                  cause: e,
+                }),
             });
           }
 
@@ -101,7 +108,7 @@ export function setupUnifiedSubscription(deps: UnifiedSubscriptionDeps): void {
           // Set up subscription BEFORE enabling emulator updates.
           // This prevents a race where the emulator fires an immediate update
           // (e.g., after resize with needsFullRefresh) before we're listening.
-          const unsubResult = await errore.tryAsync<() => void, Error>({
+          const unsubResult = await errore.tryAsync<() => void, TerminalSubscriptionError>({
             try: () =>
               subscribeUnifiedToPty(ptyId, (update: UnifiedTerminalUpdate) => {
                 if (!mounted) return;
@@ -154,7 +161,13 @@ export function setupUnifiedSubscription(deps: UnifiedSubscriptionDeps): void {
 
                 requestRenderFrame();
               }),
-            catch: (e) => new Error('Failed to subscribe to PTY', { cause: e }),
+            catch: (e) =>
+              new TerminalSubscriptionError({
+                operation: 'subscribe',
+                ptyId,
+                reason: String(e),
+                cause: e,
+              }),
           });
           if (unsubResult instanceof Error) return;
 

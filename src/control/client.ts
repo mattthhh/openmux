@@ -44,7 +44,11 @@ export class ControlClient {
     });
   }
 
-  request(method: string, params?: Record<string, unknown>, timeoutMs = 2000): Promise<{ header: ControlHeader; payloads: Buffer[] }> {
+  request(
+    method: string,
+    params?: Record<string, unknown>,
+    timeoutMs = 2000
+  ): Promise<{ header: ControlHeader; payloads: Buffer[] }> {
     const requestId = this.nextRequestId++;
     const header: ControlHeader = {
       type: 'request',
@@ -54,14 +58,15 @@ export class ControlClient {
     };
 
     return new Promise((resolve, reject) => {
-      const timer = timeoutMs > 0
-        ? setTimeout(() => {
-            if (this.pending.has(requestId)) {
-              this.pending.delete(requestId);
-              reject(new Error('Control request timed out'));
-            }
-          }, timeoutMs)
-        : null;
+      const timer =
+        timeoutMs > 0
+          ? setTimeout(() => {
+              if (this.pending.has(requestId)) {
+                this.pending.delete(requestId);
+                reject(new ControlClientError('Control request timed out', 'timeout'));
+              }
+            }, timeoutMs)
+          : null;
 
       this.pending.set(requestId, {
         resolve: (result) => {
@@ -138,7 +143,7 @@ export async function connectControlClient(options?: {
 
     if (timeoutMs > 0) {
       const timer = setTimeout(() => {
-        cleanupAndReject(new Error('Control socket connection timed out'));
+        cleanupAndReject(new ControlClientError('Control socket connection timed out', 'timeout'));
       }, timeoutMs);
       resources.registerTimer(timer);
     }

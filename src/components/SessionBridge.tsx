@@ -25,6 +25,7 @@ import {
   waitForShimClient,
 } from '../effect/bridge';
 import * as errore from 'errore';
+import { SessionRefreshError } from '../effect/errors';
 
 interface SessionBridgeProps extends ParentProps {}
 
@@ -91,9 +92,10 @@ export function SessionBridge(props: SessionBridgeProps) {
       }
     }
 
-    const waitResult = await errore.tryAsync<void, Error>({
+    const waitResult = await errore.tryAsync<void, SessionRefreshError>({
       try: () => waitForShimClient(),
-      catch: (e) => new Error('Detach/attach race', { cause: e }),
+      catch: (e) =>
+        new SessionRefreshError({ operation: 'waitForShim', reason: String(e), cause: e }),
     });
     if (waitResult instanceof Error) return;
 
