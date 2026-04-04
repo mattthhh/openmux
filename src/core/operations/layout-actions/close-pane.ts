@@ -50,10 +50,14 @@ function closePaneById(
 
   if (workspace.mainPane && containsPane(workspace.mainPane, paneId)) {
     // Closing main pane
-    updated = closeMainPane(workspace, paneId, closingFocusedPane);
+    updated = closingFocusedPane
+      ? closeFocusedMainPane(workspace, paneId)
+      : closeMainPane(workspace, paneId);
   } else {
     // Closing a stack pane
-    const result = closeStackPane(workspace, paneId, closingFocusedPane);
+    const result = closingFocusedPane
+      ? closeFocusedStackPane(workspace, paneId)
+      : closeStackPane(workspace, paneId);
     if (!result) return state; // Pane not found
     updated = result;
   }
@@ -80,17 +84,53 @@ function closePaneById(
 }
 
 /**
- * Close the main pane and promote first stack pane
+ * Close the main pane (when closing a non-focused pane)
  */
-function closeMainPane(workspace: Workspace, paneId: string, closingFocusedPane: boolean): Workspace {
+function closeMainPane(workspace: Workspace, paneId: string): Workspace {
   if (!workspace.mainPane) return workspace;
 
-  const siblingPane = closingFocusedPane ? findSiblingPane(workspace.mainPane, paneId) : null;
   const updatedMain = removePaneFromNode(workspace.mainPane, paneId);
   if (updatedMain) {
-    const nextFocus = closingFocusedPane
-      ? siblingPane?.id ?? getFirstPane(updatedMain)?.id ?? null
-      : workspace.focusedPaneId;
+    return {
+      ...workspace,
+      mainPane: updatedMain,
+      focusedPaneId: workspace.focusedPaneId,
+    };
+  }
+
+  if (workspace.stackPanes.length > 0) {
+    const [newMain, ...remainingStack] = workspace.stackPanes;
+    const newFocusId = getFirstPane(newMain)?.id ?? null;
+    return {
+      ...workspace,
+      mainPane: newMain!,
+      stackPanes: remainingStack,
+      focusedPaneId: newFocusId,
+      activeStackIndex: Math.min(
+        workspace.activeStackIndex,
+        Math.max(0, remainingStack.length - 1)
+      ),
+    };
+  }
+
+  return {
+    ...workspace,
+    mainPane: null,
+    focusedPaneId: null,
+  };
+}
+
+/**
+ * Close the focused main pane and promote first stack pane
+ * Handles focus transition when the currently focused pane is being closed
+ */
+function closeFocusedMainPane(workspace: Workspace, paneId: string): Workspace {
+  if (!workspace.mainPane) return workspace;
+
+  const siblingPane = findSiblingPane(workspace.mainPane, paneId);
+  const updatedMain = removePaneFromNode(workspace.mainPane, paneId);
+  if (updatedMain) {
+    const nextFocus = siblingPane?.id ?? getFirstPane(updatedMain)?.id ?? null;
     return {
       ...workspace,
       mainPane: updatedMain,
@@ -106,7 +146,10 @@ function closeMainPane(workspace: Workspace, paneId: string, closingFocusedPane:
       mainPane: newMain!,
       stackPanes: remainingStack,
       focusedPaneId: newFocusId,
-      activeStackIndex: Math.min(workspace.activeStackIndex, Math.max(0, remainingStack.length - 1)),
+      activeStackIndex: Math.min(
+        workspace.activeStackIndex,
+        Math.max(0, remainingStack.length - 1)
+      ),
     };
   }
 
@@ -118,17 +161,41 @@ function closeMainPane(workspace: Workspace, paneId: string, closingFocusedPane:
 }
 
 /**
- * Close a stack pane and adjust focus/indices
+ * Close a stack pane (non-focused)
+ * Preserves current focus and only adjusts stack index if necessary
  */
-function closeStackPane(
-  workspace: Workspace,
-  paneId: string,
-  closingFocusedPane: boolean
-): Workspace | null {
-  const closeIndex = workspace.stackPanes.findIndex(p => containsPane(p, paneId));
+function closeStackPane(workspace: Workspace, paneId: string): Workspace | null {
+  const closeIndex = workspace.stackPanes.findIndex((p) => containsPane(p, paneId));
   if (closeIndex < 0) return null;
 
-  const siblingPane = closingFocusedPane ? findSiblingPane(workspace.stackPanes[closeIndex]!, paneId) : null;
+  const updatedStackEntry = removePaneFromNode(workspace.stackPanes[closeIndex]!, paneId);
+  const newStack = updatedStackEntry
+    ? workspace.stackPanes.map((pane, index) => (index === closeIndex ? updatedStackEntry : pane))
+    : workspace.stackPanes.filter((_, i) => i !== closeIndex);
+  let newActiveIndex = workspace.activeStackIndex;
+
+  // Only adjust index if we removed a pane at or before the active index
+  if (!updatedStackEntry && closeIndex <= workspace.activeStackIndex) {
+    newActiveIndex = Math.max(0, workspace.activeStackIndex - 1);
+  }
+
+  return {
+    ...workspace,
+    stackPanes: newStack,
+    focusedPaneId: workspace.focusedPaneId,
+    activeStackIndex: newActiveIndex,
+  };
+}
+
+/**
+ * Close the focused stack pane and adjust focus/indices
+ * Handles focus transition to sibling or nearby pane when the focused pane is closed
+ */
+function closeFocusedStackPane(workspace: Workspace, paneId: string): Workspace | null {
+  const closeIndex = workspace.stackPanes.findIndex((p) => containsPane(p, paneId));
+  if (closeIndex < 0) return null;
+
+  const siblingPane = findSiblingPane(workspace.stackPanes[closeIndex]!, paneId);
   const updatedStackEntry = removePaneFromNode(workspace.stackPanes[closeIndex]!, paneId);
   const newStack = updatedStackEntry
     ? workspace.stackPanes.map((pane, index) => (index === closeIndex ? updatedStackEntry : pane))
@@ -136,21 +203,18 @@ function closeStackPane(
   let newFocusId: string | null = workspace.focusedPaneId;
   let newActiveIndex = workspace.activeStackIndex;
 
-  if (closingFocusedPane) {
-    // Closing the focused pane - need to update focus
-    if (updatedStackEntry) {
-      const mainFallback = workspace.mainPane ? getFirstPane(workspace.mainPane)?.id ?? null : null;
-      newFocusId = siblingPane?.id ?? getFirstPane(updatedStackEntry)?.id ?? mainFallback;
-      newActiveIndex = closeIndex;
-    } else if (newStack.length > 0) {
-      newActiveIndex = Math.min(closeIndex, newStack.length - 1);
-      newFocusId = getFirstPane(newStack[newActiveIndex]!)?.id ?? getFirstPane(workspace.mainPane)?.id ?? null;
-    } else {
-      newFocusId = getFirstPane(workspace.mainPane)?.id ?? null;
-      newActiveIndex = 0;
-    }
-  } else if (!updatedStackEntry && closeIndex <= workspace.activeStackIndex) {
-    newActiveIndex = Math.max(0, workspace.activeStackIndex - 1);
+  // Closing the focused pane - need to update focus
+  if (updatedStackEntry) {
+    const mainFallback = workspace.mainPane ? (getFirstPane(workspace.mainPane)?.id ?? null) : null;
+    newFocusId = siblingPane?.id ?? getFirstPane(updatedStackEntry)?.id ?? mainFallback;
+    newActiveIndex = closeIndex;
+  } else if (newStack.length > 0) {
+    newActiveIndex = Math.min(closeIndex, newStack.length - 1);
+    newFocusId =
+      getFirstPane(newStack[newActiveIndex]!)?.id ?? getFirstPane(workspace.mainPane)?.id ?? null;
+  } else {
+    newFocusId = getFirstPane(workspace.mainPane)?.id ?? null;
+    newActiveIndex = 0;
   }
 
   return {

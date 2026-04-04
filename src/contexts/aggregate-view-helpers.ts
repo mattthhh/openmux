@@ -56,9 +56,22 @@ export function filterActivePtys(ptys: PtyInfo[]): PtyInfo[] {
   return ptys.filter(isActivePty);
 }
 
-/** Apply active/inactive filtering based on scope flag */
+/** Get all PTYs (including inactive) */
+export function getAllPtys(ptys: PtyInfo[]): PtyInfo[] {
+  return ptys;
+}
+
+/** Get only active PTYs (excluding those with just shell process) */
+export function getActivePtysOnly(ptys: PtyInfo[]): PtyInfo[] {
+  return filterActivePtys(ptys);
+}
+
+/**
+ * Apply active/inactive filtering based on scope flag
+ * @deprecated Use getAllPtys() to include all or getActivePtysOnly() for active only
+ */
 export function getBasePtys(ptys: PtyInfo[], showInactive: boolean): PtyInfo[] {
-  return showInactive ? ptys : filterActivePtys(ptys);
+  return showInactive ? getAllPtys(ptys) : getActivePtysOnly(ptys);
 }
 
 /** Build an index map from ptyId to array index for O(1) lookups */
@@ -352,7 +365,9 @@ export function buildFlattenedTreeIndex(flattenedTree: FlattenedTreeItem[]): Map
 
 /** Recompute matched PTYs after state changes */
 export function recomputeMatches(state: AggregateViewState): void {
-  const basePtys = getBasePtys(state.allPtys, state.showInactive);
+  const basePtys = state.showInactive
+    ? getAllPtys(state.allPtys)
+    : getActivePtysOnly(state.allPtys);
   const matchedPtys = filterPtys(basePtys, state.filterQuery);
   const matchedPtysIndex = buildPtyIndex(matchedPtys);
 
