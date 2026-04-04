@@ -359,11 +359,62 @@ export async function refreshPtysOnce(
   return;
 }
 
+function hasGitMetadata(pty: PtyInfo): boolean {
+  return (
+    pty.gitBranch !== undefined ||
+    pty.gitDiffStats !== undefined ||
+    pty.gitDirty ||
+    pty.gitStaged > 0 ||
+    pty.gitUnstaged > 0 ||
+    pty.gitUntracked > 0 ||
+    pty.gitConflicted > 0 ||
+    pty.gitAhead !== undefined ||
+    pty.gitBehind !== undefined ||
+    pty.gitStashCount !== undefined ||
+    pty.gitState !== undefined ||
+    pty.gitDetached ||
+    pty.gitRepoKey !== undefined
+  );
+}
+
+function mergePtyInfoPreservingGitMetadata(existing: PtyInfo | undefined, next: PtyInfo): PtyInfo {
+  if (!existing || existing.cwd !== next.cwd) {
+    return next;
+  }
+
+  const incomingHasGitMetadata = hasGitMetadata(next);
+  const nextWithPreservedDiffStats =
+    next.gitDiffStats === undefined && existing.gitDiffStats !== undefined
+      ? { ...next, gitDiffStats: existing.gitDiffStats }
+      : next;
+
+  if (incomingHasGitMetadata || !hasGitMetadata(existing)) {
+    return nextWithPreservedDiffStats;
+  }
+
+  return {
+    ...nextWithPreservedDiffStats,
+    gitBranch: existing.gitBranch,
+    gitDiffStats: existing.gitDiffStats,
+    gitDirty: existing.gitDirty,
+    gitStaged: existing.gitStaged,
+    gitUnstaged: existing.gitUnstaged,
+    gitUntracked: existing.gitUntracked,
+    gitConflicted: existing.gitConflicted,
+    gitAhead: existing.gitAhead,
+    gitBehind: existing.gitBehind,
+    gitStashCount: existing.gitStashCount,
+    gitState: existing.gitState,
+    gitDetached: existing.gitDetached,
+    gitRepoKey: existing.gitRepoKey,
+  };
+}
+
 /**
  * Convert PtyMetadata to PtyInfo with optional existing info for fallback.
  */
 export function ptyMetadataToInfo(metadata: AggregatePtyMetadata, existing?: PtyInfo): PtyInfo {
-  return {
+  return mergePtyInfoPreservingGitMetadata(existing, {
     ptyId: metadata.ptyId,
     sortOrderHint: existing?.sortOrderHint,
     cwd: metadata.cwd,
@@ -387,5 +438,5 @@ export function ptyMetadataToInfo(metadata: AggregatePtyMetadata, existing?: Pty
     paneId: metadata.paneId,
     sessionId: metadata.sessionId ?? existing?.sessionId ?? 'unknown',
     sessionMetadata: metadata.sessionMetadata ?? existing?.sessionMetadata,
-  };
+  });
 }
