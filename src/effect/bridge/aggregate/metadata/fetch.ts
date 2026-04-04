@@ -50,7 +50,8 @@ export async function fetchPtyMetadata(
     foregroundProcessResult instanceof Error ? undefined : foregroundProcessResult;
 
   // Skip defunct processes (zombie processes)
-  if (foregroundProcess?.includes('defunct')) {
+  // Type guard: ensure foregroundProcess is a string before calling includes
+  if (typeof foregroundProcess === 'string' && foregroundProcess.includes('defunct')) {
     return null;
   }
 
