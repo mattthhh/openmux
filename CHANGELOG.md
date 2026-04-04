@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.55](https://github.com/monotykamary/openmux/compare/v0.3.54...v0.3.55) (2026-04-04)
+
+
+### Bug Fixes
+
+* **aggregate:** preserve git metadata during partial refreshes ([ed6e0ae](https://github.com/monotykamary/openmux/commit/ed6e0ae2e82f16a038f970f76173ad875d5a87b9))
+
 ### [0.3.54](https://github.com/monotykamary/openmux/compare/v0.3.53...v0.3.54) (2026-04-04)
 
 
