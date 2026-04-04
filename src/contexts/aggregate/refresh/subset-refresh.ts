@@ -7,7 +7,6 @@
  * - Git metadata refresh for specific directories
  */
 
-import * as errore from 'errore';
 import { produce, type SetStoreFunction } from 'solid-js/store';
 import { PtyMetadataError, ServicesNotInitializedError } from '../../../effect/errors';
 
@@ -17,8 +16,7 @@ import { getPtyMetadata } from '../../../effect/bridge/aggregate';
 import { getGlobalGitMetadataCache, type GitRepoMetadata } from '../../git-metadata-cache';
 import { getGitInfo, getGitDiffStats } from '../../../effect/services/pty/helpers';
 import { recomputeMatches, recomputeTree } from '../session/operations';
-import { buildPtyIndex } from '../filter/operations';
-import { extractGitMetadata } from '../git/metadata';
+import { applyGitMetadataSnapshot } from '../git/metadata';
 import { RefreshGuard } from './guard';
 import type { RefreshState } from '../subscriptions/types';
 
@@ -118,9 +116,7 @@ export async function refreshPtysSubsetOnce(
       for (const [, group] of updatesByRepo) {
         for (const { index, update, metadata } of group) {
           const prev = s.allPtys[index];
-          const gitFields = extractGitMetadata(metadata);
-
-          const updated = {
+          const updatedBase = {
             ...prev,
             cwd: update.cwd,
             foregroundProcess: update.foregroundProcess,
@@ -128,8 +124,8 @@ export async function refreshPtysSubsetOnce(
             title: update.title ?? prev.title,
             workspaceId: update.workspaceId ?? prev.workspaceId,
             paneId: update.paneId ?? prev.paneId,
-            ...gitFields,
           };
+          const updated = applyGitMetadataSnapshot(updatedBase, metadata);
 
           // Only update if something changed
           if (

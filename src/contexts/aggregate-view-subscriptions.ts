@@ -31,14 +31,18 @@ import {
   subscribeToAllPtyActivity,
   type PtyTitleChangeEvent,
 } from '../effect/bridge/pty-bridge';
-import { getGlobalGitMetadataCache, type GitRepoMetadata } from './git-metadata-cache';
+import { getGlobalGitMetadataCache } from './git-metadata-cache';
 import {
   findPendingPtyInsertionForLifecycle,
   removePendingPtyInsertions,
 } from './aggregate-view-pending-insertions';
+import {
+  applyGitMetadataSnapshot,
+  didPtyInfoChange,
+  mergePtyInfoPreservingGitMetadata,
+} from './aggregate/git/metadata';
+import { ptyMetadataToInfo } from './aggregate/pty-info';
 import { getGitInfo, getGitDiffStats } from '../effect/services/pty/helpers';
-import type { GitDiffStats } from './aggregate-view-types';
-import type { GitInfo } from '../effect/services/pty/helpers';
 import { AggregateBridgeError } from '../effect/errors';
 
 export interface SubscriptionManager {
@@ -87,174 +91,9 @@ export function createRefreshState(): RefreshState {
   };
 }
 
-/** Git metadata fields that can be applied to a PtyInfo */
-interface GitMetadataFields {
-  gitBranch: string | undefined;
-  gitDiffStats: GitDiffStats | undefined;
-  gitDirty: boolean;
-  gitStaged: number;
-  gitUnstaged: number;
-  gitUntracked: number;
-  gitConflicted: number;
-  gitAhead: number | undefined;
-  gitBehind: number | undefined;
-  gitStashCount: number | undefined;
-  gitState: GitInfo['state'] | undefined;
-  gitDetached: boolean;
-  gitRepoKey: string | undefined;
-}
-
-/** Extract git metadata fields from GitRepoMetadata */
-function extractGitMetadata(metadata: GitRepoMetadata | undefined): GitMetadataFields {
-  if (!metadata) {
-    return {
-      gitBranch: undefined,
-      gitDirty: false,
-      gitStaged: 0,
-      gitUnstaged: 0,
-      gitUntracked: 0,
-      gitConflicted: 0,
-      gitAhead: undefined,
-      gitBehind: undefined,
-      gitStashCount: undefined,
-      gitState: undefined,
-      gitDetached: false,
-      gitRepoKey: undefined,
-      gitDiffStats: undefined,
-    };
-  }
-
-  return {
-    gitBranch: metadata.branch,
-    gitDirty: metadata.dirty,
-    gitStaged: metadata.staged,
-    gitUnstaged: metadata.unstaged,
-    gitUntracked: metadata.untracked,
-    gitConflicted: metadata.conflicted,
-    gitAhead: metadata.ahead,
-    gitBehind: metadata.behind,
-    gitStashCount: metadata.stashCount,
-    gitState: metadata.state,
-    gitDetached: metadata.detached,
-    gitRepoKey: metadata.repoKey,
-    // Create a shallow copy to prevent shared reference issues across PTYs
-    gitDiffStats: metadata.diffStats ? { ...metadata.diffStats } : undefined,
-  };
-}
-
 interface AggregatePtyMetadata extends PtyMetadata {
   sessionId?: string;
   sessionMetadata?: SessionMetadata;
-}
-
-function areGitDiffStatsEqual(a: GitDiffStats | undefined, b: GitDiffStats | undefined): boolean {
-  if (!a && !b) return true;
-  if (!a || !b) return false;
-  return a.added === b.added && a.removed === b.removed && a.binary === b.binary;
-}
-
-function hasGitMetadata(pty: PtyInfo): boolean {
-  return (
-    pty.gitBranch !== undefined ||
-    pty.gitDiffStats !== undefined ||
-    pty.gitDirty ||
-    pty.gitStaged > 0 ||
-    pty.gitUnstaged > 0 ||
-    pty.gitUntracked > 0 ||
-    pty.gitConflicted > 0 ||
-    pty.gitAhead !== undefined ||
-    pty.gitBehind !== undefined ||
-    pty.gitStashCount !== undefined ||
-    pty.gitState !== undefined ||
-    pty.gitDetached ||
-    pty.gitRepoKey !== undefined
-  );
-}
-
-function mergePtyInfoPreservingGitMetadata(existing: PtyInfo | undefined, next: PtyInfo): PtyInfo {
-  if (!existing || existing.cwd !== next.cwd) {
-    return next;
-  }
-
-  const incomingHasGitMetadata = hasGitMetadata(next);
-  const nextWithPreservedDiffStats =
-    next.gitDiffStats === undefined && existing.gitDiffStats !== undefined
-      ? { ...next, gitDiffStats: existing.gitDiffStats }
-      : next;
-
-  if (incomingHasGitMetadata || !hasGitMetadata(existing)) {
-    return nextWithPreservedDiffStats;
-  }
-
-  return {
-    ...nextWithPreservedDiffStats,
-    gitBranch: existing.gitBranch,
-    gitDiffStats: existing.gitDiffStats,
-    gitDirty: existing.gitDirty,
-    gitStaged: existing.gitStaged,
-    gitUnstaged: existing.gitUnstaged,
-    gitUntracked: existing.gitUntracked,
-    gitConflicted: existing.gitConflicted,
-    gitAhead: existing.gitAhead,
-    gitBehind: existing.gitBehind,
-    gitStashCount: existing.gitStashCount,
-    gitState: existing.gitState,
-    gitDetached: existing.gitDetached,
-    gitRepoKey: existing.gitRepoKey,
-  };
-}
-
-export function didPtyInfoChange(prev: PtyInfo, next: PtyInfo): boolean {
-  return (
-    prev.cwd !== next.cwd ||
-    prev.foregroundProcess !== next.foregroundProcess ||
-    prev.shell !== next.shell ||
-    prev.title !== next.title ||
-    prev.workspaceId !== next.workspaceId ||
-    prev.paneId !== next.paneId ||
-    prev.gitBranch !== next.gitBranch ||
-    prev.gitDirty !== next.gitDirty ||
-    prev.gitStaged !== next.gitStaged ||
-    prev.gitUnstaged !== next.gitUnstaged ||
-    prev.gitUntracked !== next.gitUntracked ||
-    prev.gitConflicted !== next.gitConflicted ||
-    prev.gitAhead !== next.gitAhead ||
-    prev.gitBehind !== next.gitBehind ||
-    prev.gitStashCount !== next.gitStashCount ||
-    prev.gitState !== next.gitState ||
-    prev.gitDetached !== next.gitDetached ||
-    prev.gitRepoKey !== next.gitRepoKey ||
-    !areGitDiffStatsEqual(prev.gitDiffStats, next.gitDiffStats)
-  );
-}
-
-/** Convert PtyMetadata from bridge to PtyInfo for state */
-function ptyMetadataToInfo(metadata: AggregatePtyMetadata, existing?: PtyInfo): PtyInfo {
-  return mergePtyInfoPreservingGitMetadata(existing, {
-    ptyId: metadata.ptyId,
-    sortOrderHint: existing?.sortOrderHint,
-    cwd: metadata.cwd,
-    gitBranch: metadata.gitBranch,
-    gitDiffStats: metadata.gitDiffStats,
-    gitDirty: metadata.gitDirty,
-    gitStaged: metadata.gitStaged,
-    gitUnstaged: metadata.gitUnstaged,
-    gitUntracked: metadata.gitUntracked,
-    gitConflicted: metadata.gitConflicted,
-    gitAhead: metadata.gitAhead,
-    gitBehind: metadata.gitBehind,
-    gitStashCount: metadata.gitStashCount,
-    gitState: metadata.gitState,
-    gitDetached: metadata.gitDetached,
-    gitRepoKey: metadata.gitRepoKey,
-    foregroundProcess: metadata.foregroundProcess,
-    shell: metadata.shell,
-    title: metadata.title ?? existing?.title,
-    workspaceId: metadata.workspaceId,
-    paneId: metadata.paneId,
-    sessionId: metadata.sessionId ?? existing?.sessionId ?? 'unknown',
-    sessionMetadata: metadata.sessionMetadata ?? existing?.sessionMetadata,
-  });
 }
 
 function collectSerializedPaneIds(
@@ -527,7 +366,7 @@ export function createAggregateViewRefreshers(
   }>
 ) {
   const gitCache = getGlobalGitMetadataCache({
-    fetchGitInfo: (cwd) => getGitInfo(cwd, { force: true }),
+    fetchGitInfo: (cwd) => getGitInfo(cwd, { force: false }),
     fetchDiffStats: getGitDiffStats,
   });
   const deletedPtyIdsSeenGoneFromService = new Set<string>();
@@ -993,16 +832,19 @@ export function createAggregateViewRefreshers(
 
       const liveSessionIds = new Set(resolvedPtys.map(({ ownership }) => ownership.sessionId));
       const existingPtysById = new Map(state.allPtys.map((pty) => [pty.ptyId, pty] as const));
+      const cwds = [...new Set(resolvedPtys.map(({ metadata }) => metadata.cwd))];
+      const gitMetadataMap = await gitCache.getMetadataBatch(cwds, { forceRefresh: true });
 
       const freshPtys: PtyInfo[] = resolvedPtys.map(({ metadata, ownership, sessionMetadata }) => {
         const ptyInfo = ptyMetadataToInfo(metadata, existingPtysById.get(metadata.ptyId));
+        const nextPty = applyGitMetadataSnapshot(ptyInfo, gitMetadataMap.get(metadata.cwd));
 
         return {
-          ...ptyInfo,
+          ...nextPty,
           sessionId: ownership.sessionId,
           sessionMetadata,
-          paneId: ownership.paneId ?? ptyInfo.paneId,
-          workspaceId: ownership.workspaceId ?? ptyInfo.workspaceId,
+          paneId: ownership.paneId ?? nextPty.paneId,
+          workspaceId: ownership.workspaceId ?? nextPty.workspaceId,
         };
       });
 
@@ -1245,10 +1087,6 @@ export function createAggregateViewRefreshers(
     // when git commands fail due to race conditions or file locks. Using cached values
     // ensures stable display of git stats.
     const gitMetadataMap = await gitCache.getMetadataBatch(cwds, { forceRefresh: false });
-    const updatesByRepo = new Map<
-      string | undefined,
-      Array<{ index: number; update: PtyMetadata; metadata: GitRepoMetadata | undefined }>
-    >();
 
     let didChange = false;
     setState(
@@ -1257,37 +1095,21 @@ export function createAggregateViewRefreshers(
           const index = s.allPtysIndex.get(update.ptyId);
           if (index === undefined || !s.allPtys[index]) continue;
 
-          const gitMetadata = gitMetadataMap.get(update.cwd);
-          const repoKey = gitMetadata?.repoKey;
-          const group = updatesByRepo.get(repoKey);
+          const prev = s.allPtys[index];
+          const updatedBase = {
+            ...prev,
+            cwd: update.cwd,
+            foregroundProcess: update.foregroundProcess,
+            shell: update.shell ?? prev.shell,
+            title: update.title ?? prev.title,
+            workspaceId: update.workspaceId ?? prev.workspaceId,
+            paneId: update.paneId ?? prev.paneId,
+          };
+          const updated = applyGitMetadataSnapshot(updatedBase, gitMetadataMap.get(update.cwd));
 
-          if (group) {
-            group.push({ index, update, metadata: gitMetadata });
-          } else {
-            updatesByRepo.set(repoKey, [{ index, update, metadata: gitMetadata }]);
-          }
-        }
-
-        for (const [, group] of updatesByRepo) {
-          for (const { index, update, metadata } of group) {
-            const prev = s.allPtys[index];
-            const gitFields = extractGitMetadata(metadata);
-
-            const updated: PtyInfo = {
-              ...prev,
-              cwd: update.cwd,
-              foregroundProcess: update.foregroundProcess,
-              shell: update.shell ?? prev.shell,
-              title: update.title ?? prev.title,
-              workspaceId: update.workspaceId ?? prev.workspaceId,
-              paneId: update.paneId ?? prev.paneId,
-              ...gitFields,
-            };
-
-            if (didPtyInfoChange(prev, updated)) {
-              s.allPtys[index] = updated;
-              didChange = true;
-            }
+          if (didPtyInfoChange(prev, updated)) {
+            s.allPtys[index] = updated;
+            didChange = true;
           }
         }
 
@@ -1348,6 +1170,11 @@ export function createLifecycleHandlers(
     focusedPaneId?: string;
   }
 ) {
+  const gitCache = getGlobalGitMetadataCache({
+    fetchGitInfo: (cwd) => getGitInfo(cwd, { force: false }),
+    fetchDiffStats: getGitDiffStats,
+  });
+
   /** Get session metadata for a session ID */
   const getSessionMetadata = (sessionId: string): SessionMetadata | undefined => {
     return state.allSessions.get(sessionId);
@@ -1558,30 +1385,17 @@ export function createLifecycleHandlers(
       return;
     }
 
-    // Build the new PtyInfo from bridge metadata immediately.
-    // The bridge already gives us cwd/process/basic git state; richer git metadata can be
-    // backfilled by the normal subset/full refresh path without blocking pane creation.
+    const gitMetadata = await gitCache.getMetadata(metadataResult.cwd);
+    const basePty = ptyMetadataToInfo({
+      ...metadataResult,
+      sessionId: ownership.sessionId,
+      sessionMetadata,
+    });
+    const hydratedPty = applyGitMetadataSnapshot(basePty, gitMetadata);
     const newPty: PtyInfo = {
-      ptyId: metadataResult.ptyId,
-      cwd: metadataResult.cwd,
-      gitBranch: metadataResult.gitBranch,
-      gitDiffStats: metadataResult.gitDiffStats,
-      gitDirty: metadataResult.gitDirty,
-      gitStaged: metadataResult.gitStaged,
-      gitUnstaged: metadataResult.gitUnstaged,
-      gitUntracked: metadataResult.gitUntracked,
-      gitConflicted: metadataResult.gitConflicted,
-      gitAhead: metadataResult.gitAhead,
-      gitBehind: metadataResult.gitBehind,
-      gitStashCount: metadataResult.gitStashCount,
-      gitState: metadataResult.gitState,
-      gitDetached: metadataResult.gitDetached,
-      gitRepoKey: metadataResult.gitRepoKey,
-      foregroundProcess: metadataResult.foregroundProcess,
-      shell: metadataResult.shell,
-      title: metadataResult.title,
-      workspaceId: ownership.workspaceId ?? metadataResult.workspaceId,
-      paneId: ownership.paneId ?? metadataResult.paneId,
+      ...hydratedPty,
+      workspaceId: ownership.workspaceId ?? hydratedPty.workspaceId,
+      paneId: ownership.paneId ?? hydratedPty.paneId,
       sessionId: ownership.sessionId,
       sessionMetadata,
     };

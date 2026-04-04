@@ -507,7 +507,7 @@ describe('aggregate insertion ordering', () => {
 
     await lifecycleHandlers.handlePtyCreated('pty-new');
 
-    expect(getMetadataMock).not.toHaveBeenCalled();
+    expect(getMetadataMock).toHaveBeenCalledWith('/tmp');
     expect(state.sessionPaneOrders.get('session-1')?.get('pane-3')).toBe(0.5);
     expect(getVisiblePtyIds(state)).toEqual(['pty-1', 'pty-new', 'pty-2']);
 

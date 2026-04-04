@@ -5,7 +5,6 @@
  * including session metadata, git info, and pane ordering.
  */
 
-import * as errore from 'errore';
 import { produce, type SetStoreFunction } from 'solid-js/store';
 
 import type { AggregateViewState, PtyInfo } from '../types';
@@ -26,12 +25,12 @@ import {
   getAggregateSessionPtyMapping,
   type PtyMetadata,
 } from '../../../effect/bridge/aggregate-bridge';
-import { getGlobalGitMetadataCache, type GitRepoMetadata } from '../../git-metadata-cache';
+import { getGlobalGitMetadataCache } from '../../git-metadata-cache';
 import { getGitInfo, getGitDiffStats } from '../../../effect/services/pty/helpers';
 import { recomputeMatches, recomputeTree } from '../session/operations';
 import { buildPtyIndex } from '../filter/operations';
-import { extractGitMetadata } from '../git/metadata';
-import { RefreshGuard } from './guard';
+import { applyGitMetadataSnapshot } from '../git/metadata';
+import { ptyMetadataToInfo } from '../pty-info';
 import { buildSessionPaneOrder, findWorkspaceIdForPane } from './session-utils';
 import type { RefreshState } from '../subscriptions/types';
 import {
@@ -194,7 +193,7 @@ export async function refreshPtysOnce(
 
   // Fetch git metadata for all unique CWDs
   const gitCache = getGlobalGitMetadataCache({
-    fetchGitInfo: (cwd) => getGitInfo(cwd, { force: true }),
+    fetchGitInfo: (cwd) => getGitInfo(cwd, { force: false }),
     fetchDiffStats: getGitDiffStats,
   });
   const cwds = [...new Set(resolvedPtys.map(({ metadata }) => metadata.cwd))];
@@ -203,17 +202,15 @@ export async function refreshPtysOnce(
 
   // Build fresh PTY info array
   const freshPtys: PtyInfo[] = resolvedPtys.map(({ metadata, ownership, sessionMetadata }) => {
-    const gitMetadata = gitMetadataMap.get(metadata.cwd);
-    const gitFields = extractGitMetadata(gitMetadata);
     const ptyInfo = ptyMetadataToInfo(metadata);
+    const nextPty = applyGitMetadataSnapshot(ptyInfo, gitMetadataMap.get(metadata.cwd));
 
     return {
-      ...ptyInfo,
+      ...nextPty,
       sessionId: ownership.sessionId,
       sessionMetadata,
-      paneId: ownership.paneId ?? ptyInfo.paneId,
-      workspaceId: ownership.workspaceId ?? ptyInfo.workspaceId,
-      ...gitFields,
+      paneId: ownership.paneId ?? nextPty.paneId,
+      workspaceId: ownership.workspaceId ?? nextPty.workspaceId,
     };
   });
 
@@ -357,86 +354,4 @@ export async function refreshPtysOnce(
   );
 
   return;
-}
-
-function hasGitMetadata(pty: PtyInfo): boolean {
-  return (
-    pty.gitBranch !== undefined ||
-    pty.gitDiffStats !== undefined ||
-    pty.gitDirty ||
-    pty.gitStaged > 0 ||
-    pty.gitUnstaged > 0 ||
-    pty.gitUntracked > 0 ||
-    pty.gitConflicted > 0 ||
-    pty.gitAhead !== undefined ||
-    pty.gitBehind !== undefined ||
-    pty.gitStashCount !== undefined ||
-    pty.gitState !== undefined ||
-    pty.gitDetached ||
-    pty.gitRepoKey !== undefined
-  );
-}
-
-function mergePtyInfoPreservingGitMetadata(existing: PtyInfo | undefined, next: PtyInfo): PtyInfo {
-  if (!existing || existing.cwd !== next.cwd) {
-    return next;
-  }
-
-  const incomingHasGitMetadata = hasGitMetadata(next);
-  const nextWithPreservedDiffStats =
-    next.gitDiffStats === undefined && existing.gitDiffStats !== undefined
-      ? { ...next, gitDiffStats: existing.gitDiffStats }
-      : next;
-
-  if (incomingHasGitMetadata || !hasGitMetadata(existing)) {
-    return nextWithPreservedDiffStats;
-  }
-
-  return {
-    ...nextWithPreservedDiffStats,
-    gitBranch: existing.gitBranch,
-    gitDiffStats: existing.gitDiffStats,
-    gitDirty: existing.gitDirty,
-    gitStaged: existing.gitStaged,
-    gitUnstaged: existing.gitUnstaged,
-    gitUntracked: existing.gitUntracked,
-    gitConflicted: existing.gitConflicted,
-    gitAhead: existing.gitAhead,
-    gitBehind: existing.gitBehind,
-    gitStashCount: existing.gitStashCount,
-    gitState: existing.gitState,
-    gitDetached: existing.gitDetached,
-    gitRepoKey: existing.gitRepoKey,
-  };
-}
-
-/**
- * Convert PtyMetadata to PtyInfo with optional existing info for fallback.
- */
-export function ptyMetadataToInfo(metadata: AggregatePtyMetadata, existing?: PtyInfo): PtyInfo {
-  return mergePtyInfoPreservingGitMetadata(existing, {
-    ptyId: metadata.ptyId,
-    sortOrderHint: existing?.sortOrderHint,
-    cwd: metadata.cwd,
-    gitBranch: metadata.gitBranch,
-    gitDiffStats: metadata.gitDiffStats,
-    gitDirty: metadata.gitDirty,
-    gitStaged: metadata.gitStaged,
-    gitUnstaged: metadata.gitUnstaged,
-    gitUntracked: metadata.gitUntracked,
-    gitConflicted: metadata.gitConflicted,
-    gitAhead: metadata.gitAhead,
-    gitBehind: metadata.gitBehind,
-    gitStashCount: metadata.gitStashCount,
-    gitState: metadata.gitState,
-    gitDetached: metadata.gitDetached,
-    gitRepoKey: metadata.gitRepoKey,
-    foregroundProcess: metadata.foregroundProcess,
-    shell: metadata.shell,
-    title: metadata.title,
-    workspaceId: metadata.workspaceId,
-    paneId: metadata.paneId,
-    sessionId: metadata.sessionId ?? existing?.sessionId ?? 'unknown',
-    sessionMetadata: metadata.sessionMetadata ?? existing?.sessionMetadata,
-  });
 }

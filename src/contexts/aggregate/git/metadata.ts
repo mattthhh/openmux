@@ -42,8 +42,25 @@ export function extractGitMetadata(metadata: GitRepoMetadata | undefined): GitMe
     gitState: metadata.state,
     gitDetached: metadata.detached,
     gitRepoKey: metadata.repoKey,
-    // Create a shallow copy to prevent shared reference issues across PTYs
     gitDiffStats: metadata.diffStats ? { ...metadata.diffStats } : undefined,
+  };
+}
+
+/**
+ * Apply a repo snapshot to a PTY.
+ * If the snapshot is missing, the incoming PTY metadata is preserved as-is.
+ */
+export function applyGitMetadataSnapshot(
+  pty: PtyInfo,
+  metadata: GitRepoMetadata | undefined
+): PtyInfo {
+  if (!metadata) {
+    return pty;
+  }
+
+  return {
+    ...pty,
+    ...extractGitMetadata(metadata),
   };
 }
 
@@ -57,6 +74,67 @@ export function areGitDiffStatsEqual(
   if (!a && !b) return true;
   if (!a || !b) return false;
   return a.added === b.added && a.removed === b.removed && a.binary === b.binary;
+}
+
+/**
+ * Whether a PTY already carries meaningful git metadata.
+ */
+export function hasGitMetadata(pty: PtyInfo): boolean {
+  return (
+    pty.gitBranch !== undefined ||
+    pty.gitDiffStats !== undefined ||
+    pty.gitDirty ||
+    pty.gitStaged > 0 ||
+    pty.gitUnstaged > 0 ||
+    pty.gitUntracked > 0 ||
+    pty.gitConflicted > 0 ||
+    pty.gitAhead !== undefined ||
+    pty.gitBehind !== undefined ||
+    pty.gitStashCount !== undefined ||
+    pty.gitState !== undefined ||
+    pty.gitDetached ||
+    pty.gitRepoKey !== undefined
+  );
+}
+
+/**
+ * Preserve existing git metadata when a refresh path only returns partial PTY
+ * data. This keeps cwd/process updates cheap without clearing stable git state.
+ */
+export function mergePtyInfoPreservingGitMetadata(
+  existing: PtyInfo | undefined,
+  next: PtyInfo
+): PtyInfo {
+  if (!existing || existing.cwd !== next.cwd) {
+    return next;
+  }
+
+  const incomingHasGitMetadata = hasGitMetadata(next);
+  const nextWithPreservedDiffStats =
+    next.gitDiffStats === undefined && existing.gitDiffStats !== undefined
+      ? { ...next, gitDiffStats: existing.gitDiffStats }
+      : next;
+
+  if (incomingHasGitMetadata || !hasGitMetadata(existing)) {
+    return nextWithPreservedDiffStats;
+  }
+
+  return {
+    ...nextWithPreservedDiffStats,
+    gitBranch: existing.gitBranch,
+    gitDiffStats: existing.gitDiffStats,
+    gitDirty: existing.gitDirty,
+    gitStaged: existing.gitStaged,
+    gitUnstaged: existing.gitUnstaged,
+    gitUntracked: existing.gitUntracked,
+    gitConflicted: existing.gitConflicted,
+    gitAhead: existing.gitAhead,
+    gitBehind: existing.gitBehind,
+    gitStashCount: existing.gitStashCount,
+    gitState: existing.gitState,
+    gitDetached: existing.gitDetached,
+    gitRepoKey: existing.gitRepoKey,
+  };
 }
 
 /**

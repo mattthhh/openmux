@@ -1,6 +1,6 @@
 /**
  * Refresh operations for Aggregate View.
- * 
+ *
  * Exports:
  * - Full refresh (refreshPtysOnce)
  * - Subset refresh (refreshPtysSubsetOnce, refreshPtysSubset)
@@ -10,10 +10,10 @@
  */
 
 // Types
-export type { 
-  AggregatePtyMetadata, 
-  ResolvedPty, 
-  SessionSummary, 
+export type {
+  AggregatePtyMetadata,
+  ResolvedPty,
+  SessionSummary,
   RefreshDependencies,
   RefreshResult,
   BatchRefreshOptions,
@@ -27,19 +27,20 @@ export type {
 export { RefreshGuard } from './guard';
 
 // Refresh operations
-export { refreshPtysOnce, ptyMetadataToInfo } from './full-refresh';
+export { refreshPtysOnce } from './full-refresh';
+export { ptyMetadataToInfo } from '../pty-info';
 export { refreshPtysSubsetOnce, refreshPtysSubset } from './subset-refresh';
 export { initialLoadOnce } from './initial-load';
 
 // Session utilities
-export { 
+export {
   collectSerializedPaneIds,
   buildSessionPaneOrder,
   findWorkspaceIdForPane,
 } from './session-utils';
 
 // Backward compatibility
-export { 
+export {
   createAggregateViewRefreshers,
   type CreateRefreshersParams,
   type RefreshersResult,

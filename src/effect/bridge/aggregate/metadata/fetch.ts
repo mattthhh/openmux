@@ -5,35 +5,49 @@
 
 import type { PtyService } from '../../../services/Pty';
 import type { PtyId } from '../../../types';
-import type { GitInfo } from '../../../services/pty/helpers';
 import type { PtyMetadata, FetchPtyMetadataOptions } from '../types';
 import { PtyMetadataError } from '../../../errors';
-import { asPtyId } from '../cache/session-pty-cache';
+
+function getEmptyGitMetadata() {
+  return {
+    gitBranch: undefined,
+    gitDiffStats: undefined,
+    gitDirty: false,
+    gitStaged: 0,
+    gitUnstaged: 0,
+    gitUntracked: 0,
+    gitConflicted: 0,
+    gitAhead: undefined,
+    gitBehind: undefined,
+    gitStashCount: undefined,
+    gitState: undefined,
+    gitDetached: false,
+    gitRepoKey: undefined,
+  };
+}
 
 /**
  * Fetch metadata for a single PTY.
  * Returns null if PTY is invalid or defunct.
+ *
+ * Git metadata is intentionally omitted here. Aggregate view hydrates git state
+ * from a cwd-based repo cache so every row uses the same source of truth.
  */
 export async function fetchPtyMetadata(
   pty: PtyService,
   ptyId: PtyId,
-  options: FetchPtyMetadataOptions = {}
+  _options: FetchPtyMetadataOptions = {}
 ): Promise<PtyMetadata | null> {
-  const { skipGitDiffStats } = options;
-
   // Get session - trust Pty service for validity
   const session = await pty.getSession(ptyId);
   if (session instanceof Error || session.pid === 0) {
     return null;
   }
 
-  // Fetch cwd, git info, foregroundProcess in parallel
-  const [cwdResult, gitInfoResult, foregroundProcessResult] = await Promise.all([
+  // Fetch cwd + foreground process only. Git is hydrated later from the final
+  // cwd snapshot to avoid mixing multiple sources of truth.
+  const [cwdResult, foregroundProcessResult] = await Promise.all([
     pty.getCwd(ptyId),
-    pty.getGitInfo(ptyId).catch((e) => {
-      console.warn(`Failed to get git info for PTY ${ptyId}:`, e);
-      return undefined;
-    }),
     pty.getForegroundProcess(ptyId).catch((e) => {
       console.warn(`Failed to get foreground process for PTY ${ptyId}:`, e);
       return undefined;
@@ -45,7 +59,6 @@ export async function fetchPtyMetadata(
     console.warn(`Failed to get cwd for PTY ${ptyId}, using session cwd fallback:`, cwdResult);
     return session.cwd;
   })();
-  const gitInfo = gitInfoResult instanceof Error ? undefined : gitInfoResult;
   const foregroundProcess =
     foregroundProcessResult instanceof Error ? undefined : foregroundProcessResult;
 
@@ -55,32 +68,10 @@ export async function fetchPtyMetadata(
     return null;
   }
 
-  // Fetch git diff stats (only if we have a cwd and not skipped)
-  const gitDiffStats = skipGitDiffStats
-    ? undefined
-    : await pty.getGitDiffStats(ptyId).catch((e) => {
-        console.warn(`Failed to get git diff stats for PTY ${ptyId}:`, e);
-        return undefined;
-      });
-
-  const gitInfoValue = gitInfo as GitInfo | undefined;
-
   return {
     ptyId,
     cwd,
-    gitBranch: gitInfoValue?.branch,
-    gitDiffStats: gitDiffStats instanceof Error ? undefined : gitDiffStats,
-    gitDirty: gitInfoValue?.dirty ?? false,
-    gitStaged: gitInfoValue?.staged ?? 0,
-    gitUnstaged: gitInfoValue?.unstaged ?? 0,
-    gitUntracked: gitInfoValue?.untracked ?? 0,
-    gitConflicted: gitInfoValue?.conflicted ?? 0,
-    gitAhead: gitInfoValue?.ahead,
-    gitBehind: gitInfoValue?.behind,
-    gitStashCount: gitInfoValue?.stashCount,
-    gitState: gitInfoValue?.state,
-    gitDetached: gitInfoValue?.detached ?? false,
-    gitRepoKey: gitInfoValue?.repoKey,
+    ...getEmptyGitMetadata(),
     foregroundProcess,
     shell: session.shell,
     title: undefined, // Title is set dynamically via title change events
