@@ -12,7 +12,7 @@
  * - No global polling loop
  */
 
-import { createEffect, createMemo, createSignal } from 'solid-js';
+import { For, createEffect, createMemo, createSignal, type Accessor } from 'solid-js';
 import type { PtyInfo } from '../../contexts/aggregate/types';
 import type { AggregateTheme } from '../../core/types';
 import { getPtyShimmerColor, hasActiveShimmer } from '../../core/shimmer';
@@ -157,67 +157,61 @@ interface ShimmeringLabelProps {
   shimmerTargetColor: string;
 }
 
+interface ShimmeringCharacterProps {
+  char: string;
+  index: number;
+  textLength: number;
+  baseColor: string;
+  ptyId: string;
+  shimmerTargetColor: string;
+  renderTime: Accessor<number>;
+}
+
+function ShimmeringCharacter(props: ShimmeringCharacterProps) {
+  const color = () => {
+    const shimmerColor = getPtyShimmerColor(
+      props.ptyId,
+      props.baseColor,
+      props.index,
+      props.textLength,
+      props.renderTime(),
+      {
+        targetColor: props.shimmerTargetColor,
+      }
+    );
+
+    return shimmerColor ?? props.baseColor;
+  };
+
+  return (
+    <text fg={color()} selectable={false}>
+      {props.char}
+    </text>
+  );
+}
+
 function ShimmeringLabel(props: ShimmeringLabelProps) {
   const renderTime = useShimmerRenderTime(() => true);
+  const characters = createMemo(() => Array.from(props.text));
 
-  // Build shimmered text - character by character
-  // This runs every frame during animation, but only THIS component re-renders
-  const shimmeredText = createMemo(() => {
-    const now = renderTime();
-
-    if (!hasActiveShimmer(props.ptyId, now)) {
-      return (
-        <text fg={props.baseColor} selectable={false}>
-          {props.text}
-        </text>
-      );
-    }
-
-    const shimmeredChars: JSX.Element[] = [];
-    let currentRun = '';
-    let currentColor = props.baseColor;
-
-    for (let i = 0; i < props.text.length; i++) {
-      const shimmerColor = getPtyShimmerColor(
-        props.ptyId,
-        props.baseColor,
-        i,
-        props.text.length,
-        now,
-        {
-          targetColor: props.shimmerTargetColor,
-        }
-      );
-
-      const nextColor = shimmerColor ?? props.baseColor;
-
-      if (nextColor !== currentColor) {
-        if (currentRun) {
-          shimmeredChars.push(
-            <text fg={currentColor} selectable={false}>
-              {currentRun}
-            </text>
-          );
-          currentRun = '';
-        }
-        currentColor = nextColor;
-      }
-
-      currentRun += props.text[i];
-    }
-
-    if (currentRun) {
-      shimmeredChars.push(
-        <text fg={currentColor} selectable={false}>
-          {currentRun}
-        </text>
-      );
-    }
-
-    return <>{shimmeredChars}</>;
-  });
-
-  return <>{shimmeredText()}</>;
+  // Keep text renderables stable across animation frames.
+  // Only the fg color updates reactively, which avoids hit-testing transient
+  // text nodes that can disappear between frames while the shimmer is moving.
+  return (
+    <For each={characters()}>
+      {(char, index) => (
+        <ShimmeringCharacter
+          char={char}
+          index={index()}
+          textLength={characters().length}
+          baseColor={props.baseColor}
+          ptyId={props.ptyId}
+          shimmerTargetColor={props.shimmerTargetColor}
+          renderTime={renderTime}
+        />
+      )}
+    </For>
+  );
 }
 
 /**
@@ -313,44 +307,31 @@ export function PtyTreeRow(props: PtyTreeRowProps) {
     return ' '.repeat(padLen);
   });
 
-  const handleClick = (event: { preventDefault: () => void }) => {
-    event.preventDefault();
-    props.onClick?.();
-  };
-
   // Apply shimmer to label characters only while this row is actively animating.
   // NOTE: The shimmer is rendered as a separate component to isolate the
   // high-frequency re-renders (~60fps during animation) from the row's event
   // handlers. This prevents mouse click events from being lost during animation.
-  //
-  // CRITICAL: Text nodes don't receive onMouseDown events in OpenTUI (issue #112),
-  // so we wrap the label in a box with the handler. During shimmer, the text
-  // nodes are recreated rapidly, which was causing clicks to be lost.
   const renderLabel = createMemo(() => {
     const text = displayLabel();
     const baseColor = baseFgColor();
 
     if (!isAnimating()) {
       return (
-        <box style={{ height: 1, flexDirection: 'row' }} onMouseDown={handleClick}>
-          <text fg={baseColor} selectable={false}>
-            {text}
-          </text>
-        </box>
+        <text fg={baseColor} selectable={false}>
+          {text}
+        </text>
       );
     }
 
     // Use ShimmeringLabel component to isolate RAF-triggered re-renders.
-    // Wrap in a box with onMouseDown since text nodes don't receive mouse events.
+    // This prevents the parent row's event handlers from being disrupted.
     return (
-      <box style={{ height: 1, flexDirection: 'row' }} onMouseDown={handleClick}>
-        <ShimmeringLabel
-          text={text}
-          baseColor={baseColor}
-          ptyId={props.pty.ptyId}
-          shimmerTargetColor={props.shimmerTargetColor}
-        />
-      </box>
+      <ShimmeringLabel
+        text={text}
+        baseColor={baseColor}
+        ptyId={props.pty.ptyId}
+        shimmerTargetColor={props.shimmerTargetColor}
+      />
     );
   });
 
@@ -414,31 +395,28 @@ export function PtyTreeRow(props: PtyTreeRowProps) {
       }
     }
 
-    // Wrap in box with onMouseDown since text nodes don't receive mouse events
-    return (
-      <box style={{ height: 1, flexDirection: 'row' }} onMouseDown={handleClick}>
-        <>{parts}</>
-      </box>
-    );
+    return <>{parts}</>;
+  };
+
+  const handleClick = (event: { preventDefault: () => void }) => {
+    event.preventDefault();
+    props.onClick?.();
   };
 
   return (
     <box
       style={{ height: 1, width: props.maxWidth, flexDirection: 'row' }}
       backgroundColor={bgColor()}
+      onMouseDown={handleClick}
     >
       {/* Indentation only - NO tree prefix */}
-      <box style={{ height: 1, flexDirection: 'row' }} onMouseDown={handleClick}>
-        <text fg={subtleColor()} selectable={false}>
-          {props.indent}
-        </text>
-      </box>
+      <text fg={subtleColor()} selectable={false}>
+        {props.indent}
+      </text>
       {/* Label with optional shimmer */}
       {renderLabel()}
       {/* Padding */}
-      <box style={{ height: 1, flexDirection: 'row' }} onMouseDown={handleClick}>
-        <text selectable={false}>{padding()}</text>
-      </box>
+      <text selectable={false}>{padding()}</text>
       {/* Git metadata */}
       {renderGitMeta()}
     </box>
