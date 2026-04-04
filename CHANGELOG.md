@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.52](https://github.com/monotykamary/openmux/compare/v0.3.51...v0.3.52) (2026-04-04)
+
+
+### Bug Fixes
+
+* **aggregate-view:** prevent git metadata flickering in subset refresh ([f479ee1](https://github.com/monotykamary/openmux/commit/f479ee18ca3a2da962242ac2cdda93dbe59d274c))
+* **aggregate:** restore event-driven background shimmer ([2501235](https://github.com/monotykamary/openmux/commit/2501235050af175891909607d012ee485fa222e3))
+* **pty:** preserve pi redraw scrollback ([b661b8f](https://github.com/monotykamary/openmux/commit/b661b8feaa37ab2dad9718d17061470720c221b2))
+
+
+### Refactoring
+
+* **aggregate:** modularize pending insertions and add missing types ([cf49475](https://github.com/monotykamary/openmux/commit/cf4947582e28048d23c74e5f34d5efd6c946bd3f))
+* **bridge:** eliminate WithService function bloat ([e23cc2c](https://github.com/monotykamary/openmux/commit/e23cc2c3beed33f04d300a8e22ef722aa98e6746))
+* **error-handling:** convert remaining try-catch to errore patterns ([f3452e8](https://github.com/monotykamary/openmux/commit/f3452e835ff47180b0d9b90f067efcfccd34b16a))
+* **errors:** adopt errore patterns in bridge, runtime, and subscriptions ([3c3f0fe](https://github.com/monotykamary/openmux/commit/3c3f0fe01a07b7bc867c2d4aefb40c91b2032af4))
+
 ### [0.3.51](https://github.com/monotykamary/openmux/compare/v0.3.50...v0.3.51) (2026-04-03)
 
 
