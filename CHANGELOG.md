@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.56](https://github.com/monotykamary/openmux/compare/v0.3.55...v0.3.56) (2026-04-04)
+
+
+### Bug Fixes
+
+* **aggregate:** wrap PTY row text in boxes for click handling ([e032dfe](https://github.com/monotykamary/openmux/commit/e032dfe35f9abaee889c76fca1a4be43ef472afc)), closes [#112](https://github.com/monotykamary/openmux/issues/112)
+
 ### [0.3.55](https://github.com/monotykamary/openmux/compare/v0.3.54...v0.3.55) (2026-04-04)
 
 
