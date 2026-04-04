@@ -317,27 +317,35 @@ export function PtyTreeRow(props: PtyTreeRowProps) {
   // NOTE: The shimmer is rendered as a separate component to isolate the
   // high-frequency re-renders (~60fps during animation) from the row's event
   // handlers. This prevents mouse click events from being lost during animation.
+  //
+  // CRITICAL: Text nodes don't receive onMouseDown events in OpenTUI (issue #112),
+  // so we wrap the label in a box with the handler. During shimmer, the text
+  // nodes are recreated rapidly, which was causing clicks to be lost.
   const renderLabel = createMemo(() => {
     const text = displayLabel();
     const baseColor = baseFgColor();
 
     if (!isAnimating()) {
       return (
-        <text fg={baseColor} selectable={false}>
-          {text}
-        </text>
+        <box style={{ height: 1, flexDirection: 'row' }} onMouseDown={handleClick}>
+          <text fg={baseColor} selectable={false}>
+            {text}
+          </text>
+        </box>
       );
     }
 
     // Use ShimmeringLabel component to isolate RAF-triggered re-renders.
-    // This prevents the parent row's event handlers from being disrupted.
+    // Wrap in a box with onMouseDown since text nodes don't receive mouse events.
     return (
-      <ShimmeringLabel
-        text={text}
-        baseColor={baseColor}
-        ptyId={props.pty.ptyId}
-        shimmerTargetColor={props.shimmerTargetColor}
-      />
+      <box style={{ height: 1, flexDirection: 'row' }} onMouseDown={handleClick}>
+        <ShimmeringLabel
+          text={text}
+          baseColor={baseColor}
+          ptyId={props.pty.ptyId}
+          shimmerTargetColor={props.shimmerTargetColor}
+        />
+      </box>
     );
   });
 
@@ -401,7 +409,12 @@ export function PtyTreeRow(props: PtyTreeRowProps) {
       }
     }
 
-    return <>{parts}</>;
+    // Wrap in box with onMouseDown since text nodes don't receive mouse events
+    return (
+      <box style={{ height: 1, flexDirection: 'row' }} onMouseDown={handleClick}>
+        <>{parts}</>
+      </box>
+    );
   };
 
   const handleClick = (event: { preventDefault: () => void }) => {
@@ -413,16 +426,19 @@ export function PtyTreeRow(props: PtyTreeRowProps) {
     <box
       style={{ height: 1, width: props.maxWidth, flexDirection: 'row' }}
       backgroundColor={bgColor()}
-      onMouseDown={handleClick}
     >
       {/* Indentation only - NO tree prefix */}
-      <text fg={subtleColor()} selectable={false}>
-        {props.indent}
-      </text>
+      <box style={{ height: 1, flexDirection: 'row' }} onMouseDown={handleClick}>
+        <text fg={subtleColor()} selectable={false}>
+          {props.indent}
+        </text>
+      </box>
       {/* Label with optional shimmer */}
       {renderLabel()}
       {/* Padding */}
-      <text selectable={false}>{padding()}</text>
+      <box style={{ height: 1, flexDirection: 'row' }} onMouseDown={handleClick}>
+        <text selectable={false}>{padding()}</text>
+      </box>
       {/* Git metadata */}
       {renderGitMeta()}
     </box>
