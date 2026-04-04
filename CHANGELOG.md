@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.58](https://github.com/monotykamary/openmux/compare/v0.3.57...v0.3.58) (2026-04-04)
+
+
+### Bug Fixes
+
+* **aggregate:** use session cwd fallback for metadata ([e89410a](https://github.com/monotykamary/openmux/commit/e89410ab2f50a56bed45bde5d5f315b23daf18b2))
+
 ### [0.3.57](https://github.com/monotykamary/openmux/compare/v0.3.56...v0.3.57) (2026-04-04)
 
 
