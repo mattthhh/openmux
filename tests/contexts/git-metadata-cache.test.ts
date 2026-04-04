@@ -51,14 +51,16 @@ describe('GitMetadataCache', () => {
     });
   }
 
-  describe('Reference equality', () => {
-    it('should return same metadata object for same repo (reference equality)', async () => {
+  describe('Detached snapshots', () => {
+    it('should return equivalent detached metadata snapshots for repeated reads', async () => {
       const cache = createCache();
 
       const meta1 = await cache.getMetadata('/repo1', { skipDiffStats: true });
       const meta2 = await cache.getMetadata('/repo1', { skipDiffStats: true });
 
-      expect(meta1).toBe(meta2);
+      expect(meta1).toEqual(meta2);
+      expect(meta1).not.toBe(meta2);
+      expect(fetchGitInfoCalls).toEqual(['/repo1', '/repo1']);
     });
 
     it('should return different objects for different repos', async () => {
@@ -97,8 +99,10 @@ describe('GitMetadataCache', () => {
       expect(fetchGitInfoCalls.length).toBe(3);
 
       const metas = cwds.map((cwd) => results.get(cwd));
-      expect(metas[0]).toBe(metas[1]);
-      expect(metas[1]).toBe(metas[2]);
+      expect(metas[0]).toEqual(metas[1]);
+      expect(metas[1]).toEqual(metas[2]);
+      expect(metas[0]).not.toBe(metas[1]);
+      expect(metas[1]).not.toBe(metas[2]);
     });
 
     it('should resolve repos sequentially to avoid underlying git-helper race conditions', async () => {
@@ -132,18 +136,20 @@ describe('GitMetadataCache', () => {
       const results = await cache.getMetadataBatch(cwds, { skipDiffStats: true });
 
       expect(fetchGitInfoCalls.length).toBe(3);
-      expect(results.get('/repo1/src')).toBe(results.get('/repo1/tests'));
-      expect(results.get('/repo2/src')).not.toBe(results.get('/repo1/src'));
+      expect(results.get('/repo1/src')).toEqual(results.get('/repo1/tests'));
+      expect(results.get('/repo1/src')).not.toBe(results.get('/repo1/tests'));
+      expect(results.get('/repo2/src')?.repoKey).toBe('/repo2');
+      expect(results.get('/repo1/src')?.repoKey).toBe('/repo1');
     });
 
-    it('should use cached metadata on subsequent batch calls', async () => {
+    it('should revalidate metadata on subsequent batch calls', async () => {
       const cache = createCache();
 
       await cache.getMetadataBatch(['/repo/src', '/repo/tests'], { skipDiffStats: true });
       expect(fetchGitInfoCalls.length).toBe(2);
 
       await cache.getMetadataBatch(['/repo/src', '/repo/tests'], { skipDiffStats: true });
-      expect(fetchGitInfoCalls.length).toBe(2);
+      expect(fetchGitInfoCalls.length).toBe(4);
     });
   });
 
@@ -163,9 +169,10 @@ describe('GitMetadataCache', () => {
       const first = await cache.getMetadata('/repo', { skipDiffStats: false });
       const second = await cache.getMetadata('/repo', { skipDiffStats: true });
 
-      expect(second).toBe(first);
+      expect(second).toEqual(first);
+      expect(second).not.toBe(first);
       expect(second?.diffStats).toEqual(mockDiffStats);
-      expect(fetchGitInfoCalls.length).toBe(1);
+      expect(fetchGitInfoCalls.length).toBe(2);
       expect(fetchDiffStatsCalls.length).toBe(1);
     });
 

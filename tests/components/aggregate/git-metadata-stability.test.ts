@@ -6,7 +6,7 @@ const loadGitMetadataCacheModule = (() => {
 })();
 
 describe('Git metadata stability - synchronous aggregate behavior', () => {
-  it('shares one metadata object across PTYs in the same repo', async () => {
+  it('returns equivalent detached snapshots for PTYs in the same repo', async () => {
     const { GitMetadataCache } = await loadGitMetadataCacheModule();
     const cache = new GitMetadataCache({
       fetchGitInfo: async () => ({
@@ -30,7 +30,8 @@ describe('Git metadata stability - synchronous aggregate behavior', () => {
       skipDiffStats: false,
     });
 
-    expect(metadata.get('/project/a')).toBe(metadata.get('/project/b'));
+    expect(metadata.get('/project/a')).toEqual(metadata.get('/project/b'));
+    expect(metadata.get('/project/a')).not.toBe(metadata.get('/project/b'));
     expect(metadata.get('/project/a')?.diffStats).toEqual({ added: 5, removed: 3, binary: 0 });
   });
 

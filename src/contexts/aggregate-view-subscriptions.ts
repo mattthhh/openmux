@@ -41,6 +41,7 @@ import {
   didPtyInfoChange,
   mergePtyInfoPreservingGitMetadata,
 } from './aggregate/git/metadata';
+export { didPtyInfoChange } from './aggregate/git/metadata';
 import { ptyMetadataToInfo } from './aggregate/pty-info';
 import {
   getGitInfo,
