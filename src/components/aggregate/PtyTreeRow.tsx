@@ -313,6 +313,11 @@ export function PtyTreeRow(props: PtyTreeRowProps) {
     return ' '.repeat(padLen);
   });
 
+  const handleClick = (event: { preventDefault: () => void }) => {
+    event.preventDefault();
+    props.onClick?.();
+  };
+
   // Apply shimmer to label characters only while this row is actively animating.
   // NOTE: The shimmer is rendered as a separate component to isolate the
   // high-frequency re-renders (~60fps during animation) from the row's event
@@ -348,11 +353,6 @@ export function PtyTreeRow(props: PtyTreeRowProps) {
       </box>
     );
   });
-
-  const handleClick = (event: { preventDefault: () => void }) => {
-    event.preventDefault();
-    props.onClick?.();
-  };
 
   // Git metadata color mapping
   const renderGitMeta = () => {
