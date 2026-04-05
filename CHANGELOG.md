@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.62](https://github.com/monotykamary/openmux/compare/v0.3.61...v0.3.62) (2026-04-05)
+
+
+### Bug Fixes
+
+* **zig-pty:** cast pidfd_open flags for linux build ([a92d106](https://github.com/monotykamary/openmux/commit/a92d106ac75357fabd617e08ee22bdc54cdd54fa))
+* **zig-pty:** disable pidfd watcher on linux ([548d0b4](https://github.com/monotykamary/openmux/commit/548d0b455d765416c2e6aacab6a2eb16878f1d70))
+* **zig-pty:** store PTYs by pointer in registry ([7413d7a](https://github.com/monotykamary/openmux/commit/7413d7a4683f0549232de82cafbdfd3fe1729231))
+
+
+### Performance
+
+* **zig-pty:** make PTY reads event-driven ([fc7b71a](https://github.com/monotykamary/openmux/commit/fc7b71af4126fb88b6851c7934db4b15a3b2d104))
+
+
+### CI/CD
+
+* remove node20-backed actions from CI ([862c6a0](https://github.com/monotykamary/openmux/commit/862c6a0d1e9611cc1f02f4f796bfc0068720f41c))
+* run zig-pty tests on linux ([00d3146](https://github.com/monotykamary/openmux/commit/00d31464e55fb2cc1f9d6843b9fca164c9746381))
+
 ### [0.3.61](https://github.com/monotykamary/openmux/compare/v0.3.60...v0.3.61) (2026-04-05)
 
 
