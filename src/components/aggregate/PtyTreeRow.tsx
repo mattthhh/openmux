@@ -12,10 +12,15 @@
  * - No global polling loop
  */
 
-import { createEffect, createMemo, createSignal, type Accessor } from 'solid-js';
+import { createEffect, createMemo, createSignal, onCleanup, type Accessor } from 'solid-js';
 import type { PtyInfo } from '../../contexts/aggregate-view-types';
 import type { AggregateTheme } from '../../core/types';
-import { getPtyShimmerColor, hasActiveShimmer } from '../../core/shimmer';
+import {
+  getPtyShimmerColor,
+  hasActiveShimmer,
+  suppressPtyShimmer,
+  unsuppressPtyShimmer,
+} from '../../core/shimmer';
 import { useShimmerRenderTime, useShimmerStateVersion } from './hooks/useShimmerRenderTime';
 import { getDirectoryName } from './utils';
 
@@ -243,26 +248,33 @@ export function PtyTreeRow(props: PtyTreeRowProps) {
   const [isAnimating, setIsAnimating] = createSignal(hasActiveShimmer(props.pty.ptyId));
 
   // Disable shimmer when this PTY is selected (being previewed)
-  const shimmerDisabled = () => props.isSelected;
+  createEffect(() => {
+    if (props.isSelected) {
+      suppressPtyShimmer(props.pty.ptyId);
+    } else {
+      unsuppressPtyShimmer(props.pty.ptyId);
+    }
+  });
 
+  // Effect 1: Start shimmer when conditions are met
   createEffect(() => {
     void shimmerStateVersion();
-    if (isAnimating() || shimmerDisabled()) return;
+    if (isAnimating()) return;
     setIsAnimating(hasActiveShimmer(props.pty.ptyId));
   });
 
-  // Effect 2: detect when shimmer ENDS (animation timeout) OR when selection disables it
+  // Effect 2: Detect when shimmer ENDS (animation timeout)
   createEffect(() => {
     void shimmerStateVersion(); // Track shimmer state changes to detect end
     if (!isAnimating()) return;
-    // Disable shimmer immediately when selected
-    if (shimmerDisabled()) {
-      setIsAnimating(false);
-      return;
-    }
     const now = Date.now();
     if (hasActiveShimmer(props.pty.ptyId, now)) return;
     setIsAnimating(false);
+  });
+
+  // Cleanup: ensure shimmer suppression is removed when component unmounts
+  onCleanup(() => {
+    unsuppressPtyShimmer(props.pty.ptyId);
   });
 
   // Selection colors

@@ -20,6 +20,9 @@ const MAX_TOTAL_SHIMMER_MS = 15000; // 15 seconds max
 /** Timestamp of recent stdout activity per PTY */
 const ptyStdoutActivity = new Map<string, number[]>();
 
+/** PTY IDs that should not shimmer (e.g., selected in aggregate view) */
+const suppressedPtyIds = new Set<string>();
+
 /** Shimmer animation state per PTY - tracks completed sweeps and queued activity */
 interface ShimmerState {
   startTime: number;
@@ -37,6 +40,32 @@ function notifyShimmerStateListeners(): void {
   for (const listener of shimmerStateListeners) {
     listener();
   }
+}
+
+/**
+ * Suppress shimmer for a specific PTY ID (e.g., when selected in aggregate view).
+ * This immediately stops calculations and clears animation state for this PTY.
+ */
+export function suppressPtyShimmer(ptyId: string): void {
+  suppressedPtyIds.add(ptyId);
+  // Clear any existing animation state to stop calculations immediately
+  if (shimmerStates.delete(ptyId)) {
+    notifyShimmerStateListeners();
+  }
+}
+
+/**
+ * Unsuppress shimmer for a specific PTY ID, allowing it to shimmer again.
+ */
+export function unsuppressPtyShimmer(ptyId: string): void {
+  suppressedPtyIds.delete(ptyId);
+}
+
+/**
+ * Check if a PTY ID is currently suppressed from shimmering.
+ */
+export function isPtyShimmerSuppressed(ptyId: string): boolean {
+  return suppressedPtyIds.has(ptyId);
 }
 
 /** Shimmer configuration */
@@ -131,6 +160,10 @@ function prunePtyStdoutActivity(ptyId: string, now = Date.now()): number[] {
  * to ensure the user sees a complete animation for all activity.
  */
 export function recordPtyStdoutActivity(ptyId: string, time = Date.now()): void {
+  // Don't record activity for suppressed PTYs
+  if (suppressedPtyIds.has(ptyId)) {
+    return;
+  }
   const recent = prunePtyStdoutActivity(ptyId, time);
   recent.push(time);
   ptyStdoutActivity.set(ptyId, recent);
@@ -321,6 +354,11 @@ export function getPtyShimmerColor(
  * continues the animation with a new sweep (max 15 seconds total).
  */
 export function hasActiveShimmer(ptyId: string, now = Date.now()): boolean {
+  // Suppressed PTYs never have active shimmer
+  if (suppressedPtyIds.has(ptyId)) {
+    return false;
+  }
+
   const state = shimmerStates.get(ptyId);
   if (!state) return false;
 
