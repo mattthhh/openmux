@@ -5,6 +5,7 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 
 import { afterEach, describe, expect, test, vi } from 'bun:test';
+import { UpdateError } from '../../src/effect/errors';
 import {
   detectManagedInstall,
   findReleaseAsset,
@@ -406,7 +407,7 @@ b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3  openmux-v1.0.0
       ).resolves.toBeUndefined();
     });
 
-    test('throws on checksum mismatch', async () => {
+    test('returns error on checksum mismatch', async () => {
       const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'checksum-mismatch-test-'));
       cleanupRoots.push(tempDir);
 
@@ -436,14 +437,17 @@ b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3  openmux-v1.0.0
         assets: [{ name: 'SHA256SUMS', browser_download_url: 'https://example.com/checksums' }],
       };
 
-      await expect(
-        verifyReleaseChecksum(
-          io as UpdateIO,
-          release,
-          archivePath,
-          'openmux-v1.0.0-linux-x64.tar.gz'
-        )
-      ).rejects.toThrow('Checksum verification failed');
+      const result = await verifyReleaseChecksum(
+        io as UpdateIO,
+        release,
+        archivePath,
+        'openmux-v1.0.0-linux-x64.tar.gz'
+      );
+
+      expect(result instanceof UpdateError).toBe(true);
+      if (result instanceof UpdateError) {
+        expect(result.message).toContain('Checksum verification failed');
+      }
     });
 
     test('warns when no checksum file available', async () => {
@@ -479,7 +483,7 @@ b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3  openmux-v1.0.0
       expect(logs.some((line) => line.includes('Warning: No checksum available'))).toBe(true);
     });
 
-    test('throws when checksum file download fails', async () => {
+    test('returns error when checksum file download fails', async () => {
       const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'checksum-download-fail-test-'));
       cleanupRoots.push(tempDir);
 
@@ -497,17 +501,20 @@ b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3  openmux-v1.0.0
         assets: [{ name: 'SHA256SUMS', browser_download_url: 'https://example.com/checksums' }],
       };
 
-      await expect(
-        verifyReleaseChecksum(
-          io as UpdateIO,
-          release,
-          archivePath,
-          'openmux-v1.0.0-linux-x64.tar.gz'
-        )
-      ).rejects.toThrow('Failed to download checksum file');
+      const result = await verifyReleaseChecksum(
+        io as UpdateIO,
+        release,
+        archivePath,
+        'openmux-v1.0.0-linux-x64.tar.gz'
+      );
+
+      expect(result instanceof UpdateError).toBe(true);
+      if (result instanceof UpdateError) {
+        expect(result.message).toContain('Failed to download checksum file');
+      }
     });
 
-    test('throws when checksum entry not found in file', async () => {
+    test('returns error when checksum entry not found in file', async () => {
       const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'checksum-entry-missing-test-'));
       cleanupRoots.push(tempDir);
 
@@ -533,14 +540,19 @@ b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3  openmux-v1.0.0
         assets: [{ name: 'SHA256SUMS', browser_download_url: 'https://example.com/checksums' }],
       };
 
-      await expect(
-        verifyReleaseChecksum(
-          io as UpdateIO,
-          release,
-          archivePath,
-          'openmux-v1.0.0-linux-x64.tar.gz'
-        )
-      ).rejects.toThrow('Could not find checksum for openmux-v1.0.0-linux-x64.tar.gz');
+      const result = await verifyReleaseChecksum(
+        io as UpdateIO,
+        release,
+        archivePath,
+        'openmux-v1.0.0-linux-x64.tar.gz'
+      );
+
+      expect(result instanceof UpdateError).toBe(true);
+      if (result instanceof UpdateError) {
+        expect(result.message).toContain(
+          'Could not find checksum for openmux-v1.0.0-linux-x64.tar.gz'
+        );
+      }
     });
 
     test('accepts sha256sums.txt as checksum file', async () => {

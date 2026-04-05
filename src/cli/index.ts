@@ -4,6 +4,7 @@ import { parseCliArgs, type CliCommand } from './parse';
 import { getCliVersion } from './version';
 import { createSessionOnDisk, listSessionsOnDisk } from './session-store';
 import { runUpdateCommand } from './update';
+import { SessionStorageError } from '../effect/errors';
 
 const EXIT_SUCCESS = 0;
 const EXIT_USAGE = 2;
@@ -12,9 +13,7 @@ const EXIT_NOT_FOUND = 4;
 const EXIT_AMBIGUOUS = 5;
 const EXIT_INTERNAL = 6;
 
-type CliOutcome =
-  | { kind: 'attach'; session?: string }
-  | { kind: 'handled'; exitCode: number };
+type CliOutcome = { kind: 'attach'; session?: string } | { kind: 'handled'; exitCode: number };
 
 function printError(message: string): void {
   console.error(message);
@@ -87,11 +86,17 @@ async function runSessionCreate(name?: string): Promise<CliOutcome> {
   }
 
   const metadata = await createSessionOnDisk(name);
+  if (metadata instanceof SessionStorageError) {
+    console.error(`Failed to create session: ${metadata.message}`);
+    return { kind: 'handled', exitCode: EXIT_INTERNAL };
+  }
   console.log(metadata.id);
   return { kind: 'handled', exitCode: EXIT_SUCCESS };
 }
 
-async function runPaneSplit(command: Extract<CliCommand, { kind: 'pane.split' }>): Promise<CliOutcome> {
+async function runPaneSplit(
+  command: Extract<CliCommand, { kind: 'pane.split' }>
+): Promise<CliOutcome> {
   const client = await withControlClient();
   if (!client) {
     printError('No active openmux UI. Attach first.');
@@ -114,7 +119,9 @@ async function runPaneSplit(command: Extract<CliCommand, { kind: 'pane.split' }>
   }
 }
 
-async function runPaneSend(command: Extract<CliCommand, { kind: 'pane.send' }>): Promise<CliOutcome> {
+async function runPaneSend(
+  command: Extract<CliCommand, { kind: 'pane.send' }>
+): Promise<CliOutcome> {
   const client = await withControlClient();
   if (!client) {
     printError('No active openmux UI. Attach first.');
@@ -137,7 +144,9 @@ async function runPaneSend(command: Extract<CliCommand, { kind: 'pane.send' }>):
   }
 }
 
-async function runPaneCapture(command: Extract<CliCommand, { kind: 'pane.capture' }>): Promise<CliOutcome> {
+async function runPaneCapture(
+  command: Extract<CliCommand, { kind: 'pane.capture' }>
+): Promise<CliOutcome> {
   const client = await withControlClient();
   if (!client) {
     printError('No active openmux UI. Attach first.');

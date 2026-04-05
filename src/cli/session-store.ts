@@ -9,7 +9,7 @@ import path from 'path';
 
 import type { SessionMetadata } from '../core/types';
 import { makeSessionId } from '../effect/types';
-import { FileSystemError } from '../effect/errors';
+import { FileSystemError, SessionStorageError } from '../effect/errors';
 import { getAutoName } from '../effect/services/session-manager/serialization';
 
 export type SessionIndex = {
@@ -127,9 +127,11 @@ export async function listSessionsOnDisk(): Promise<{
 
 /**
  * Create a new session on disk.
- * @returns SessionMetadata on success, throws on critical failure
+ * @returns SessionMetadata on success, SessionStorageError on critical failure
  */
-export async function createSessionOnDisk(name?: string): Promise<SessionMetadata> {
+export async function createSessionOnDisk(
+  name?: string
+): Promise<SessionMetadata | SessionStorageError> {
   const storagePath = getSessionStoragePath();
 
   // Ensure directory exists
@@ -141,7 +143,12 @@ export async function createSessionOnDisk(name?: string): Promise<SessionMetadat
       new FileSystemError({ operation: 'write', path: storagePath, reason: String(e), cause: e }),
   });
   if (mkdirResult instanceof FileSystemError) {
-    throw mkdirResult; // Critical failure - can't create session
+    return new SessionStorageError({
+      operation: 'create',
+      path: storagePath,
+      reason: `Cannot create sessions directory: ${mkdirResult.message}`,
+      cause: mkdirResult,
+    });
   }
 
   const id = makeSessionId();
@@ -174,7 +181,12 @@ export async function createSessionOnDisk(name?: string): Promise<SessionMetadat
       new FileSystemError({ operation: 'write', path: sessionPath, reason: String(e), cause: e }),
   });
   if (writeResult instanceof FileSystemError) {
-    throw writeResult; // Critical failure - session file not written
+    return new SessionStorageError({
+      operation: 'write',
+      path: sessionPath,
+      reason: `Cannot write session file: ${writeResult.message}`,
+      cause: writeResult,
+    });
   }
 
   // Update index

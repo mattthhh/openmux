@@ -112,6 +112,12 @@ export class ShimConnectionError extends errore.createTaggedError({
   message: 'Shim connection failed: $reason',
 }) {}
 
+/** Update operation failed */
+export class UpdateError extends errore.createTaggedError({
+  name: 'UpdateError',
+  message: 'Update $operation failed: $reason',
+}) {}
+
 /** Kitty graphics offload error */
 export class KittyOffloadError extends errore.createTaggedError({
   name: 'KittyOffloadError',

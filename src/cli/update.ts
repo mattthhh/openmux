@@ -1,3 +1,6 @@
+import * as errore from 'errore';
+import { UpdateError } from '../effect/errors';
+
 import fs from 'node:fs/promises';
 import fsSync from 'node:fs';
 import os from 'node:os';
@@ -120,10 +123,13 @@ function defaultExtractTarGz(archivePath: string, destination: string): Promise<
   });
 }
 
-function createDefaultUpdateIO(): UpdateIO {
+function createDefaultUpdateIO(): UpdateIO | UpdateError {
   const fetchFn = globalThis.fetch?.bind(globalThis);
   if (!fetchFn) {
-    throw new Error('Fetch API is not available in this runtime.');
+    return new UpdateError({
+      operation: 'init',
+      reason: 'Fetch API is not available in this runtime',
+    });
   }
 
   return {
@@ -133,15 +139,61 @@ function createDefaultUpdateIO(): UpdateIO {
     execPath: process.execPath,
     stdinIsTTY: process.stdin.isTTY === true,
     fetch: fetchFn,
-    readFile: (filePath) => fs.readFile(filePath, 'utf8'),
-    writeFile: (filePath, data) => fs.writeFile(filePath, data),
-    copyFile: (source, destination) => fs.copyFile(source, destination),
-    chmod: (targetPath, mode) => fs.chmod(targetPath, mode),
-    rename: (source, destination) => fs.rename(source, destination),
-    mkdir: (dirPath) => fs.mkdir(dirPath, { recursive: true }).then(() => undefined),
-    mkdtemp: (prefix) => fs.mkdtemp(prefix),
-    rm: (targetPath) => fs.rm(targetPath, { recursive: true, force: true }),
-    access: (targetPath) => fs.access(targetPath),
+    readFile: (filePath) =>
+      fs
+        .readFile(filePath, 'utf8')
+        .catch((e) =>
+          Promise.reject(new UpdateError({ operation: 'readFile', reason: String(e), cause: e }))
+        ),
+    writeFile: (filePath, data) =>
+      fs
+        .writeFile(filePath, data)
+        .catch((e) =>
+          Promise.reject(new UpdateError({ operation: 'writeFile', reason: String(e), cause: e }))
+        ),
+    copyFile: (source, destination) =>
+      fs
+        .copyFile(source, destination)
+        .catch((e) =>
+          Promise.reject(new UpdateError({ operation: 'copyFile', reason: String(e), cause: e }))
+        ),
+    chmod: (targetPath, mode) =>
+      fs
+        .chmod(targetPath, mode)
+        .catch((e) =>
+          Promise.reject(new UpdateError({ operation: 'chmod', reason: String(e), cause: e }))
+        ),
+    rename: (source, destination) =>
+      fs
+        .rename(source, destination)
+        .catch((e) =>
+          Promise.reject(new UpdateError({ operation: 'rename', reason: String(e), cause: e }))
+        ),
+    mkdir: (dirPath) =>
+      fs
+        .mkdir(dirPath, { recursive: true })
+        .then(() => undefined)
+        .catch((e) =>
+          Promise.reject(new UpdateError({ operation: 'mkdir', reason: String(e), cause: e }))
+        ),
+    mkdtemp: (prefix) =>
+      fs
+        .mkdtemp(prefix)
+        .catch((e) =>
+          Promise.reject(new UpdateError({ operation: 'mkdtemp', reason: String(e), cause: e }))
+        ),
+    rm: (targetPath) =>
+      fs
+        .rm(targetPath, { recursive: true, force: true })
+        .catch((e) =>
+          Promise.reject(new UpdateError({ operation: 'rm', reason: String(e), cause: e }))
+        ),
+    access: (targetPath) =>
+      fs
+        .access(targetPath)
+        .catch((e) =>
+          Promise.reject(new UpdateError({ operation: 'access', reason: String(e), cause: e }))
+        ),
     tmpdir: () => os.tmpdir(),
     prompt: defaultPrompt,
     extractTarGz: defaultExtractTarGz,
@@ -235,30 +287,48 @@ export function findReleaseAsset(
   return { name: fallback.name, url: fallback.browser_download_url };
 }
 
-async function fetchGitHubJson<T>(io: UpdateIO, url: string): Promise<T> {
-  const response = await io.fetch(url, {
-    headers: {
-      Accept: 'application/vnd.github+json',
-      'User-Agent': 'openmux-update',
-    },
-  });
+async function fetchGitHubJson<T>(io: UpdateIO, url: string): Promise<T | UpdateError> {
+  const response = await io
+    .fetch(url, {
+      headers: {
+        Accept: 'application/vnd.github+json',
+        'User-Agent': 'openmux-update',
+      },
+    })
+    .catch((e) => new UpdateError({ operation: 'fetch', reason: String(e), cause: e }));
+  if (response instanceof UpdateError) return response;
 
   if (!response.ok) {
-    throw new Error(`GitHub API request failed (${response.status})`);
+    return new UpdateError({
+      operation: 'fetch',
+      reason: `GitHub API request failed (${response.status})`,
+    });
   }
 
-  return (await response.json()) as T;
+  const data = await (response.json() as Promise<T>).catch(
+    (e) =>
+      new UpdateError({
+        operation: 'fetch',
+        reason: `Invalid JSON response: ${String(e)}`,
+        cause: e,
+      })
+  );
+  return data;
 }
 
 async function fetchTargetRelease(
   io: UpdateIO,
   options: { includePrerelease: boolean }
-): Promise<GitHubRelease> {
+): Promise<GitHubRelease | UpdateError> {
   const { includePrerelease } = options;
   if (!includePrerelease) {
     const release = await fetchGitHubJson<GitHubRelease>(io, `${GITHUB_API_BASE}/releases/latest`);
+    if (release instanceof UpdateError) return release;
     if (!release || !release.tag_name) {
-      throw new Error('GitHub latest release response is missing tag information.');
+      return new UpdateError({
+        operation: 'fetchRelease',
+        reason: 'GitHub latest release response is missing tag information',
+      });
     }
     return release;
   }
@@ -267,9 +337,13 @@ async function fetchTargetRelease(
     io,
     `${GITHUB_API_BASE}/releases?per_page=30`
   );
+  if (releases instanceof UpdateError) return releases;
   const selected = selectLatestRelease(releases, { includePrerelease: true });
   if (!selected) {
-    throw new Error('No valid GitHub releases were found.');
+    return new UpdateError({
+      operation: 'fetchRelease',
+      reason: 'No valid GitHub releases were found',
+    });
   }
   return selected;
 }
@@ -471,24 +545,70 @@ function suggestPackageManagerUpdate(io: UpdateIO, pmInstall: PackageManagerInst
   io.log(`To update, run: ${pmInstall.updateCommand}`);
 }
 
-async function downloadReleaseAsset(io: UpdateIO, url: string, destination: string): Promise<void> {
-  const response = await io.fetch(url, {
-    headers: {
-      Accept: 'application/octet-stream',
-      'User-Agent': 'openmux-update',
-    },
-  });
+async function downloadReleaseAsset(
+  io: UpdateIO,
+  url: string,
+  destination: string
+): Promise<void | UpdateError> {
+  const response = await io
+    .fetch(url, {
+      headers: {
+        Accept: 'application/octet-stream',
+        'User-Agent': 'openmux-update',
+      },
+    })
+    .catch((e) => new UpdateError({ operation: 'download', reason: String(e), cause: e }));
+  if (response instanceof UpdateError) return response;
+
   if (!response.ok) {
-    throw new Error(`Failed to download release asset (${response.status}).`);
+    return new UpdateError({
+      operation: 'download',
+      reason: `Failed to download release asset (${response.status})`,
+    });
   }
 
-  const payload = new Uint8Array(await response.arrayBuffer());
-  await io.writeFile(destination, payload);
+  const payload = await response
+    .arrayBuffer()
+    .catch(
+      (e) =>
+        new UpdateError({
+          operation: 'download',
+          reason: `Failed to read response: ${String(e)}`,
+          cause: e,
+        })
+    );
+  if (payload instanceof UpdateError) return payload;
+
+  const writeResult = await io
+    .writeFile(destination, new Uint8Array(payload))
+    .catch(
+      (e) =>
+        new UpdateError({
+          operation: 'download',
+          reason: `Failed to write file: ${String(e)}`,
+          cause: e,
+        })
+    );
+  if (writeResult instanceof UpdateError) return writeResult;
 }
 
-export async function computeFileSha256(_io: UpdateIO, filePath: string): Promise<string> {
+export async function computeFileSha256(
+  _io: UpdateIO,
+  filePath: string
+): Promise<string | UpdateError> {
   // Read file as binary buffer, not UTF-8 text
-  const data = await fs.readFile(filePath);
+  const data = await fs
+    .readFile(filePath)
+    .catch(
+      (e) =>
+        new UpdateError({
+          operation: 'checksum',
+          reason: `Failed to read file: ${String(e)}`,
+          cause: e,
+        })
+    );
+  if (data instanceof UpdateError) return data;
+
   const hash = crypto.createHash('sha256').update(data).digest('hex');
   return hash;
 }
@@ -523,7 +643,7 @@ export async function verifyReleaseChecksum(
   release: GitHubRelease,
   archivePath: string,
   assetName: string
-): Promise<void> {
+): Promise<void | UpdateError> {
   const assets = release.assets ?? [];
 
   // Find the asset to get its digest from GitHub API
@@ -545,42 +665,67 @@ export async function verifyReleaseChecksum(
       return;
     }
 
-    const checksumResponse = await io.fetch(checksumAsset.browser_download_url, {
-      headers: {
-        Accept: 'text/plain',
-        'User-Agent': 'openmux-update',
-      },
-    });
+    const checksumResponse = await io
+      .fetch(checksumAsset.browser_download_url, {
+        headers: {
+          Accept: 'text/plain',
+          'User-Agent': 'openmux-update',
+        },
+      })
+      .catch((e) => new UpdateError({ operation: 'verify', reason: String(e), cause: e }));
+    if (checksumResponse instanceof UpdateError) return checksumResponse;
 
     if (!checksumResponse.ok) {
-      throw new Error(`Failed to download checksum file (${checksumResponse.status}).`);
+      return new UpdateError({
+        operation: 'verify',
+        reason: `Failed to download checksum file (${checksumResponse.status})`,
+      });
     }
 
-    const checksumContent = await checksumResponse.text();
+    const checksumContent = await checksumResponse
+      .text()
+      .catch(
+        (e) =>
+          new UpdateError({
+            operation: 'verify',
+            reason: `Failed to read checksum: ${String(e)}`,
+            cause: e,
+          })
+      );
+    if (checksumContent instanceof UpdateError) return checksumContent;
+
     expectedHash = parseChecksumFile(checksumContent, assetName);
 
     if (!expectedHash) {
-      throw new Error(`Could not find checksum for ${assetName} in checksum file.`);
+      return new UpdateError({
+        operation: 'verify',
+        reason: `Could not find checksum for ${assetName} in checksum file`,
+      });
     }
   }
 
   const actualHash = await computeFileSha256(io, archivePath);
+  if (actualHash instanceof UpdateError) return actualHash;
 
   if (actualHash !== expectedHash) {
-    throw new Error(
-      `Checksum verification failed for ${assetName}.\n` +
-        `Expected: ${expectedHash}\n` +
-        `Actual:   ${actualHash}`
-    );
+    return new UpdateError({
+      operation: 'verify',
+      reason: `Checksum verification failed for ${assetName}. Expected: ${expectedHash}, Actual: ${actualHash}`,
+    });
   }
 }
 
-async function ensureFileExists(io: UpdateIO, filePath: string): Promise<void> {
-  try {
-    await io.access(filePath);
-  } catch {
-    throw new Error(`Update archive is missing required file: ${path.basename(filePath)}`);
-  }
+async function ensureFileExists(io: UpdateIO, filePath: string): Promise<void | UpdateError> {
+  const result = await io
+    .access(filePath)
+    .catch(
+      () =>
+        new UpdateError({
+          operation: 'verify',
+          reason: `Update archive is missing required file: ${path.basename(filePath)}`,
+        })
+    );
+  if (result instanceof UpdateError) return result;
 }
 
 async function replaceFileAtomically(
@@ -588,19 +733,53 @@ async function replaceFileAtomically(
   source: string,
   destination: string,
   options?: { executable?: boolean }
-): Promise<void> {
+): Promise<void | UpdateError> {
   const tempDestination = `${destination}.new-${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`;
-  try {
-    await io.copyFile(source, tempDestination);
-    if (options?.executable) {
-      await io.chmod(tempDestination, 0o755);
+  const copyResult = await io
+    .copyFile(source, tempDestination)
+    .catch(
+      (e) =>
+        new UpdateError({
+          operation: 'install',
+          reason: `Failed to copy file: ${String(e)}`,
+          cause: e,
+        })
+    );
+  if (copyResult instanceof UpdateError) {
+    await io.rm(tempDestination).catch(() => {});
+    return copyResult;
+  }
+
+  if (options?.executable) {
+    const chmodResult = await io
+      .chmod(tempDestination, 0o755)
+      .catch(
+        (e) =>
+          new UpdateError({
+            operation: 'install',
+            reason: `Failed to set permissions: ${String(e)}`,
+            cause: e,
+          })
+      );
+    if (chmodResult instanceof UpdateError) {
+      await io.rm(tempDestination).catch(() => {});
+      return chmodResult;
     }
-    await io.rename(tempDestination, destination);
-  } catch (error) {
-    await io.rm(tempDestination).catch((e) => {
-      console.warn('[update] Failed to clean up temp destination:', e);
-    });
-    throw error;
+  }
+
+  const renameResult = await io
+    .rename(tempDestination, destination)
+    .catch(
+      (e) =>
+        new UpdateError({
+          operation: 'install',
+          reason: `Failed to move file: ${String(e)}`,
+          cause: e,
+        })
+    );
+  if (renameResult instanceof UpdateError) {
+    await io.rm(tempDestination).catch(() => {});
+    return renameResult;
   }
 }
 
@@ -609,31 +788,73 @@ async function installRelease(
   release: GitHubRelease,
   installDir: string,
   platformInfo: PlatformInfo
-): Promise<string> {
+): Promise<string | UpdateError> {
   const tagName = release.tag_name;
   if (!tagName) {
-    throw new Error('Selected release has no tag name.');
+    return new UpdateError({ operation: 'install', reason: 'Selected release has no tag name' });
   }
 
   const version = parseReleaseVersion(tagName);
   if (!version) {
-    throw new Error(`Selected release tag is not a valid semver: ${tagName}`);
+    return new UpdateError({
+      operation: 'install',
+      reason: `Selected release tag is not a valid semver: ${tagName}`,
+    });
   }
 
   const asset = findReleaseAsset(release, platformInfo.target);
   if (!asset) {
-    throw new Error(`No release asset found for target ${platformInfo.target}.`);
+    return new UpdateError({
+      operation: 'install',
+      reason: `No release asset found for target ${platformInfo.target}`,
+    });
   }
 
-  const tempRoot = await io.mkdtemp(path.join(io.tmpdir(), 'openmux-update-'));
+  const tempRoot = await io
+    .mkdtemp(path.join(io.tmpdir(), 'openmux-update-'))
+    .catch(
+      (e) =>
+        new UpdateError({
+          operation: 'install',
+          reason: `Failed to create temp directory: ${String(e)}`,
+          cause: e,
+        })
+    );
+  if (tempRoot instanceof UpdateError) return tempRoot;
+
   try {
     const archivePath = path.join(tempRoot, 'openmux.tar.gz');
     const extractedPath = path.join(tempRoot, 'extracted');
 
-    await io.mkdir(extractedPath);
-    await downloadReleaseAsset(io, asset.url, archivePath);
-    await verifyReleaseChecksum(io, release, archivePath, asset.name);
-    await io.extractTarGz(archivePath, extractedPath);
+    const mkdirResult = await io
+      .mkdir(extractedPath)
+      .catch(
+        (e) =>
+          new UpdateError({
+            operation: 'install',
+            reason: `Failed to create extract directory: ${String(e)}`,
+            cause: e,
+          })
+      );
+    if (mkdirResult instanceof UpdateError) return mkdirResult;
+
+    const downloadResult = await downloadReleaseAsset(io, asset.url, archivePath);
+    if (downloadResult instanceof UpdateError) return downloadResult;
+
+    const verifyResult = await verifyReleaseChecksum(io, release, archivePath, asset.name);
+    if (verifyResult instanceof UpdateError) return verifyResult;
+
+    const extractResult = await io
+      .extractTarGz(archivePath, extractedPath)
+      .catch(
+        (e) =>
+          new UpdateError({
+            operation: 'install',
+            reason: `Failed to extract archive: ${String(e)}`,
+            cause: e,
+          })
+      );
+    if (extractResult instanceof UpdateError) return extractResult;
 
     const requiredFiles = [
       'openmux-bin',
@@ -643,44 +864,76 @@ async function installRelease(
     ];
 
     for (const requiredFile of requiredFiles) {
-      await ensureFileExists(io, path.join(extractedPath, requiredFile));
+      const existsResult = await ensureFileExists(io, path.join(extractedPath, requiredFile));
+      if (existsResult instanceof UpdateError) return existsResult;
     }
 
-    await io.mkdir(installDir);
+    const installDirResult = await io
+      .mkdir(installDir)
+      .catch(
+        (e) =>
+          new UpdateError({
+            operation: 'install',
+            reason: `Failed to create install directory: ${String(e)}`,
+            cause: e,
+          })
+      );
+    if (installDirResult instanceof UpdateError) return installDirResult;
 
-    await replaceFileAtomically(
+    const binResult = await replaceFileAtomically(
       io,
       path.join(extractedPath, 'openmux-bin'),
       path.join(installDir, 'openmux-bin'),
-      {
-        executable: true,
-      }
+      { executable: true }
     );
-    await replaceFileAtomically(
+    if (binResult instanceof UpdateError) return binResult;
+
+    const ptyResult = await replaceFileAtomically(
       io,
       path.join(extractedPath, `libzig_pty.${platformInfo.libExt}`),
       path.join(installDir, `libzig_pty.${platformInfo.libExt}`)
     );
-    await replaceFileAtomically(
+    if (ptyResult instanceof UpdateError) return ptyResult;
+
+    const gitResult = await replaceFileAtomically(
       io,
       path.join(extractedPath, `libzig_git.${platformInfo.libExt}`),
       path.join(installDir, `libzig_git.${platformInfo.libExt}`)
     );
-    await replaceFileAtomically(
+    if (gitResult instanceof UpdateError) return gitResult;
+
+    const vtResult = await replaceFileAtomically(
       io,
       path.join(extractedPath, `libghostty-vt.${platformInfo.libExt}`),
       path.join(installDir, `libghostty-vt.${platformInfo.libExt}`)
     );
+    if (vtResult instanceof UpdateError) return vtResult;
 
     const bunfigPath = path.join(extractedPath, 'bunfig.toml');
-    try {
-      await io.access(bunfigPath);
-      await replaceFileAtomically(io, bunfigPath, path.join(installDir, 'bunfig.toml'));
-    } catch {
+    const bunfigResult = await io.access(bunfigPath).catch(() => null);
+    if (bunfigResult === null) {
       // Optional: older artifacts may not include bunfig.toml.
+    } else {
+      const replaceResult = await replaceFileAtomically(
+        io,
+        bunfigPath,
+        path.join(installDir, 'bunfig.toml')
+      );
+      if (replaceResult instanceof UpdateError) return replaceResult;
     }
 
-    await io.writeFile(path.join(installDir, '.version'), version);
+    const versionWriteResult = await io
+      .writeFile(path.join(installDir, '.version'), version)
+      .catch(
+        (e) =>
+          new UpdateError({
+            operation: 'install',
+            reason: `Failed to write version file: ${String(e)}`,
+            cause: e,
+          })
+      );
+    if (versionWriteResult instanceof UpdateError) return versionWriteResult;
+
     return version;
   } finally {
     await io.rm(tempRoot).catch((e) => {
@@ -707,19 +960,54 @@ async function replaceTextFileAtomically(
   destination: string,
   content: string,
   options?: { executable?: boolean }
-): Promise<void> {
+): Promise<void | UpdateError> {
   const tempDestination = `${destination}.new-${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`;
-  try {
-    await io.writeFile(tempDestination, content);
-    if (options?.executable) {
-      await io.chmod(tempDestination, 0o755);
+
+  const writeResult = await io
+    .writeFile(tempDestination, content)
+    .catch(
+      (e) =>
+        new UpdateError({
+          operation: 'install',
+          reason: `Failed to write wrapper: ${String(e)}`,
+          cause: e,
+        })
+    );
+  if (writeResult instanceof UpdateError) {
+    await io.rm(tempDestination).catch(() => {});
+    return writeResult;
+  }
+
+  if (options?.executable) {
+    const chmodResult = await io
+      .chmod(tempDestination, 0o755)
+      .catch(
+        (e) =>
+          new UpdateError({
+            operation: 'install',
+            reason: `Failed to set wrapper permissions: ${String(e)}`,
+            cause: e,
+          })
+      );
+    if (chmodResult instanceof UpdateError) {
+      await io.rm(tempDestination).catch(() => {});
+      return chmodResult;
     }
-    await io.rename(tempDestination, destination);
-  } catch (error) {
-    await io.rm(tempDestination).catch((e) => {
-      console.warn('[update] Failed to clean up temp file:', e);
-    });
-    throw error;
+  }
+
+  const renameResult = await io
+    .rename(tempDestination, destination)
+    .catch(
+      (e) =>
+        new UpdateError({
+          operation: 'install',
+          reason: `Failed to move wrapper: ${String(e)}`,
+          cause: e,
+        })
+    );
+  if (renameResult instanceof UpdateError) {
+    await io.rm(tempDestination).catch(() => {});
+    return renameResult;
   }
 }
 
@@ -729,10 +1017,24 @@ async function updateManagedWrapper(
   installDir: string,
   platformInfo: PlatformInfo,
   version: string
-): Promise<void> {
-  await io.mkdir(path.dirname(wrapperPath));
+): Promise<void | UpdateError> {
+  const mkdirResult = await io
+    .mkdir(path.dirname(wrapperPath))
+    .catch(
+      (e) =>
+        new UpdateError({
+          operation: 'install',
+          reason: `Failed to create bin directory: ${String(e)}`,
+          cause: e,
+        })
+    );
+  if (mkdirResult instanceof UpdateError) return mkdirResult;
+
   const content = renderManagedWrapper(installDir, platformInfo.libExt, version);
-  await replaceTextFileAtomically(io, wrapperPath, content, { executable: true });
+  const replaceResult = await replaceTextFileAtomically(io, wrapperPath, content, {
+    executable: true,
+  });
+  if (replaceResult instanceof UpdateError) return replaceResult;
 }
 
 function isAffirmative(answer: string | null): boolean {
@@ -749,10 +1051,12 @@ export async function runUpdateCommand(
   command: UpdateCommand,
   overrides: Partial<UpdateIO> = {}
 ): Promise<CliOutcome> {
-  const io = {
-    ...createDefaultUpdateIO(),
-    ...overrides,
-  };
+  const ioResult = createDefaultUpdateIO();
+  if (ioResult instanceof UpdateError) {
+    console.error(`Update init failed: ${ioResult.message}`);
+    return toCliOutcome(EXIT_INTERNAL);
+  }
+  const io = { ...ioResult, ...overrides };
 
   // Check if installed via package manager (npm/bun) first
   const pmInstall = detectPackageManager(io.execPath, io.env);
@@ -773,59 +1077,68 @@ export async function runUpdateCommand(
     return toCliOutcome(EXIT_INTERNAL);
   }
 
-  try {
-    const release = await fetchTargetRelease(io, {
-      includePrerelease: command.prerelease,
-    });
-    const latestVersion = parseReleaseVersion(release.tag_name);
-    if (!latestVersion) {
-      io.error(`Latest release tag is not a valid semver: ${release.tag_name ?? '<missing>'}`);
-      return toCliOutcome(EXIT_INTERNAL);
-    }
-
-    if (compareSemver(install.value.currentVersion, latestVersion) >= 0) {
-      io.log(`Already up to date (${formatVersion(install.value.currentVersion)}).`);
-      return toCliOutcome(EXIT_SUCCESS);
-    }
-
-    if (!command.yes) {
-      if (!io.stdinIsTTY) {
-        io.error(
-          'openmux update requires confirmation in an interactive terminal. Re-run with --yes.'
-        );
-        return toCliOutcome(EXIT_USAGE);
-      }
-
-      const answer = await io.prompt(
-        `Update openmux ${formatVersion(install.value.currentVersion)} -> ${formatVersion(latestVersion)}? [y/N] `
-      );
-      if (!isAffirmative(answer)) {
-        io.log('Update cancelled.');
-        return toCliOutcome(EXIT_SUCCESS);
-      }
-    }
-
-    io.log(`Downloading ${formatVersion(latestVersion)} for ${platformInfo.target}...`);
-    const installedVersion = await installRelease(
-      io,
-      release,
-      install.value.installDir,
-      platformInfo
-    );
-    await updateManagedWrapper(
-      io,
-      install.value.wrapperPath,
-      install.value.installDir,
-      platformInfo,
-      installedVersion
-    );
-    io.log(
-      `Updated openmux ${formatVersion(install.value.currentVersion)} -> ${formatVersion(installedVersion)}.`
-    );
-    return toCliOutcome(EXIT_SUCCESS);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    io.error(`Update failed: ${message}`);
+  const release = await fetchTargetRelease(io, {
+    includePrerelease: command.prerelease,
+  });
+  if (release instanceof UpdateError) {
+    io.error(`Failed to fetch release: ${release.message}`);
     return toCliOutcome(EXIT_INTERNAL);
   }
+
+  const latestVersion = parseReleaseVersion(release.tag_name);
+  if (!latestVersion) {
+    io.error(`Latest release tag is not a valid semver: ${release.tag_name ?? '<missing>'}`);
+    return toCliOutcome(EXIT_INTERNAL);
+  }
+
+  if (compareSemver(install.value.currentVersion, latestVersion) >= 0) {
+    io.log(`Already up to date (${formatVersion(install.value.currentVersion)}).`);
+    return toCliOutcome(EXIT_SUCCESS);
+  }
+
+  if (!command.yes) {
+    if (!io.stdinIsTTY) {
+      io.error(
+        'openmux update requires confirmation in an interactive terminal. Re-run with --yes.'
+      );
+      return toCliOutcome(EXIT_USAGE);
+    }
+
+    const answer = await io.prompt(
+      `Update openmux ${formatVersion(install.value.currentVersion)} -> ${formatVersion(latestVersion)}? [y/N] `
+    );
+    if (!isAffirmative(answer)) {
+      io.log('Update cancelled.');
+      return toCliOutcome(EXIT_SUCCESS);
+    }
+  }
+
+  io.log(`Downloading ${formatVersion(latestVersion)} for ${platformInfo.target}...`);
+  const installedVersion = await installRelease(
+    io,
+    release,
+    install.value.installDir,
+    platformInfo
+  );
+  if (installedVersion instanceof UpdateError) {
+    io.error(`Update failed: ${installedVersion.message}`);
+    return toCliOutcome(EXIT_INTERNAL);
+  }
+
+  const wrapperResult = await updateManagedWrapper(
+    io,
+    install.value.wrapperPath,
+    install.value.installDir,
+    platformInfo,
+    installedVersion
+  );
+  if (wrapperResult instanceof UpdateError) {
+    io.error(`Update failed: ${wrapperResult.message}`);
+    return toCliOutcome(EXIT_INTERNAL);
+  }
+
+  io.log(
+    `Updated openmux ${formatVersion(install.value.currentVersion)} -> ${formatVersion(installedVersion)}.`
+  );
+  return toCliOutcome(EXIT_SUCCESS);
 }
