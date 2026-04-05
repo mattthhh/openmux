@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.65](https://github.com/monotykamary/openmux/compare/v0.3.64...v0.3.65) (2026-04-05)
+
+
+### Bug Fixes
+
+* **aggregate:** actually stop shimmer calculations for selected PTY ([784cbe6](https://github.com/monotykamary/openmux/commit/784cbe6ceb5ef243961c8a35524f0f227386b88e))
+
 ### [0.3.64](https://github.com/monotykamary/openmux/compare/v0.3.63...v0.3.64) (2026-04-05)
 
 
