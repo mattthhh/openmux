@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.64](https://github.com/monotykamary/openmux/compare/v0.3.63...v0.3.64) (2026-04-05)
+
+
+### Bug Fixes
+
+* **aggregate:** disable shimmer for selected PTY in list view ([0da2b07](https://github.com/monotykamary/openmux/commit/0da2b07fdbae7817f12d8478036cdab41c16cb66))
+
 ### [0.3.63](https://github.com/monotykamary/openmux/compare/v0.3.62...v0.3.63) (2026-04-05)
 
 
