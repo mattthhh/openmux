@@ -3,6 +3,7 @@
  * Single line indicating more content available on demand
  */
 
+import { Show } from 'solid-js';
 import type { AggregateTheme } from '../../core/types';
 
 export interface PlaceholderRowProps {
@@ -36,8 +37,7 @@ export function PlaceholderRow(props: PlaceholderRowProps) {
   const selectionColors = () => props.aggregateTheme.selection;
   const subtleColor = () =>
     props.isSelected ? selectionColors().foreground : props.textColors.subtle;
-  const bgColor = () =>
-    props.isSelected ? selectionColors().background : undefined;
+  const bgColor = () => (props.isSelected ? selectionColors().background : undefined);
 
   const label = () => props.label ?? '...';
 
@@ -53,13 +53,23 @@ export function PlaceholderRow(props: PlaceholderRowProps) {
       onMouseDown={handleClick}
     >
       {/* Indentation */}
-      <text fg={subtleColor()} selectable={false}>{props.indent}</text>
+      <text fg={subtleColor()} selectable={false}>
+        {props.indent}
+      </text>
       {/* Tree prefix glyph */}
-      <text fg={subtleColor()} selectable={false}>{props.treePrefix}</text>
-      {/* Spacing */}
-      <text fg={subtleColor()} selectable={false}> </text>
+      <text fg={subtleColor()} selectable={false}>
+        {props.treePrefix}
+      </text>
+      {/* Spacing - only when treePrefix exists */}
+      <Show when={props.treePrefix}>
+        <text fg={subtleColor()} selectable={false}>
+          {' '}
+        </text>
+      </Show>
       {/* Placeholder dots in subtle color */}
-      <text fg={subtleColor()} selectable={false}>{label()}</text>
+      <text fg={subtleColor()} selectable={false}>
+        {label()}
+      </text>
     </box>
   );
 }
