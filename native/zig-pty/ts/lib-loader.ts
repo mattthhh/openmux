@@ -2,9 +2,9 @@
  * Library loader for zig-pty
  */
 
-import { dlopen, FFIType } from "bun:ffi";
-import { join, dirname, basename } from "path";
-import { existsSync } from "fs";
+import { dlopen, FFIType } from 'bun:ffi';
+import { join, dirname, basename } from 'path';
+import { existsSync } from 'fs';
 
 function resolveLibPath(): string {
   const env = process.env.ZIG_PTY_LIB;
@@ -14,17 +14,17 @@ function resolveLibPath(): string {
   const arch = process.arch;
 
   // Library filename based on platform/arch
-  const ext = platform === "darwin" ? "dylib" : platform === "win32" ? "dll" : "so";
+  const ext = platform === 'darwin' ? 'dylib' : platform === 'win32' ? 'dll' : 'so';
   const filenames =
-    platform === "darwin"
-      ? arch === "arm64"
-        ? ["libzig_pty_arm64.dylib", "libzig_pty.dylib"]
-        : ["libzig_pty.dylib"]
-      : platform === "win32"
-        ? ["zig_pty.dll"]
-        : arch === "arm64"
-          ? ["libzig_pty_arm64.so", "libzig_pty.so"]
-          : ["libzig_pty.so"];
+    platform === 'darwin'
+      ? arch === 'arm64'
+        ? ['libzig_pty_arm64.dylib', 'libzig_pty.dylib']
+        : ['libzig_pty.dylib']
+      : platform === 'win32'
+        ? ['zig_pty.dll']
+        : arch === 'arm64'
+          ? ['libzig_pty_arm64.so', 'libzig_pty.so']
+          : ['libzig_pty.so'];
 
   // For compiled binaries, check next to the executable first
   // process.execPath points to the actual binary location
@@ -35,14 +35,15 @@ function resolveLibPath(): string {
   const fileDir = dirname(base);
   const dirName = basename(fileDir);
   // Handle ts/, src/, or dist/ directory
-  const here = dirName === "ts" || dirName === "src" || dirName === "dist" ? dirname(fileDir) : fileDir;
+  const here =
+    dirName === 'ts' || dirName === 'src' || dirName === 'dist' ? dirname(fileDir) : fileDir;
 
   const basePaths = [
     // Compiled binary: library next to executable (set by wrapper or manual)
     execDir,
     // Development: native/zig-pty/zig-out/lib/
-    join(here, "zig-out", "lib"),
-    join(process.cwd(), "native", "zig-pty", "zig-out", "lib"),
+    join(here, 'zig-out', 'lib'),
+    join(process.cwd(), 'native', 'zig-pty', 'zig-out', 'lib'),
   ];
 
   const fallbackPaths: string[] = [];
@@ -59,7 +60,7 @@ function resolveLibPath(): string {
   }
 
   throw new Error(
-    `libzig_pty shared library not found.\nChecked:\n  - ZIG_PTY_LIB=${env ?? "<unset>"}\n  - ${fallbackPaths.join("\n  - ")}\n\nSet ZIG_PTY_LIB or ensure one of these paths contains the file.`
+    `libzig_pty shared library not found.\nChecked:\n  - ZIG_PTY_LIB=${env ?? '<unset>'}\n  - ${fallbackPaths.join('\n  - ')}\n\nSet ZIG_PTY_LIB or ensure one of these paths contains the file.`
   );
 }
 
@@ -88,6 +89,7 @@ export const lib = dlopen(libPath, {
   },
   bun_pty_kill: { args: [FFIType.i32], returns: FFIType.i32 },
   bun_pty_get_pid: { args: [FFIType.i32], returns: FFIType.i32 },
+  bun_pty_dup_wakeup_fd: { args: [FFIType.i32], returns: FFIType.i32 },
   bun_pty_get_exit_code: { args: [FFIType.i32], returns: FFIType.i32 },
   bun_pty_close: { args: [FFIType.i32], returns: FFIType.void },
   // Async spawn functions
@@ -100,7 +102,10 @@ export const lib = dlopen(libPath, {
   // Process inspection (native APIs - no subprocess spawning)
   bun_pty_get_foreground_pid: { args: [FFIType.i32], returns: FFIType.i32 },
   bun_pty_get_cwd: { args: [FFIType.i32, FFIType.pointer, FFIType.i32], returns: FFIType.i32 },
-  bun_pty_get_process_name: { args: [FFIType.i32, FFIType.pointer, FFIType.i32], returns: FFIType.i32 },
+  bun_pty_get_process_name: {
+    args: [FFIType.i32, FFIType.pointer, FFIType.i32],
+    returns: FFIType.i32,
+  },
   // macOS notify(3) helpers
   bun_pty_notify_register: { args: [FFIType.cstring, FFIType.pointer], returns: FFIType.i32 },
   bun_pty_notify_cancel: { args: [FFIType.i32], returns: FFIType.i32 },

@@ -180,6 +180,80 @@ test "exit code for failing command" {
 // PTY Output After Exit Tests
 // ============================================================================
 
+test "wakeup fd becomes readable when output arrives" {
+    const handle = spawn_module.spawnPty("echo wakeup", "", "", 80, 24);
+    try std.testing.expect(handle > 0);
+    defer exports.bun_pty_close(handle);
+
+    const wake_fd = exports.bun_pty_dup_wakeup_fd(handle);
+    try std.testing.expect(wake_fd >= 0);
+    defer _ = c.close(wake_fd);
+
+    var pfd = [_]c.pollfd{.{
+        .fd = wake_fd,
+        .events = c.POLLIN,
+        .revents = 0,
+    }};
+
+    const poll_result = c.poll(&pfd, 1, 1000);
+    try std.testing.expect(poll_result > 0);
+    try std.testing.expect((pfd[0].revents & c.POLLIN) != 0);
+
+    var wake_buf: [64]u8 = undefined;
+    _ = c.read(wake_fd, &wake_buf, wake_buf.len);
+
+    var buf: [1024]u8 = undefined;
+    var saw_output = false;
+    var attempts: usize = 0;
+    while (attempts < 50) : (attempts += 1) {
+        const n = exports.bun_pty_read(handle, &buf, buf.len);
+        if (n > 0) {
+            saw_output = true;
+            break;
+        }
+        std.Thread.sleep(20 * std.time.ns_per_ms);
+    }
+
+    try std.testing.expect(saw_output);
+}
+
+test "wakeup fd becomes readable when child exits without output" {
+    const handle = spawn_module.spawnPty("sleep 0.1", "", "", 80, 24);
+    try std.testing.expect(handle > 0);
+    defer exports.bun_pty_close(handle);
+
+    const wake_fd = exports.bun_pty_dup_wakeup_fd(handle);
+    try std.testing.expect(wake_fd >= 0);
+    defer _ = c.close(wake_fd);
+
+    var pfd = [_]c.pollfd{.{
+        .fd = wake_fd,
+        .events = c.POLLIN,
+        .revents = 0,
+    }};
+
+    const poll_result = c.poll(&pfd, 1, 1500);
+    try std.testing.expect(poll_result > 0);
+    try std.testing.expect((pfd[0].revents & c.POLLIN) != 0);
+
+    var wake_buf: [64]u8 = undefined;
+    _ = c.read(wake_fd, &wake_buf, wake_buf.len);
+
+    var buf: [256]u8 = undefined;
+    var saw_exit = false;
+    var attempts: usize = 0;
+    while (attempts < 50) : (attempts += 1) {
+        const n = exports.bun_pty_read(handle, &buf, buf.len);
+        if (n == constants.CHILD_EXITED) {
+            saw_exit = true;
+            break;
+        }
+        std.Thread.sleep(20 * std.time.ns_per_ms);
+    }
+
+    try std.testing.expect(saw_exit);
+}
+
 test "read returns child exited after process ends" {
     const handle = spawn_module.spawnPty("echo quick", "", "", 80, 24);
     try std.testing.expect(handle > 0);

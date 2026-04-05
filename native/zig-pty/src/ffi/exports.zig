@@ -83,6 +83,10 @@ pub fn bun_pty_get_pid(handle: c_int) c_int {
     return pty_ops.getPid(handle);
 }
 
+pub fn bun_pty_dup_wakeup_fd(handle: c_int) c_int {
+    return pty_ops.dupWakeupFd(handle);
+}
+
 pub fn bun_pty_get_exit_code(handle: c_int) c_int {
     return pty_ops.getExitCode(handle);
 }

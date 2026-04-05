@@ -136,6 +136,20 @@ pub fn getPid(handle: c_int) c_int {
     return pty.pid;
 }
 
+/// Duplicate the wakeup pipe read end for event-driven JS consumption.
+/// The returned fd is owned by the caller and must be closed there.
+pub fn dupWakeupFd(handle: c_int) c_int {
+    if (handle <= 0) {
+        return constants.ERROR;
+    }
+
+    const h: u32 = @intCast(handle);
+    const pty = handle_registry.acquireHandle(h) orelse return constants.ERROR;
+    defer handle_registry.releaseHandle(h);
+
+    return pty.duplicateWakeReadFd();
+}
+
 /// Get PTY child exit code (after process exits).
 /// Returns: exit code (>= 0) or ERROR (-1).
 pub fn getExitCode(handle: c_int) c_int {

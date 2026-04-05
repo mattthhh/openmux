@@ -1,6 +1,7 @@
 //! PTY Spawn - Creates new PTY sessions
 
 const std = @import("std");
+const builtin = @import("builtin");
 const posix = @import("../util/posix.zig");
 const c = posix.c;
 const constants = @import("../util/constants.zig");
@@ -18,6 +19,41 @@ fn setCloseOnExec(fd: c_int) void {
     _ = c.fcntl(fd, c.F_SETFD, c.FD_CLOEXEC);
 }
 
+fn createProcessExitEventFd(pid: c_int) c_int {
+    if (builtin.os.tag == .macos) {
+        const kq = c.kqueue();
+        if (kq < 0) return -1;
+        setCloseOnExec(kq);
+
+        const change = c.struct_kevent{
+            .ident = @intCast(pid),
+            .filter = c.EVFILT_PROC,
+            .flags = c.EV_ADD | c.EV_ENABLE | c.EV_ONESHOT,
+            .fflags = c.NOTE_EXIT | c.NOTE_EXITSTATUS,
+            .data = 0,
+            .udata = null,
+        };
+
+        if (c.kevent(kq, &change, 1, null, 0, null) == -1) {
+            _ = c.close(kq);
+            return -1;
+        }
+
+        return kq;
+    }
+
+    if (builtin.os.tag == .linux) {
+        if (!@hasDecl(c, "SYS_pidfd_open")) return -1;
+        const fd_long = c.syscall(c.SYS_pidfd_open, pid, 0);
+        if (fd_long < 0) return -1;
+        const fd: c_int = @intCast(fd_long);
+        setCloseOnExec(fd);
+        return fd;
+    }
+
+    return -1;
+}
+
 pub fn spawnPty(
     cmd: [*:0]const u8,
     cwd: [*:0]const u8,
@@ -27,6 +63,7 @@ pub fn spawnPty(
 ) c_int {
     var master_fd: c_int = undefined;
     var slave_fd: c_int = undefined;
+    var wake_fds: [2]c_int = undefined;
 
     // Set up window size
     var ws: c.winsize = winsize.makeWinsize(cols, rows);
@@ -43,7 +80,23 @@ pub fn spawnPty(
         return constants.ERROR;
     }
 
+    if (c.socketpair(c.AF_UNIX, c.SOCK_STREAM, 0, &wake_fds) == -1) {
+        _ = c.close(master_fd);
+        _ = c.close(slave_fd);
+        return constants.ERROR;
+    }
+
+    if (!setNonBlocking(wake_fds[1])) {
+        _ = c.close(master_fd);
+        _ = c.close(slave_fd);
+        _ = c.close(wake_fds[0]);
+        _ = c.close(wake_fds[1]);
+        return constants.ERROR;
+    }
+
     setCloseOnExec(master_fd);
+    setCloseOnExec(wake_fds[0]);
+    setCloseOnExec(wake_fds[1]);
 
     // Fork
     const pid = c.fork();
@@ -52,12 +105,16 @@ pub fn spawnPty(
         // Fork failed
         _ = c.close(master_fd);
         _ = c.close(slave_fd);
+        _ = c.close(wake_fds[0]);
+        _ = c.close(wake_fds[1]);
         return constants.ERROR;
     }
 
     if (pid == 0) {
         // Child process
         _ = c.close(master_fd);
+        _ = c.close(wake_fds[0]);
+        _ = c.close(wake_fds[1]);
 
         // Create new session
         _ = c.setsid();
@@ -118,7 +175,7 @@ pub fn spawnPty(
         // Platform-specific: macOS uses login shells by default to source .bash_profile/.zprofile
         // Linux and other Unix systems typically use non-login shells (GUI login sources profile)
         const is_macos = @import("builtin").target.os.tag == .macos;
-        
+
         const argv = if (is_macos)
             [_:null]?[*:0]const u8{
                 shell,
@@ -148,15 +205,32 @@ pub fn spawnPty(
     // Parent process
     _ = c.close(slave_fd);
 
+    const proc_exit_fd = createProcessExitEventFd(pid);
+
     // Allocate handle
     const h = handle_registry.allocHandle() orelse {
         _ = c.close(master_fd);
+        _ = c.close(wake_fds[0]);
+        _ = c.close(wake_fds[1]);
+        if (proc_exit_fd >= 0) {
+            _ = c.close(proc_exit_fd);
+        }
         _ = c.kill(pid, c.SIGKILL);
         _ = c.waitpid(pid, null, 0); // Reap zombie
         return constants.ERROR;
     };
 
-    const pty = Pty.init(master_fd, pid, cols, rows, ws.ws_xpixel, ws.ws_ypixel);
+    const pty = Pty.init(
+        master_fd,
+        pid,
+        cols,
+        rows,
+        ws.ws_xpixel,
+        ws.ws_ypixel,
+        wake_fds[0],
+        wake_fds[1],
+        proc_exit_fd,
+    );
     handle_registry.setHandle(h, pty);
 
     // Start the background reader thread

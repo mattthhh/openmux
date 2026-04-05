@@ -6,7 +6,7 @@
 //! Architecture:
 //! - Background reader thread does blocking reads for natural data coalescing
 //! - Ring buffer allows lock-free producer/consumer pattern
-//! - JS polls the ring buffer, getting complete chunks
+//! - Wakeup pipe notifies JS when new data or exit state is ready to drain
 //!
 //! Module structure:
 //! - core/           Core PTY implementation
@@ -87,6 +87,10 @@ export fn bun_pty_kill(handle: c_int) c_int {
 
 export fn bun_pty_get_pid(handle: c_int) c_int {
     return exports.bun_pty_get_pid(handle);
+}
+
+export fn bun_pty_dup_wakeup_fd(handle: c_int) c_int {
+    return exports.bun_pty_dup_wakeup_fd(handle);
 }
 
 export fn bun_pty_get_exit_code(handle: c_int) c_int {

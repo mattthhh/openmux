@@ -1,6 +1,7 @@
 //! PTY Handle with Background Reader
 
 const std = @import("std");
+const builtin = @import("builtin");
 const RingBuffer = @import("ring_buffer.zig").RingBuffer;
 const posix = @import("../util/posix.zig");
 const c = posix.c;
@@ -9,12 +10,16 @@ const winsize = @import("../util/winsize.zig");
 
 pub const Pty = struct {
     master_fd: c_int,
+    wake_read_fd: c_int,
+    wake_write_fd: c_int,
+    proc_exit_fd: c_int,
     pid: c_int,
     cols: u16,
     rows: u16,
     pixel_width: u16,
     pixel_height: u16,
     exited: std.atomic.Value(bool),
+    exit_detected: std.atomic.Value(bool),
     exit_code: std.atomic.Value(c_int),
     stopping: std.atomic.Value(bool),
     ring: RingBuffer,
@@ -27,15 +32,22 @@ pub const Pty = struct {
         rows: u16,
         pixel_width: u16,
         pixel_height: u16,
+        wake_read_fd: c_int,
+        wake_write_fd: c_int,
+        proc_exit_fd: c_int,
     ) Pty {
         return .{
             .master_fd = master_fd,
+            .wake_read_fd = wake_read_fd,
+            .wake_write_fd = wake_write_fd,
+            .proc_exit_fd = proc_exit_fd,
             .pid = pid,
             .cols = cols,
             .rows = rows,
             .pixel_width = pixel_width,
             .pixel_height = pixel_height,
             .exited = std.atomic.Value(bool).init(false),
+            .exit_detected = std.atomic.Value(bool).init(false),
             .exit_code = std.atomic.Value(c_int).init(-1),
             .stopping = std.atomic.Value(bool).init(false),
             .ring = RingBuffer.init(),
@@ -48,68 +60,186 @@ pub const Pty = struct {
         return true;
     }
 
+    fn signalWakeup(self: *Pty) void {
+        if (self.wake_write_fd < 0) return;
+
+        var byte: [1]u8 = .{1};
+        while (true) {
+            const n = c.write(self.wake_write_fd, &byte, byte.len);
+            if (n == 1) return;
+            if (n == -1) {
+                const err = std.c._errno().*;
+                if (err == c.EINTR) continue;
+                if (err == c.EAGAIN or err == c.EWOULDBLOCK or err == c.EPIPE) return;
+            }
+            return;
+        }
+    }
+
+    fn hasProcExitWatcher(self: *Pty) bool {
+        return self.proc_exit_fd >= 0;
+    }
+
+    fn markExitDetected(self: *Pty) void {
+        if (self.exit_detected.load(.acquire)) return;
+        self.exit_detected.store(true, .release);
+        self.signalWakeup();
+    }
+
+    fn checkExitEventNonBlocking(self: *Pty) void {
+        if (!self.hasProcExitWatcher()) return;
+        if (self.exit_detected.load(.acquire)) return;
+
+        if (builtin.os.tag == .macos) {
+            var event: c.struct_kevent = undefined;
+            var timeout = c.timespec{ .tv_sec = 0, .tv_nsec = 0 };
+            const n = c.kevent(self.proc_exit_fd, null, 0, &event, 1, &timeout);
+            if (n == 1 and event.filter == c.EVFILT_PROC and (event.fflags & c.NOTE_EXIT) != 0) {
+                self.markExitDetected();
+            }
+            return;
+        }
+
+        if (builtin.os.tag == .linux) {
+            var pfd = [_]c.pollfd{.{
+                .fd = self.proc_exit_fd,
+                .events = c.POLLIN,
+                .revents = 0,
+            }};
+            const ready = c.poll(&pfd, 1, 0);
+            if (ready > 0 and (pfd[0].revents & (c.POLLIN | c.POLLHUP | c.POLLERR | c.POLLNVAL)) != 0) {
+                self.markExitDetected();
+            }
+        }
+    }
+
     fn readerLoop(self: *Pty) void {
         var buf: [32768]u8 = undefined; // 32KB read buffer
 
         while (!self.stopping.load(.acquire)) {
-            // Use poll to wait for data with timeout (allows checking stopping flag)
             var pfd = [_]c.pollfd{.{
                 .fd = self.master_fd,
                 .events = c.POLLIN,
                 .revents = 0,
             }};
 
-            const poll_result = c.poll(&pfd, 1, 100); // 100ms timeout
+            const poll_result = c.poll(&pfd, 1, 100);
+            self.checkExitEventNonBlocking();
 
             if (poll_result < 0) {
                 const err = std.c._errno().*;
                 if (err == c.EINTR) continue;
-                break; // Error
+                break;
             }
 
             if (poll_result == 0) {
-                // Timeout - check if child exited
+                if (self.hasProcExitWatcher()) {
+                    if (self.exit_detected.load(.acquire)) break;
+                    continue;
+                }
+
                 self.checkChild();
-                if (self.exited.load(.acquire)) break;
+                if (self.exited.load(.acquire)) {
+                    self.signalWakeup();
+                    break;
+                }
                 continue;
             }
 
-            // Data available - read it (blocking read, will get all available)
+            const master_revents = pfd[0].revents;
+            const master_has_hangup = (master_revents & (c.POLLHUP | c.POLLERR | c.POLLNVAL)) != 0;
+
+            if ((master_revents & c.POLLIN) == 0) {
+                if (self.hasProcExitWatcher()) {
+                    if (self.exit_detected.load(.acquire) and master_has_hangup) break;
+                    if (master_has_hangup) {
+                        std.Thread.sleep(1 * std.time.ns_per_ms);
+                    }
+                    continue;
+                }
+
+                if (master_has_hangup) {
+                    self.checkChild();
+                    if (self.exited.load(.acquire)) {
+                        self.signalWakeup();
+                        break;
+                    }
+                }
+                continue;
+            }
+
             const n = c.read(self.master_fd, &buf, buf.len);
 
             if (n > 0) {
-                // Write to ring buffer
                 var written: usize = 0;
                 while (written < @as(usize, @intCast(n))) {
                     const w = self.ring.write(buf[written..@intCast(n)]);
                     if (w == 0) {
-                        // Buffer full - wait for consumer to signal space available
                         self.ring.mutex.lock();
                         while (self.ring.availableSpace() == 0 and !self.stopping.load(.acquire)) {
-                            // Wait with timeout so we can check stopping flag
                             self.ring.not_full.timedWait(&self.ring.mutex, 100 * std.time.ns_per_ms) catch {};
                         }
                         self.ring.mutex.unlock();
                         if (self.stopping.load(.acquire)) break;
                     } else {
                         written += w;
+                        self.signalWakeup();
                     }
                 }
-            } else if (n == 0) {
-                // EOF
+                continue;
+            }
+
+            if (n == 0) {
+                if (self.hasProcExitWatcher()) {
+                    if (self.exit_detected.load(.acquire)) {
+                        self.signalWakeup();
+                        break;
+                    }
+                    std.Thread.sleep(1 * std.time.ns_per_ms);
+                    continue;
+                }
+
                 self.checkChild();
-                break;
-            } else {
-                // Error
-                const err = std.c._errno().*;
-                if (err == c.EINTR) continue;
-                if (err == c.EAGAIN or err == c.EWOULDBLOCK) continue;
+                if (self.exited.load(.acquire)) {
+                    self.signalWakeup();
+                }
                 break;
             }
+
+            const err = std.c._errno().*;
+            if (err == c.EINTR) continue;
+            if (err == c.EAGAIN or err == c.EWOULDBLOCK) {
+                self.checkExitEventNonBlocking();
+                if (self.hasProcExitWatcher()) {
+                    if (self.exit_detected.load(.acquire) and master_has_hangup) {
+                        self.signalWakeup();
+                        break;
+                    }
+                    continue;
+                }
+
+                self.checkChild();
+                if (self.exited.load(.acquire)) {
+                    self.signalWakeup();
+                    break;
+                }
+                continue;
+            }
+            break;
         }
 
-        // Final child check
+        self.checkExitEventNonBlocking();
+        if (self.hasProcExitWatcher()) {
+            if (self.exit_detected.load(.acquire)) {
+                self.signalWakeup();
+            }
+            return;
+        }
+
         self.checkChild();
+        if (self.exited.load(.acquire)) {
+            self.signalWakeup();
+        }
     }
 
     pub fn checkChild(self: *Pty) void {
@@ -125,27 +255,40 @@ pub const Pty = struct {
                 self.exit_code.store(128 + c.WTERMSIG(status), .release);
             }
             self.exited.store(true, .release);
+            self.exit_detected.store(true, .release);
         } else if (result == -1) {
             self.exit_code.store(-1, .release);
             self.exited.store(true, .release);
+            self.exit_detected.store(true, .release);
         }
     }
 
+    pub fn duplicateWakeReadFd(self: *Pty) c_int {
+        if (self.wake_read_fd < 0) return constants.ERROR;
+
+        const dup_fd = c.dup(self.wake_read_fd);
+        if (dup_fd < 0) {
+            return constants.ERROR;
+        }
+
+        _ = c.fcntl(dup_fd, c.F_SETFD, c.FD_CLOEXEC);
+        return dup_fd;
+    }
+
     pub fn readAvailable(self: *Pty, buf: [*]u8, len: usize) c_int {
-        // Read from ring buffer (filled by background thread)
         const n = self.ring.read(buf[0..len]);
 
         if (n > 0) {
-            // Signal producer that space is available
             self.ring.not_full.signal();
             return @intCast(n);
         }
 
         if (self.ring.available() == 0) {
-            // Ensure we observe child exit even if the reader thread is stalled.
-            self.checkChild();
-            if (self.exited.load(.acquire)) {
-                return constants.CHILD_EXITED;
+            if (self.exit_detected.load(.acquire) or !self.hasProcExitWatcher()) {
+                self.checkChild();
+                if (self.exited.load(.acquire)) {
+                    return constants.CHILD_EXITED;
+                }
             }
         }
 
@@ -165,9 +308,8 @@ pub const Pty = struct {
             } else if (n == -1) {
                 const err = std.c._errno().*;
                 if (err == c.EINTR) continue;
-                // Handle buffer full - sleep briefly and retry
                 if (err == c.EAGAIN or err == c.EWOULDBLOCK) {
-                    std.Thread.sleep(1 * std.time.ns_per_ms); // 1ms
+                    std.Thread.sleep(1 * std.time.ns_per_ms);
                     continue;
                 }
                 return constants.ERROR;
@@ -221,12 +363,9 @@ pub const Pty = struct {
     }
 
     pub fn deinit(self: *Pty) void {
-        // Signal thread to stop
         self.stopping.store(true, .release);
-        // Wake up producer if waiting on condition
         self.ring.not_full.signal();
 
-        // Join the reader thread to avoid use-after-free if the handle slot is reused.
         if (self.reader_thread) |thread| {
             thread.join();
             self.reader_thread = null;
@@ -237,12 +376,24 @@ pub const Pty = struct {
             self.master_fd = -1;
         }
 
-        // Try non-blocking reap first (WNOHANG)
-        // If process hasn't exited yet, spawn a reaper thread to prevent zombies
+        if (self.proc_exit_fd >= 0) {
+            _ = c.close(self.proc_exit_fd);
+            self.proc_exit_fd = -1;
+        }
+
+        if (self.wake_write_fd >= 0) {
+            _ = c.close(self.wake_write_fd);
+            self.wake_write_fd = -1;
+        }
+
+        if (self.wake_read_fd >= 0) {
+            _ = c.close(self.wake_read_fd);
+            self.wake_read_fd = -1;
+        }
+
         if (self.pid > 0 and !self.exited.load(.acquire)) {
             const result = c.waitpid(self.pid, null, c.WNOHANG);
             if (result == 0) {
-                // Process still running - spawn detached reaper thread
                 const pid = self.pid;
                 const reaper = std.Thread.spawn(.{}, reapZombie, .{pid}) catch null;
                 if (reaper) |t| t.detach();
@@ -251,9 +402,6 @@ pub const Pty = struct {
     }
 };
 
-/// Reaper thread function - waits for zombie process in background
 fn reapZombie(pid: c.pid_t) void {
-    // Wait for process to exit (blocking, but in separate detached thread)
     _ = c.waitpid(pid, null, 0);
-    // Thread exits automatically after reaping
 }

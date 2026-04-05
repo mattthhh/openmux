@@ -10,13 +10,16 @@ pub const c = @cImport({
     @cInclude("string.h");
     @cInclude("signal.h");
     @cInclude("poll.h");
+    @cInclude("sys/syscall.h");
     @cInclude("sys/wait.h");
     @cInclude("sys/ioctl.h");
+    @cInclude("sys/socket.h");
     if (builtin.os.tag == .macos) {
         @cInclude("util.h");
         @cInclude("crt_externs.h");
         @cInclude("libproc.h"); // For proc_pidinfo, proc_listpids
         @cInclude("sys/sysctl.h"); // For KERN_PROCARGS2 (argv[0] detection)
+        @cInclude("sys/event.h");
         @cInclude("notify.h");
     } else {
         @cInclude("pty.h");
