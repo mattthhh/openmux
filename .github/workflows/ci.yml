@@ -79,6 +79,9 @@ jobs:
       - name: Run TypeScript tests with coverage
         run: bun run test:ts --coverage
 
+      - name: Run Zig PTY tests (Linux)
+        run: cd native/zig-pty && zig build test --summary all
+
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
         with:
