@@ -23,6 +23,8 @@ export interface TerminalCapabilities {
   kittyGraphics: boolean;
   /** Whether true color is supported */
   trueColor: boolean;
+  /** Whether terminal supports OSC 997 color scheme events (Kitty, Ghostty, iTerm2) */
+  colorSchemeEvents: boolean;
   /** Queried terminal colors (foreground, background, palette) */
   colors: TerminalColors | null;
 }
@@ -45,6 +47,7 @@ export async function detectHostCapabilities(): Promise<TerminalCapabilities> {
     xtversionResponse: null,
     kittyGraphics: false,
     trueColor: false,
+    colorSchemeEvents: false,
     colors: null,
   };
 
@@ -53,22 +56,29 @@ export async function detectHostCapabilities(): Promise<TerminalCapabilities> {
   const termProgram = process.env.TERM_PROGRAM || '';
   const colorterm = process.env.COLORTERM || '';
 
-  // Detect terminal from environment
+  // Detect terminal from environment and check for OSC 997 support
   if (termProgram.toLowerCase().includes('ghostty')) {
     capabilities.terminalName = 'ghostty';
     capabilities.kittyGraphics = true; // Ghostty supports Kitty graphics
     capabilities.trueColor = true;
+    capabilities.colorSchemeEvents = true; // Ghostty supports OSC 997
   } else if (termProgram.toLowerCase().includes('kitty')) {
     capabilities.terminalName = 'kitty';
     capabilities.kittyGraphics = true;
     capabilities.trueColor = true;
+    capabilities.colorSchemeEvents = true; // Kitty invented OSC 997
   } else if (termProgram.toLowerCase() === 'iterm.app') {
     capabilities.terminalName = 'iterm2';
     capabilities.trueColor = true;
+    // iTerm2 added OSC 997 support in version 3.5.0
+    const itermVersion = process.env.TERM_PROGRAM_VERSION;
+    capabilities.colorSchemeEvents = itermVersion ? parseFloat(itermVersion) >= 3.5 : false;
   } else if (termProgram.toLowerCase().includes('wezterm')) {
     capabilities.terminalName = 'wezterm';
     capabilities.kittyGraphics = true;
     capabilities.trueColor = true;
+    // WezTerm supports OSC 997
+    capabilities.colorSchemeEvents = true;
   } else if (term.includes('256color') || term.includes('truecolor')) {
     capabilities.trueColor = true;
   }
@@ -83,6 +93,7 @@ export async function detectHostCapabilities(): Promise<TerminalCapabilities> {
     capabilities.terminalName = 'kitty';
     capabilities.kittyGraphics = true;
     capabilities.trueColor = true;
+    capabilities.colorSchemeEvents = true;
   }
 
   // TODO: For more accurate detection, we could:
