@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.61](https://github.com/monotykamary/openmux/compare/v0.3.60...v0.3.61) (2026-04-05)
+
+
+### Refactoring
+
+* **cli:** adopt errore patterns for consistent error handling ([2d6d82a](https://github.com/monotykamary/openmux/commit/2d6d82a068825017e4bc3c880817cd6f6609cf0c))
+
 ### [0.3.60](https://github.com/monotykamary/openmux/compare/v0.3.59...v0.3.60) (2026-04-05)
 
 
