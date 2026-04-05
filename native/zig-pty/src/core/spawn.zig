@@ -44,7 +44,7 @@ fn createProcessExitEventFd(pid: c_int) c_int {
 
     if (builtin.os.tag == .linux) {
         if (!@hasDecl(c, "SYS_pidfd_open")) return -1;
-        const fd_long = c.syscall(c.SYS_pidfd_open, pid, 0);
+        const fd_long = c.syscall(c.SYS_pidfd_open, pid, @as(c_uint, 0));
         if (fd_long < 0) return -1;
         const fd: c_int = @intCast(fd_long);
         setCloseOnExec(fd);
