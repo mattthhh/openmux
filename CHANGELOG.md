@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.60](https://github.com/monotykamary/openmux/compare/v0.3.59...v0.3.60) (2026-04-05)
+
+
+### Refactoring
+
+* **aggregate:** delegate subscription wrapper exports ([a2ff117](https://github.com/monotykamary/openmux/commit/a2ff1171228c93437b05ea95627429ae839d3e47))
+* **aggregate:** flatten modules and split subscriptions ([6b44d26](https://github.com/monotykamary/openmux/commit/6b44d26d2bd59ffb5440a7178462078e511d81f9))
+* **keyboard:** extract mode transition helpers ([9733580](https://github.com/monotykamary/openmux/commit/9733580293b726e2acdcb97d8505507181298294))
+* split boolean param functions in capture.ts ([dd13de2](https://github.com/monotykamary/openmux/commit/dd13de282e47b997d5e15b095390715bf877868e))
+* split boolean param functions into explicit variants ([4c6a3f5](https://github.com/monotykamary/openmux/commit/4c6a3f5f1b9394975c28fef9a2f345fd3c360e7a))
+* technical debt cleanup - types, dead code, patterns ([de7eb55](https://github.com/monotykamary/openmux/commit/de7eb55244a5f618a8d51ebfc5274f8f678f6eff))
+
 ### [0.3.59](https://github.com/monotykamary/openmux/compare/v0.3.58...v0.3.59) (2026-04-04)
 
 
