@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.66](https://github.com/monotykamary/openmux/compare/v0.3.65...v0.3.66) (2026-04-05)
+
+
+### Features
+
+* **host-color-sync:** add event-driven color scheme detection for OSC 997 terminals ([89bb780](https://github.com/monotykamary/openmux/commit/89bb780101a1903f51400384895693a45508e33b))
+
 ### [0.3.65](https://github.com/monotykamary/openmux/compare/v0.3.64...v0.3.65) (2026-04-05)
 
 
