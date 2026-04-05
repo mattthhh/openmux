@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.63](https://github.com/monotykamary/openmux/compare/v0.3.62...v0.3.63) (2026-04-05)
+
+
+### Bug Fixes
+
+* **aggregate:** remove extra space in PlaceholderRow when treePrefix is empty ([d6136d6](https://github.com/monotykamary/openmux/commit/d6136d6df84169352cf4355cb4f2ae8759986793))
+
 ### [0.3.62](https://github.com/monotykamary/openmux/compare/v0.3.61...v0.3.62) (2026-04-05)
 
 
