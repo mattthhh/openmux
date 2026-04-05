@@ -13,7 +13,6 @@ pub const c = @cImport({
     @cInclude("sys/syscall.h");
     @cInclude("sys/wait.h");
     @cInclude("sys/ioctl.h");
-    @cInclude("sys/socket.h");
     if (builtin.os.tag == .macos) {
         @cInclude("util.h");
         @cInclude("crt_externs.h");

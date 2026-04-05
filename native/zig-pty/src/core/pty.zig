@@ -25,6 +25,36 @@ pub const Pty = struct {
     ring: RingBuffer,
     reader_thread: ?std.Thread,
 
+    pub fn initInPlace(
+        self: *Pty,
+        master_fd: c_int,
+        pid: c_int,
+        cols: u16,
+        rows: u16,
+        pixel_width: u16,
+        pixel_height: u16,
+        wake_read_fd: c_int,
+        wake_write_fd: c_int,
+        proc_exit_fd: c_int,
+    ) void {
+        self.* = std.mem.zeroes(Pty);
+        self.master_fd = master_fd;
+        self.wake_read_fd = wake_read_fd;
+        self.wake_write_fd = wake_write_fd;
+        self.proc_exit_fd = proc_exit_fd;
+        self.pid = pid;
+        self.cols = cols;
+        self.rows = rows;
+        self.pixel_width = pixel_width;
+        self.pixel_height = pixel_height;
+        self.exited = std.atomic.Value(bool).init(false);
+        self.exit_detected = std.atomic.Value(bool).init(false);
+        self.exit_code = std.atomic.Value(c_int).init(-1);
+        self.stopping = std.atomic.Value(bool).init(false);
+        self.ring.initInPlace();
+        self.reader_thread = null;
+    }
+
     pub fn init(
         master_fd: c_int,
         pid: c_int,
@@ -36,23 +66,19 @@ pub const Pty = struct {
         wake_write_fd: c_int,
         proc_exit_fd: c_int,
     ) Pty {
-        return .{
-            .master_fd = master_fd,
-            .wake_read_fd = wake_read_fd,
-            .wake_write_fd = wake_write_fd,
-            .proc_exit_fd = proc_exit_fd,
-            .pid = pid,
-            .cols = cols,
-            .rows = rows,
-            .pixel_width = pixel_width,
-            .pixel_height = pixel_height,
-            .exited = std.atomic.Value(bool).init(false),
-            .exit_detected = std.atomic.Value(bool).init(false),
-            .exit_code = std.atomic.Value(c_int).init(-1),
-            .stopping = std.atomic.Value(bool).init(false),
-            .ring = RingBuffer.init(),
-            .reader_thread = null,
-        };
+        var pty: Pty = undefined;
+        pty.initInPlace(
+            master_fd,
+            pid,
+            cols,
+            rows,
+            pixel_width,
+            pixel_height,
+            wake_read_fd,
+            wake_write_fd,
+            proc_exit_fd,
+        );
+        return pty;
     }
 
     pub fn startReader(self: *Pty) bool {

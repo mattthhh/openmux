@@ -75,7 +75,7 @@ pub fn spawnPty(
         return constants.ERROR;
     }
 
-    if (c.socketpair(c.AF_UNIX, c.SOCK_STREAM, 0, &wake_fds) == -1) {
+    if (c.pipe(&wake_fds[0]) == -1) {
         _ = c.close(master_fd);
         _ = c.close(slave_fd);
         return constants.ERROR;
@@ -215,7 +215,18 @@ pub fn spawnPty(
         return constants.ERROR;
     };
 
-    const pty = Pty.init(
+    const p = handle_registry.createHandle(h) orelse {
+        _ = c.close(master_fd);
+        _ = c.close(wake_fds[0]);
+        _ = c.close(wake_fds[1]);
+        if (proc_exit_fd >= 0) {
+            _ = c.close(proc_exit_fd);
+        }
+        _ = c.kill(pid, c.SIGKILL);
+        _ = c.waitpid(pid, null, 0);
+        return constants.ERROR;
+    };
+    p.initInPlace(
         master_fd,
         pid,
         cols,
@@ -226,16 +237,15 @@ pub fn spawnPty(
         wake_fds[1],
         proc_exit_fd,
     );
-    handle_registry.setHandle(h, pty);
 
     // Start the background reader thread
-    const p = handle_registry.acquireHandle(h) orelse {
+    const acquired = handle_registry.acquireHandle(h) orelse {
         handle_registry.removeHandle(h);
         _ = c.kill(pid, c.SIGKILL);
         _ = c.waitpid(pid, null, 0);
         return constants.ERROR;
     };
-    const started = p.startReader();
+    const started = acquired.startReader();
     handle_registry.releaseHandle(h);
     if (!started) {
         // Thread spawn failed - clean up

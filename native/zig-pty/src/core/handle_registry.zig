@@ -4,7 +4,11 @@ const std = @import("std");
 const Pty = @import("pty.zig").Pty;
 const constants = @import("../util/constants.zig");
 
-var handles: [constants.MAX_HANDLES]?Pty = [_]?Pty{null} ** constants.MAX_HANDLES;
+const allocator = std.heap.c_allocator;
+
+// Store heap-allocated PTY objects to avoid copying large structs with mutex /
+// condition-variable state through the registry on spawn.
+var handles: [constants.MAX_HANDLES]?*Pty = [_]?*Pty{null} ** constants.MAX_HANDLES;
 var next_handle: u32 = 1;
 var registry_mutex: std.Thread.Mutex = .{};
 var handle_ref_counts: [constants.MAX_HANDLES]std.atomic.Value(u32) = [_]std.atomic.Value(u32){std.atomic.Value(u32).init(0)} ** constants.MAX_HANDLES;
@@ -34,7 +38,7 @@ pub fn acquireHandle(h: u32) ?*Pty {
 
     if (handle_closing[h].load(.acquire)) return null;
 
-    if (handles[h]) |*pty| {
+    if (handles[h]) |pty| {
         _ = handle_ref_counts[h].fetchAdd(1, .acq_rel);
         return pty;
     }
@@ -46,12 +50,23 @@ pub fn releaseHandle(h: u32) void {
     _ = handle_ref_counts[h].fetchSub(1, .acq_rel);
 }
 
-pub fn setHandle(h: u32, pty: Pty) void {
+pub fn createHandle(h: u32) ?*Pty {
+    if (h == 0 or h >= constants.MAX_HANDLES) return null;
+
+    const pty = allocator.create(Pty) catch return null;
+
     registry_mutex.lock();
     defer registry_mutex.unlock();
+
+    if (handles[h] != null) {
+        allocator.destroy(pty);
+        return null;
+    }
+
     handles[h] = pty;
     handle_ref_counts[h].store(0, .release);
     handle_closing[h].store(false, .release);
+    return pty;
 }
 
 pub fn removeHandle(h: u32) void {
@@ -74,7 +89,7 @@ pub fn removeHandle(h: u32) void {
     // Deinitialize outside the registry lock to avoid blocking other handles.
     var pty_ptr: *Pty = undefined;
     registry_mutex.lock();
-    if (handles[h]) |*pty| {
+    if (handles[h]) |pty| {
         pty_ptr = pty;
     } else {
         handle_closing[h].store(false, .release);
@@ -84,6 +99,7 @@ pub fn removeHandle(h: u32) void {
     registry_mutex.unlock();
 
     pty_ptr.deinit();
+    allocator.destroy(pty_ptr);
 
     registry_mutex.lock();
     handles[h] = null;

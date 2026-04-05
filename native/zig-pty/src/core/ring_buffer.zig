@@ -13,14 +13,18 @@ pub const RingBuffer = struct {
     mutex: std.Thread.Mutex,
     not_full: std.Thread.Condition,
 
+    pub fn initInPlace(self: *RingBuffer) void {
+        self.* = std.mem.zeroes(RingBuffer);
+        self.write_pos = std.atomic.Value(usize).init(0);
+        self.read_pos = std.atomic.Value(usize).init(0);
+        self.mutex = .{};
+        self.not_full = .{};
+    }
+
     pub fn init() RingBuffer {
-        return .{
-            .data = undefined,
-            .write_pos = std.atomic.Value(usize).init(0),
-            .read_pos = std.atomic.Value(usize).init(0),
-            .mutex = .{},
-            .not_full = .{},
-        };
+        var ring: RingBuffer = undefined;
+        ring.initInPlace();
+        return ring;
     }
 
     pub fn availableSpace(self: *RingBuffer) usize {
