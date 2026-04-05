@@ -12,27 +12,50 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           submodules: recursive
 
       - name: Setup Zig
-        uses: mlugg/setup-zig@v2
-        with:
-          version: 0.15.2
+        shell: bash
+        env:
+          ZIG_VERSION: 0.15.2
+        run: |
+          set -euxo pipefail
+          case "$(uname -s)-$(uname -m)" in
+            Linux-x86_64) zig_target=x86_64-linux ;;
+            Linux-aarch64|Linux-arm64) zig_target=aarch64-linux ;;
+            Darwin-arm64) zig_target=aarch64-macos ;;
+            Darwin-x86_64) zig_target=x86_64-macos ;;
+            *)
+              echo "Unsupported runner: $(uname -s)-$(uname -m)" >&2
+              exit 1
+              ;;
+          esac
+
+          archive="zig-${zig_target}-${ZIG_VERSION}.tar.xz"
+          url="https://ziglang.org/download/${ZIG_VERSION}/${archive}"
+          install_dir="$RUNNER_TEMP/zig-${ZIG_VERSION}"
+
+          rm -rf "$install_dir"
+          mkdir -p "$install_dir"
+          curl -L --fail --silent --show-error "$url" -o "$RUNNER_TEMP/$archive"
+          tar -xJf "$RUNNER_TEMP/$archive" -C "$install_dir" --strip-components=1
+          echo "$install_dir" >> "$GITHUB_PATH"
+          "$install_dir/zig" version
 
       - name: Get libgit2 revision
         id: libgit2
         run: echo "rev=$(git -C vendor/libgit2 rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Cache libgit2 build
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: native/zig-git/zig-out/libgit2
           key: libgit2-${{ runner.os }}-${{ runner.arch }}-${{ steps.libgit2.outputs.rev }}-${{ hashFiles('native/zig-git/build.zig') }}
 
       - name: Cache native libraries
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             native/zig-pty/zig-out/lib
@@ -83,7 +106,7 @@ jobs:
         run: cd native/zig-pty && zig build test --summary all
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v6
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./coverage/coverage-final.json
@@ -95,21 +118,44 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           submodules: recursive
 
       - name: Setup Zig
-        uses: mlugg/setup-zig@v2
-        with:
-          version: 0.15.2
+        shell: bash
+        env:
+          ZIG_VERSION: 0.15.2
+        run: |
+          set -euxo pipefail
+          case "$(uname -s)-$(uname -m)" in
+            Linux-x86_64) zig_target=x86_64-linux ;;
+            Linux-aarch64|Linux-arm64) zig_target=aarch64-linux ;;
+            Darwin-arm64) zig_target=aarch64-macos ;;
+            Darwin-x86_64) zig_target=x86_64-macos ;;
+            *)
+              echo "Unsupported runner: $(uname -s)-$(uname -m)" >&2
+              exit 1
+              ;;
+          esac
+
+          archive="zig-${zig_target}-${ZIG_VERSION}.tar.xz"
+          url="https://ziglang.org/download/${ZIG_VERSION}/${archive}"
+          install_dir="$RUNNER_TEMP/zig-${ZIG_VERSION}"
+
+          rm -rf "$install_dir"
+          mkdir -p "$install_dir"
+          curl -L --fail --silent --show-error "$url" -o "$RUNNER_TEMP/$archive"
+          tar -xJf "$RUNNER_TEMP/$archive" -C "$install_dir" --strip-components=1
+          echo "$install_dir" >> "$GITHUB_PATH"
+          "$install_dir/zig" version
 
       - name: Get libgit2 revision
         id: libgit2
         run: echo "rev=$(git -C vendor/libgit2 rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Cache libgit2 build
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: native/zig-git/zig-out/libgit2
           key: libgit2-${{ runner.os }}-${{ runner.arch }}-${{ steps.libgit2.outputs.rev }}-${{ hashFiles('native/zig-git/build.zig') }}
