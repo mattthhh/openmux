@@ -242,16 +242,24 @@ export function PtyTreeRow(props: PtyTreeRowProps) {
   const shimmerStateVersion = useShimmerStateVersion();
   const [isAnimating, setIsAnimating] = createSignal(hasActiveShimmer(props.pty.ptyId));
 
+  // Disable shimmer when this PTY is selected (being previewed)
+  const shimmerDisabled = () => props.isSelected;
+
   createEffect(() => {
     void shimmerStateVersion();
-    if (isAnimating()) return;
+    if (isAnimating() || shimmerDisabled()) return;
     setIsAnimating(hasActiveShimmer(props.pty.ptyId));
   });
 
-  // Effect 2: detect when shimmer ENDS (animation timeout)
+  // Effect 2: detect when shimmer ENDS (animation timeout) OR when selection disables it
   createEffect(() => {
     void shimmerStateVersion(); // Track shimmer state changes to detect end
     if (!isAnimating()) return;
+    // Disable shimmer immediately when selected
+    if (shimmerDisabled()) {
+      setIsAnimating(false);
+      return;
+    }
     const now = Date.now();
     if (hasActiveShimmer(props.pty.ptyId, now)) return;
     setIsAnimating(false);
