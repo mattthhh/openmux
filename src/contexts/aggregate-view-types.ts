@@ -12,19 +12,24 @@ export interface GitDiffStats {
   binary: number;
 }
 
-/**
- * PTY info for the aggregate view.
- *
- * Represents a terminal session (PTY) with its associated metadata including
- * git status, current working directory, process information, and session
- * membership details. Used for displaying and navigating PTYs across all
- * workspaces in the aggregate view overlay.
- */
-export interface PtyInfo {
+/** Core PTY identity and ownership data. */
+export interface PtyCoreInfo {
   ptyId: string;
-  /** Temporary aggregate-list sort key used before a paneId is fully anchored. */
-  sortOrderHint?: number;
   cwd: string;
+  foregroundProcess: string | undefined;
+  shell: string | undefined;
+  /** Workspace ID where this PTY is located (if found in current session) */
+  workspaceId: number | undefined;
+  /** Pane ID where this PTY is located (if found in current session) */
+  paneId: string | undefined;
+  /** Session ID where this PTY belongs (for tree structure) */
+  sessionId: string;
+  /** Session metadata reference */
+  sessionMetadata: SessionMetadata | undefined;
+}
+
+/** Git metadata tracked for aggregate PTY rows. */
+export interface PtyGitMetadata {
   gitBranch: string | undefined;
   gitDiffStats: GitDiffStats | undefined;
   gitDirty: boolean;
@@ -38,42 +43,56 @@ export interface PtyInfo {
   gitState: GitInfo['state'] | undefined;
   gitDetached: boolean;
   gitRepoKey: string | undefined;
-  foregroundProcess: string | undefined;
-  shell: string | undefined;
+}
+
+/** Display-only PTY metadata used by the aggregate list. */
+export interface PtyDisplayMetadata {
+  /** Temporary aggregate-list sort key used before a paneId is fully anchored. */
+  sortOrderHint?: number;
   /** Terminal title (set via escape sequences), distinct from foregroundProcess */
   title: string | undefined;
-  /** Workspace ID where this PTY is located (if found in current session) */
-  workspaceId: number | undefined;
-  /** Pane ID where this PTY is located (if found in current session) */
-  paneId: string | undefined;
-  /** Session ID where this PTY belongs (for tree structure) */
-  sessionId: string;
-  /** Session metadata reference */
-  sessionMetadata: SessionMetadata | undefined;
+}
+
+/**
+ * PTY info for the aggregate view.
+ *
+ * Represents a terminal session (PTY) with its associated metadata including
+ * git status, current working directory, process information, and session
+ * membership details. Used for displaying and navigating PTYs across all
+ * workspaces in the aggregate view overlay.
+ */
+export interface PtyInfo extends PtyCoreInfo, PtyGitMetadata, PtyDisplayMetadata {}
+
+/** Shared session load metadata across all load states. */
+export interface SessionLoadMetadata {
+  lastActiveWorkspaceId?: number;
+  focusedPaneId?: string;
+  paneCount?: number;
+}
+
+export interface UnloadedSessionLoadState extends SessionLoadMetadata {
+  status: 'unloaded';
+}
+
+export interface LoadingSessionLoadState extends SessionLoadMetadata {
+  status: 'loading';
+}
+
+export interface LoadedSessionLoadState extends SessionLoadMetadata {
+  status: 'loaded';
+}
+
+export interface ErrorSessionLoadState extends SessionLoadMetadata {
+  status: 'error';
+  error: string;
 }
 
 /** Loading state for a session */
 export type SessionLoadState =
-  | {
-      status: 'unloaded';
-      lastActiveWorkspaceId?: number;
-      focusedPaneId?: string;
-      paneCount?: number;
-    }
-  | {
-      status: 'loading';
-      lastActiveWorkspaceId?: number;
-      focusedPaneId?: string;
-      paneCount?: number;
-    }
-  | { status: 'loaded'; lastActiveWorkspaceId?: number; focusedPaneId?: string; paneCount?: number }
-  | {
-      status: 'error';
-      error: string;
-      lastActiveWorkspaceId?: number;
-      focusedPaneId?: string;
-      paneCount?: number;
-    };
+  | UnloadedSessionLoadState
+  | LoadingSessionLoadState
+  | LoadedSessionLoadState
+  | ErrorSessionLoadState;
 
 /** Session node in the tree */
 export interface SessionTreeNode {
@@ -181,10 +200,23 @@ export interface PendingPaneCreation {
   sortOrderHint?: number;
 }
 
-/** Aggregate view state with tree structure support */
-export interface AggregateViewState {
+/** Flattened session pane ordering keyed by sessionId + paneId. */
+export type SessionPaneOrderIndex = Map<string, number>;
+
+/** Overlay visibility and high-level UI mode state. */
+export interface AggregateViewUiSlice {
   /** Whether the aggregate view overlay is shown */
   showAggregateView: boolean;
+  /** Whether in interactive preview mode (vs list mode) */
+  previewMode: boolean;
+  /** Whether preview is zoomed to hide the session list pane */
+  previewZoomed: boolean;
+  /** Scroll offset for the session/PTY list (0 = top) */
+  listScrollOffset: number;
+}
+
+/** Filterable PTY collection state. */
+export interface AggregateViewFilterSlice {
   /** Current filter query text */
   filterQuery: string;
   /** Whether to include inactive PTYs in the list/search */
@@ -193,20 +225,24 @@ export interface AggregateViewState {
   allPtys: PtyInfo[];
   /** PTYs matching the current filter (flat array for backward compat) */
   matchedPtys: PtyInfo[];
+  /** Map from ptyId to index in allPtys for O(1) lookup */
+  allPtysIndex: Map<string, number>;
+  /** @deprecated Legacy matched array index retained while callers migrate to direct lookups. */
+  matchedPtysIndex: Map<string, number>;
+}
+
+/** Selection and cursor state for the flattened tree. */
+export interface AggregateViewSelectionSlice {
   /** Index of selected item in the flattened tree */
   selectedIndex: number;
   /** PTY ID currently selected for viewing */
   selectedPtyId: string | null;
-  /** Whether a query is in progress */
-  isLoading: boolean;
-  /** Whether in interactive preview mode (vs list mode) */
-  previewMode: boolean;
-  /** Whether preview is zoomed to hide the session list pane */
-  previewZoomed: boolean;
-  /** Map from ptyId to index in allPtys for O(1) lookup */
-  allPtysIndex: Map<string, number>;
-  /** Map from ptyId to index in matchedPtys for O(1) lookup */
-  matchedPtysIndex: Map<string, number>;
+  /** Currently selected session ID (for operations on sessions) */
+  selectedSessionId: string | null;
+}
+
+/** Tree structure and session ordering state. */
+export interface AggregateViewTreeSlice {
   /** Hierarchical tree structure: sessions with their PTYs */
   treeRoot: TreeNode[];
   /** Flattened tree for visual navigation (respects filtering) */
@@ -215,20 +251,25 @@ export interface AggregateViewState {
   flattenedTreeIndex: Map<string, number>;
   /** Expanded session IDs (collapsed sessions hide their PTYs) */
   expandedSessionIds: Set<string>;
-  /** Currently selected session ID (for operations on sessions) */
-  selectedSessionId: string | null;
-  /** Map of session IDs to their loading states */
-  sessionLoadStates: Map<string, SessionLoadState>;
-  /**
-   * Aggregate-list ordering per session (paneId -> order index).
-   *
-   * Once aggregate view has shown a session, this becomes the authoritative order for
-   * already-known panes. Refreshes may append newly discovered panes, but they must not
-   * replace the existing order wholesale or newly inserted PTYs will jump to the end.
-   */
+  /** @deprecated Legacy nested pane-order map retained while refresh/subscription code migrates. */
   sessionPaneOrders: Map<string, Map<string, number>>;
+  /** Aggregate-list ordering per session, stored as a flattened pane-order index. */
+  sessionPaneOrderIndex: SessionPaneOrderIndex;
   /** Persisted manual session ordering for aggregate view */
   manualSessionOrder: string[];
+  /**
+   * All unresolved aggregate pane creation requests.
+   * Multiple create commands can overlap, so lifecycle matching must track each request separately.
+   */
+  pendingPaneCreations: PendingPaneCreation[];
+}
+
+/** Loading, metadata hydration, and tombstone bookkeeping state. */
+export interface AggregateViewLoadingSlice {
+  /** Whether a query is in progress */
+  isLoading: boolean;
+  /** Map of session IDs to their loading states */
+  sessionLoadStates: Map<string, SessionLoadState>;
   /** Set of sessions currently loading (for spinner display) */
   loadingSessionIds: Set<string>;
   /** Sessions already auto-attempted for hover/select loading */
@@ -248,79 +289,82 @@ export interface AggregateViewState {
    * deleted rows can be revived by initial load, bootstrap, or refresh.
    */
   deletedPtyIds: Set<string>;
-  /**
-   * All unresolved aggregate pane creation requests.
-   * Multiple create commands can overlap, so lifecycle matching must track each request separately.
-   */
-  pendingPaneCreations: PendingPaneCreation[];
-  /** Scroll offset for the session/PTY list (0 = top) */
-  listScrollOffset: number;
 }
 
-export const initialState: AggregateViewState = {
-  showAggregateView: false,
-  filterQuery: '',
-  showInactive: true,
-  allPtys: [],
-  matchedPtys: [],
-  selectedIndex: 0,
-  selectedPtyId: null,
-  isLoading: false,
-  previewMode: false,
-  previewZoomed: false,
-  allPtysIndex: new Map(),
-  matchedPtysIndex: new Map(),
-  treeRoot: [],
-  flattenedTree: [],
-  flattenedTreeIndex: new Map(),
-  expandedSessionIds: new Set(),
-  selectedSessionId: null,
-  sessionLoadStates: new Map(),
-  sessionPaneOrders: new Map(),
-  manualSessionOrder: [],
-  loadingSessionIds: new Set(),
-  loadAttemptedSessionIds: new Set(),
-  allSessions: new Map(),
-  pendingPtyIds: new Set(),
-  recentlyAddedPtyIds: new Set(),
-  deletedPtyIds: new Set(),
-  pendingPaneCreations: [],
-  listScrollOffset: 0,
-};
+/** Aggregate view state with feature-oriented slices. */
+export interface AggregateViewState
+  extends
+    AggregateViewUiSlice,
+    AggregateViewFilterSlice,
+    AggregateViewSelectionSlice,
+    AggregateViewTreeSlice,
+    AggregateViewLoadingSlice {}
 
-/** Factory function to create initial state (for backward compatibility) */
-export function createInitialState(): AggregateViewState {
+export function createAggregateViewUiSlice(): AggregateViewUiSlice {
   return {
     showAggregateView: false,
+    previewMode: false,
+    previewZoomed: false,
+    listScrollOffset: 0,
+  };
+}
+
+export function createAggregateViewFilterSlice(): AggregateViewFilterSlice {
+  return {
     filterQuery: '',
     showInactive: true,
     allPtys: [],
     matchedPtys: [],
-    selectedIndex: 0,
-    selectedPtyId: null,
-    isLoading: false,
-    previewMode: false,
-    previewZoomed: false,
     allPtysIndex: new Map(),
     matchedPtysIndex: new Map(),
+  };
+}
+
+export function createAggregateViewSelectionSlice(): AggregateViewSelectionSlice {
+  return {
+    selectedIndex: 0,
+    selectedPtyId: null,
+    selectedSessionId: null,
+  };
+}
+
+export function createAggregateViewTreeSlice(): AggregateViewTreeSlice {
+  return {
     treeRoot: [],
     flattenedTree: [],
     flattenedTreeIndex: new Map(),
     expandedSessionIds: new Set(),
-    selectedSessionId: null,
-    sessionLoadStates: new Map(),
     sessionPaneOrders: new Map(),
+    sessionPaneOrderIndex: new Map(),
     manualSessionOrder: [],
+    pendingPaneCreations: [],
+  };
+}
+
+export function createAggregateViewLoadingSlice(): AggregateViewLoadingSlice {
+  return {
+    isLoading: false,
+    sessionLoadStates: new Map(),
     loadingSessionIds: new Set(),
     loadAttemptedSessionIds: new Set(),
     allSessions: new Map(),
     pendingPtyIds: new Set(),
     recentlyAddedPtyIds: new Set(),
     deletedPtyIds: new Set(),
-    pendingPaneCreations: [],
-    listScrollOffset: 0,
   };
 }
+
+export function createInitialState(): AggregateViewState {
+  return {
+    ...createAggregateViewUiSlice(),
+    ...createAggregateViewFilterSlice(),
+    ...createAggregateViewSelectionSlice(),
+    ...createAggregateViewTreeSlice(),
+    ...createAggregateViewLoadingSlice(),
+  };
+}
+
+export const initialState: AggregateViewState = createInitialState();
 
 export interface AggregateViewContextValue {
   state: AggregateViewState;

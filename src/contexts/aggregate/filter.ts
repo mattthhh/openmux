@@ -26,9 +26,12 @@ export function filterActivePtys(ptys: PtyInfo[]): PtyInfo[] {
   return ptys.filter(isActivePty);
 }
 
-export function getBasePtys(ptys: PtyInfo[], showInactive: boolean): PtyInfo[] {
+export function filterPtysByActivity(ptys: PtyInfo[], showInactive: boolean): PtyInfo[] {
   return showInactive ? ptys : filterActivePtys(ptys);
 }
+
+/** @deprecated Use filterPtysByActivity instead. */
+export const getBasePtys = filterPtysByActivity;
 
 export function filterPtys(ptys: PtyInfo[], query: string): PtyInfo[] | FilterOperationError {
   const trimmedQuery = query.trim();
@@ -55,7 +58,7 @@ export function filterPtys(ptys: PtyInfo[], query: string): PtyInfo[] | FilterOp
 }
 
 export function buildPtyIndex(ptys: PtyInfo[]): Map<string, number> {
-  return new Map(ptys.map((pty, index) => [pty.ptyId, index]));
+  return new Map(ptys.map((pty, index) => [pty.ptyId, index] as const));
 }
 
 export function groupPtysBySession(ptys: PtyInfo[]): Map<string, PtyInfo[]> {

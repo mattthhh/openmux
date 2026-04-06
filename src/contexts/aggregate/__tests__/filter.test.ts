@@ -7,7 +7,7 @@ import {
   normalizeProcessName,
   isActivePty,
   filterActivePtys,
-  getBasePtys,
+  filterPtysByActivity,
   buildPtyIndex,
   groupPtysBySession,
   extractSessionIds,
@@ -83,13 +83,13 @@ describe('filterActivePtys', () => {
   });
 });
 
-describe('getBasePtys', () => {
+describe('filterPtysByActivity', () => {
   it('returns all PTYs when showInactive is true', () => {
     const ptys = [
       createMockPty({ foregroundProcess: 'bash' }),
       createMockPty({ foregroundProcess: 'vim' }),
     ];
-    expect(getBasePtys(ptys, true)).toHaveLength(2);
+    expect(filterPtysByActivity(ptys, true)).toHaveLength(2);
   });
 
   it('filters inactive when showInactive is false', () => {
@@ -97,7 +97,7 @@ describe('getBasePtys', () => {
       createMockPty({ ptyId: '1', foregroundProcess: 'bash', shell: 'bash' }),
       createMockPty({ ptyId: '2', foregroundProcess: 'vim', shell: 'bash' }),
     ];
-    const result = getBasePtys(ptys, false);
+    const result = filterPtysByActivity(ptys, false);
     expect(result).toHaveLength(1);
     expect(result[0].ptyId).toBe('2');
   });

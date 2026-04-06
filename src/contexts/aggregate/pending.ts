@@ -3,11 +3,12 @@
  */
 
 import type { AggregateViewState, PendingPaneCreation } from './types';
+import { buildSessionPaneOrderFromAggregateState } from './pane-order';
 
 type PendingInsertionCollectionState = Pick<AggregateViewState, 'pendingPaneCreations'>;
 type PendingInsertionOrderState = Pick<
   AggregateViewState,
-  'allPtys' | 'sessionPaneOrders' | 'pendingPaneCreations'
+  'allPtys' | 'sessionPaneOrders' | 'sessionPaneOrderIndex' | 'pendingPaneCreations'
 >;
 
 export function getCurrentPendingPaneCreation(
@@ -51,30 +52,6 @@ export function findPendingPaneCreation(
   return state.pendingPaneCreations.find(predicate) ?? null;
 }
 
-function buildSessionPaneOrderFromState(
-  state: Pick<AggregateViewState, 'allPtys' | 'sessionPaneOrders'>,
-  sessionId: string
-): Map<string, number> {
-  const existingOrder = state.sessionPaneOrders.get(sessionId);
-  if (existingOrder) {
-    return existingOrder;
-  }
-
-  const sessionPaneIds = state.allPtys
-    .filter((pty) => pty.sessionId === sessionId && !!pty.paneId)
-    .sort((a, b) => {
-      const aOrder = a.sortOrderHint ?? Number.MAX_SAFE_INTEGER;
-      const bOrder = b.sortOrderHint ?? Number.MAX_SAFE_INTEGER;
-      if (aOrder !== bOrder) {
-        return aOrder - bOrder;
-      }
-      return (a.paneId ?? a.ptyId).localeCompare(b.paneId ?? b.ptyId);
-    })
-    .map((pty) => pty.paneId as string);
-
-  return new Map(sessionPaneIds.map((paneId, index) => [paneId, index] as const));
-}
-
 export function getInsertedPaneOrder(
   paneOrder: Map<string, number>,
   insertAfterPaneId: string
@@ -109,7 +86,7 @@ export function getNextPendingPaneCreationOrder(
   state: PendingInsertionOrderState,
   params: { sessionId: string; insertAfterPaneId: string | null }
 ): number {
-  const paneOrder = buildSessionPaneOrderFromState(state, params.sessionId);
+  const paneOrder = buildSessionPaneOrderFromAggregateState(state, params.sessionId);
   const existingPendingOrders = state.pendingPaneCreations
     .filter(
       (insertion) =>

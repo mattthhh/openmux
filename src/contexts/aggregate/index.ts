@@ -14,6 +14,7 @@ export {
   normalizeProcessName,
   isActivePty,
   filterActivePtys,
+  filterPtysByActivity,
   getBasePtys,
   filterPtys,
   buildPtyIndex,
@@ -84,9 +85,6 @@ export {
   type SubscriptionManager,
   type RefreshState,
   type RefreshFlagKey,
-  type PtyOwnership,
-  type CurrentSessionHints,
-  type CurrentSessionPty,
   type TitleChangeHandler,
   type LifecycleEvent,
   type LifecycleHandlers,
@@ -94,6 +92,12 @@ export {
   type LifecycleHandlerDeps,
   type TitleChangeEvent,
 } from './subscriptions';
+
+export type {
+  PtyOwnership,
+  CurrentSessionMetadata,
+  CurrentSessionLayoutPty,
+} from './current-session';
 
 export {
   ptyMetadataToInfo,
@@ -130,6 +134,19 @@ export {
   getNextPendingPaneCreationOrder,
   findPendingPaneCreationForLifecycle,
 } from './pending';
+
+export {
+  getSessionPaneOrderKey,
+  getPaneOrder,
+  getSessionPaneOrder,
+  hasSessionPaneOrder,
+  deleteSessionPaneOrder,
+  setSessionPaneOrder,
+  mergePaneOrder,
+  mergeSessionPaneOrder,
+  buildSessionPaneOrderFromAggregateState,
+  type SessionPaneOrderIndex,
+} from './pane-order';
 
 export type {
   PtyInfo,

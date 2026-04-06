@@ -7,9 +7,9 @@ import { produce, type SetStoreFunction } from 'solid-js/store';
 import type { SessionMetadata } from '../../effect/models';
 import type { AggregateViewState, SessionTreeNode } from './types';
 import { SessionOperationError } from './errors';
-import { buildPtyIndex, filterPtys, getBasePtys, groupPtysBySession } from './filter';
+import { buildPtyIndex, filterPtys, filterPtysByActivity, groupPtysBySession } from './filter';
 import { clearPreviewState } from './selection';
-import { buildTreeRoot, flattenTree } from './tree';
+import { buildFlattenedTreeIndex, buildTreeRoot, flattenTree } from './tree';
 
 export function toggleSessionExpanded(
   expandedSessionIds: Set<string>,
@@ -47,7 +47,7 @@ export function getSortedSessions(
 }
 
 export function recomputeMatches(state: AggregateViewState): void {
-  const basePtys = getBasePtys(state.allPtys, state.showInactive);
+  const basePtys = filterPtysByActivity(state.allPtys, state.showInactive);
   const matchedPtysResult = filterPtys(basePtys, state.filterQuery);
 
   if (matchedPtysResult instanceof Error) {
@@ -59,7 +59,7 @@ export function recomputeMatches(state: AggregateViewState): void {
 
   state.matchedPtysIndex = buildPtyIndex(state.matchedPtys);
 
-  if (state.selectedPtyId && !state.matchedPtysIndex.has(state.selectedPtyId)) {
+  if (state.selectedPtyId && !state.matchedPtys.some((pty) => pty.ptyId === state.selectedPtyId)) {
     state.selectedPtyId = null;
     clearPreviewState(state);
   }
@@ -111,17 +111,12 @@ export function recomputeTree(state: AggregateViewState): void {
     ptysBySession,
     state.expandedSessionIds,
     state.sessionLoadStates,
-    state.sessionPaneOrders
+    state.sessionPaneOrders,
+    state.sessionPaneOrderIndex
   );
 
   state.flattenedTree = flattenTree(state.treeRoot, state.filterQuery, state.showInactive);
-  state.flattenedTreeIndex = new Map();
-  for (let index = 0; index < state.flattenedTree.length; index++) {
-    const item = state.flattenedTree[index];
-    if (item.node.type === 'pty') {
-      state.flattenedTreeIndex.set(item.node.ptyInfo.ptyId, index);
-    }
-  }
+  state.flattenedTreeIndex = buildFlattenedTreeIndex(state.flattenedTree);
 
   if (state.flattenedTree.length === 0) {
     state.selectedIndex = 0;

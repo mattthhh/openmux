@@ -11,7 +11,7 @@ import type { GitInfo } from '../../effect/services/pty/helpers';
 import type { GitDiffStats, PtyInfo } from './types';
 import { mergePtyInfoPreservingGitMetadata } from './git';
 
-export interface AggregatePtyMetadataLike {
+export interface EnrichedPtyMetadataLike {
   ptyId: string;
   cwd: string;
   gitBranch: string | undefined;
@@ -36,7 +36,7 @@ export interface AggregatePtyMetadataLike {
   sessionMetadata?: SessionMetadata;
 }
 
-export function ptyMetadataToInfo(metadata: AggregatePtyMetadataLike, existing?: PtyInfo): PtyInfo {
+export function ptyMetadataToInfo(metadata: EnrichedPtyMetadataLike, existing?: PtyInfo): PtyInfo {
   return mergePtyInfoPreservingGitMetadata(existing, {
     ptyId: metadata.ptyId,
     sortOrderHint: existing?.sortOrderHint,

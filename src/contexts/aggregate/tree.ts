@@ -6,12 +6,18 @@ import type { SessionMetadata } from '../../effect/models';
 
 import { TreeOperationError } from './errors';
 import { isActivePty, sortPtysForSession } from './filter';
+import {
+  getSessionPaneOrder,
+  hasSessionPaneOrder,
+  type LegacySessionPaneOrders,
+} from './pane-order';
 import type {
   FlattenedTreeItem,
   PlaceholderTreeNode,
   PtyInfo,
   PtyTreeNode,
   SessionLoadState,
+  SessionPaneOrderIndex,
   SessionTreeNode,
   SpacerTreeNode,
   TreeNode,
@@ -72,15 +78,20 @@ export function buildTreeRoot(
   ptysBySession: Map<string, PtyInfo[]>,
   expandedSessionIds: Set<string>,
   sessionLoadStates: Map<string, SessionLoadState>,
-  sessionPaneOrders: Map<string, Map<string, number>>
+  sessionPaneOrders: LegacySessionPaneOrders,
+  sessionPaneOrderIndex?: SessionPaneOrderIndex
 ): TreeNode[] {
   const root: TreeNode[] = [];
 
   for (const session of sessions) {
     const loadState = sessionLoadStates.get(session.id) ?? getDefaultLoadState();
+    const paneOrderSource =
+      sessionPaneOrderIndex && hasSessionPaneOrder(sessionPaneOrderIndex, session.id)
+        ? sessionPaneOrderIndex
+        : sessionPaneOrders;
     const sessionPtys = sortPtysForSession(
       ptysBySession.get(session.id) ?? [],
-      sessionPaneOrders.get(session.id)
+      getSessionPaneOrder(paneOrderSource, session.id)
     );
 
     const activePtyCount = sessionPtys.filter(isActivePty).length;

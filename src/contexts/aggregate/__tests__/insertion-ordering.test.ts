@@ -12,6 +12,7 @@ import {
   createAggregateViewRefreshers,
   createLifecycleHandlers,
 } from '../../aggregate-view-subscriptions';
+import { getSessionPaneOrder } from '../../aggregate';
 import { initialState, type AggregateViewState, type PtyInfo } from '../../aggregate-view-types';
 
 vi.mock('../../../effect/bridge/aggregate-bridge', () => ({
@@ -97,13 +98,13 @@ const createFreshState = (): AggregateViewState => ({
   allPtys: [],
   matchedPtys: [],
   allPtysIndex: new Map(),
-  matchedPtysIndex: new Map(),
   treeRoot: [],
   flattenedTree: [],
   flattenedTreeIndex: new Map(),
   expandedSessionIds: new Set(),
   sessionLoadStates: new Map(),
   sessionPaneOrders: new Map(),
+  sessionPaneOrderIndex: new Map(),
   manualSessionOrder: [],
   loadingSessionIds: new Set(),
   loadAttemptedSessionIds: new Set(),
@@ -483,7 +484,7 @@ describe('aggregate insertion ordering', () => {
 
     await refreshers.initialLoad();
 
-    expect(state.sessionPaneOrders.get('session-1')).toEqual(
+    expect(getSessionPaneOrder(state.sessionPaneOrders, 'session-1')).toEqual(
       new Map([
         ['pane-1', 0],
         ['pane-2', 1],
@@ -508,7 +509,7 @@ describe('aggregate insertion ordering', () => {
     await lifecycleHandlers.handlePtyCreated('pty-new');
 
     expect(getMetadataMock).toHaveBeenCalledWith('/tmp');
-    expect(state.sessionPaneOrders.get('session-1')?.get('pane-3')).toBe(0.5);
+    expect(getSessionPaneOrder(state.sessionPaneOrders, 'session-1').get('pane-3')).toBe(0.5);
     expect(getVisiblePtyIds(state)).toEqual(['pty-1', 'pty-new', 'pty-2']);
 
     setCurrentSessionPaneOrder(
@@ -521,7 +522,7 @@ describe('aggregate insertion ordering', () => {
 
     await refreshers.refreshPtys();
 
-    expect(state.sessionPaneOrders.get('session-1')?.get('pane-3')).toBe(0.5);
+    expect(getSessionPaneOrder(state.sessionPaneOrders, 'session-1').get('pane-3')).toBe(0.5);
     expect(getVisiblePtyIds(state)).toEqual(['pty-1', 'pty-new', 'pty-2']);
   });
 
@@ -612,8 +613,8 @@ describe('aggregate insertion ordering', () => {
     await lifecycleHandlers.handlePtyCreated('pty-new-2');
     await lifecycleHandlers.handlePtyCreated('pty-new');
 
-    expect(state.sessionPaneOrders.get('session-1')?.get('pane-3')).toBe(0.5);
-    expect(state.sessionPaneOrders.get('session-1')?.get('pane-4')).toBe(0.75);
+    expect(getSessionPaneOrder(state.sessionPaneOrders, 'session-1').get('pane-3')).toBe(0.5);
+    expect(getSessionPaneOrder(state.sessionPaneOrders, 'session-1').get('pane-4')).toBe(0.75);
     expect(getVisiblePtyIds(state)).toEqual(['pty-1', 'pty-new', 'pty-new-2', 'pty-2']);
     expect(state.pendingPaneCreations).toEqual([]);
   });
