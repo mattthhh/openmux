@@ -7,44 +7,47 @@ import type {
   TerminalState,
   TerminalScrollState,
   DirtyTerminalUpdate,
-} from "../core/types"
-import type {
-  ITerminalEmulator,
-  SearchResult,
-  TerminalModes,
-  KittyGraphicsImageInfo,
-  KittyGraphicsPlacement,
-} from "./emulator-interface"
-import type { TerminalColors } from "./terminal-colors"
-import { searchTerminal } from "./ghostty-vt/terminal-search"
-import { createEmptyRow } from "./ghostty-emulator/cell-converter"
-import type { ScrollbackArchive } from "./scrollback-archive"
-import type { ArchivePlacement } from "./kitty-graphics/archive-placement"
+} from '../core/types';
+import {
+  isKittyGraphicsEmulator,
+  type IKittyGraphicsEmulator,
+  type ITerminalEmulator,
+  type SearchResult,
+  type TerminalModes,
+  type KittyGraphicsEmulator,
+  type KittyGraphicsImageInfo,
+  type KittyGraphicsPlacement,
+} from './emulator-interface';
+import type { TerminalColors } from './terminal-colors';
+import { searchTerminal } from './ghostty-vt/terminal-search';
+import { createEmptyRow } from './ghostty-emulator/cell-converter';
+import type { ScrollbackArchive } from './scrollback-archive';
+import type { ArchivePlacement } from './kitty-graphics/archive-placement';
 
 /** Cache entry for archived placements */
 interface PlacementCache {
   /** Archived placements adjusted for current viewport */
-  placements: KittyGraphicsPlacement[]
+  placements: KittyGraphicsPlacement[];
   /** Archive length when cache was built */
-  archiveLength: number
+  archiveLength: number;
   /** Archive content revision when cache was built */
-  archiveRevision: number
+  archiveRevision: number;
   /** Base emulator placement count when cache was built */
-  basePlacementCount: number
+  basePlacementCount: number;
 }
 
 interface ArchiveSnapshotCache {
-  archiveLength: number
-  archiveRevision: number
-  placements: ArchivePlacement[]
-  imageIds: number[]
+  archiveLength: number;
+  archiveRevision: number;
+  placements: ArchivePlacement[];
+  imageIds: number[];
 }
 
-export class ArchivedTerminalEmulator implements ITerminalEmulator {
+export class ArchivedTerminalEmulator implements ITerminalEmulator, IKittyGraphicsEmulator {
   /** Cache for archived placements to avoid recalculation */
-  private placementCache: PlacementCache | null = null
+  private placementCache: PlacementCache | null = null;
   /** Cache for full archived placement scans used by IDs + placements lookups */
-  private archiveSnapshotCache: ArchiveSnapshotCache | null = null
+  private archiveSnapshotCache: ArchiveSnapshotCache | null = null;
 
   constructor(
     private base: ITerminalEmulator,
@@ -52,149 +55,151 @@ export class ArchivedTerminalEmulator implements ITerminalEmulator {
   ) {}
 
   get cols(): number {
-    return this.base.cols
+    return this.base.cols;
   }
 
   get rows(): number {
-    return this.base.rows
+    return this.base.rows;
   }
 
   get isDisposed(): boolean {
-    return this.base.isDisposed
+    return this.base.isDisposed;
   }
 
   write(data: string | Uint8Array): void {
-    this.base.write(data)
+    this.base.write(data);
   }
 
   resize(cols: number, rows: number): void {
-    this.base.resize(cols, rows)
+    this.base.resize(cols, rows);
   }
 
   setPixelSize(widthPx: number, heightPx: number): void {
-    this.base.setPixelSize?.(widthPx, heightPx)
+    this.base.setPixelSize?.(widthPx, heightPx);
   }
 
   reset(): void {
-    this.base.reset()
-    this.invalidatePlacementCache()
+    this.base.reset();
+    this.invalidatePlacementCache();
   }
 
   dispose(): void {
-    this.base.dispose()
-    this.archive.dispose()
+    this.base.dispose();
+    this.archive.dispose();
   }
 
   getScrollbackLength(): number {
-    return this.archive.length + this.base.getScrollbackLength()
+    return this.archive.length + this.base.getScrollbackLength();
   }
 
   getScrollbackLine(offset: number): TerminalCell[] | null {
-    const archiveLength = this.archive.length
+    const archiveLength = this.archive.length;
     if (offset < archiveLength) {
-      return this.archive.getLine(offset)
+      return this.archive.getLine(offset);
     }
-    return this.base.getScrollbackLine(offset - archiveLength)
+    return this.base.getScrollbackLine(offset - archiveLength);
   }
 
   prefetchScrollbackLines?(startOffset: number, count: number): Promise<void> {
-    const archiveLength = this.archive.length
+    const archiveLength = this.archive.length;
     if (startOffset < archiveLength) {
-      const archiveCount = Math.min(count, archiveLength - startOffset)
-      this.archive.prefetchLines(startOffset, archiveCount)
+      const archiveCount = Math.min(count, archiveLength - startOffset);
+      this.archive.prefetchLines(startOffset, archiveCount);
     }
-    return Promise.resolve()
+    return Promise.resolve();
   }
 
   getDirtyUpdate(scrollState: TerminalScrollState): DirtyTerminalUpdate {
-    return this.base.getDirtyUpdate(scrollState)
+    return this.base.getDirtyUpdate(scrollState);
   }
 
   getTerminalState(): TerminalState {
-    return this.base.getTerminalState()
+    return this.base.getTerminalState();
   }
 
   getCursor(): { x: number; y: number; visible: boolean } {
-    return this.base.getCursor()
+    return this.base.getCursor();
   }
 
-  getCursorKeyMode(): "normal" | "application" {
-    return this.base.getCursorKeyMode()
+  getCursorKeyMode(): 'normal' | 'application' {
+    return this.base.getCursorKeyMode();
   }
 
   getKittyKeyboardFlags(): number {
-    return this.base.getKittyKeyboardFlags()
+    return this.base.getKittyKeyboardFlags();
   }
 
   isMouseTrackingEnabled(): boolean {
-    return this.base.isMouseTrackingEnabled()
+    return this.base.isMouseTrackingEnabled();
   }
 
   isAlternateScreen(): boolean {
-    return this.base.isAlternateScreen()
+    return this.base.isAlternateScreen();
   }
 
   getMode(mode: number): boolean {
-    return this.base.getMode(mode)
+    return this.base.getMode(mode);
   }
 
   getColors(): TerminalColors {
-    return this.base.getColors()
+    return this.base.getColors();
   }
 
   setColors(colors: TerminalColors): void {
-    this.base.setColors?.(colors)
+    this.base.setColors?.(colors);
   }
 
   getTitle(): string {
-    return this.base.getTitle()
+    return this.base.getTitle();
   }
 
   onTitleChange(callback: (title: string) => void): () => void {
-    return this.base.onTitleChange(callback)
+    return this.base.onTitleChange(callback);
   }
 
   onUpdate(callback: () => void): () => void {
-    return this.base.onUpdate(callback)
+    return this.base.onUpdate(callback);
   }
 
   setUpdateEnabled(enabled: boolean): void {
-    this.base.setUpdateEnabled?.(enabled)
+    this.base.setUpdateEnabled?.(enabled);
   }
 
   onModeChange(callback: (modes: TerminalModes, prevModes?: TerminalModes) => void): () => void {
-    return this.base.onModeChange(callback)
+    return this.base.onModeChange(callback);
   }
 
   getKittyImagesDirty(): boolean {
-    return this.base.getKittyImagesDirty?.() ?? false
+    return this.getKittyBase()?.getKittyImagesDirty() ?? false;
   }
 
   clearKittyImagesDirty(): void {
-    this.base.clearKittyImagesDirty?.()
+    this.getKittyBase()?.clearKittyImagesDirty();
   }
 
   getKittyImageIds(): number[] {
+    const kittyBase = this.getKittyBase();
+
     // Get live emulator IDs
-    const baseIds = this.base.getKittyImageIds?.() ?? []
-    
+    const baseIds = kittyBase?.getKittyImageIds() ?? [];
+
     // Get archived image IDs from placements
-    const archivedIds = this.getArchivedImageIds()
-    
+    const archivedIds = this.getArchivedImageIds();
+
     if (archivedIds.length === 0) {
-      return baseIds
+      return baseIds;
     }
-    
+
     // Merge and deduplicate
-    const merged = new Set([...baseIds, ...archivedIds])
-    return Array.from(merged)
+    const merged = new Set([...baseIds, ...archivedIds]);
+    return Array.from(merged);
   }
-  
+
   /**
    * Get unique image IDs referenced by archived placements.
    */
   private getArchivedImageIds(): number[] {
-    return this.getArchiveSnapshot().imageIds
+    return this.getArchiveSnapshot().imageIds;
   }
 
   /**
@@ -202,92 +207,102 @@ export class ArchivedTerminalEmulator implements ITerminalEmulator {
    * both image-id and placement queries.
    */
   private getArchiveSnapshot(): ArchiveSnapshotCache {
-    const archiveLength = this.archive.length
-    const archiveRevision = this.archive.getRevision()
+    const archiveLength = this.archive.length;
+    const archiveRevision = this.archive.getRevision();
 
     if (
       this.archiveSnapshotCache &&
       this.archiveSnapshotCache.archiveLength === archiveLength &&
       this.archiveSnapshotCache.archiveRevision === archiveRevision
     ) {
-      return this.archiveSnapshotCache
+      return this.archiveSnapshotCache;
     }
 
     const placements: ArchivePlacement[] =
-      (this.archive as unknown as { getPlacementsForLineRange?(start: number, end: number): ArchivePlacement[] })
-        .getPlacementsForLineRange?.(0, archiveLength) ?? []
+      (
+        this.archive as unknown as {
+          getPlacementsForLineRange?(start: number, end: number): ArchivePlacement[];
+        }
+      ).getPlacementsForLineRange?.(0, archiveLength) ?? [];
 
-    const imageIds = placements.length === 0
-      ? []
-      : Array.from(new Set(placements.map((placement) => placement.imageId)))
+    const imageIds =
+      placements.length === 0
+        ? []
+        : Array.from(new Set(placements.map((placement) => placement.imageId)));
 
     const snapshot: ArchiveSnapshotCache = {
       archiveLength,
       archiveRevision,
       placements,
       imageIds,
-    }
-    this.archiveSnapshotCache = snapshot
-    return snapshot
+    };
+    this.archiveSnapshotCache = snapshot;
+    return snapshot;
   }
 
   getKittyImageInfo(imageId: number): KittyGraphicsImageInfo | null {
-    return this.base.getKittyImageInfo?.(imageId) ?? null
+    return this.getKittyBase()?.getKittyImageInfo(imageId) ?? null;
   }
 
   getKittyImageData(imageId: number): Uint8Array | null {
-    return this.base.getKittyImageData?.(imageId) ?? null
+    return this.getKittyBase()?.getKittyImageData(imageId) ?? null;
+  }
+
+  shouldSeedKittyImage(imageId: number): boolean {
+    return this.getKittyBase()?.shouldSeedKittyImage?.(imageId) ?? false;
   }
 
   getKittyPlacements(): KittyGraphicsPlacement[] {
-    const archiveLength = this.archive.length
+    const archiveLength = this.archive.length;
+    const kittyBase = this.getKittyBase();
 
     // Ghostty placement coordinates from the live emulator are relative to the
     // live scrollback buffer (which excludes archived lines after trim).
     // Convert them into the wrapped emulator's absolute coordinate space by
     // shifting them down by current archive length.
-    const rawBasePlacements = this.base.getKittyPlacements?.() ?? []
-    const basePlacements = archiveLength > 0
-      ? rawBasePlacements.map((placement) => ({
-          ...placement,
-          screenY: placement.screenY + archiveLength,
-        }))
-      : rawBasePlacements
+    const rawBasePlacements = kittyBase?.getKittyPlacements() ?? [];
+    const basePlacements =
+      archiveLength > 0
+        ? rawBasePlacements.map((placement) => ({
+            ...placement,
+            screenY: placement.screenY + archiveLength,
+          }))
+        : rawBasePlacements;
 
     // Get archived placements (already in wrapped absolute space)
-    const archivedPlacements = this.getArchivedPlacements(rawBasePlacements.length)
+    const archivedPlacements = this.getArchivedPlacements(rawBasePlacements.length);
 
     if (archivedPlacements.length === 0) {
-      return basePlacements
+      return basePlacements;
     }
 
     if (basePlacements.length === 0) {
-      return archivedPlacements
+      return archivedPlacements;
     }
 
     // Merge and deduplicate by (imageId, placementId)
-    const seen = new Set<string>()
-    const merged: KittyGraphicsPlacement[] = []
+    const seen = new Set<string>();
+    const merged: KittyGraphicsPlacement[] = [];
 
     // Add archived placements first (they're "behind" live ones)
     for (const p of archivedPlacements) {
-      const key = `${p.imageId}:${p.placementId}`
+      const key = `${p.imageId}:${p.placementId}`;
       if (!seen.has(key)) {
-        seen.add(key)
-        merged.push(p)
+        seen.add(key);
+        merged.push(p);
       }
     }
 
     // Add base placements
     for (const p of basePlacements) {
-      const key = `${p.imageId}:${p.placementId}`
+      const key = `${p.imageId}:${p.placementId}`;
       if (!seen.has(key)) {
-        seen.add(key)
-        merged.push(p)
+        seen.add(key);
+        merged.push(p);
       }
     }
 
-    return merged
+    return merged;
   }
 
   /**
@@ -296,8 +311,8 @@ export class ArchivedTerminalEmulator implements ITerminalEmulator {
    * Results are cached for performance.
    */
   private getArchivedPlacements(basePlacementCount: number): KittyGraphicsPlacement[] {
-    const archiveLength = this.archive.length
-    const archiveRevision = this.archive.getRevision()
+    const archiveLength = this.archive.length;
+    const archiveRevision = this.archive.getRevision();
 
     // Check if we can use cached placements
     if (this.placementCache) {
@@ -306,12 +321,12 @@ export class ArchivedTerminalEmulator implements ITerminalEmulator {
         this.placementCache.archiveRevision === archiveRevision &&
         this.placementCache.basePlacementCount === basePlacementCount
       ) {
-        return this.placementCache.placements
+        return this.placementCache.placements;
       }
     }
 
     // Reuse revision-scoped archived placement snapshot.
-    const archivePlacements = this.getArchiveSnapshot().placements
+    const archivePlacements = this.getArchiveSnapshot().placements;
 
     if (archivePlacements.length === 0) {
       this.placementCache = {
@@ -319,8 +334,8 @@ export class ArchivedTerminalEmulator implements ITerminalEmulator {
         archiveLength,
         archiveRevision,
         basePlacementCount,
-      }
-      return []
+      };
+      return [];
     }
 
     // Return archived placements with screenY = archiveOffset (absolute line position)
@@ -329,16 +344,20 @@ export class ArchivedTerminalEmulator implements ITerminalEmulator {
     const adjustedPlacements: KittyGraphicsPlacement[] = archivePlacements.map((p) => ({
       ...p,
       screenY: p.archiveOffset,
-    }))
+    }));
 
     this.placementCache = {
       placements: adjustedPlacements,
       archiveLength,
       archiveRevision,
       basePlacementCount,
-    }
+    };
 
-    return adjustedPlacements
+    return adjustedPlacements;
+  }
+
+  private getKittyBase(): KittyGraphicsEmulator | null {
+    return isKittyGraphicsEmulator(this.base) ? this.base : null;
   }
 
   /**
@@ -346,12 +365,12 @@ export class ArchivedTerminalEmulator implements ITerminalEmulator {
    * Called when archive is reset or when we need to force recalculation.
    */
   private invalidatePlacementCache(): void {
-    this.placementCache = null
-    this.archiveSnapshotCache = null
+    this.placementCache = null;
+    this.archiveSnapshotCache = null;
   }
 
   drainResponses(): string[] {
-    return this.base.drainResponses?.() ?? []
+    return this.base.drainResponses?.() ?? [];
   }
 
   async search(query: string, options?: { limit?: number }): Promise<SearchResult> {
@@ -360,6 +379,6 @@ export class ArchivedTerminalEmulator implements ITerminalEmulator {
       getScrollbackLine: (offset) => this.getScrollbackLine(offset),
       getTerminalState: () => this.getTerminalState(),
       createEmptyRow: (cols) => createEmptyRow(cols, this.getColors()),
-    })
+    });
   }
 }

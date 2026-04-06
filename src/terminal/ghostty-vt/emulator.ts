@@ -3,16 +3,20 @@
  */
 
 import type {
+  IKittyGraphicsEmulator,
   ITerminalEmulator,
   KittyGraphicsImageInfo,
   KittyGraphicsPlacement,
-} from "../emulator-interface";
-import type { TerminalColors } from "../terminal-colors";
-import { mapKittyImageInfo, mapKittyPlacements } from "./kitty";
-import { drainTerminalResponses } from "./responses";
-import { GhosttyVTEmulatorCore } from "./emulator-core";
+} from '../emulator-interface';
+import type { TerminalColors } from '../terminal-colors';
+import { mapKittyImageInfo, mapKittyPlacements } from './kitty';
+import { drainTerminalResponses } from './responses';
+import { GhosttyVTEmulatorCore } from './emulator-core';
 
-export class GhosttyVTEmulator extends GhosttyVTEmulatorCore implements ITerminalEmulator {
+export class GhosttyVTEmulator
+  extends GhosttyVTEmulatorCore
+  implements ITerminalEmulator, IKittyGraphicsEmulator
+{
   getKittyKeyboardFlags(): number {
     if (this._disposed) return 0;
     return this.terminal.getKittyKeyboardFlags();

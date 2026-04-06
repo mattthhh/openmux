@@ -1,50 +1,19 @@
-import { Buffer } from 'buffer';
-import fs from 'fs';
-import * as errore from 'errore';
-import { KittyOffloadError } from '../../effect/errors';
 import { getHostCapabilities } from '../capabilities';
 import type { KittyGraphicsImageInfo } from '../emulator-interface';
-import { buildDeleteImage } from './commands';
-import type { RendererLike } from './types';
 import { tracePtyEvent } from '../pty-trace';
+import { buildDeleteImage } from './commands';
+import { mergeTransmitParams, type KittySequence, type TransmitParams } from './sequence-utils';
+import type { RendererLike } from './types';
 import {
   buildEmulatorSequence,
   buildHostFileTransmitSequence,
   buildHostTransmitSequence,
 } from './transmit-broker/sequences';
-import {
-  buildGuestKey,
-  createTempFilePath,
-  estimateDecodedSize,
-  mergeTransmitParams,
-  normalizeParamId,
-  parseKittySequence,
-  parseTransmitParams,
-  rebuildControl,
-  type TransmitParams,
-} from './sequence-utils';
-import { resolveKittyOffloadCleanupDelay, resolveKittyOffloadThreshold } from './offload-utils';
-
-type PendingChunk = {
-  guestKey: string;
-  hostId: number;
-  params: TransmitParams;
-  offload: OffloadState | null;
-};
-
-type PtyBrokerState = {
-  hostIdByGuestKey: Map<string, number>;
-  pendingChunk: PendingChunk | null;
-  stubbedGuestKeys: Set<string>;
-  nextSyntheticGuestId: number;
-};
-
-type OffloadState = {
-  fd: number;
-  filePath: string;
-  carry: string;
-  bytesWritten: number;
-};
+import { IdMapper } from './transmit-broker/id-mapper';
+import { OffloadManager } from './transmit-broker/offload-manager';
+import type { OffloadState } from './transmit-broker/offload-manager';
+import { SequenceParser } from './transmit-broker/sequence-parser';
+import type { DeleteRequest, TransmitRequest } from './transmit-broker/sequence-parser';
 
 let activeBroker: KittyTransmitBroker | null = null;
 
@@ -59,22 +28,55 @@ export function setKittyTransmitBroker(broker: KittyTransmitBroker | null): void
 export class KittyTransmitBroker {
   private writer: ((chunk: string) => void) | null = null;
   private enabled = getHostCapabilities()?.kittyGraphics ?? false;
-  private nextHostImageId = 1;
-  private stateByPty = new Map<string, PtyBrokerState>();
-  private offloadThresholdBytes: number;
-  private offloadCleanupDelayMs: number;
-  private cleanupTimers = new Set<ReturnType<typeof setTimeout>>();
-  private tempFileCounter = 0;
+  private readonly idMapper = new IdMapper();
+  private readonly offloadManager = new OffloadManager();
+  private readonly sequenceParser = new SequenceParser();
   private pendingWrites: string[] = [];
   private autoFlush = true;
   private flushScheduled = false;
   private flushScheduler: (() => void) | null = null;
+  /**
+   * Whether to stub the emulator entirely for Kitty graphics.
+   *
+   * When enabled, sequences are rewritten to remove data payloads
+   * before reaching the emulator, keeping only control parameters.
+   * This creates "stubbed" images that track placement without
+   * storing actual pixel data in the emulator.
+   *
+   * Useful for:
+   * - Testing graphics protocol handling without image storage
+   * - Reducing memory usage when images aren't actually rendered
+   * - Debugging protocol sequences
+   *
+   * Controlled by OPENMUX_KITTY_EMULATOR_STUB environment variable.
+   */
   private stubEmulator = false;
+  /**
+   * Whether to stub shared memory (medium='s') transmissions.
+   *
+   * Shared memory transmission requires the terminal emulator to access
+   * shared memory segments created by the application. In multiplexer
+   * environments, this is problematic because:
+   *
+   * 1. The emulator runs in a different process from the PTY
+   * 2. Shared memory segments are process-scoped and may not be accessible
+   * 3. Cross-platform shared memory handling adds complexity
+   *
+   * When stubbing is enabled (default), shared memory transmissions are
+   * intercepted and converted to regular data transmissions that the
+   * emulator can process normally. The dimensions are preserved, but
+   * the actual pixel data path changes.
+   *
+   * Controlled by OPENMUX_KITTY_STUB_SHARED_MEMORY:
+   * - '0', 'false' → Disable stubbing (pass through shared memory refs)
+   * - Default → Enable stubbing (convert to regular transmissions)
+   *
+   * Disabling stubbing requires the emulator to handle shared memory
+   * references directly, which may not work in all environments.
+   */
   private stubSharedMemory = true;
 
   constructor() {
-    this.offloadThresholdBytes = resolveKittyOffloadThreshold();
-    this.offloadCleanupDelayMs = resolveKittyOffloadCleanupDelay();
     const stubEnv = (process.env.OPENMUX_KITTY_EMULATOR_STUB ?? '').toLowerCase();
     this.stubEmulator = stubEnv === '1' || stubEnv === 'true';
     const stubSharedEnv = (process.env.OPENMUX_KITTY_STUB_SHARED_MEMORY ?? '').toLowerCase();
@@ -99,6 +101,7 @@ export class KittyTransmitBroker {
       this.flushScheduled = false;
       return false;
     }
+
     const payload = this.pendingWrites.join('');
     this.pendingWrites = [];
     this.flushScheduled = false;
@@ -111,6 +114,7 @@ export class KittyTransmitBroker {
       this.writer = null;
       return;
     }
+
     const stdout = renderer.stdout ?? process.stdout;
     const writer = renderer.writeOut
       ? renderer.writeOut.bind(renderer)
@@ -123,235 +127,146 @@ export class KittyTransmitBroker {
   }
 
   dispose(): void {
-    this.stateByPty.clear();
+    this.idMapper.dispose();
+    this.offloadManager.dispose();
     this.writer = null;
     this.pendingWrites = [];
     this.flushScheduled = false;
     this.flushScheduler = null;
-    for (const timer of this.cleanupTimers) {
-      clearTimeout(timer);
-    }
-    this.cleanupTimers.clear();
   }
 
+  /**
+   * Clear all state for a PTY when it closes.
+   *
+   * Removes ID mappings, clears pending chunks, and aborts
+   * any active offload operations for the PTY.
+   *
+   * @param ptyId - PTY identifier to clear
+   */
   clearPty(ptyId: string): void {
-    const state = this.stateByPty.get(ptyId);
-    if (state?.pendingChunk?.offload) {
-      void this.abortOffload(state.pendingChunk.offload);
+    const pendingChunk = this.idMapper.clearPty(ptyId);
+    if (pendingChunk?.offload) {
+      void this.offloadManager.abort(pendingChunk.offload);
     }
-    this.stateByPty.delete(ptyId);
   }
 
+  /**
+   * Resolve the host image ID for an existing guest image.
+   *
+   * Used by the renderer to determine if a placed image
+   * exists and what its host ID is.
+   *
+   * @param ptyId - PTY identifier
+   * @param info - Guest image info with id and/or number
+   * @returns Host image ID if mapped, null otherwise
+   */
   resolveHostId(ptyId: string, info: KittyGraphicsImageInfo): number | null {
-    const state = this.stateByPty.get(ptyId);
-    if (!state) return null;
-    const idKey = buildGuestKey(info.id, null);
-    const numberKey = info.number > 0 ? buildGuestKey(null, info.number) : null;
-    if (idKey && state.hostIdByGuestKey.has(idKey)) {
-      return state.hostIdByGuestKey.get(idKey)!;
-    }
-    if (numberKey && state.hostIdByGuestKey.has(numberKey)) {
-      return state.hostIdByGuestKey.get(numberKey)!;
-    }
-    return null;
+    return this.idMapper.resolveHostId(ptyId, info);
   }
 
   dropMapping(ptyId: string, info: KittyGraphicsImageInfo): void {
-    const state = this.stateByPty.get(ptyId);
-    if (!state) return;
-    const idKey = buildGuestKey(info.id, null);
-    if (idKey) state.hostIdByGuestKey.delete(idKey);
-    if (info.number > 0) {
-      const numberKey = buildGuestKey(null, info.number);
-      if (numberKey) state.hostIdByGuestKey.delete(numberKey);
-    }
-    if (idKey) state.stubbedGuestKeys.delete(idKey);
-    if (info.number > 0) {
-      const numberKey = buildGuestKey(null, info.number);
-      if (numberKey) state.stubbedGuestKeys.delete(numberKey);
-    }
-    if (state.hostIdByGuestKey.size === 0 && !state.pendingChunk) {
-      this.stateByPty.delete(ptyId);
-    }
+    this.idMapper.dropMapping(ptyId, info);
   }
 
+  /**
+   * Main entry point for handling Kitty graphics sequences.
+   *
+   * Processing flow:
+   * 1. Parse the sequence into structured parameters
+   * 2. Handle delete actions (a=d) separately
+   * 3. Resolve transmit target (guest key → host ID mapping)
+   * 4. Determine if data should be offloaded to temp file
+   * 5. Forward to host terminal with resolved parameters
+   * 6. Rebuild guest sequence for emulator (possibly stubbed)
+   *
+   * @param ptyId - PTY identifier for this sequence
+   * @param sequence - Raw Kitty graphics escape sequence
+   * @returns Modified sequence for the emulator, or empty string to drop
+   */
   handleSequence(ptyId: string, sequence: string): string {
     if (!this.enabled || !this.writer) return sequence;
-    const parsed = parseKittySequence(sequence);
+
+    const parsed = this.sequenceParser.parse(sequence);
     if (!parsed) return sequence;
+
     const action = parsed.params.get('a');
     if (action === 'd') {
-      const state = this.getState(ptyId);
-      const deleteTarget = parsed.params.get('d') ?? '';
-      if (deleteTarget === 'a') {
-        if (state.pendingChunk?.offload) {
-          void this.abortOffload(state.pendingChunk.offload);
-        }
-        state.pendingChunk = null;
-        // Host renders are driven by the emulator state; forwarding d=a would
-        // nuke images from unrelated screens/panes.
-        return sequence;
-      }
-
-      if (deleteTarget === 'i' || deleteTarget === 'I') {
-        const guestId = normalizeParamId(parsed.params.get('i'));
-        const guestNumber = normalizeParamId(parsed.params.get('I'));
-        const guestKey = buildGuestKey(guestId, guestNumber);
-        if (guestKey) {
-          const hostId = state.hostIdByGuestKey.get(guestKey);
-          if (hostId) {
-            this.enqueue(buildDeleteImage(hostId));
-            state.hostIdByGuestKey.delete(guestKey);
-            state.stubbedGuestKeys.delete(guestKey);
-          }
-        }
+      const deleteRequest = this.sequenceParser.resolveDelete(parsed);
+      if (deleteRequest) {
+        return this.handleDelete({ ptyId, sequence, deleteRequest });
       }
       return sequence;
     }
-    tracePtyEvent('kitty-broker-seq', {
-      ptyId,
-      control: parsed.control,
-      dataLen: parsed.data.length,
-      action: action ?? '',
-      format: parsed.params.get('f') ?? '',
-      medium: parsed.params.get('t') ?? '',
-      more: parsed.params.get('m') ?? '',
-      imageId: parsed.params.get('i') ?? '',
-      imageNumber: parsed.params.get('I') ?? '',
-    });
-    const state = this.getState(ptyId);
-    let transmit = parseTransmitParams(parsed);
-    if (!transmit && state.pendingChunk) {
-      const actionParam = parsed.params.get('a');
-      let continuationOnlyIds = true;
-      if (actionParam && actionParam !== 't' && actionParam !== 'T') {
-        continuationOnlyIds = false;
-      }
-      for (const key of parsed.params.keys()) {
-        if (key !== 'i' && key !== 'I' && key !== 'a') {
-          continuationOnlyIds = false;
-          break;
-        }
-      }
-      if (continuationOnlyIds) {
-        transmit = { ...state.pendingChunk.params, more: false };
-      }
-    }
+
+    this.traceGuestSequence({ ptyId, parsed });
+
+    const pendingChunk = this.idMapper.getPendingChunk(ptyId);
+    const transmit = this.sequenceParser.resolveTransmit({ parsed, pendingChunk });
     if (!transmit) return sequence;
-    const guestId = normalizeParamId(parsed.params.get('i'));
-    const guestNumber = normalizeParamId(parsed.params.get('I'));
-    let guestKey = guestId || guestNumber ? buildGuestKey(guestId, guestNumber) : null;
-    let shouldInjectId = false;
-    let injectedGuestId: string | null = null;
 
-    if (!guestKey && state.pendingChunk) {
-      guestKey = state.pendingChunk.guestKey;
-    }
+    const target = this.idMapper.resolveTransmitTarget({
+      ptyId,
+      guestId: transmit.guestId,
+      guestNumber: transmit.guestNumber,
+      fallbackGuestKey: transmit.fallbackGuestKey,
+    });
+    if (!target) return sequence;
 
-    if (!guestKey) {
-      injectedGuestId = String(state.nextSyntheticGuestId);
-      state.nextSyntheticGuestId = nextSynthetic(state.nextSyntheticGuestId);
-      guestKey = buildGuestKey(injectedGuestId, null);
-      shouldInjectId = true;
-    }
-
-    if (!guestKey) {
-      return sequence;
-    }
-
-    const resolvedGuestKey = guestKey;
-    let hostId = state.hostIdByGuestKey.get(resolvedGuestKey);
-    if (!hostId) {
-      hostId = this.nextHostImageId++;
-      state.hostIdByGuestKey.set(resolvedGuestKey, hostId);
-    }
-
-    const mergedParams = mergeTransmitParams(state.pendingChunk?.params ?? null, transmit);
-    const activeOffload = state.pendingChunk?.offload ?? null;
-    const shouldOffload = activeOffload ?? this.shouldOffload(mergedParams, parsed.data, transmit.more);
-    if (shouldOffload) {
-      const offload = activeOffload ?? this.startOffload();
-      if (!activeOffload && transmit.more) {
-        state.pendingChunk = { guestKey, hostId, params: mergedParams, offload };
-      }
-      this.appendOffload(offload, parsed.data);
-      if (!transmit.more) {
-        const filePath = this.finishOffload(offload);
-        const hostSequence = buildHostFileTransmitSequence(hostId, mergedParams, filePath);
-        if (hostSequence.length > 0) {
-          this.enqueue(hostSequence);
-        }
-      const hostControl = process.env.OPENMUX_PTY_TRACE
-        ? parseKittySequence(hostSequence)?.control ?? ''
-        : '';
-      tracePtyEvent('kitty-broker-host', {
-        ptyId,
-        hostId,
-        guestKey: resolvedGuestKey,
-        offload: true,
-        filePath,
-        bytesWritten: offload.bytesWritten,
-        control: hostControl,
-        });
-        void this.scheduleCleanup(filePath);
-      }
-    } else {
-      const hostSequence = buildHostTransmitSequence(hostId, mergedParams, parsed.data);
-      if (hostSequence.length > 0) {
-        this.enqueue(hostSequence);
-      }
-      const hostControl = process.env.OPENMUX_PTY_TRACE
-        ? parseKittySequence(hostSequence)?.control ?? ''
-        : '';
-      tracePtyEvent('kitty-broker-host', {
-        ptyId,
-        hostId,
-        guestKey: resolvedGuestKey,
-        offload: false,
-        dataLen: parsed.data.length,
-        control: hostControl,
+    const mergedParams = mergeTransmitParams(pendingChunk?.params ?? null, transmit.params);
+    const activeOffload = pendingChunk?.offload ?? null;
+    const shouldOffload =
+      activeOffload !== null ||
+      this.offloadManager.shouldOffload({
+        params: mergedParams,
+        data: parsed.data,
+        isChunked: transmit.params.more,
       });
-    }
 
-    if (shouldInjectId && injectedGuestId) {
-      parsed.params.set('i', injectedGuestId);
-    }
+    const pendingOffload = this.forwardHostTransmit({
+      ptyId,
+      parsed,
+      targetHostId: target.hostId,
+      guestKey: target.guestKey,
+      params: mergedParams,
+      transmit,
+      activeOffload,
+      shouldOffload,
+    });
 
-    if (transmit.more) {
-      if (!state.pendingChunk) {
-        state.pendingChunk = { guestKey: resolvedGuestKey, hostId, params: mergedParams, offload: null };
-      } else {
-        state.pendingChunk.guestKey = resolvedGuestKey;
-        state.pendingChunk.hostId = hostId;
-        state.pendingChunk.params = mergedParams;
-      }
-    } else if (!state.pendingChunk?.offload || activeOffload) {
-      state.pendingChunk = null;
-    }
+    const rebuiltSequence = target.injectedGuestId
+      ? this.sequenceParser.injectGuestId({
+          parsed,
+          injectedGuestId: target.injectedGuestId,
+        })
+      : null;
 
-    let rebuiltSequence: string | null = null;
-    if (shouldInjectId && injectedGuestId) {
-      const rebuiltControl = rebuildControl(parsed.params);
-      rebuiltSequence = `${parsed.prefix}${rebuiltControl};${parsed.data}${parsed.suffix}`;
-    }
+    this.updatePendingChunk({
+      ptyId,
+      guestKey: target.guestKey,
+      hostId: target.hostId,
+      params: mergedParams,
+      more: transmit.params.more,
+      offload: pendingOffload,
+    });
 
     const shouldStubSharedMemory = this.stubSharedMemory && mergedParams.medium === 's';
     if (!this.stubEmulator && !shouldStubSharedMemory) {
       return rebuiltSequence ?? sequence;
     }
 
+    const stubbedGuestKeys = this.idMapper.getStubbedGuestKeys(ptyId);
     const { emuSequence, dropEmulator } = buildEmulatorSequence(
       parsed,
       mergedParams,
-      resolvedGuestKey,
-      state.stubbedGuestKeys,
+      target.guestKey,
+      stubbedGuestKeys,
       shouldStubSharedMemory
     );
 
     if (dropEmulator) {
       tracePtyEvent('kitty-broker-emu', {
         ptyId,
-        guestKey: resolvedGuestKey,
+        guestKey: target.guestKey,
         drop: true,
       });
       return '';
@@ -360,7 +275,7 @@ export class KittyTransmitBroker {
     if (emuSequence) {
       tracePtyEvent('kitty-broker-emu', {
         ptyId,
-        guestKey: resolvedGuestKey,
+        guestKey: target.guestKey,
         stubbed: true,
       });
       return emuSequence;
@@ -369,107 +284,140 @@ export class KittyTransmitBroker {
     return rebuiltSequence ?? sequence;
   }
 
-  private getState(ptyId: string): PtyBrokerState {
-    let state = this.stateByPty.get(ptyId);
-    if (!state) {
-      state = {
-        hostIdByGuestKey: new Map(),
-        pendingChunk: null,
-        stubbedGuestKeys: new Set(),
-        nextSyntheticGuestId: 2147483647,
-      };
-      this.stateByPty.set(ptyId, state);
-    }
-    return state;
-  }
+  private handleDelete(params: {
+    ptyId: string;
+    sequence: string;
+    deleteRequest: DeleteRequest;
+  }): string {
+    const { ptyId, sequence, deleteRequest } = params;
 
-  private shouldOffload(params: TransmitParams, data: string, isChunked: boolean): boolean {
-    if (this.offloadThresholdBytes <= 0) return false;
-    const medium = params.medium ?? 'd';
-    if (medium !== 'd') return false;
-    if (isChunked) return true;
-    if (!data) return false;
-    const estimated = estimateDecodedSize(data);
-    return estimated >= this.offloadThresholdBytes;
-  }
-
-  private startOffload(): OffloadState {
-    const filePath = createTempFilePath(this.tempFileCounter++);
-    const fd = fs.openSync(filePath, 'w');
-    return { fd, filePath, carry: '', bytesWritten: 0 };
-  }
-
-  private appendOffload(offload: OffloadState, data: string): void {
-    if (!data) return;
-    const combined = `${offload.carry}${data}`;
-    const usableLen = Math.floor(combined.length / 4) * 4;
-    const toDecode = usableLen > 0 ? combined.slice(0, usableLen) : '';
-    offload.carry = combined.slice(usableLen);
-    if (toDecode.length === 0) return;
-    const decoded = Buffer.from(toDecode, 'base64');
-    if (decoded.length === 0) return;
-    fs.writeSync(offload.fd, decoded);
-    offload.bytesWritten += decoded.length;
-  }
-
-  private finishOffload(offload: OffloadState): string {
-    if (offload.carry.length > 0) {
-      const decoded = Buffer.from(offload.carry, 'base64');
-      if (decoded.length > 0) {
-        fs.writeSync(offload.fd, decoded);
-        offload.bytesWritten += decoded.length;
+    if (deleteRequest.target === 'all') {
+      const pendingChunk = this.idMapper.getPendingChunk(ptyId);
+      this.idMapper.setPendingChunk(ptyId, null);
+      if (pendingChunk?.offload) {
+        void this.offloadManager.abort(pendingChunk.offload);
       }
-      offload.carry = '';
+
+      // Host renders are driven by the emulator state; forwarding d=a would
+      // nuke images from unrelated screens/panes.
+      return sequence;
     }
-    fs.closeSync(offload.fd);
-    return offload.filePath;
+
+    if (!deleteRequest.guestKey) {
+      return sequence;
+    }
+
+    const hostId = this.idMapper.deleteGuestKey(ptyId, deleteRequest.guestKey);
+    if (hostId) {
+      this.enqueue(buildDeleteImage(hostId));
+    }
+
+    return sequence;
   }
 
-  private async abortOffload(offload: OffloadState): Promise<KittyOffloadError | void> {
-    const closeResult = await errore.tryAsync<void, KittyOffloadError>({
-      try: () => {
-        fs.closeSync(offload.fd);
-        return Promise.resolve();
-      },
-      catch: (e) => new KittyOffloadError({ operation: 'close', reason: String(e), cause: e }),
-    });
-    if (closeResult instanceof KittyOffloadError) {
-      return closeResult;
+  private forwardHostTransmit(params: {
+    ptyId: string;
+    parsed: KittySequence;
+    targetHostId: number;
+    guestKey: string;
+    params: TransmitParams;
+    transmit: TransmitRequest;
+    activeOffload: OffloadState | null;
+    shouldOffload: boolean;
+  }): OffloadState | null {
+    const {
+      ptyId,
+      parsed,
+      targetHostId,
+      guestKey,
+      params: mergedParams,
+      transmit,
+      activeOffload,
+      shouldOffload,
+    } = params;
+
+    if (shouldOffload) {
+      const offload = activeOffload ?? this.offloadManager.start();
+      this.offloadManager.append({ offload, data: parsed.data });
+
+      if (!transmit.params.more) {
+        const filePath = this.offloadManager.finish(offload);
+        const hostSequence = buildHostFileTransmitSequence(targetHostId, mergedParams, filePath);
+        if (hostSequence.length > 0) {
+          this.enqueue(hostSequence);
+        }
+        tracePtyEvent('kitty-broker-host', {
+          ptyId,
+          hostId: targetHostId,
+          guestKey,
+          offload: true,
+          filePath,
+          bytesWritten: offload.bytesWritten,
+          control: this.getTraceControl(hostSequence),
+        });
+        void this.offloadManager.scheduleCleanup(filePath);
+        return null;
+      }
+
+      return offload;
     }
 
-    const unlinkResult = await errore.tryAsync<void, KittyOffloadError>({
-      try: () => {
-        fs.unlinkSync(offload.filePath);
-        return Promise.resolve();
-      },
-      catch: (e) => new KittyOffloadError({ operation: 'unlink', reason: String(e), cause: e }),
+    const hostSequence = buildHostTransmitSequence(targetHostId, mergedParams, parsed.data);
+    if (hostSequence.length > 0) {
+      this.enqueue(hostSequence);
+    }
+    tracePtyEvent('kitty-broker-host', {
+      ptyId,
+      hostId: targetHostId,
+      guestKey,
+      offload: false,
+      dataLen: parsed.data.length,
+      control: this.getTraceControl(hostSequence),
     });
-    return unlinkResult;
+    return null;
   }
 
-  private async scheduleCleanup(filePath: string): Promise<KittyOffloadError | void> {
-    if (this.offloadCleanupDelayMs <= 0) {
-      const result = await errore.tryAsync<void, KittyOffloadError>({
-        try: () => {
-          fs.unlinkSync(filePath);
-          return Promise.resolve();
-        },
-        catch: (e) => new KittyOffloadError({ operation: 'cleanup', reason: String(e), cause: e }),
-      });
-      return result;
+  private updatePendingChunk(params: {
+    ptyId: string;
+    guestKey: string;
+    hostId: number;
+    params: TransmitParams;
+    more: boolean;
+    offload: OffloadState | null;
+  }): void {
+    const { ptyId, guestKey, hostId, params: transmitParams, more, offload } = params;
+
+    if (!more) {
+      this.idMapper.setPendingChunk(ptyId, null);
+      return;
     }
 
-    const timer = setTimeout(() => {
-      this.cleanupTimers.delete(timer);
-      void errore.tryAsync<void, KittyOffloadError>({
-        try: () => {
-          fs.unlinkSync(filePath);
-          return Promise.resolve();
-        },
-        catch: (e) => new KittyOffloadError({ operation: 'cleanup', reason: String(e), cause: e }),
-      });
-    }, this.offloadCleanupDelayMs);
-    this.cleanupTimers.add(timer);
+    this.idMapper.setPendingChunk(ptyId, {
+      guestKey,
+      hostId,
+      params: transmitParams,
+      offload,
+    });
+  }
+
+  private traceGuestSequence(params: { ptyId: string; parsed: KittySequence }): void {
+    const { ptyId, parsed } = params;
+    tracePtyEvent('kitty-broker-seq', {
+      ptyId,
+      control: parsed.control,
+      dataLen: parsed.data.length,
+      action: parsed.params.get('a') ?? '',
+      format: parsed.params.get('f') ?? '',
+      medium: parsed.params.get('t') ?? '',
+      more: parsed.params.get('m') ?? '',
+      imageId: parsed.params.get('i') ?? '',
+      imageNumber: parsed.params.get('I') ?? '',
+    });
+  }
+
+  private getTraceControl(sequence: string): string {
+    if (!process.env.OPENMUX_PTY_TRACE) return '';
+    return this.sequenceParser.parse(sequence)?.control ?? '';
   }
 
   private enqueue(chunk: string): void {
@@ -478,16 +426,11 @@ export class KittyTransmitBroker {
       this.writer(chunk);
       return;
     }
+
     this.pendingWrites.push(chunk);
     if (!this.flushScheduled) {
       this.flushScheduled = true;
       this.flushScheduler?.();
     }
   }
-}
-
-function nextSynthetic(current: number): number {
-  const next = current + 1;
-  if (next > 0xffffffff) return 2147483647;
-  return next;
 }

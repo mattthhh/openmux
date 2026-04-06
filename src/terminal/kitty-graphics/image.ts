@@ -1,5 +1,19 @@
 import { KittyGraphicsFormat, type KittyGraphicsImageInfo } from '../emulator-interface';
 
+/**
+ * Prepare image data for Kitty graphics transmission.
+ *
+ * Converts various image formats to the appropriate Kitty format:
+ * - RGB → Format 24 (RGB888)
+ * - RGBA → Format 32 (RGBA8888)
+ * - PNG → Format 100, or 32 if already decoded
+ * - Grayscale → Expanded to RGBA8888
+ * - Grayscale+Alpha → Expanded to RGBA8888
+ *
+ * @param info - Image metadata including format
+ * @param data - Raw image pixel data
+ * @returns Prepared data with Kitty format code, or null if unsupported
+ */
 export function prepareImageData(
   info: KittyGraphicsImageInfo,
   data: Uint8Array
@@ -25,6 +39,10 @@ export function prepareImageData(
   }
 }
 
+/**
+ * Expand grayscale data to RGBA by replicating the gray value
+ * to R, G, B channels with full alpha.
+ */
 function expandGray(data: Uint8Array): Uint8Array {
   const out = new Uint8Array(data.byteLength * 4);
   let outIdx = 0;
@@ -38,6 +56,10 @@ function expandGray(data: Uint8Array): Uint8Array {
   return out;
 }
 
+/**
+ * Expand grayscale+alpha data to RGBA by replicating the gray value
+ * to R, G, B channels and preserving the alpha channel.
+ */
 function expandGrayAlpha(data: Uint8Array): Uint8Array {
   const pixels = Math.floor(data.byteLength / 2);
   const out = new Uint8Array(pixels * 4);

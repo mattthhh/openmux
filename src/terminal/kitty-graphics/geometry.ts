@@ -1,6 +1,24 @@
 import type { KittyGraphicsImageInfo, KittyGraphicsPlacement } from '../emulator-interface';
 import type { CellMetrics, ClipRect, PaneState, PlacementRender } from './types';
 
+/**
+ * Compute rendering parameters for a single image placement.
+ *
+ * Calculates:
+ * - Viewport position from absolute scrollback coordinates
+ * - Destination size (respecting placement dimensions or image size)
+ * - Visible region (clipped to pane bounds)
+ * - Source crop coordinates for partial visibility
+ *
+ * Returns null if the placement is completely outside the visible pane
+ * or has invalid dimensions.
+ *
+ * @param pane - Pane state with dimensions and scroll info
+ * @param placement - Image placement specification
+ * @param image - Image metadata (width, height)
+ * @param metrics - Cell dimensions in pixels
+ * @returns Render parameters or null if not visible
+ */
 export function computePlacementRender(
   pane: PaneState,
   placement: KittyGraphicsPlacement,

@@ -4,6 +4,12 @@ import type {
   KittyGraphicsPlacement,
 } from '../emulator-interface';
 
+/**
+ * Renderer-like interface for output operations.
+ *
+ * Supports both OpenTUI renderer objects and raw stdout streams.
+ * Used to abstract where Kitty graphics commands are written to.
+ */
 export type RendererLike = {
   resolution?: { width: number; height: number } | null;
   terminalWidth?: number;
@@ -53,11 +59,26 @@ export type PtyKittyState = {
   initialized: boolean;
 };
 
+/**
+ * Cache entry for a transmitted image.
+ *
+ * Maps host image IDs to their metadata for tracking
+ * which images are available for placement.
+ */
 export type ImageCache = {
   hostId: number;
   info: KittyGraphicsImageInfo;
 };
 
+/**
+ * Parameters for rendering a single image placement.
+ *
+ * Contains both the image reference (hostImageId) and
+ * positioning/sizing information for where to display it.
+ *
+ * Coordinates are in cells (rows/cols) with pixel offsets.
+ * Source coordinates allow cropping the source image.
+ */
 export type PlacementRender = {
   key: string;
   imageId: number;

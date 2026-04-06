@@ -8,6 +8,18 @@ const KITTY_ESCAPE = `${ESC}_G`;
 const KITTY_END = `${ESC}\\`;
 const BASE64_CHUNK_SIZE = 4096;
 
+/**
+ * Build a Kitty graphics transmit command for image data.
+ *
+ * Prepares the image data (converting format if needed), then builds
+ * a chunked transmit sequence. Large images are split into multiple
+ * sequences with the m=1 flag (more data coming).
+ *
+ * @param hostId - Host-assigned image ID
+ * @param info - Image metadata (width, height, format)
+ * @param data - Raw image pixel data
+ * @returns Complete transmit sequence string
+ */
 export function buildTransmitImage(
   hostId: number,
   info: KittyGraphicsImageInfo,
@@ -44,6 +56,23 @@ export function buildTransmitImage(
   return chunks.join('');
 }
 
+/**
+ * Build a Kitty graphics display (placement) command.
+ *
+ * Positions the cursor, saves cursor position (ESC 7),
+ * sends the placement command, then restores cursor (ESC 8).
+ *
+ * Parameters include:
+ * - C=1: Do not move cursor after display
+ * - c,r: Cell dimensions for the placement
+ * - x,y: Source image crop offset
+ * - w,h: Source image crop dimensions
+ * - X,Y: Cell offset within the target cell
+ * - z: Z-index for layering
+ *
+ * @param render - Placement render parameters
+ * @returns Complete display sequence with cursor positioning
+ */
 export function buildDisplay(render: PlacementRender): string {
   const params: Array<[string, string | number]> = [
     ['a', 'p'],
@@ -67,6 +96,16 @@ export function buildDisplay(render: PlacementRender): string {
   return `${ESC}7${position}${buildKittyCommand(params)}${ESC}8`;
 }
 
+/**
+ * Build a Kitty graphics delete placement command.
+ *
+ * Deletes a specific placement (instance) of an image without
+ * deleting the image itself (which may have other placements).
+ *
+ * @param hostImageId - Host image ID
+ * @param hostPlacementId - Placement ID to delete
+ * @returns Delete placement sequence
+ */
 export function buildDeletePlacement(hostImageId: number, hostPlacementId: number): string {
   return buildKittyCommand([
     ['a', 'd'],
@@ -77,6 +116,16 @@ export function buildDeletePlacement(hostImageId: number, hostPlacementId: numbe
   ]);
 }
 
+/**
+ * Build a Kitty graphics delete image command.
+ *
+ * Deletes an image entirely (d=I), removing all its placements.
+ * Unlike delete placement, this removes the image from the host
+ * terminal's storage.
+ *
+ * @param hostImageId - Host image ID to delete
+ * @returns Delete image sequence
+ */
 export function buildDeleteImage(hostImageId: number): string {
   return buildKittyCommand([
     ['a', 'd'],

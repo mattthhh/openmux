@@ -9,6 +9,27 @@ import {
   type TransmitParams,
 } from '../sequence-utils';
 
+/**
+ * Host query mode for Kitty graphics protocol.
+ *
+ * The 'q' parameter controls whether the host terminal responds to
+ * image transmission queries (success/failure acknowledgments).
+ *
+ * Mode values:
+ * - '0': No acknowledgments (silent operation)
+ * - '1': Synchronous acknowledgment (waits for display)
+ * - '2': Asynchronous acknowledgment (immediate response, default)
+ *
+ * Controlled by OPENMUX_KITTY_HOST_QUERY environment variable:
+ * - '1', 'true', 'yes' → Mode 1 (synchronous)
+ * - '0', 'false', 'no' → Mode 0 (silent)
+ * - '2' → Mode 2 (async, default)
+ * - If OPENMUX_PTY_TRACE is set → Mode 1 (for debugging)
+ * - Otherwise → Mode 2 (default for performance)
+ *
+ * Async mode (2) is preferred for performance as it doesn't block
+ * on image rendering operations.
+ */
 const hostQueryMode = (() => {
   const explicit = (process.env.OPENMUX_KITTY_HOST_QUERY ?? '').toLowerCase();
   if (explicit === '1' || explicit === 'true' || explicit === 'yes') return '1';
@@ -17,7 +38,11 @@ const hostQueryMode = (() => {
   return process.env.OPENMUX_PTY_TRACE ? '1' : '2';
 })();
 
-export function buildHostTransmitSequence(hostId: number, params: TransmitParams, data: string): string {
+export function buildHostTransmitSequence(
+  hostId: number,
+  params: TransmitParams,
+  data: string
+): string {
   if (!data && !params.more) return '';
   const control: string[] = [];
   control.push('a=t');
@@ -57,7 +82,11 @@ export function buildHostTransmitSequence(hostId: number, params: TransmitParams
   return `${KITTY_PREFIX_ESC}${control.join(',')};${data}${ESC}\\`;
 }
 
-export function buildHostFileTransmitSequence(hostId: number, params: TransmitParams, filePath: string): string {
+export function buildHostFileTransmitSequence(
+  hostId: number,
+  params: TransmitParams,
+  filePath: string
+): string {
   const control: string[] = [];
   control.push('a=t');
   control.push(`q=${hostQueryMode}`);
@@ -108,9 +137,10 @@ export function buildEmulatorSequence(
       return { emuSequence: null, dropEmulator: false };
     }
     if (medium !== 's') {
-      const dims = medium === 'd'
-        ? parsePngDimensionsFromBase64(parsed.data)
-        : parsePngDimensionsFromFilePayload(parsed.data);
+      const dims =
+        medium === 'd'
+          ? parsePngDimensionsFromBase64(parsed.data)
+          : parsePngDimensionsFromFilePayload(parsed.data);
       if (dims) {
         controlParams.set('s', String(dims.width));
         controlParams.set('v', String(dims.height));
@@ -119,7 +149,10 @@ export function buildEmulatorSequence(
   }
 
   if (!controlParams.get('s') || !controlParams.get('v')) {
-    return { emuSequence: parsed.prefix + parsed.control + ';' + parsed.data + parsed.suffix, dropEmulator: false };
+    return {
+      emuSequence: parsed.prefix + parsed.control + ';' + parsed.data + parsed.suffix,
+      dropEmulator: false,
+    };
   }
 
   if (!isPng) {

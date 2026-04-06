@@ -7,36 +7,33 @@ import type {
   TerminalState,
   TerminalScrollState,
   DirtyTerminalUpdate,
-} from "../../core/types";
-import type {
-  SearchResult,
-  TerminalModes,
-} from "../emulator-interface";
-import { areTerminalColorsEqual, type TerminalColors } from "../terminal-colors";
-import { createTitleParser } from "../title-parser";
-import { stripProblematicOscSequences } from "./osc-stripping";
-import { GhosttyVtTerminal } from "./terminal";
-import { createEmptyRow } from "../ghostty-emulator/cell-converter";
+} from '../../core/types';
+import type { SearchResult, TerminalModes } from '../emulator-interface';
+import { areTerminalColorsEqual, type TerminalColors } from '../terminal-colors';
+import { createTitleParser } from '../title-parser';
+import { stripProblematicOscSequences } from './osc-stripping';
+import { GhosttyVtTerminal } from './terminal';
+import { createEmptyRow } from '../ghostty-emulator/cell-converter';
 import {
   ScrollbackCache,
   createDefaultModes,
   createDefaultScrollState,
   createEmptyTerminalState,
   createEmptyDirtyUpdate,
-} from "../emulator-utils";
-import { getModes } from "./utils";
-import { searchTerminal } from "./terminal-search";
-import { fetchScrollbackLine } from "./scrollback";
-import { getCursorSnapshot } from "./cursor";
-import { prepareEmulatorUpdate } from "./emulator-updates";
-import { deferNextTick } from "../../core/scheduling";
-import { HOT_SCROLLBACK_LIMIT } from "../scrollback-config";
+} from '../emulator-utils';
+import { getModes } from './utils';
+import { searchTerminal } from './terminal-search';
+import { fetchScrollbackLine } from './scrollback';
+import { getCursorSnapshot } from './cursor';
+import { prepareEmulatorUpdate } from './emulator-updates';
+import { deferNextTick } from '../../core/scheduling';
+import { HOT_SCROLLBACK_LIMIT } from '../scrollback-config';
 import {
   applyColorRemapToRow,
   buildColorRemap,
   buildOscColorSequence,
   cloneColors,
-} from "./color-utils";
+} from './color-utils';
 
 const SCROLLBACK_LIMIT = HOT_SCROLLBACK_LIMIT;
 
@@ -55,10 +52,12 @@ export class GhosttyVTEmulatorCore {
   private pendingUpdate: DirtyTerminalUpdate | null = null;
 
   private titleParser: ReturnType<typeof createTitleParser>;
-  private currentTitle = "";
+  private currentTitle = '';
   private titleCallbacks = new Set<(title: string) => void>();
   private updateCallbacks = new Set<() => void>();
-  private modeChangeCallbacks = new Set<(modes: TerminalModes, prevModes?: TerminalModes) => void>();
+  private modeChangeCallbacks = new Set<
+    (modes: TerminalModes, prevModes?: TerminalModes) => void
+  >();
   private updatesEnabled = true;
   private needsFullRefresh = false;
 
@@ -90,7 +89,7 @@ export class GhosttyVTEmulatorCore {
     });
 
     // Clear terminal state to avoid stale memory artifacts.
-    this.terminal.write("\x1b[2J\x1b[H");
+    this.terminal.write('\x1b[2J\x1b[H');
     this.terminal.update();
     this.terminal.markClean();
 
@@ -113,7 +112,7 @@ export class GhosttyVTEmulatorCore {
   write(data: string | Uint8Array): void {
     if (this._disposed) return;
 
-    const text = typeof data === "string" ? data : this.decoder.decode(data);
+    const text = typeof data === 'string' ? data : this.decoder.decode(data);
     if (text.length === 0) return;
 
     this.titleParser.processData(text);
@@ -166,8 +165,8 @@ export class GhosttyVTEmulatorCore {
 
   reset(): void {
     if (this._disposed) return;
-    this.terminal.write("\x1bc");
-    this.currentTitle = "";
+    this.terminal.write('\x1bc');
+    this.currentTitle = '';
     this.scrollbackCache.clear();
     this.scrollbackSnapshotDirty = true;
     if (!this.updatesEnabled) {
@@ -265,7 +264,7 @@ export class GhosttyVTEmulatorCore {
     });
   }
 
-  getCursorKeyMode(): "normal" | "application" {
+  getCursorKeyMode(): 'normal' | 'application' {
     return this.modes.cursorKeyMode;
   }
 
@@ -415,21 +414,25 @@ export class GhosttyVTEmulatorCore {
     if (this._disposed) return;
     const result = prepareEmulatorUpdate({
       terminal: this.terminal,
-      cols: this._cols,
-      rows: this._rows,
+      layout: {
+        cols: this._cols,
+        rows: this._rows,
+        scrollbackLimit: SCROLLBACK_LIMIT,
+      },
       colors: this.colors,
-      cachedState: this.cachedState,
-      modes: this.modes,
-      scrollState: this.scrollState,
+      state: {
+        cachedState: this.cachedState,
+        modes: this.modes,
+        scrollState: this.scrollState,
+        forceFull,
+      },
       scrollbackCache: this.scrollbackCache,
-      forceFull,
-      scrollbackLimit: SCROLLBACK_LIMIT,
     });
 
     this.cachedState = result.cachedState;
     this.pendingUpdate = result.pendingUpdate;
     this.scrollState = result.scrollState;
-    this.scrollbackSnapshotDirty = result.scrollbackSnapshotDirty;
+    this.scrollbackSnapshotDirty = false;
     this.applyColorRemapToPendingUpdate();
 
     if (
@@ -450,8 +453,7 @@ export class GhosttyVTEmulatorCore {
   private refreshColorRemap(colors: TerminalColors): void {
     const native = this.terminal.getColors();
     const nativeMatches =
-      native.foreground === colors.foreground &&
-      native.background === colors.background;
+      native.foreground === colors.foreground && native.background === colors.background;
 
     if (nativeMatches) {
       this.baseColors = cloneColors(colors);

@@ -162,30 +162,6 @@ export interface ITerminalEmulator {
    */
   onModeChange(callback: (modes: TerminalModes, prevModes?: TerminalModes) => void): () => void;
 
-  /** Check if kitty images/placements changed since last clear. */
-  getKittyImagesDirty?(): boolean;
-
-  /** Clear kitty images/placements dirty flag. */
-  clearKittyImagesDirty?(): void;
-
-  /** Get list of kitty image IDs. */
-  getKittyImageIds?(): number[];
-
-  /** Get kitty image metadata by ID. */
-  getKittyImageInfo?(imageId: number): KittyGraphicsImageInfo | null;
-
-  /** Get kitty image data by ID. */
-  getKittyImageData?(imageId: number): Uint8Array | null;
-
-  /**
-   * Whether renderer should seed host image bytes for a broker-mapped image.
-   * Used by shim emulators to request explicit fallback seeding on selected updates.
-   */
-  shouldSeedKittyImage?(imageId: number): boolean;
-
-  /** Get kitty placements for the active screen. */
-  getKittyPlacements?(): KittyGraphicsPlacement[];
-
   /**
    * Drain pending terminal responses (e.g., Kitty graphics query replies).
    * Returns an array of response strings to write back to the PTY.
@@ -199,6 +175,53 @@ export interface ITerminalEmulator {
    * @param options.limit Maximum number of matches to return (default: 500)
    */
   search(query: string, options?: { limit?: number }): Promise<SearchResult>;
+}
+
+/**
+ * Optional Kitty graphics extension implemented by emulators that expose
+ * image metadata, pixel payloads, and placement state.
+ */
+export interface IKittyGraphicsEmulator {
+  /** Check if kitty images/placements changed since last clear. */
+  getKittyImagesDirty(): boolean;
+
+  /** Clear kitty images/placements dirty flag. */
+  clearKittyImagesDirty(): void;
+
+  /** Get list of kitty image IDs. */
+  getKittyImageIds(): number[];
+
+  /** Get kitty image metadata by ID. */
+  getKittyImageInfo(imageId: number): KittyGraphicsImageInfo | null;
+
+  /** Get kitty image data by ID. */
+  getKittyImageData(imageId: number): Uint8Array | null;
+
+  /**
+   * Whether renderer should seed host image bytes for a broker-mapped image.
+   * Used by shim emulators to request explicit fallback seeding on selected updates.
+   */
+  shouldSeedKittyImage?(imageId: number): boolean;
+
+  /** Get kitty placements for the active screen. */
+  getKittyPlacements(): KittyGraphicsPlacement[];
+}
+
+export type KittyGraphicsEmulator = ITerminalEmulator & IKittyGraphicsEmulator;
+
+export function isKittyGraphicsEmulator(
+  emulator: ITerminalEmulator | null | undefined
+): emulator is KittyGraphicsEmulator {
+  const candidate = emulator as Partial<IKittyGraphicsEmulator> | null | undefined;
+  return Boolean(
+    emulator &&
+    typeof candidate?.getKittyImagesDirty === 'function' &&
+    typeof candidate?.clearKittyImagesDirty === 'function' &&
+    typeof candidate?.getKittyImageIds === 'function' &&
+    typeof candidate?.getKittyImageInfo === 'function' &&
+    typeof candidate?.getKittyImageData === 'function' &&
+    typeof candidate?.getKittyPlacements === 'function'
+  );
 }
 
 /**

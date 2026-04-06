@@ -1,8 +1,4 @@
-import type {
-  DirtyTerminalUpdate,
-  TerminalScrollState,
-  TerminalState,
-} from '../../core/types';
+import type { DirtyTerminalUpdate, TerminalScrollState, TerminalState } from '../../core/types';
 import type { TerminalModes } from '../emulator-interface';
 import type { TerminalColors } from '../terminal-colors';
 import type { ScrollbackCache } from '../emulator-utils';
@@ -12,17 +8,25 @@ import { getModes } from './utils';
 import { buildDirtyState } from './dirty-state';
 import type { GhosttyVtTerminal } from './terminal';
 
-export interface PrepareEmulatorUpdateParams {
-  terminal: GhosttyVtTerminal;
+export interface EmulatorUpdateLayout {
   cols: number;
   rows: number;
-  colors: TerminalColors;
+  scrollbackLimit: number;
+}
+
+export interface EmulatorUpdateState {
   cachedState: TerminalState | null;
   modes: TerminalModes;
   scrollState: TerminalScrollState;
-  scrollbackCache: ScrollbackCache;
   forceFull: boolean;
-  scrollbackLimit: number;
+}
+
+export interface PrepareEmulatorUpdateParams {
+  terminal: GhosttyVtTerminal;
+  layout: EmulatorUpdateLayout;
+  colors: TerminalColors;
+  state: EmulatorUpdateState;
+  scrollbackCache: ScrollbackCache;
 }
 
 export interface PrepareEmulatorUpdateResult {
@@ -31,21 +35,17 @@ export interface PrepareEmulatorUpdateResult {
   modes: TerminalModes;
   prevModes: TerminalModes;
   scrollState: TerminalScrollState;
-  scrollbackSnapshotDirty: boolean;
 }
 
-export function prepareEmulatorUpdate(params: PrepareEmulatorUpdateParams): PrepareEmulatorUpdateResult {
+export function prepareEmulatorUpdate(
+  params: PrepareEmulatorUpdateParams
+): PrepareEmulatorUpdateResult {
   const {
     terminal,
-    cols,
-    rows,
+    layout: { cols, rows, scrollbackLimit },
     colors,
-    cachedState,
-    modes,
-    scrollState,
+    state: { cachedState, modes, scrollState, forceFull },
     scrollbackCache,
-    forceFull,
-    scrollbackLimit,
   } = params;
 
   const dirtyState = terminal.update();
@@ -64,11 +64,14 @@ export function prepareEmulatorUpdate(params: PrepareEmulatorUpdateParams): Prep
   };
 
   const shouldBuildFull = forceFull || dirtyState === DirtyState.FULL || !cachedState;
-  const viewport = shouldBuildFull || dirtyState !== DirtyState.NONE
-    ? terminal.getViewport()
-    : null;
+  const viewport =
+    shouldBuildFull || dirtyState !== DirtyState.NONE ? terminal.getViewport() : null;
 
-  const { cachedState: nextCachedState, dirtyRows, fullState } = buildDirtyState({
+  const {
+    cachedState: nextCachedState,
+    dirtyRows,
+    fullState,
+  } = buildDirtyState({
     terminal,
     viewport,
     cols,
@@ -120,6 +123,5 @@ export function prepareEmulatorUpdate(params: PrepareEmulatorUpdateParams): Prep
     modes: newModes,
     prevModes,
     scrollState: nextScrollState,
-    scrollbackSnapshotDirty: false,
   };
 }

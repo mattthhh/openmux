@@ -1,12 +1,8 @@
-import type { ITerminalEmulator } from '../../emulator-interface';
+import { isKittyGraphicsEmulator, type ITerminalEmulator } from '../../emulator-interface';
 import { buildDeleteImage, buildTransmitImage } from '../commands';
 import { getKittyTransmitBroker } from '../transmit-broker';
 import { tracePtyEvent } from '../../pty-trace';
-import {
-  buildScreenKey,
-  getScreenKeys,
-  isSameImage,
-} from '../renderer-helpers';
+import { buildScreenKey, getScreenKeys, isSameImage } from '../renderer-helpers';
 import type { ImageCache, PtyKittyState, PlacementRender } from '../types';
 import { deletePlacementsForImage } from './placements';
 
@@ -58,10 +54,9 @@ export function updatePtyState(params: {
   let nextHostImageId = params.nextHostImageId;
 
   if (emulator.isDisposed) return nextHostImageId;
-  const supportsKitty = !!emulator.getKittyImageIds && !!emulator.getKittyPlacements;
-  if (!supportsKitty) return nextHostImageId;
+  if (!isKittyGraphicsEmulator(emulator)) return nextHostImageId;
 
-  const dirty = emulator.getKittyImagesDirty?.() ?? false;
+  const dirty = emulator.getKittyImagesDirty();
   const screenKey = buildScreenKey(ptyId, isAlternateScreen);
   const screenState = getScreenState(screenStates, screenKey);
   const broker = getKittyTransmitBroker();
@@ -74,14 +69,14 @@ export function updatePtyState(params: {
     return nextHostImageId;
   }
 
-  const ids = emulator.getKittyImageIds?.() ?? [];
+  const ids = emulator.getKittyImageIds();
   const nextImages = new Map<number, ImageCache>();
   const previousImages = screenState.images;
   const registry = getImageRegistry(imageRegistry, ptyId);
   let imagesChanged = ids.length !== previousImages.size;
 
   for (const id of ids) {
-    const info = emulator.getKittyImageInfo?.(id);
+    const info = emulator.getKittyImageInfo(id);
     if (!info) continue;
 
     const previousScreen = previousImages.get(id);
@@ -98,7 +93,7 @@ export function updatePtyState(params: {
       : false;
     const shouldTransmitData = (!brokerHostId && changed) || shouldSeedMappedImage;
     if (shouldTransmitData) {
-      const data = emulator.getKittyImageData?.(id);
+      const data = emulator.getKittyImageData(id);
       if (data) {
         const transmit = buildTransmitImage(hostId, info, data);
         if (transmit) {
@@ -122,13 +117,11 @@ export function updatePtyState(params: {
     nextImages.set(id, cache);
   }
 
-  const nextPlacements = emulator.getKittyPlacements?.() ?? [];
+  const nextPlacements = emulator.getKittyPlacements();
   // Only reuse placements during an alt/main screen transition. When scrollback
   // trims, Ghostty returns no placements; reusing them keeps stale images pinned.
   const shouldReusePlacements =
-    allowPlacementReuse &&
-    nextPlacements.length === 0 &&
-    nextImages.size > 0;
+    allowPlacementReuse && nextPlacements.length === 0 && nextImages.size > 0;
   if (shouldReusePlacements) {
     screenState.images = nextImages;
   } else {
@@ -147,7 +140,7 @@ export function updatePtyState(params: {
     cachedPlacements: screenState.placements.length,
   });
   screenState.initialized = true;
-  emulator.clearKittyImagesDirty?.();
+  emulator.clearKittyImagesDirty();
 
   const activeIds = new Set<number>();
   for (const key of getScreenKeys(ptyId)) {

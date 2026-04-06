@@ -166,6 +166,15 @@ export function normalizeParamId(value: string | undefined): string | null {
   return value;
 }
 
+/**
+ * Parse PNG dimensions from base64-encoded PNG data.
+ *
+ * Takes the first 64 characters of the base64 string, decodes them,
+ * and extracts width/height from the PNG IHDR chunk.
+ *
+ * @param data - Base64-encoded PNG data
+ * @returns Object with width and height, or null if not valid PNG
+ */
 export function parsePngDimensionsFromBase64(
   data: string
 ): { width: number; height: number } | null {
@@ -182,6 +191,13 @@ export function parsePngDimensionsFromBase64(
   return parsePngDimensionsFromBuffer(decoded);
 }
 
+/**
+ * Decode a Kitty graphics protocol file payload from base64.
+ * Used when medium='t' (temporary file) to get the file path.
+ *
+ * @param payload - Base64-encoded file path
+ * @returns Decoded file path, or null if decoding fails
+ */
 export function decodeKittyFilePayload(payload: string): string | null {
   if (!payload) return null;
   const result = errore.try<string, Error>({
@@ -236,6 +252,18 @@ export function parsePngDimensionsFromFilePayload(
   return parsePngDimensionsFromFilePath(filePath);
 }
 
+/**
+ * Estimate the decoded size of base64 data.
+ * Accounts for base64 padding characters (=).
+ *
+ * Formula: floor(len * 3 / 4) - padding
+ * - No padding: 0 bytes subtracted
+ * - One '=': 1 byte subtracted
+ * - Two '==': 2 bytes subtracted
+ *
+ * @param base64 - Base64-encoded string
+ * @returns Estimated decoded size in bytes
+ */
 export function estimateDecodedSize(base64: string): number {
   if (!base64) return 0;
   let padding = 0;
@@ -252,6 +280,25 @@ export function createTempFilePath(counter: number): string {
   return path.join(tempDir, name);
 }
 
+/**
+ * Parse PNG dimensions from a buffer by reading the IHDR chunk.
+ *
+ * PNG file structure:
+ * - Bytes 0-7: PNG signature (0x89 0x50 0x4E 0x47 0x0D 0x0A 0x1A 0x0A)
+ * - Bytes 8-11: IHDR chunk length (always 13 for IHDR)
+ * - Bytes 12-15: IHDR chunk type ("IHDR" = 0x49 0x48 0x44 0x52)
+ * - Bytes 16-19: Width (big-endian 32-bit)
+ * - Bytes 20-23: Height (big-endian 32-bit)
+ *
+ * This function validates the PNG signature and reads width/height from the
+ * IHDR chunk. It returns null if:
+ * - Buffer is too short (< 24 bytes)
+ * - PNG signature doesn't match
+ * - Width or height is zero
+ *
+ * @param decoded - Buffer containing PNG data (at least 24 bytes)
+ * @returns Object with width and height, or null if invalid
+ */
 function parsePngDimensionsFromBuffer(decoded: Buffer): { width: number; height: number } | null {
   if (decoded.length < 24) return null;
   if (
