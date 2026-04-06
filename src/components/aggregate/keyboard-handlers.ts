@@ -83,10 +83,6 @@ export function createAggregateKeyboardHandler(deps: AggregateKeyboardDeps) {
     }
 
     const globalAction = matchKeybinding(keybindings.normal, keyEvent);
-    if (globalAction === 'session.picker.toggle') {
-      onToggleSessionPicker?.();
-      return true;
-    }
     if (globalAction === 'command.palette.toggle') {
       onToggleCommandPalette?.();
       return true;
@@ -139,13 +135,6 @@ export function createAggregateKeyboardHandler(deps: AggregateKeyboardDeps) {
         setPrefixActive(false);
         clearPrefixTimeout();
         handleEnterCopyMode();
-        return true;
-      }
-
-      if (globalPrefixAction === 'session.picker.toggle') {
-        setPrefixActive(false);
-        clearPrefixTimeout();
-        onToggleSessionPicker?.();
         return true;
       }
 

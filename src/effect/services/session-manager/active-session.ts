@@ -4,29 +4,27 @@
  * Migrated from Effect to errore - uses promises and direct dependency passing
  */
 
-import type { SessionStorage } from "../SessionStorage"
+import type { SessionStorage } from '../SessionStorage';
 import {
   SessionNotFoundError,
   SessionStorageError,
   SessionCorruptedError,
   type SessionError,
-} from "../../errors"
-import type { SessionMetadata } from "../../models"
-import type { SessionId } from "../../types"
+} from '../../errors';
+import type { SessionMetadata } from '../../models';
+import type { SessionId } from '../../types';
 
 export interface ActiveSessionDeps {
-  storage: SessionStorage
-  getActiveSessionId: () => SessionId | null
-  setActiveSessionId: (id: SessionId | null) => void
+  storage: SessionStorage;
+  getActiveSessionId: () => SessionId | null;
+  setActiveSessionId: (id: SessionId | null) => void;
 }
 
 /**
  * Get the active session ID
  */
-export function getActiveSessionId(
-  deps: ActiveSessionDeps
-): SessionId | null {
-  return deps.getActiveSessionId()
+export function getActiveSessionId(deps: ActiveSessionDeps): SessionId | null {
+  return deps.getActiveSessionId();
 }
 
 /**
@@ -36,21 +34,21 @@ export async function setActiveSessionId(
   deps: ActiveSessionDeps,
   id: SessionId | null
 ): Promise<SessionStorageError | void> {
-  const { storage, setActiveSessionId: setLocal } = deps
+  const { storage, setActiveSessionId: setLocal } = deps;
 
-  setLocal(id)
+  setLocal(id);
 
   // Update index
-  const currentIndex = await storage.loadIndex()
+  const currentIndex = await storage.loadIndex();
   if (currentIndex instanceof SessionStorageError) {
-    return currentIndex
+    return currentIndex;
   }
 
   return await storage.saveIndex({
     sessions: currentIndex.sessions,
     activeSessionId: id,
     aggregateSessionOrder: currentIndex.aggregateSessionOrder,
-  })
+  });
 }
 
 /**
@@ -60,55 +58,60 @@ export async function switchToSession(
   deps: ActiveSessionDeps,
   id: SessionId
 ): Promise<SessionError | void> {
-  const { storage, setActiveSessionId } = deps
+  const { storage, setActiveSessionId } = deps;
 
-  const currentIndex = await storage.loadIndex()
+  const currentIndex = await storage.loadIndex();
   if (currentIndex instanceof SessionStorageError) {
-    return currentIndex
+    return currentIndex;
   }
 
-  const session = currentIndex.sessions.find((s) => s.id === id)
+  const session = currentIndex.sessions.find((s) => s.id === id);
 
   if (!session) {
-    return new SessionNotFoundError({ sessionId: id })
+    return new SessionNotFoundError({ sessionId: id });
   }
 
   // Update lastSwitchedAt
-  const now = Date.now()
+  const now = Date.now();
   const updatedMetadata: SessionMetadata = {
     ...session,
     lastSwitchedAt: now,
-  }
+  };
 
-  const updatedSessions = currentIndex.sessions.map((s) =>
-    s.id === id ? updatedMetadata : s
-  )
+  const updatedSessions = currentIndex.sessions.map((s) => (s.id === id ? updatedMetadata : s));
 
   const saveIndexResult = await storage.saveIndex({
     sessions: updatedSessions,
     activeSessionId: id,
     aggregateSessionOrder: currentIndex.aggregateSessionOrder,
-  })
+  });
   if (saveIndexResult instanceof SessionStorageError) {
-    return saveIndexResult
+    return saveIndexResult;
   }
 
-  // Update session file too
-  const sessionData = await storage.loadSession(id)
-  if (sessionData instanceof SessionNotFoundError || sessionData instanceof SessionCorruptedError) {
-    return sessionData
-  }
-  if (sessionData instanceof SessionStorageError) {
-    return sessionData
-  }
+  setActiveSessionId(id);
 
-  const saveSessionResult = await storage.saveSession({
-    ...sessionData,
-    metadata: updatedMetadata,
-  })
-  if (saveSessionResult instanceof SessionStorageError) {
-    return saveSessionResult
-  }
+  // Keep the session file metadata in sync without blocking the switch path.
+  void (async () => {
+    const sessionData = await storage.loadSession(id);
+    if (
+      sessionData instanceof SessionNotFoundError ||
+      sessionData instanceof SessionCorruptedError
+    ) {
+      console.warn('Failed to refresh switched session metadata:', sessionData.message);
+      return;
+    }
+    if (sessionData instanceof SessionStorageError) {
+      console.warn('Failed to refresh switched session metadata:', sessionData.message);
+      return;
+    }
 
-  setActiveSessionId(id)
+    const saveSessionResult = await storage.saveSession({
+      ...sessionData,
+      metadata: updatedMetadata,
+    });
+    if (saveSessionResult instanceof SessionStorageError) {
+      console.warn('Failed to persist switched session metadata:', saveSessionResult.message);
+    }
+  })();
 }

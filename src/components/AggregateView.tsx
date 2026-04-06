@@ -12,7 +12,7 @@
  * - Preview mode: Interact with the terminal, Prefix+Esc to return to list
  */
 
-import { Show, createMemo, createSignal } from 'solid-js';
+import { Show, createEffect, createMemo, createSignal } from 'solid-js';
 import { useAggregateView } from '../contexts/AggregateViewContext';
 import { useLayout } from '../contexts/LayoutContext';
 import { useSession } from '../contexts/SessionContext';
@@ -27,7 +27,10 @@ import { getHostBackgroundColor } from '../effect/bridge';
 import { useOverlayColors } from './overlay-colors';
 import { createCopyModeKeyHandler } from './app/copy-mode-keyboard';
 import { createCopyModeVimState } from './app/copy-mode-vim';
-import { calculateAggregateListViewport } from './aggregate/list-viewport';
+import {
+  calculateAggregateListViewport,
+  getAggregateListScrollOffsetForSelection,
+} from './aggregate/list-viewport';
 import {
   calculateLayoutDimensions,
   getHintsText,
@@ -173,6 +176,25 @@ export function AggregateView(props: AggregateViewProps) {
     if (relY < 0 || relY >= viewport.visibleCount) return undefined;
     return aggregate.state.flattenedTree[viewport.start + relY];
   };
+
+  createEffect((previousSelectedIndex?: number) => {
+    if (!aggregate.state.showAggregateView) return aggregate.state.selectedIndex;
+    if (previousSelectedIndex === aggregate.state.selectedIndex)
+      return aggregate.state.selectedIndex;
+
+    const nextScrollOffset = getAggregateListScrollOffsetForSelection({
+      selectedIndex: aggregate.state.selectedIndex,
+      totalItems: aggregate.state.flattenedTree.length,
+      maxRows: layoutDims().maxVisibleCards,
+      scrollOffset: aggregate.state.listScrollOffset,
+    });
+
+    if (nextScrollOffset !== aggregate.state.listScrollOffset) {
+      aggregate.setListScrollOffset(nextScrollOffset);
+    }
+
+    return aggregate.state.selectedIndex;
+  });
 
   // Emulator helpers
   const getAggregateEmulatorSync = (ptyId: string) =>

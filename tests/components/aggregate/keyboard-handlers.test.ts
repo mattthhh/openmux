@@ -166,17 +166,17 @@ describe('createAggregateKeyboardHandler', () => {
     expect(setup.handleListEnter).toHaveBeenCalledTimes(1);
   });
 
-  it('opens the shared session picker from aggregate list mode via the normal binding', () => {
+  it('does not open the shared session picker from aggregate list mode via the normal binding', () => {
     const setup = createDeps({
       getPreviewMode: () => false,
     });
     const handler = createAggregateKeyboardHandler(setup.deps);
 
     expect(handler.handleKeyDown({ key: 's', alt: true, eventType: 'press' })).toBe(true);
-    expect(setup.onToggleSessionPicker).toHaveBeenCalledTimes(1);
+    expect(setup.onToggleSessionPicker).not.toHaveBeenCalled();
   });
 
-  it('opens the shared session picker from aggregate mode via the prefix binding', () => {
+  it('does not open the shared session picker from aggregate mode via the prefix binding', () => {
     const setup = createDeps({
       getPreviewMode: () => false,
     });
@@ -184,7 +184,7 @@ describe('createAggregateKeyboardHandler', () => {
 
     expect(handler.handleKeyDown({ key: 'b', ctrl: true, eventType: 'press' })).toBe(true);
     expect(handler.handleKeyDown({ key: 's', eventType: 'press' })).toBe(true);
-    expect(setup.onToggleSessionPicker).toHaveBeenCalledTimes(1);
+    expect(setup.onToggleSessionPicker).not.toHaveBeenCalled();
     expect(setup.getPrefixActive()).toBe(false);
   });
 

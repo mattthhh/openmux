@@ -111,7 +111,10 @@ describe('createSessionOperations', () => {
     expect(dispatch).toHaveBeenCalledWith({
       type: 'SET_ACTIVE_SESSION',
       id: sessionB.id,
-      session: sessionB,
+      session: {
+        ...sessionB,
+        lastSwitchedAt: expect.any(Number),
+      },
     });
   });
 
@@ -276,5 +279,52 @@ describe('createSessionOperations', () => {
     expect(refreshSessions).toHaveBeenCalledTimes(1);
     expect(onSessionLoad).toHaveBeenCalled();
     expect(dispatch).toHaveBeenCalledWith({ type: 'SET_SWITCHING', switching: false });
+  });
+
+  it('still updates the active session on disk when preloaded data is supplied', async () => {
+    const sessionA = createMetadata('session-a');
+    const sessionB = createMetadata('session-b');
+    const state = createState({
+      sessions: [sessionA, sessionB],
+      activeSessionId: sessionA.id,
+      activeSession: sessionA,
+    });
+
+    const onSessionLoad = vi.fn().mockResolvedValue(undefined);
+
+    const ops = createSessionOperations({
+      getState: () => state,
+      dispatch: vi.fn(),
+      getCwd: vi.fn().mockResolvedValue('/tmp'),
+      getWorkspaces: () => ({}),
+      getActiveWorkspaceId: () => 1 as WorkspaceId,
+      shouldPersistSession: () => false,
+      onSessionLoad,
+      onBeforeSwitch: vi.fn().mockResolvedValue(undefined),
+      onDeleteSession: vi.fn(),
+      refreshSessions: vi.fn().mockResolvedValue(undefined),
+    });
+
+    (switchToSession as any).mockResolvedValue(undefined);
+
+    const preloadedData = {
+      metadata: sessionB,
+      workspaces: {} as Workspaces,
+      activeWorkspaceId: 1 as WorkspaceId,
+      cwdMap: new Map<string, string>(),
+    };
+
+    await ops.switchSession(sessionB.id, { preloadedData });
+
+    expect(switchToSession).toHaveBeenCalledWith(sessionB.id);
+    expect(loadSessionData).not.toHaveBeenCalled();
+    expect(onSessionLoad).toHaveBeenCalledWith(
+      preloadedData.workspaces,
+      preloadedData.activeWorkspaceId,
+      preloadedData.cwdMap,
+      expect.any(Map),
+      sessionB.id,
+      { allowPrune: true }
+    );
   });
 });

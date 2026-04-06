@@ -144,21 +144,18 @@ export function createSessionOperations(params: SessionOperationsParams) {
     await using _switchGuard = new SwitchingGuard(dispatch, true);
     void _switchGuard;
 
-    // Use preloaded data if available, otherwise load new session
-    const data =
-      options.preloadedData ??
-      (await (async () => {
-        const switchResult = await switchToSession(id);
-        if (
-          switchResult instanceof SessionNotFoundError ||
-          switchResult instanceof SessionCorruptedError ||
-          switchResult instanceof SessionStorageError
-        ) {
-          console.error('Failed to switch to session:', switchResult.message);
-          return null;
-        }
-        return loadSessionData(id);
-      })());
+    const switchResult = await switchToSession(id);
+    if (
+      switchResult instanceof SessionNotFoundError ||
+      switchResult instanceof SessionCorruptedError ||
+      switchResult instanceof SessionStorageError
+    ) {
+      console.error('Failed to switch to session:', switchResult.message);
+      return;
+    }
+
+    // Use preloaded data if available, otherwise load from disk after switching.
+    const data = options.preloadedData ?? (await loadSessionData(id));
 
     if (data === null) {
       return;
@@ -173,7 +170,11 @@ export function createSessionOperations(params: SessionOperationsParams) {
       }
       await onSessionLoad({}, 1, new Map(), new Map(), id, { allowPrune: false });
     } else {
-      dispatch({ type: 'SET_ACTIVE_SESSION', id, session: data.metadata });
+      dispatch({
+        type: 'SET_ACTIVE_SESSION',
+        id,
+        session: { ...data.metadata, lastSwitchedAt: Date.now() },
+      });
       // IMPORTANT: Await onSessionLoad to ensure CWD map is set before switching completes
       await onSessionLoad(data.workspaces, data.activeWorkspaceId, data.cwdMap, new Map(), id, {
         allowPrune: true,
