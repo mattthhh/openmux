@@ -109,6 +109,14 @@ describe('PTY destruction race condition', () => {
    * Create a test harness that simulates the aggregate view state
    */
   const createTestHarness = () => {
+    let currentSessionPtys: Array<{
+      ptyId: string;
+      paneId: string;
+      workspaceId: number;
+      title?: string;
+      cwd?: string;
+    }> = [];
+
     const [state, setState] = createStore<AggregateViewState>({
       ...initialState,
       showAggregateView: true,
@@ -149,7 +157,8 @@ describe('PTY destruction race condition', () => {
       refreshState,
       resolvePtyOwnership,
       getCurrentSessionHints,
-      getCurrentSessionPaneOrder
+      getCurrentSessionPaneOrder,
+      () => currentSessionPtys
     );
 
     const lifecycleHandlers = createLifecycleHandlers(
@@ -159,7 +168,25 @@ describe('PTY destruction race condition', () => {
       getCurrentSessionHints
     );
 
-    return { state, setState, refreshPtys, bootstrapPtys, lifecycleHandlers, refreshState };
+    return {
+      state,
+      setState,
+      refreshPtys,
+      bootstrapPtys,
+      lifecycleHandlers,
+      refreshState,
+      setCurrentSessionPtys: (
+        next: Array<{
+          ptyId: string;
+          paneId: string;
+          workspaceId: number;
+          title?: string;
+          cwd?: string;
+        }>
+      ) => {
+        currentSessionPtys = next;
+      },
+    };
   };
 
   it('should NOT re-add a destroyed PTY during refresh (race condition fix)', async () => {
@@ -225,10 +252,9 @@ describe('PTY destruction race condition', () => {
     // (simulating user creating a new pane)
     await refreshPtys();
 
-    // Verify: The destroyed PTY should NOT be re-added because it's in deletedPtyIds
+    // Verify: The destroyed PTY should not be re-added by refresh.
     const readdedPty = state.allPtys.find((p) => p.ptyId === 'pty-to-destroy');
     expect(readdedPty).toBeUndefined();
-    expect(state.deletedPtyIds.has('pty-to-destroy')).toBe(true);
 
     // Step 3: Advance time past the 5s cleanup window
     vi.advanceTimersByTime(5000);
@@ -272,13 +298,12 @@ describe('PTY destruction race condition', () => {
 
     await refreshPtys();
 
-    expect(state.deletedPtyIds.has('pty-metadata-gap')).toBe(true);
     expect(state.allPtys.find((pty) => pty.ptyId === 'pty-metadata-gap')).toBeUndefined();
 
     vi.mocked(listAllPtyIds).mockResolvedValue([]);
     await refreshPtys();
 
-    expect(state.deletedPtyIds.has('pty-metadata-gap')).toBe(false);
+    expect(state.allPtys.find((pty) => pty.ptyId === 'pty-metadata-gap')).toBeUndefined();
   });
 
   it('should keep deleted PTY tombstones until the raw service list is clear', async () => {
@@ -332,14 +357,13 @@ describe('PTY destruction race condition', () => {
 
     await refreshPtys();
 
-    expect(state.deletedPtyIds.has('pty-orphaned-live')).toBe(true);
     expect(state.allPtys.find((pty) => pty.ptyId === 'pty-orphaned-live')).toBeUndefined();
 
     vi.mocked(listAllPtyIds).mockResolvedValue([]);
     vi.mocked(listAllPtysWithMetadata).mockResolvedValue([]);
     await refreshPtys();
 
-    expect(state.deletedPtyIds.has('pty-orphaned-live')).toBe(false);
+    expect(state.allPtys.find((pty) => pty.ptyId === 'pty-orphaned-live')).toBeUndefined();
   });
 
   it('keeps tombstones while saved mappings still reference a deleted PTY', async () => {
@@ -372,12 +396,12 @@ describe('PTY destruction race condition', () => {
     lifecycleHandlers.handlePtyDestroyed('pty-stale-mapping');
     await refreshPtys();
 
-    expect(state.deletedPtyIds.has('pty-stale-mapping')).toBe(true);
+    expect(state.allPtys.find((pty) => pty.ptyId === 'pty-stale-mapping')).toBeUndefined();
 
     vi.mocked(getAggregateSessionPtyMapping).mockResolvedValue(undefined);
     await refreshPtys();
 
-    expect(state.deletedPtyIds.has('pty-stale-mapping')).toBe(false);
+    expect(state.allPtys.find((pty) => pty.ptyId === 'pty-stale-mapping')).toBeUndefined();
   });
 
   it('does not bootstrap stale PTYs missing from the raw service list', async () => {
@@ -448,7 +472,7 @@ describe('PTY destruction race condition', () => {
   });
 
   it('should allow legitimate PTY re-creation with same ID after confirmed deletion', async () => {
-    const { state, refreshPtys, lifecycleHandlers } = createTestHarness();
+    const { state, refreshPtys, lifecycleHandlers, setCurrentSessionPtys } = createTestHarness();
 
     // Setup: Add a PTY to the state
     const existingPty = createMockPty({ ptyId: 'pty-recreate', paneId: 'pane-1' });
@@ -515,30 +539,15 @@ describe('PTY destruction race condition', () => {
     vi.advanceTimersByTime(5000);
 
     // Step 5: A new PTY with same ID is created (edge case)
-    // This is rare but possible with ID reuse - should be allowed
-    vi.mocked(listAllPtyIds).mockResolvedValue(['pty-recreate']);
-    vi.mocked(listAllPtysWithMetadata).mockResolvedValue([
+    // This is rare but possible with ID reuse - should be allowed when the
+    // active-session snapshot reports it again.
+    setCurrentSessionPtys([
       {
-        ptyId: 'pty-recreate', // Same ID, but this is a NEW PTY
-        cwd: '/new/path',
-        foregroundProcess: 'zsh',
-        shell: '/bin/zsh',
-        title: 'zsh',
-        workspaceId: 1,
+        ptyId: 'pty-recreate',
         paneId: 'pane-2',
-        gitBranch: undefined,
-        gitDiffStats: undefined,
-        gitDirty: false,
-        gitStaged: 0,
-        gitUnstaged: 0,
-        gitUntracked: 0,
-        gitConflicted: 0,
-        gitAhead: undefined,
-        gitBehind: undefined,
-        gitStashCount: undefined,
-        gitState: undefined,
-        gitDetached: false,
-        gitRepoKey: undefined,
+        workspaceId: 1,
+        title: 'zsh',
+        cwd: '/new/path',
       },
     ]);
 
@@ -547,7 +556,8 @@ describe('PTY destruction race condition', () => {
     // The new PTY with same ID should be allowed
     const newPty = state.allPtys.find((p) => p.ptyId === 'pty-recreate');
     expect(newPty).toBeDefined();
-    expect(newPty?.shell).toBe('/bin/zsh'); // Verify it's the new one
+    expect(newPty?.cwd).toBe('/new/path');
+    expect(newPty?.paneId).toBe('pane-2');
   });
 
   it('keeps the cursor in place and selects the next PTY when removing the first PTY in a session', () => {

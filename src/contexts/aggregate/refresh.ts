@@ -1,33 +1,28 @@
 /**
  * Refresh orchestration for Aggregate View.
+ *
+ * Source of truth:
+ * - Active session: current in-memory layout
+ * - Other sessions: persisted session workspaces on disk
+ *
+ * Live PTY metadata is treated as an overlay on top of that stable workspace snapshot.
+ * We intentionally do not derive the aggregate list from a global scan of live PTYs,
+ * because that can surface orphaned/shadow PTYs that do not belong to any session workspace.
  */
 
 import { produce, type SetStoreFunction } from 'solid-js/store';
 
 import type { SerializedLayoutNode, SerializedSession, SessionMetadata } from '../../effect/models';
-import {
-  getSessionSummaryResult,
-  listSessionsResult,
-  loadSession,
-} from '../../effect/bridge/session-bridge';
-import {
-  getAggregateSessionPtyMapping,
-  getPtyMetadata,
-  listAllPtyIds,
-  listAllPtysWithMetadata,
-  type PtyMetadata,
-} from '../../effect/bridge/aggregate';
-import { AggregateBridgeError, ServicesNotInitializedError } from '../../effect/errors';
+import { getPtyMetadata } from '../../effect/bridge/aggregate';
+import { listSessionsResult, loadSession } from '../../effect/bridge/session-bridge';
+import { AggregateBridgeError } from '../../effect/errors';
 import { getGlobalGitMetadataCache } from '../git-metadata-cache';
 import { getGitDiffStats, getGitInfo } from '../../effect/services/pty/helpers';
 
 import { buildPtyIndex } from './filter';
-import {
-  applyGitMetadataSnapshot,
-  didPtyInfoChange,
-  mergePtyInfoPreservingGitMetadata,
-} from './git';
+import { applyGitMetadataSnapshot } from './git';
 import { ptyMetadataToInfo } from './pty-info';
+import { setSessionPaneOrder } from './pane-order';
 import {
   RefreshGuard,
   type CurrentSessionHints,
@@ -36,11 +31,31 @@ import {
   type RefreshState,
 } from './subscriptions';
 import { recomputeMatches, recomputeTree } from './session';
-import type { AggregateViewState, PtyInfo } from './types';
+import type { AggregateViewState, PtyInfo, SessionLoadState } from './types';
 
 export { ptyMetadataToInfo } from './pty-info';
 
-export interface AggregatePtyMetadata extends PtyMetadata {
+export interface AggregatePtyMetadata {
+  ptyId: string;
+  cwd: string;
+  gitBranch: string | undefined;
+  gitDiffStats: PtyInfo['gitDiffStats'];
+  gitDirty: boolean;
+  gitStaged: number;
+  gitUnstaged: number;
+  gitUntracked: number;
+  gitConflicted: number;
+  gitAhead: number | undefined;
+  gitBehind: number | undefined;
+  gitStashCount: number | undefined;
+  gitState: PtyInfo['gitState'];
+  gitDetached: boolean;
+  gitRepoKey: string | undefined;
+  foregroundProcess: string | undefined;
+  shell: string | undefined;
+  title: string | undefined;
+  workspaceId: number | undefined;
+  paneId: string | undefined;
   sessionId?: string;
   sessionMetadata?: SessionMetadata;
 }
@@ -125,40 +140,6 @@ export function findWorkspaceIdForPane(
   return undefined;
 }
 
-function mergeSessionPaneOrder(
-  existing: Map<string, number> | undefined,
-  incoming: Map<string, number>
-): Map<string, number> {
-  if (!existing || existing.size === 0) {
-    return new Map(incoming);
-  }
-
-  const incomingPaneIds = new Set(incoming.keys());
-  const merged = new Map<string, number>();
-  const existingEntries = [...existing.entries()]
-    .filter(([paneId]) => incomingPaneIds.has(paneId))
-    .sort(([, aOrder], [, bOrder]) => aOrder - bOrder);
-
-  for (const [paneId, order] of existingEntries) {
-    merged.set(paneId, order);
-  }
-
-  let nextOrder = existingEntries.reduce((maxOrder, [, order]) => Math.max(maxOrder, order), -1);
-
-  for (const [paneId] of [...incoming.entries()].sort(
-    ([, aOrder], [, bOrder]) => aOrder - bOrder
-  )) {
-    if (merged.has(paneId)) {
-      continue;
-    }
-
-    nextOrder = Math.floor(nextOrder) + 1;
-    merged.set(paneId, nextOrder);
-  }
-
-  return merged;
-}
-
 function countSerializedPanes(node: SerializedLayoutNode | null | undefined): number {
   if (!node) return 0;
   if ('type' in node && node.type === 'split') {
@@ -226,11 +207,91 @@ function collectSessionPaneRecords(session: SerializedSession): Array<{
   return result;
 }
 
+function getEmptyGitMetadata(): Pick<
+  PtyInfo,
+  | 'gitBranch'
+  | 'gitDiffStats'
+  | 'gitDirty'
+  | 'gitStaged'
+  | 'gitUnstaged'
+  | 'gitUntracked'
+  | 'gitConflicted'
+  | 'gitAhead'
+  | 'gitBehind'
+  | 'gitStashCount'
+  | 'gitState'
+  | 'gitDetached'
+  | 'gitRepoKey'
+> {
+  return {
+    gitBranch: undefined,
+    gitDiffStats: undefined,
+    gitDirty: false,
+    gitStaged: 0,
+    gitUnstaged: 0,
+    gitUntracked: 0,
+    gitConflicted: 0,
+    gitAhead: undefined,
+    gitBehind: undefined,
+    gitStashCount: undefined,
+    gitState: undefined,
+    gitDetached: false,
+    gitRepoKey: undefined,
+  };
+}
+
+function buildSavedPaneInfo(params: {
+  sessionId: string;
+  sessionMetadata: SessionMetadata;
+  paneId: string;
+  workspaceId: number;
+  cwd: string;
+  title: string | undefined;
+}): PtyInfo {
+  const { sessionId, sessionMetadata, paneId, workspaceId, cwd, title } = params;
+
+  return {
+    ptyId: `saved:${sessionId}:${paneId}`,
+    cwd,
+    foregroundProcess: undefined,
+    shell: undefined,
+    workspaceId,
+    paneId,
+    sessionId,
+    sessionMetadata,
+    title,
+    sortOrderHint: undefined,
+    ...getEmptyGitMetadata(),
+  };
+}
+
+function buildLivePaneFallback(params: {
+  sessionId: string;
+  sessionMetadata: SessionMetadata;
+  pty: CurrentSessionPty;
+}): PtyInfo {
+  const { sessionId, sessionMetadata, pty } = params;
+
+  return {
+    ptyId: pty.ptyId,
+    cwd: pty.cwd ?? '',
+    foregroundProcess: undefined,
+    shell: undefined,
+    workspaceId: pty.workspaceId,
+    paneId: pty.paneId,
+    sessionId,
+    sessionMetadata,
+    title: pty.title,
+    sortOrderHint: undefined,
+    ...getEmptyGitMetadata(),
+  };
+}
+
 export function createAggregateViewRefreshers(
   state: AggregateViewState,
   setState: SetStoreFunction<AggregateViewState>,
   refreshState: RefreshState,
-  resolvePtyOwnership: (ptyId: string) => PtyOwnership | null,
+  _resolvePtyOwnership: (ptyId: string) => PtyOwnership | null,
   getCurrentSessionHints: () => CurrentSessionHints,
   getCurrentSessionPaneOrder: () => Map<string, number> | null,
   getCurrentSessionPtys?: () => CurrentSessionPty[]
@@ -239,149 +300,30 @@ export function createAggregateViewRefreshers(
     fetchGitInfo: (cwd) => getGitInfo(cwd, { force: false }),
     fetchDiffStats: getGitDiffStats,
   });
-  const deletedPtyIdsSeenGoneFromService = new Set<string>();
 
-  const initialLoad = async (): Promise<void | Error> => {
+  const buildSnapshot = async (options: {
+    forceGitRefresh: boolean;
+  }): Promise<
+    | {
+        sessions: SessionMetadata[];
+        sessionLoadStates: Map<string, SessionLoadState>;
+        sessionPaneOrders: Map<string, Map<string, number>>;
+        ptys: PtyInfo[];
+      }
+    | Error
+  > => {
     try {
       const sessionsResult = await listSessionsResult();
       if (sessionsResult instanceof Error) {
         return sessionsResult;
       }
       const sessions = [...sessionsResult];
-
       const currentSessionHints = getCurrentSessionHints();
       const currentSessionPaneOrder = getCurrentSessionPaneOrder();
-      const currentSessionPtys = getCurrentSessionPtys?.() ?? [];
-
-      const quickPtys: PtyInfo[] = currentSessionPtys.map((pty) => ({
-        ptyId: pty.ptyId,
-        cwd: pty.cwd ?? '',
-        gitBranch: undefined,
-        gitDiffStats: undefined,
-        gitDirty: false,
-        gitStaged: 0,
-        gitUnstaged: 0,
-        gitUntracked: 0,
-        gitConflicted: 0,
-        gitAhead: undefined,
-        gitBehind: undefined,
-        gitStashCount: undefined,
-        gitState: undefined,
-        gitDetached: false,
-        gitRepoKey: undefined,
-        foregroundProcess: undefined,
-        shell: undefined,
-        title: pty.title,
-        workspaceId: pty.workspaceId,
-        paneId: pty.paneId,
-        sessionId: currentSessionHints.sessionId ?? 'unknown',
-        sessionMetadata: sessions.find((session) => session.id === currentSessionHints.sessionId),
-      }));
-
-      const summaryEntries = await Promise.all(
-        sessions.map(async (session) => {
-          const summaryResult = await getSessionSummaryResult(String(session.id));
-          return [
-            String(session.id),
-            summaryResult instanceof Error ? null : summaryResult,
-          ] as const;
-        })
+      const currentSessionPtys = (getCurrentSessionPtys?.() ?? []).filter(
+        (pty) => !state.deletedPtyIds.has(pty.ptyId)
       );
-      const summaryBySessionId = new Map<string, SessionSummary | null>(summaryEntries);
-
-      setState(
-        produce((s) => {
-          s.allSessions.clear();
-          for (const session of sessions) {
-            s.allSessions.set(session.id, session);
-          }
-
-          const visibleQuickPtys = quickPtys.filter((pty) => !s.deletedPtyIds.has(pty.ptyId));
-
-          if (currentSessionHints.sessionId && currentSessionPaneOrder) {
-            s.sessionPaneOrders.set(
-              currentSessionHints.sessionId,
-              mergeSessionPaneOrder(
-                s.sessionPaneOrders.get(currentSessionHints.sessionId),
-                currentSessionPaneOrder
-              )
-            );
-          }
-
-          for (const pty of visibleQuickPtys) {
-            s.recentlyAddedPtyIds.add(pty.ptyId);
-          }
-
-          setTimeout(() => {
-            setState(
-              produce((s2) => {
-                for (const pty of visibleQuickPtys) {
-                  s2.recentlyAddedPtyIds.delete(pty.ptyId);
-                }
-              })
-            );
-          }, 5000);
-
-          const existingPtyIds = new Set(s.allPtys.map((pty) => pty.ptyId));
-          const newPtys = visibleQuickPtys.filter((pty) => !existingPtyIds.has(pty.ptyId));
-
-          if (newPtys.length > 0) {
-            s.allPtys = [...s.allPtys, ...newPtys];
-            s.allPtysIndex = buildPtyIndex(s.allPtys);
-          }
-
-          for (const session of sessions) {
-            const sessionId = String(session.id);
-            const summary = summaryBySessionId.get(sessionId);
-            const isCurrentSession = sessionId === currentSessionHints.sessionId;
-            const existingLoadState = s.sessionLoadStates.get(sessionId);
-            if (!existingLoadState) {
-              s.sessionLoadStates.set(sessionId, {
-                status: isCurrentSession ? 'loaded' : 'unloaded',
-                paneCount: summary?.paneCount ?? 0,
-                lastActiveWorkspaceId: isCurrentSession
-                  ? currentSessionHints.lastActiveWorkspaceId
-                  : undefined,
-                focusedPaneId: isCurrentSession ? currentSessionHints.focusedPaneId : undefined,
-              });
-            }
-          }
-
-          if (currentSessionHints.sessionId) {
-            s.expandedSessionIds.add(currentSessionHints.sessionId);
-          }
-
-          recomputeMatches(s);
-          recomputeTree(s);
-        })
-      );
-
-      return;
-    } catch (error) {
-      return error instanceof AggregateBridgeError
-        ? error
-        : new AggregateBridgeError({
-            operation: 'initialLoadOnce',
-            target: 'aggregate-view',
-            reason: String(error),
-            cause: error instanceof Error ? error : undefined,
-          });
-    }
-  };
-
-  const bootstrapPtysOnce = async (): Promise<void | Error> => {
-    try {
-      const sessionsResult = await listSessionsResult();
-      if (sessionsResult instanceof Error) {
-        return sessionsResult;
-      }
-      const sessions = [...sessionsResult];
-
-      const serviceLivePtyIdsResult = await listAllPtyIds();
-      if (serviceLivePtyIdsResult instanceof Error) {
-        return serviceLivePtyIdsResult;
-      }
-      const serviceLivePtyIds = new Set(serviceLivePtyIdsResult);
+      const activeSessionId = currentSessionHints.sessionId;
 
       const sessionDetailsEntries = await Promise.all(
         sessions.map(
@@ -389,176 +331,148 @@ export function createAggregateViewRefreshers(
         )
       );
       const sessionDetailsById = new Map(sessionDetailsEntries);
-      const sessionMetadataById = new Map<string, SessionMetadata>(
-        sessions.map((session) => [String(session.id), session])
-      );
 
-      const sessionMappingEntries = await Promise.all(
-        sessions.map(
-          async (session) =>
-            [String(session.id), await getAggregateSessionPtyMapping(String(session.id))] as const
-        )
-      );
-      const sessionMappingById = new Map(sessionMappingEntries);
-
-      const currentSessionHints = getCurrentSessionHints();
-      const currentSessionPaneOrder = getCurrentSessionPaneOrder();
+      const sessionLoadStates = new Map<string, SessionLoadState>();
       const sessionPaneOrders = new Map<string, Map<string, number>>();
       const provisionalPtys: PtyInfo[] = [];
 
-      for (const [sessionId, sessionDetails] of sessionDetailsEntries) {
-        if (sessionDetails instanceof Error) {
+      const currentLiveMetadataEntries = await Promise.all(
+        currentSessionPtys.map(
+          async (pty) =>
+            [pty.ptyId, await getPtyMetadata(pty.ptyId, { skipGitDiffStats: true })] as const
+        )
+      );
+      const currentLiveMetadata = new Map(currentLiveMetadataEntries);
+      const existingActivePtys = activeSessionId
+        ? state.allPtys.filter(
+            (pty) => pty.sessionId === activeSessionId && !pty.ptyId.startsWith('saved:')
+          )
+        : [];
+
+      for (const session of sessions) {
+        const sessionId = String(session.id);
+        const sessionDetails = sessionDetailsById.get(sessionId);
+        const loadedSession =
+          sessionDetails && !(sessionDetails instanceof Error) ? sessionDetails : null;
+
+        if (sessionId === activeSessionId && currentSessionPtys.length > 0) {
+          const paneOrder =
+            currentSessionPaneOrder ??
+            (loadedSession ? buildSessionPaneOrder(loadedSession) : new Map<string, number>());
+          sessionPaneOrders.set(sessionId, paneOrder);
+
+          for (const currentPty of currentSessionPtys) {
+            const metadataResult = currentLiveMetadata.get(currentPty.ptyId);
+            const nextPty =
+              metadataResult && !(metadataResult instanceof Error) && metadataResult !== null
+                ? ptyMetadataToInfo({
+                    ...metadataResult,
+                    sessionId,
+                    sessionMetadata: session,
+                    paneId: currentPty.paneId,
+                    workspaceId: currentPty.workspaceId,
+                    title: metadataResult.title ?? currentPty.title,
+                  })
+                : buildLivePaneFallback({
+                    sessionId,
+                    sessionMetadata: session,
+                    pty: currentPty,
+                  });
+
+            provisionalPtys.push(nextPty);
+          }
+
+          sessionLoadStates.set(sessionId, {
+            status: 'loaded',
+            paneCount: currentSessionPtys.length,
+            lastActiveWorkspaceId: currentSessionHints.lastActiveWorkspaceId,
+            focusedPaneId: currentSessionHints.focusedPaneId,
+          });
           continue;
         }
 
-        const paneOrder =
-          sessionId === currentSessionHints.sessionId && currentSessionPaneOrder
-            ? currentSessionPaneOrder
-            : buildSessionPaneOrder(sessionDetails);
+        if (sessionId === activeSessionId && existingActivePtys.length > 0) {
+          const paneOrder =
+            currentSessionPaneOrder ??
+            new Map(
+              existingActivePtys
+                .filter((pty) => !!pty.paneId)
+                .map((pty, index) => [pty.paneId as string, index] as const)
+            );
+          sessionPaneOrders.set(sessionId, paneOrder);
+          provisionalPtys.push(...existingActivePtys.map((pty) => ({ ...pty })));
+          sessionLoadStates.set(sessionId, {
+            status: 'loaded',
+            paneCount: existingActivePtys.length,
+            lastActiveWorkspaceId: currentSessionHints.lastActiveWorkspaceId,
+            focusedPaneId: currentSessionHints.focusedPaneId,
+          });
+          continue;
+        }
+
+        if (sessionDetails instanceof Error) {
+          sessionLoadStates.set(sessionId, {
+            status: 'error',
+            error: sessionDetails.message,
+          });
+          continue;
+        }
+
+        if (!loadedSession) {
+          sessionLoadStates.set(sessionId, {
+            status: 'error',
+            error: 'Session data unavailable',
+          });
+          continue;
+        }
+
+        const paneOrder = buildSessionPaneOrder(loadedSession);
         sessionPaneOrders.set(sessionId, paneOrder);
 
-        const paneRecords = new Map(
-          collectSessionPaneRecords(sessionDetails).map(
-            (record) => [record.paneId, record] as const
-          )
-        );
-        const mappingInfo = sessionMappingById.get(sessionId);
-        const sessionMetadata = sessionMetadataById.get(sessionId);
-        if (!mappingInfo || mappingInfo instanceof Error || !sessionMetadata) {
-          continue;
-        }
-
-        const stalePaneIds = new Set(mappingInfo.stalePaneIds);
-        for (const [paneId, ptyId] of mappingInfo.mapping) {
-          if (
-            stalePaneIds.has(paneId) ||
-            state.deletedPtyIds.has(ptyId) ||
-            !serviceLivePtyIds.has(ptyId)
-          ) {
-            continue;
-          }
-
-          const paneRecord = paneRecords.get(paneId);
-          provisionalPtys.push({
-            ptyId,
-            cwd: paneRecord?.cwd ?? '',
-            gitBranch: undefined,
-            gitDiffStats: undefined,
-            gitDirty: false,
-            gitStaged: 0,
-            gitUnstaged: 0,
-            gitUntracked: 0,
-            gitConflicted: 0,
-            gitAhead: undefined,
-            gitBehind: undefined,
-            gitStashCount: undefined,
-            gitState: undefined,
-            gitDetached: false,
-            gitRepoKey: undefined,
-            foregroundProcess: undefined,
-            shell: undefined,
-            title: paneRecord?.title,
-            workspaceId: paneRecord?.workspaceId,
-            paneId,
-            sessionId,
-            sessionMetadata,
-          });
-        }
-      }
-
-      if (provisionalPtys.length === 0 && sessionPaneOrders.size === 0) {
-        return;
-      }
-
-      setState(
-        produce((s) => {
-          for (const session of sessions) {
-            s.allSessions.set(session.id, session);
-          }
-
-          for (const [sessionId, paneOrder] of sessionPaneOrders) {
-            s.sessionPaneOrders.set(
+        const paneRecords = collectSessionPaneRecords(loadedSession);
+        for (const paneRecord of paneRecords) {
+          provisionalPtys.push(
+            buildSavedPaneInfo({
               sessionId,
-              mergeSessionPaneOrder(s.sessionPaneOrders.get(sessionId), paneOrder)
-            );
-          }
-
-          const visibleProvisionalPtys = provisionalPtys.filter(
-            (pty) => !s.deletedPtyIds.has(pty.ptyId)
+              sessionMetadata: session,
+              paneId: paneRecord.paneId,
+              workspaceId: paneRecord.workspaceId,
+              cwd: paneRecord.cwd,
+              title: paneRecord.title,
+            })
           );
-          const visiblePaneCountBySession = new Map<string, number>();
-          const existingIndex = new Map(s.allPtys.map((pty, index) => [pty.ptyId, index] as const));
-          for (const pty of visibleProvisionalPtys) {
-            const index = existingIndex.get(pty.ptyId);
-            if (index === undefined) {
-              existingIndex.set(pty.ptyId, s.allPtys.length);
-              s.allPtys.push(pty);
-            } else {
-              s.allPtys[index] = mergePtyInfoPreservingGitMetadata(s.allPtys[index], {
-                ...s.allPtys[index],
-                ...pty,
-              });
-            }
-            s.recentlyAddedPtyIds.add(pty.ptyId);
-            visiblePaneCountBySession.set(
-              pty.sessionId,
-              (visiblePaneCountBySession.get(pty.sessionId) ?? 0) + 1
-            );
-          }
+        }
 
-          if (visibleProvisionalPtys.length > 0) {
-            setTimeout(() => {
-              setState(
-                produce((s2) => {
-                  for (const pty of visibleProvisionalPtys) {
-                    s2.recentlyAddedPtyIds.delete(pty.ptyId);
-                  }
-                })
-              );
-            }, 5000);
-          }
+        const activeWorkspace = loadedSession.workspaces.find(
+          (workspace) => workspace.id === loadedSession.activeWorkspaceId
+        );
+        sessionLoadStates.set(sessionId, {
+          status: 'loaded',
+          paneCount: paneRecords.length,
+          lastActiveWorkspaceId: loadedSession.activeWorkspaceId,
+          focusedPaneId: activeWorkspace?.focusedPaneId ?? undefined,
+        });
+      }
 
-          for (const [sessionId, paneCount] of visiblePaneCountBySession) {
-            const sessionDetails = sessionDetailsById.get(sessionId);
-            const detailValue = sessionDetails instanceof Error ? undefined : sessionDetails;
-            const detailWorkspaceId = detailValue?.activeWorkspaceId;
-            const detailFocusedPaneId =
-              detailWorkspaceId !== undefined
-                ? (detailValue?.workspaces.find((workspace) => workspace.id === detailWorkspaceId)
-                    ?.focusedPaneId ?? undefined)
-                : undefined;
-
-            const currentHints = getCurrentSessionHints();
-            const lastActiveWorkspaceId =
-              currentHints.sessionId === sessionId
-                ? currentHints.lastActiveWorkspaceId
-                : detailWorkspaceId;
-            const focusedPaneId =
-              currentHints.sessionId === sessionId
-                ? currentHints.focusedPaneId
-                : detailFocusedPaneId;
-
-            s.sessionLoadStates.set(sessionId, {
-              status: 'loaded',
-              paneCount: Math.max(paneCount, s.sessionLoadStates.get(sessionId)?.paneCount ?? 0),
-              lastActiveWorkspaceId,
-              focusedPaneId: focusedPaneId ?? undefined,
-            });
-            s.loadAttemptedSessionIds.delete(sessionId);
-          }
-
-          s.allPtysIndex = buildPtyIndex(s.allPtys);
-          recomputeMatches(s);
-          recomputeTree(s);
-        })
+      const cwds = [...new Set(provisionalPtys.map((pty) => pty.cwd).filter(Boolean))];
+      const gitMetadataMap = await gitCache.getMetadataBatch(cwds, {
+        forceRefresh: options.forceGitRefresh,
+      });
+      const ptys = provisionalPtys.map((pty) =>
+        applyGitMetadataSnapshot(pty, gitMetadataMap.get(pty.cwd))
       );
 
-      return;
+      return {
+        sessions,
+        sessionLoadStates,
+        sessionPaneOrders,
+        ptys,
+      };
     } catch (error) {
       return error instanceof AggregateBridgeError
         ? error
         : new AggregateBridgeError({
-            operation: 'bootstrapPtysOnce',
+            operation: 'aggregate snapshot refresh',
             target: 'aggregate-view',
             reason: String(error),
             cause: error instanceof Error ? error : undefined,
@@ -566,291 +480,62 @@ export function createAggregateViewRefreshers(
     }
   };
 
-  const refreshPtysOnce = async (): Promise<void | Error> => {
+  const applySnapshot = (snapshot: {
+    sessions: SessionMetadata[];
+    sessionLoadStates: Map<string, SessionLoadState>;
+    sessionPaneOrders: Map<string, Map<string, number>>;
+    ptys: PtyInfo[];
+  }) => {
+    setState(
+      produce((s) => {
+        s.isLoading = false;
+        s.allSessions.clear();
+        for (const session of snapshot.sessions) {
+          s.allSessions.set(session.id, session);
+        }
+
+        s.sessionLoadStates.clear();
+        for (const [sessionId, loadState] of snapshot.sessionLoadStates) {
+          s.sessionLoadStates.set(sessionId, loadState);
+        }
+
+        s.loadingSessionIds.clear();
+        s.loadAttemptedSessionIds.clear();
+
+        s.sessionPaneOrders = new Map(snapshot.sessionPaneOrders);
+        s.sessionPaneOrderIndex.clear();
+        for (const [sessionId, paneOrder] of snapshot.sessionPaneOrders) {
+          setSessionPaneOrder(s.sessionPaneOrderIndex, sessionId, paneOrder);
+        }
+
+        s.allPtys = snapshot.ptys;
+        s.allPtysIndex = buildPtyIndex(s.allPtys);
+        s.pendingPtyIds.clear();
+        s.recentlyAddedPtyIds.clear();
+        s.deletedPtyIds.clear();
+
+        if (s.expandedSessionIds.size === 0) {
+          for (const session of snapshot.sessions) {
+            s.expandedSessionIds.add(session.id);
+          }
+        }
+
+        recomputeMatches(s);
+        recomputeTree(s);
+      })
+    );
+  };
+
+  const refreshPtysOnce = async (forceGitRefresh: boolean): Promise<void | Error> => {
     setState('isLoading', true);
-
-    try {
-      const sessionsResult = await listSessionsResult();
-      if (sessionsResult instanceof Error) {
-        return sessionsResult;
-      }
-      const sessions = [...sessionsResult];
-
-      const serviceLivePtyIdsResult = await listAllPtyIds();
-      if (serviceLivePtyIdsResult instanceof Error) {
-        return serviceLivePtyIdsResult;
-      }
-      const serviceLivePtyIds = new Set(serviceLivePtyIdsResult);
-
-      const livePtysResult = await listAllPtysWithMetadata({ skipGitDiffStats: true });
-      if (livePtysResult instanceof Error) {
-        return livePtysResult;
-      }
-      const livePtys = livePtysResult;
-
-      const sessionMetadataById = new Map<string, SessionMetadata>(
-        sessions.map((session) => [String(session.id), session])
-      );
-
-      const sessionDetailsEntries = await Promise.all(
-        sessions.map(
-          async (session) => [String(session.id), await loadSession(String(session.id))] as const
-        )
-      );
-      const sessionDetailsById = new Map(sessionDetailsEntries);
-      const summaryBySessionId = new Map<string, SessionSummary | null>(
-        sessionDetailsEntries.map(([sessionId, sessionDetails]) => [
-          sessionId,
-          sessionDetails instanceof Error ? null : getSessionSummaryFromDetails(sessionDetails),
-        ])
-      );
-
-      const sessionPaneOrders = new Map<string, Map<string, number>>();
-      for (const [sessionId, sessionDetails] of sessionDetailsEntries) {
-        if (!(sessionDetails instanceof Error)) {
-          sessionPaneOrders.set(sessionId, buildSessionPaneOrder(sessionDetails));
-        }
-      }
-
-      const currentSessionHints = getCurrentSessionHints();
-      const currentSessionPaneOrder = getCurrentSessionPaneOrder();
-      const currentSessionPtyIds = new Set(
-        (getCurrentSessionPtys?.() ?? []).map((pty) => pty.ptyId)
-      );
-      if (currentSessionHints.sessionId && currentSessionPaneOrder) {
-        sessionPaneOrders.set(currentSessionHints.sessionId, currentSessionPaneOrder);
-      }
-
-      const sessionMappingEntries = await Promise.all(
-        sessions.map(
-          async (session) =>
-            [String(session.id), await getAggregateSessionPtyMapping(String(session.id))] as const
-        )
-      );
-      const mappedOwnershipByPtyId = new Map<string, PtyOwnership>();
-      for (const [sessionId, mappingInfo] of sessionMappingEntries) {
-        if (!mappingInfo || mappingInfo instanceof Error) continue;
-        const sessionDetails = sessionDetailsById.get(sessionId);
-        const detailValue = sessionDetails instanceof Error ? undefined : sessionDetails;
-        for (const [paneId, ptyId] of mappingInfo.mapping) {
-          mappedOwnershipByPtyId.set(ptyId, {
-            sessionId,
-            paneId,
-            workspaceId: detailValue ? findWorkspaceIdForPane(detailValue, paneId) : undefined,
-          });
-        }
-      }
-
-      const resolvedPtys: ResolvedPty[] = [];
-      for (const metadata of livePtys) {
-        const ownership =
-          resolvePtyOwnership(metadata.ptyId) ?? mappedOwnershipByPtyId.get(metadata.ptyId);
-        if (!ownership) {
-          continue;
-        }
-
-        const sessionMetadata = sessionMetadataById.get(ownership.sessionId);
-        if (!sessionMetadata) {
-          continue;
-        }
-
-        const enrichedMetadata: AggregatePtyMetadata = {
-          ...metadata,
-          paneId: ownership.paneId ?? metadata.paneId,
-          workspaceId: ownership.workspaceId ?? metadata.workspaceId,
-          sessionId: ownership.sessionId,
-          sessionMetadata,
-        };
-        resolvedPtys.push({ metadata: enrichedMetadata, ownership, sessionMetadata });
-      }
-
-      const liveSessionIds = new Set(resolvedPtys.map(({ ownership }) => ownership.sessionId));
-      const existingPtysById = new Map(state.allPtys.map((pty) => [pty.ptyId, pty] as const));
-      const cwds = [...new Set(resolvedPtys.map(({ metadata }) => metadata.cwd))];
-      const gitMetadataMap = await gitCache.getMetadataBatch(cwds, { forceRefresh: true });
-
-      const freshPtys: PtyInfo[] = resolvedPtys.map(({ metadata, ownership, sessionMetadata }) => {
-        const ptyInfo = ptyMetadataToInfo(metadata, existingPtysById.get(metadata.ptyId));
-        const nextPty = applyGitMetadataSnapshot(ptyInfo, gitMetadataMap.get(metadata.cwd));
-
-        return {
-          ...nextPty,
-          sessionId: ownership.sessionId,
-          sessionMetadata,
-          paneId: ownership.paneId ?? nextPty.paneId,
-          workspaceId: ownership.workspaceId ?? nextPty.workspaceId,
-        };
-      });
-
-      const livePaneCountBySession = new Map<string, number>();
-      for (const pty of freshPtys) {
-        livePaneCountBySession.set(
-          pty.sessionId,
-          (livePaneCountBySession.get(pty.sessionId) ?? 0) + 1
-        );
-      }
-
-      setState(
-        produce((s) => {
-          const nextSessionIds = new Set<string>(sessions.map((session) => String(session.id)));
-
-          s.allSessions.clear();
-          for (const session of sessions) {
-            s.allSessions.set(session.id, session);
-          }
-
-          const existingSessionPaneOrders = new Map(s.sessionPaneOrders);
-          s.sessionPaneOrders.clear();
-          for (const [sessionId, paneOrder] of sessionPaneOrders) {
-            s.sessionPaneOrders.set(
-              sessionId,
-              mergeSessionPaneOrder(existingSessionPaneOrders.get(sessionId), paneOrder)
-            );
-          }
-
-          s.manualSessionOrder = s.manualSessionOrder.filter((sessionId) =>
-            nextSessionIds.has(sessionId)
-          );
-
-          for (const sessionId of [...s.sessionLoadStates.keys()]) {
-            if (!nextSessionIds.has(sessionId)) {
-              s.sessionLoadStates.delete(sessionId);
-              s.sessionPaneOrders.delete(sessionId);
-              s.loadingSessionIds.delete(sessionId);
-              s.loadAttemptedSessionIds.delete(sessionId);
-              s.expandedSessionIds.delete(sessionId);
-            }
-          }
-
-          const protectedPaneCountBySession = new Map<string, number>();
-          for (const pty of s.allPtys) {
-            if (!s.pendingPtyIds.has(pty.ptyId) && !s.recentlyAddedPtyIds.has(pty.ptyId)) {
-              continue;
-            }
-
-            protectedPaneCountBySession.set(
-              pty.sessionId,
-              (protectedPaneCountBySession.get(pty.sessionId) ?? 0) + 1
-            );
-          }
-
-          for (const session of sessions) {
-            const sessionId = String(session.id);
-            const livePaneCount = livePaneCountBySession.get(sessionId) ?? 0;
-            const protectedPaneCount = protectedPaneCountBySession.get(sessionId) ?? 0;
-            const storedPaneCount = summaryBySessionId.get(sessionId)?.paneCount ?? 0;
-            const paneCount = Math.max(livePaneCount, protectedPaneCount, storedPaneCount);
-
-            const sessionDetails = sessionDetailsById.get(sessionId);
-            const detailValue = sessionDetails instanceof Error ? undefined : sessionDetails;
-            const detailWorkspaceId = detailValue?.activeWorkspaceId;
-            const detailFocusedPaneId =
-              detailWorkspaceId !== undefined
-                ? (detailValue?.workspaces.find((workspace) => workspace.id === detailWorkspaceId)
-                    ?.focusedPaneId ?? undefined)
-                : undefined;
-
-            const lastActiveWorkspaceId =
-              currentSessionHints.sessionId === sessionId
-                ? currentSessionHints.lastActiveWorkspaceId
-                : detailWorkspaceId;
-            const focusedPaneId =
-              currentSessionHints.sessionId === sessionId
-                ? currentSessionHints.focusedPaneId
-                : detailFocusedPaneId;
-
-            if (liveSessionIds.has(sessionId) || protectedPaneCount > 0) {
-              s.sessionLoadStates.set(sessionId, {
-                status: 'loaded',
-                paneCount,
-                lastActiveWorkspaceId,
-                focusedPaneId: focusedPaneId ?? undefined,
-              });
-              s.loadAttemptedSessionIds.delete(sessionId);
-            } else if (!s.loadingSessionIds.has(sessionId)) {
-              s.sessionLoadStates.set(sessionId, {
-                status: 'unloaded',
-                paneCount,
-                lastActiveWorkspaceId,
-                focusedPaneId: focusedPaneId ?? undefined,
-              });
-            }
-          }
-
-          for (const deletedPtyId of s.deletedPtyIds) {
-            if (!serviceLivePtyIds.has(deletedPtyId)) {
-              deletedPtyIdsSeenGoneFromService.add(deletedPtyId);
-              if (
-                !mappedOwnershipByPtyId.has(deletedPtyId) &&
-                !currentSessionPtyIds.has(deletedPtyId)
-              ) {
-                s.deletedPtyIds.delete(deletedPtyId);
-                deletedPtyIdsSeenGoneFromService.delete(deletedPtyId);
-              }
-              continue;
-            }
-
-            if (deletedPtyIdsSeenGoneFromService.has(deletedPtyId)) {
-              s.deletedPtyIds.delete(deletedPtyId);
-              deletedPtyIdsSeenGoneFromService.delete(deletedPtyId);
-            }
-          }
-
-          const filteredFreshPtys = freshPtys.filter((pty) => !s.deletedPtyIds.has(pty.ptyId));
-          const freshPtyMap = new Map(filteredFreshPtys.map((pty) => [pty.ptyId, pty]));
-          const currentPtyIds = new Set(s.allPtys.map((pty) => pty.ptyId));
-          const newFreshPtys = filteredFreshPtys.filter((pty) => !currentPtyIds.has(pty.ptyId));
-
-          const mergedPtys = s.allPtys
-            .map((pty) => {
-              if (s.deletedPtyIds.has(pty.ptyId)) {
-                return null;
-              }
-
-              const freshPty = freshPtyMap.get(pty.ptyId);
-              if (freshPty) {
-                return freshPty;
-              }
-              if (s.pendingPtyIds.has(pty.ptyId) || s.recentlyAddedPtyIds.has(pty.ptyId)) {
-                return pty;
-              }
-              return null;
-            })
-            .filter((pty): pty is PtyInfo => pty !== null);
-
-          s.allPtys = [...mergedPtys, ...newFreshPtys];
-          s.allPtysIndex = buildPtyIndex(s.allPtys);
-
-          const selectedStillExists = s.selectedPtyId && s.allPtysIndex.has(s.selectedPtyId);
-          if (!selectedStillExists && s.selectedPtyId) {
-            s.selectedPtyId = null;
-          }
-
-          recomputeMatches(s);
-          recomputeTree(s);
-
-          if (s.selectedPtyId) {
-            const newIndex = s.flattenedTreeIndex.get(s.selectedPtyId);
-            if (newIndex !== undefined) {
-              s.selectedIndex = newIndex;
-            }
-          }
-        })
-      );
-
-      return;
-    } catch (error) {
-      return error instanceof AggregateBridgeError
-        ? error
-        : new AggregateBridgeError({
-            operation: 'fullRefreshOnce',
-            target: 'aggregate-view',
-            reason: String(error),
-            cause: error instanceof Error ? error : undefined,
-          });
-    } finally {
+    const snapshot = await buildSnapshot({ forceGitRefresh });
+    if (snapshot instanceof Error) {
       setState('isLoading', false);
+      return snapshot;
     }
+
+    applySnapshot(snapshot);
+    return;
   };
 
   const refreshPtys = async () => {
@@ -864,96 +549,24 @@ export function createAggregateViewRefreshers(
       await using _guardRefresh = new RefreshGuard(refreshState, 'refreshInProgress');
       void _guardRefresh;
 
-      const result = await refreshPtysOnce();
+      const result = await refreshPtysOnce(true);
       if (result instanceof Error) {
         console.error('Failed to refresh aggregate PTYs:', result.message);
       }
     } while (refreshState.pendingFullRefresh);
   };
 
+  const initialLoad = async (): Promise<void | Error> => {
+    return refreshPtysOnce(false);
+  };
+
   const bootstrapPtys = async () => {
-    const result = await bootstrapPtysOnce();
-    if (result instanceof Error) {
-      console.error('Failed to bootstrap aggregate PTYs:', result.message);
-    }
+    // No-op: the aggregate list is rebuilt from workspace snapshots directly.
   };
 
-  const refreshPtysSubsetOnce = async (ptyIds: string[]): Promise<void | Error> => {
-    const results = await Promise.all(
-      ptyIds.map((id) => getPtyMetadata(id, { skipGitDiffStats: true }))
-    );
-
-    const updates = results.filter(
-      (result): result is PtyMetadata => result !== null && !(result instanceof Error)
-    );
-    if (updates.length === 0) {
-      const firstError = results.find(
-        (result): result is ServicesNotInitializedError => result instanceof Error
-      );
-      return firstError;
-    }
-
-    const cwds = [...new Set(updates.map((update) => update.cwd))];
-    const gitMetadataMap = await gitCache.getMetadataBatch(cwds, { forceRefresh: false });
-
-    let didChange = false;
-    setState(
-      produce((s) => {
-        for (const update of updates) {
-          const index = s.allPtysIndex.get(update.ptyId);
-          if (index === undefined || !s.allPtys[index]) continue;
-
-          const prev = s.allPtys[index];
-          const updatedBase = {
-            ...prev,
-            cwd: update.cwd,
-            foregroundProcess: update.foregroundProcess,
-            shell: update.shell ?? prev.shell,
-            title: update.title ?? prev.title,
-            workspaceId: update.workspaceId ?? prev.workspaceId,
-            paneId: update.paneId ?? prev.paneId,
-          };
-          const updated = applyGitMetadataSnapshot(updatedBase, gitMetadataMap.get(update.cwd));
-
-          if (didPtyInfoChange(prev, updated)) {
-            s.allPtys[index] = updated;
-            didChange = true;
-          }
-        }
-
-        if (didChange) {
-          recomputeMatches(s);
-          recomputeTree(s);
-        }
-      })
-    );
-
-    return;
-  };
-
-  const refreshPtysSubset = async (ptyIds: string[]) => {
-    if (ptyIds.length === 0) return;
-
-    for (const ptyId of ptyIds) {
-      refreshState.pendingSubsetPtyIds.add(ptyId);
-    }
-
-    if (refreshState.subsetRefreshInProgress) {
-      return;
-    }
-
-    while (refreshState.pendingSubsetPtyIds.size > 0) {
-      const nextPtyIds = [...refreshState.pendingSubsetPtyIds];
-      refreshState.pendingSubsetPtyIds.clear();
-
-      await using _guardSubset = new RefreshGuard(refreshState, 'subsetRefreshInProgress');
-      void _guardSubset;
-
-      const result = await refreshPtysSubsetOnce(nextPtyIds);
-      if (result instanceof Error) {
-        console.error('Failed to refresh aggregate PTY subset:', result.message);
-      }
-    }
+  const refreshPtysSubset = async (_ptyIds: string[]) => {
+    // Simplicity over clever partial mutation: rebuild the stable snapshot.
+    await refreshPtys();
   };
 
   return {

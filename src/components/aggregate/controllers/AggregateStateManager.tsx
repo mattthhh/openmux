@@ -208,7 +208,10 @@ export function AggregateStateManager(props: AggregateStateManagerProps) {
     if (!props.isActive()) return;
     if (sessionState.switching) return;
 
-    const selectedSessionId = props.selectedSessionId();
+    const selectedItem = props.flattenedTree()[props.selectedIndex()];
+    if (selectedItem?.node.type !== 'pty') return;
+
+    const selectedSessionId = selectedItem.node.ptyInfo.sessionId;
     if (!selectedSessionId) return;
     if (selectedSessionId === sessionState.activeSessionId) return;
 

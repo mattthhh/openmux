@@ -449,8 +449,8 @@ describe('aggregate insertion ordering', () => {
 
     await refreshers.refreshPtys();
 
-    expect(getVisiblePtyIds(state)).toEqual(['pty-1', 'pty-new', 'pty-2']);
-    expect(state.allPtys.find((pty) => pty.ptyId === 'pty-new')?.title).toBe('...');
+    expect(getVisiblePtyIds(state)).toEqual(['pty-1', 'pty-2']);
+    expect(state.allPtys.find((pty) => pty.ptyId === 'pty-new')).toBeUndefined();
 
     metadataDeferred.resolve({
       ptyId: 'pty-new',
@@ -522,8 +522,8 @@ describe('aggregate insertion ordering', () => {
 
     await refreshers.refreshPtys();
 
-    expect(getSessionPaneOrder(state.sessionPaneOrders, 'session-1').get('pane-3')).toBe(0.5);
-    expect(getVisiblePtyIds(state)).toEqual(['pty-1', 'pty-new', 'pty-2']);
+    expect(getSessionPaneOrder(state.sessionPaneOrders, 'session-1').get('pane-3')).toBe(2);
+    expect(getVisiblePtyIds(state)).toEqual(['pty-1', 'pty-2']);
   });
 
   it('preserves adjacency for overlapping pane creations in the same session', async () => {

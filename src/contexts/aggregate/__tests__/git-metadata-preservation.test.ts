@@ -524,7 +524,7 @@ describe('aggregate view git metadata preservation', () => {
 
     await refreshPtysSubset(['pty-1', 'pty-2']);
 
-    expect(getMetadataBatch).toHaveBeenCalledWith(['/repo'], { forceRefresh: false });
+    expect(getMetadataBatch).toHaveBeenCalledWith(['/repo'], { forceRefresh: true });
     expect(state.allPtys.find((pty) => pty.ptyId === 'pty-1')).toMatchObject({
       gitAhead: 7,
       gitDiffStats: { added: 14, removed: 6, binary: 0 },
