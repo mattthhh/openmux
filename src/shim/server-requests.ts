@@ -1,5 +1,6 @@
 import type net from 'net';
 
+import type { PtyService } from '../effect/services/Pty';
 import { asPtyId, makeCols, makeRows } from '../effect/types';
 import type { TerminalScrollState, TerminalState } from '../core/types';
 import type { ITerminalEmulator } from '../terminal/emulator-interface';
@@ -23,11 +24,11 @@ import type { ShimPtyMetadata, ShimPtySessionInfo } from './pty-metadata';
  */
 async function readPtyValue<T>(
   context: Pick<ShimHandlerContext, 'withPty'>,
-  fn: (pty: any) => Promise<T | Error> | T | Error
-): Promise<T | null> {
+  fn: (pty: PtyService) => Promise<T | Error> | T | Error
+): Promise<Exclude<T, Error> | null> {
   try {
-    const result = (await context.withPty(fn)) as T | Error;
-    return result instanceof Error ? null : result;
+    const result = await context.withPty(fn);
+    return result instanceof Error ? null : (result as Exclude<T, Error>);
   } catch {
     return null;
   }
@@ -94,21 +95,29 @@ async function getPtyMetadata(
       : null;
   const session = serializeSession(sessionValue);
 
-  const gitInfo =
-    gitInfoWithDiff && typeof gitInfoWithDiff === 'object'
-      ? (({ diffStats: _diffStats, ...rest }) => rest)(gitInfoWithDiff as Record<string, unknown>)
-      : undefined;
-  const gitDiffStats =
-    gitInfoWithDiff && typeof gitInfoWithDiff === 'object' && 'diffStats' in gitInfoWithDiff
-      ? ((gitInfoWithDiff as { diffStats?: ShimPtyMetadata['gitDiffStats'] }).diffStats ??
-        undefined)
-      : undefined;
+  const gitInfo = gitInfoWithDiff
+    ? {
+        branch: gitInfoWithDiff.branch,
+        dirty: gitInfoWithDiff.dirty,
+        staged: gitInfoWithDiff.staged,
+        unstaged: gitInfoWithDiff.unstaged,
+        untracked: gitInfoWithDiff.untracked,
+        conflicted: gitInfoWithDiff.conflicted,
+        ahead: gitInfoWithDiff.ahead,
+        behind: gitInfoWithDiff.behind,
+        stashCount: gitInfoWithDiff.stashCount,
+        state: gitInfoWithDiff.state,
+        detached: gitInfoWithDiff.detached,
+        repoKey: gitInfoWithDiff.repoKey,
+      }
+    : undefined;
+  const gitDiffStats = gitInfoWithDiff?.diffStats;
 
   return {
     session,
     cwd: cwd ?? session?.cwd ?? null,
     foregroundProcess: foregroundProcess ?? undefined,
-    gitInfo: gitInfo as ShimPtyMetadata['gitInfo'],
+    gitInfo,
     gitDiffStats,
     title: runtimeSession?.title ?? '',
     lastCommand: runtimeSession?.lastCommand ?? undefined,

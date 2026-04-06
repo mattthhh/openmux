@@ -9,7 +9,9 @@ import type { ShimHeader } from '../protocol';
 import type { KittyHandlers } from '../server/kitty';
 
 /** PTY accessor function type */
-export type WithPty = <A>(fn: (pty: PtyService) => Promise<A> | A) => Promise<A>;
+export type WithPty = <A>(
+  fn: (pty: PtyService) => Promise<A | Error> | A | Error
+) => Promise<A | Error>;
 
 /** Server handler options */
 export type ShimServerOptions = {

@@ -30,8 +30,7 @@ const defaultWithPty: WithPty = async (fn) => {
     return new ServicesNotInitializedError({ operation: 'withPty' });
   }
   const pty = getPtyService();
-  const result = fn(pty);
-  return result as any;
+  return await fn(pty);
 };
 
 /**

@@ -112,6 +112,32 @@ describe('shim handlers/replay (litmus)', () => {
   });
 
   describe('replayPtyState', () => {
+    it('returns a shim connection error when PTY getters fail as values', async () => {
+      const result = await replayPtyState(
+        state,
+        async (fn) =>
+          fn({
+            getTerminalState: async () => new Error('missing terminal state'),
+            getScrollState: async () => ({
+              viewportOffset: 0,
+              isAtBottom: true,
+              scrollbackLength: 0,
+            }),
+          } as any),
+        (() => {}) as any,
+        {
+          sendKittyTransmit: () => {},
+          sendKittyUpdate: () => {},
+          queueKittyUpdate: () => {},
+          hasCachedTransmit: () => false,
+        },
+        'pty-1'
+      );
+
+      expect(result).toBeInstanceOf(Error);
+      expect((result as Error).message).toContain('missing terminal state');
+    });
+
     it('normalizes cached scrollback length against the live emulator snapshot', async () => {
       const sentHeaders: ShimHeader[] = [];
       const sendEvent = (header: ShimHeader, _payloads?: ArrayBuffer[]) => {

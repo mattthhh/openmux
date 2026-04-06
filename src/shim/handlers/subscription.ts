@@ -4,6 +4,7 @@
  */
 import * as errore from 'errore';
 import type { UnifiedTerminalUpdate } from '../../core/types';
+import type { PtyService } from '../../effect/services/Pty';
 import { packDirtyUpdate } from '../../terminal/cell-serialization';
 import { ShimConnectionError } from '../../effect/errors';
 import { asPtyId } from '../../effect/types';
@@ -21,10 +22,10 @@ type PtyStreamEvent =
 async function callPty<A>(
   context: Pick<ShimHandlerContext, 'withPty'>,
   operation: string,
-  fn: (pty: any) => Promise<A | Error> | A | Error
+  fn: (pty: PtyService) => Promise<A | Error> | A | Error
 ): Promise<A | ShimConnectionError> {
   const result = await errore.tryAsync<A | Error, ShimConnectionError>({
-    try: () => context.withPty(fn) as Promise<A | Error>,
+    try: () => context.withPty(fn),
     catch: (e) => new ShimConnectionError({ reason: `${operation}: ${e}`, cause: e }),
   });
 

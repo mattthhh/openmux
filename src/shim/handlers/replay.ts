@@ -171,24 +171,37 @@ export async function replayPtyState(
 
   // Fetch from PTY service
   const stateResult = await errore.tryAsync<
-    {
-      state: TerminalState;
-      scrollState: TerminalScrollState;
-    },
+    | {
+        state: TerminalState;
+        scrollState: TerminalScrollState;
+      }
+    | Error,
     ShimConnectionError
   >({
     try: async () => {
-      return (await withPty(async (pty) => {
+      return await withPty(async (pty) => {
         const terminalState = await pty.getTerminalState(asPtyId(ptyId));
+        if (terminalState instanceof Error) {
+          return terminalState;
+        }
         const scrollState = await pty.getScrollState(asPtyId(ptyId));
+        if (scrollState instanceof Error) {
+          return scrollState;
+        }
         return { state: terminalState, scrollState };
-      })) as { state: TerminalState; scrollState: TerminalScrollState };
+      });
     },
     catch: (e) =>
       new ShimConnectionError({ reason: `Failed to get terminal state: ${e}`, cause: e }),
   });
 
   if (stateResult instanceof ShimConnectionError) return stateResult;
+  if (stateResult instanceof Error) {
+    return new ShimConnectionError({
+      reason: `Failed to get terminal state: ${stateResult.message}`,
+      cause: stateResult,
+    });
+  }
 
   state.ptyScrollStates.set(ptyId, stateResult.scrollState);
   sendFullSnapshot(sendEvent, ptyId, stateResult.state, stateResult.scrollState, options);

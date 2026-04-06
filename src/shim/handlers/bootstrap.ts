@@ -150,12 +150,16 @@ export async function applyHostColors(
   colors: import('../../terminal/terminal-colors').TerminalColors
 ): Promise<void> {
   setHostColors(colors);
-  const result = await errore.tryAsync<void, ShimConnectionError>({
+  const result = await errore.tryAsync<void | Error, ShimConnectionError>({
     try: () => withPty((pty) => pty.setHostColors(colors)),
     catch: (e) =>
       new ShimConnectionError({ reason: `Failed to apply host colors: ${e}`, cause: e }),
   });
   if (result instanceof ShimConnectionError) {
+    console.warn('Failed to apply host colors:', result.message);
+    return;
+  }
+  if (result instanceof Error) {
     console.warn('Failed to apply host colors:', result.message);
   }
 }
