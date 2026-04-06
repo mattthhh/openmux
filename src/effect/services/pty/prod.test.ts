@@ -1,6 +1,6 @@
 /**
  * PTY Service Production Implementation - Litmus Tests
- * Fast, focused tests for core functionality
+ * Fast, focused tests for core functionality.
  */
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { PtyState } from './state';
@@ -94,14 +94,15 @@ describe('createPtyService (litmus)', () => {
     service.dispose();
   });
 
-  it('should create a service with all required methods', () => {
+  it('should create a service with the consolidated PTY API', () => {
     expect(service.create).toBeTypeOf('function');
     expect(service.write).toBeTypeOf('function');
     expect(service.resize).toBeTypeOf('function');
     expect(service.destroy).toBeTypeOf('function');
     expect(service.getCwd).toBeTypeOf('function');
     expect(service.subscribe).toBeTypeOf('function');
-    expect(service.subscribeUnified).toBeTypeOf('function');
+    expect(service.getEmulator).toBeTypeOf('function');
+    expect(service.subscribeToTitle).toBeTypeOf('function');
     expect(service.listAll).toBeTypeOf('function');
     expect(service.dispose).toBeTypeOf('function');
   });

@@ -192,11 +192,9 @@ export function createOperations(deps: OperationsDeps) {
     }
     session.closing = true;
 
-    // Clear subscribers
-    for (const callback of session.subscribers) {
-      callback(null as unknown as TerminalState);
-    }
-    session.subscribers.clear();
+    session.unifiedSubscribers.clear();
+    session.titleSubscribers.clear();
+    session.exitCallbacks.clear();
 
     // Kill PTY and dispose emulator
     session.pty.kill();
@@ -225,6 +223,8 @@ export function createOperations(deps: OperationsDeps) {
       rows: session.rows as Rows,
       cwd: session.cwd,
       shell: session.shell,
+      title: session.emulator.getTitle() || undefined,
+      lastCommand: session.lastCommand ?? undefined,
     };
   }
 
@@ -282,18 +282,25 @@ export function createOperations(deps: OperationsDeps) {
     session.emulator.setUpdateEnabled?.(enabled);
   }
 
-  async function getEmulator(id: PtyId): Promise<PtyNotFoundError | ITerminalEmulator> {
+  function getEmulator(id: PtyId, options: { sync: true }): ITerminalEmulator | null;
+  function getEmulator(
+    id: PtyId,
+    options?: { sync?: false }
+  ): Promise<PtyNotFoundError | ITerminalEmulator>;
+  function getEmulator(
+    id: PtyId,
+    options: { sync?: boolean } = {}
+  ): ITerminalEmulator | null | Promise<PtyNotFoundError | ITerminalEmulator> {
+    if (options.sync) {
+      return sessions.get(id)?.emulator ?? null;
+    }
+
     const sessionOrError = getSessionOrFail(id);
     if (sessionOrError instanceof PtyNotFoundError) {
-      return sessionOrError;
+      return Promise.resolve(sessionOrError);
     }
-    const session = sessionOrError;
-    return session.emulator;
-  }
 
-  function getEmulatorSync(id: PtyId): ITerminalEmulator | null {
-    const session = sessions.get(id);
-    return session?.emulator ?? null;
+    return Promise.resolve(sessionOrError.emulator);
   }
 
   async function destroyAll(): Promise<void> {
@@ -305,24 +312,6 @@ export function createOperations(deps: OperationsDeps) {
 
   async function listAll(): Promise<PtyId[]> {
     return Array.from(sessions.keys());
-  }
-
-  async function getTitle(id: PtyId): Promise<PtyNotFoundError | string> {
-    const sessionOrError = getSessionOrFail(id);
-    if (sessionOrError instanceof PtyNotFoundError) {
-      return sessionOrError;
-    }
-    const session = sessionOrError;
-    return session.emulator.getTitle();
-  }
-
-  async function getLastCommand(id: PtyId): Promise<PtyNotFoundError | string | undefined> {
-    const sessionOrError = getSessionOrFail(id);
-    if (sessionOrError instanceof PtyNotFoundError) {
-      return sessionOrError;
-    }
-    const session = sessionOrError;
-    return session.lastCommand ?? undefined;
   }
 
   return {
@@ -337,11 +326,8 @@ export function createOperations(deps: OperationsDeps) {
     setScrollOffset,
     setUpdateEnabled,
     getEmulator,
-    getEmulatorSync,
     destroyAll,
     listAll,
-    getTitle,
-    getLastCommand,
     getSessionOrFail,
   };
 }

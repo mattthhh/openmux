@@ -3,7 +3,6 @@
  */
 import { describe, it, expect, beforeEach } from 'bun:test';
 import { createTestPtyService } from './index';
-import { PtyNotFoundError } from '../../errors';
 import type { PtyService } from './interface';
 
 describe('createTestPtyService (litmus)', () => {
@@ -13,14 +12,15 @@ describe('createTestPtyService (litmus)', () => {
     service = createTestPtyService();
   });
 
-  it('should create a service with all required methods', () => {
+  it('should create a service with the consolidated PTY API', () => {
     expect(service.create).toBeTypeOf('function');
     expect(service.write).toBeTypeOf('function');
     expect(service.resize).toBeTypeOf('function');
     expect(service.destroy).toBeTypeOf('function');
     expect(service.getCwd).toBeTypeOf('function');
     expect(service.subscribe).toBeTypeOf('function');
-    expect(service.subscribeUnified).toBeTypeOf('function');
+    expect(service.getEmulator).toBeTypeOf('function');
+    expect(service.subscribeToTitle).toBeTypeOf('function');
     expect(service.listAll).toBeTypeOf('function');
     expect(service.dispose).toBeTypeOf('function');
   });
@@ -39,8 +39,7 @@ describe('createTestPtyService (litmus)', () => {
     expect(cwd).toBe('/test/cwd');
   });
 
-  it('should return test session', async () => {
-    // First create a PTY to get a valid ID
+  it('should return test session metadata', async () => {
     const ptyId = await service.create({ cols: 80, rows: 24 });
     expect(ptyId).not.toBeInstanceOf(Error);
     if (ptyId instanceof Error) return;
@@ -56,6 +55,8 @@ describe('createTestPtyService (litmus)', () => {
     expect(session.rows).toBe(24);
     expect(session.cwd).toBe('/test/cwd');
     expect(session.shell).toBe('/bin/bash');
+    expect(session.title).toBe('');
+    expect(session.lastCommand).toBeUndefined();
   });
 
   it('should return mock terminal state', async () => {
@@ -76,23 +77,19 @@ describe('createTestPtyService (litmus)', () => {
 
   it('should return no-op unsubscribe functions', async () => {
     const unsub1 = await service.subscribe('pty' as any, () => {});
-    const unsub2 = await service.subscribeToScroll('pty' as any, () => {});
-    const unsub3 = await service.subscribeUnified('pty' as any, () => {});
-    const unsub4 = await service.onExit('pty' as any, () => {});
-    const unsub5 = await service.subscribeToTitleChange('pty' as any, () => {});
+    const unsub2 = await service.onExit('pty' as any, () => {});
+    const unsub3 = await service.subscribeToTitle('pty' as any, () => {});
+    const unsub4 = service.subscribeToTitle(() => {});
 
     expect(unsub1).toBeTypeOf('function');
     expect(unsub2).toBeTypeOf('function');
     expect(unsub3).toBeTypeOf('function');
     expect(unsub4).toBeTypeOf('function');
-    expect(unsub5).toBeTypeOf('function');
 
-    // Should not throw
     unsub1();
     unsub2();
     unsub3();
     unsub4();
-    unsub5();
   });
 
   it('should return no-op for lifecycle subscriptions', () => {
@@ -101,29 +98,15 @@ describe('createTestPtyService (litmus)', () => {
     unsub();
   });
 
-  it('should return no-op for all title subscriptions', () => {
-    const unsub = service.subscribeToAllTitleChanges(() => {});
-    expect(unsub).toBeTypeOf('function');
-    unsub();
-  });
-
-  it('should return undefined for git operations', async () => {
-    expect(await service.getGitBranch('pty' as any)).toBeUndefined();
+  it('should return undefined for git and foreground-process metadata', async () => {
     expect(await service.getGitInfo('pty' as any)).toBeUndefined();
-    expect(await service.getGitDiffStats('pty' as any)).toBeUndefined();
+    expect(await service.getGitInfo('pty' as any, { includeDiffStats: true })).toBeUndefined();
     expect(await service.getForegroundProcess('pty' as any)).toBeUndefined();
   });
 
-  it('should return empty string for title', async () => {
-    expect(await service.getTitle('pty' as any)).toBe('');
-  });
-
-  it('should return undefined for last command', async () => {
-    expect(await service.getLastCommand('pty' as any)).toBeUndefined();
-  });
-
-  it('should throw for getEmulator', async () => {
+  it('should throw for async getEmulator and return null for sync getEmulator', async () => {
     await expect(service.getEmulator('pty' as any)).rejects.toThrow('No emulator in test layer');
+    expect(service.getEmulator('pty' as any, { sync: true })).toBeNull();
   });
 
   it('should handle dispose without error', () => {

@@ -2,7 +2,7 @@
  * Tests for focus and navigation layout reducer actions.
  */
 
-import { describe, it, expect } from "bun:test";
+import { describe, it, expect } from 'bun:test';
 import type { PaneData } from '../../../src/core/types';
 import { layoutReducer, generatePaneId } from '../../../src/core/operations/layout-actions';
 import {
@@ -31,11 +31,7 @@ describe('Layout Reducer', () => {
 
     it('should update activeStackIndex when focusing stack pane', () => {
       const mainPane: PaneData = { id: 'pane-1' };
-      const stackPanes: PaneData[] = [
-        { id: 'pane-2' },
-        { id: 'pane-3' },
-        { id: 'pane-4' },
-      ];
+      const stackPanes: PaneData[] = [{ id: 'pane-2' }, { id: 'pane-3' }, { id: 'pane-4' }];
       const workspace = createWorkspaceWithPanes(1, mainPane, stackPanes);
       const state = createInitialState({
         workspaces: { 1: workspace },
@@ -117,11 +113,7 @@ describe('Layout Reducer', () => {
 
       it('should navigate north/south within stack', () => {
         const mainPane: PaneData = { id: 'pane-1' };
-        const stackPanes: PaneData[] = [
-          { id: 'pane-2' },
-          { id: 'pane-3' },
-          { id: 'pane-4' },
-        ];
+        const stackPanes: PaneData[] = [{ id: 'pane-2' }, { id: 'pane-3' }, { id: 'pane-4' }];
         const workspace = createWorkspaceWithPanes(1, mainPane, stackPanes, {
           focusedPaneId: 'pane-3',
           activeStackIndex: 1,
@@ -171,11 +163,7 @@ describe('Layout Reducer', () => {
 
       it('should navigate to closest stack pane from main', () => {
         const mainPane: PaneData = { id: 'pane-1' };
-        const stackPanes: PaneData[] = [
-          { id: 'pane-2' },
-          { id: 'pane-3' },
-          { id: 'pane-4' },
-        ];
+        const stackPanes: PaneData[] = [{ id: 'pane-2' }, { id: 'pane-3' }, { id: 'pane-4' }];
         const workspace = createWorkspaceWithPanes(1, mainPane, stackPanes, {
           focusedPaneId: 'pane-1',
           activeStackIndex: 2, // Remember last focused stack pane
@@ -192,11 +180,7 @@ describe('Layout Reducer', () => {
     describe('stacked layout', () => {
       it('should navigate with west/east (h/l) including main pane', () => {
         const mainPane: PaneData = { id: 'pane-1' };
-        const stackPanes: PaneData[] = [
-          { id: 'pane-2' },
-          { id: 'pane-3' },
-          { id: 'pane-4' },
-        ];
+        const stackPanes: PaneData[] = [{ id: 'pane-2' }, { id: 'pane-3' }, { id: 'pane-4' }];
         const workspace = createWorkspaceWithPanes(1, mainPane, stackPanes, {
           focusedPaneId: 'pane-2',
           activeStackIndex: 0,
@@ -224,10 +208,7 @@ describe('Layout Reducer', () => {
 
       it('should navigate within split tree before cycling tabs', () => {
         const mainPane: PaneData = { id: generatePaneId() };
-        const stackPanes: PaneData[] = [
-          { id: generatePaneId() },
-          { id: generatePaneId() },
-        ];
+        const stackPanes: PaneData[] = [{ id: generatePaneId() }, { id: generatePaneId() }];
         let workspace = createWorkspaceWithPanes(1, mainPane, stackPanes, {
           focusedPaneId: stackPanes[0]!.id,
           activeStackIndex: 0,
@@ -244,6 +225,39 @@ describe('Layout Reducer', () => {
         const newState = layoutReducer(state, { type: 'NAVIGATE', direction: 'north' });
         expect(newState.workspaces[1]!.focusedPaneId).toBe(stackPanes[0]!.id);
         expect(newState.workspaces[1]!.activeStackIndex).toBe(0);
+      });
+
+      it('should restore the last focused pane when returning to a stacked tab', () => {
+        const mainPane: PaneData = { id: generatePaneId() };
+        const stackPanes: PaneData[] = [{ id: generatePaneId() }, { id: generatePaneId() }];
+        let state = createInitialState({
+          workspaces: {
+            1: createWorkspaceWithPanes(1, mainPane, stackPanes, {
+              focusedPaneId: stackPanes[0]!.id,
+              activeStackIndex: 0,
+              layoutMode: 'stacked',
+            }),
+          },
+        });
+
+        state = layoutReducer(state, { type: 'SPLIT_PANE', direction: 'horizontal' });
+        const rememberedPaneId = state.workspaces[1]!.focusedPaneId;
+        expect(rememberedPaneId).toBe('pane-4');
+
+        state = layoutReducer(state, { type: 'NAVIGATE', direction: 'west' });
+        expect(state.workspaces[1]!.focusedPaneId).toBe(mainPane.id);
+
+        state = layoutReducer(state, { type: 'NAVIGATE', direction: 'east' });
+        expect(state.workspaces[1]!.focusedPaneId).toBe(rememberedPaneId);
+        expect(state.workspaces[1]!.activeStackIndex).toBe(0);
+
+        state = layoutReducer(state, { type: 'NAVIGATE', direction: 'east' });
+        expect(state.workspaces[1]!.focusedPaneId).toBe(stackPanes[1]!.id);
+        expect(state.workspaces[1]!.activeStackIndex).toBe(1);
+
+        state = layoutReducer(state, { type: 'NAVIGATE', direction: 'west' });
+        expect(state.workspaces[1]!.focusedPaneId).toBe(rememberedPaneId);
+        expect(state.workspaces[1]!.activeStackIndex).toBe(0);
       });
     });
 
@@ -280,11 +294,7 @@ describe('Layout Reducer', () => {
 
       it('should navigate west/east within stack', () => {
         const mainPane: PaneData = { id: 'pane-1' };
-        const stackPanes: PaneData[] = [
-          { id: 'pane-2' },
-          { id: 'pane-3' },
-          { id: 'pane-4' },
-        ];
+        const stackPanes: PaneData[] = [{ id: 'pane-2' }, { id: 'pane-3' }, { id: 'pane-4' }];
         const workspace = createWorkspaceWithPanes(1, mainPane, stackPanes, {
           focusedPaneId: 'pane-3',
           activeStackIndex: 1,
@@ -323,5 +333,4 @@ describe('Layout Reducer', () => {
       expect(newState).toBe(state);
     });
   });
-
 });

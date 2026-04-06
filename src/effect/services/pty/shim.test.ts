@@ -8,7 +8,7 @@ describe('createShimPtyService (litmus)', () => {
     mock.restore();
   });
 
-  it('should create a service with all required methods', async () => {
+  it('should create a service with the consolidated PTY API', async () => {
     mock.module('../../../shim/client', () => ({
       waitForShim: vi.fn().mockResolvedValue(undefined),
       getTitle: vi.fn().mockResolvedValue('test'),
@@ -32,10 +32,10 @@ describe('createShimPtyService (litmus)', () => {
     expect(service.destroy).toBeTypeOf('function');
     expect(service.getCwd).toBeTypeOf('function');
     expect(service.subscribe).toBeTypeOf('function');
-    expect(service.subscribeUnified).toBeTypeOf('function');
+    expect(service.getEmulator).toBeTypeOf('function');
     expect(service.listAll).toBeTypeOf('function');
     expect(service.dispose).toBeTypeOf('function');
     expect(service.subscribeToLifecycle).toBeTypeOf('function');
-    expect(service.subscribeToAllTitleChanges).toBeTypeOf('function');
+    expect(service.subscribeToTitle).toBeTypeOf('function');
   });
 });

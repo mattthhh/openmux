@@ -154,7 +154,8 @@ describe('Smoke Tests - Aggregate View current behavior', () => {
     expect(placeholder).toBeDefined();
     expect(placeholder?.node.type).toBe('placeholder');
     if (placeholder?.node.type === 'placeholder') {
-      expect(placeholder.node.message).toBe('...');
+      expect(placeholder.node.message).toBe('Session (unloaded)');
+      expect(placeholder.node.parentSessionId).toBe('session-b');
     }
   });
 

@@ -1,6 +1,6 @@
 /**
  * Test PTY Service Implementation
- * Mock PTY for testing purposes
+ * Mock PTY for testing purposes.
  */
 import type { TerminalState, UnifiedTerminalUpdate } from '../../../core/types';
 import type { ITerminalEmulator } from '../../../terminal/emulator-interface';
@@ -9,22 +9,52 @@ import { PtyNotFoundError } from '../../errors';
 import type { PtyId, Cols, Rows } from '../../types';
 import type { PtySession } from '../../models';
 import { makePtyId } from '../../types';
-import type { GitDiffStats, GitInfo } from './helpers';
-import type { PtyService } from './interface';
+import type { GitInfo } from './helpers';
+import type { PtyService, PtyTitleChangeEvent, GetPtyGitInfoOptions } from './interface';
 
 /**
- * Create test PTY service - mock PTY for testing
+ * Create test PTY service - mock PTY for testing.
  */
 export function createTestPtyService(): PtyService {
-  // Track created and destroyed PTY IDs for testing
   const ptyIds = new Set<PtyId>();
   const destroyedPtyIds = new Set<PtyId>();
+
+  function getEmulator(id: PtyId, options: { sync: true }): ITerminalEmulator | null;
+  function getEmulator(
+    id: PtyId,
+    options?: { sync?: false }
+  ): Promise<PtyNotFoundError | ITerminalEmulator>;
+  function getEmulator(
+    _id: PtyId,
+    options: { sync?: boolean } = {}
+  ): ITerminalEmulator | null | Promise<PtyNotFoundError | ITerminalEmulator> {
+    if (options.sync) {
+      return null;
+    }
+
+    return Promise.reject(new Error('No emulator in test layer'));
+  }
+
+  function subscribeToTitle(
+    id: PtyId,
+    callback: (title: string) => void
+  ): Promise<PtyNotFoundError | (() => void)>;
+  function subscribeToTitle(callback: (event: PtyTitleChangeEvent) => void): () => void;
+  function subscribeToTitle(
+    idOrCallback: PtyId | ((event: PtyTitleChangeEvent) => void),
+    _maybeCallback?: (title: string) => void
+  ): Promise<PtyNotFoundError | (() => void)> | (() => void) {
+    if (typeof idOrCallback === 'function') {
+      return () => {};
+    }
+    return Promise.resolve(() => {});
+  }
 
   return {
     create: async () => {
       const id = makePtyId();
       ptyIds.add(id);
-      destroyedPtyIds.delete(id); // Re-enable if previously destroyed
+      destroyedPtyIds.delete(id);
       return id;
     },
     write: async () => undefined,
@@ -37,18 +67,16 @@ export function createTestPtyService(): PtyService {
       return undefined;
     },
     getSession: async (id: PtyId) => {
-      // Return error for destroyed PTYs
       if (destroyedPtyIds.has(id)) {
         return new PtyNotFoundError({ ptyId: id });
       }
-      // Return error for IDs that don't look like valid PTY IDs
-      // Valid PTY IDs start with 'pty-' and follow the format from makePtyId()
+
       const idStr = String(id);
       const isValidFormat = idStr.startsWith('pty-') || ptyIds.has(id);
       if (!isValidFormat) {
         return new PtyNotFoundError({ ptyId: id });
       }
-      // Return session for valid IDs
+
       return {
         id,
         pid: 12345,
@@ -56,7 +84,9 @@ export function createTestPtyService(): PtyService {
         rows: 24 as Rows,
         cwd: '/test/cwd',
         shell: '/bin/bash',
-      };
+        title: '',
+        lastCommand: undefined,
+      } satisfies PtySession;
     },
     getTerminalState: async () =>
       ({
@@ -65,19 +95,7 @@ export function createTestPtyService(): PtyService {
         cursorY: 0,
         cursorVisible: true,
       }) as unknown as TerminalState,
-    subscribe: async (id: PtyId, callback: (state: TerminalState) => void) => {
-      // Provide initial state immediately
-      callback({
-        cells: [],
-        cursorX: 0,
-        cursorY: 0,
-        cursorVisible: true,
-      } as unknown as TerminalState);
-      return () => {};
-    },
-    subscribeToScroll: async () => () => {},
-    subscribeUnified: async (id: PtyId, callback: (update: UnifiedTerminalUpdate) => void) => {
-      // Provide initial update immediately
+    subscribe: async (_id: PtyId, callback: (update: UnifiedTerminalUpdate) => void) => {
       callback({
         terminalUpdate: {
           dirtyRows: new Map(),
@@ -103,24 +121,19 @@ export function createTestPtyService(): PtyService {
     }),
     setScrollOffset: async () => undefined,
     setUpdateEnabled: async () => undefined,
-    getEmulator: async () => {
-      throw new Error('No emulator in test layer');
-    },
-    getEmulatorSync: () => null,
-    setHostColors: async () => undefined,
+    getEmulator,
+    setHostColors: async (_colors: TerminalColors) => undefined,
     destroyAll: async () => {
       ptyIds.clear();
     },
     listAll: async () => Array.from(ptyIds),
     getForegroundProcess: async () => undefined,
-    getGitBranch: async () => undefined,
-    getGitInfo: async () => undefined,
-    getGitDiffStats: async () => undefined,
+    getGitInfo: async (
+      _id: PtyId,
+      _options: GetPtyGitInfoOptions = {}
+    ): Promise<GitInfo | undefined> => undefined,
     subscribeToLifecycle: () => () => {},
-    getTitle: async () => '',
-    getLastCommand: async () => undefined,
-    subscribeToTitleChange: async () => () => {},
-    subscribeToAllTitleChanges: () => () => {},
+    subscribeToTitle,
     subscribeToAllActivity: () => () => {},
     dispose: () => {
       ptyIds.clear();

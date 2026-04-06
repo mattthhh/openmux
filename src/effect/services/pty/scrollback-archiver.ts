@@ -1,30 +1,33 @@
 /**
  * Scrollback archiver - spills live scrollback into a disk archive.
  */
-import type { InternalPtySession } from "./types"
-import type { ITerminalEmulator } from "../../../terminal/emulator-interface"
-import type { TerminalCell } from "../../../core/types"
-import type { ArchivePlacement, ScrollbackArchive } from "../../../terminal/scrollback-archive"
-import { HOT_SCROLLBACK_LIMIT } from "../../../terminal/scrollback-config"
-import { tracePtyEvent } from "../../../terminal/pty-trace"
-import { deferMacrotask } from "../../../core/scheduling"
+import type { InternalPtySession } from './types';
+import {
+  isKittyGraphicsEmulator,
+  type ITerminalEmulator,
+} from '../../../terminal/emulator-interface';
+import type { TerminalCell } from '../../../core/types';
+import type { ArchivePlacement, ScrollbackArchive } from '../../../terminal/scrollback-archive';
+import { HOT_SCROLLBACK_LIMIT } from '../../../terminal/scrollback-config';
+import { tracePtyEvent } from '../../../terminal/pty-trace';
+import { deferMacrotask } from '../../../core/scheduling';
 
-const ARCHIVE_BATCH_LINES = 512
-const MAX_BATCHES_PER_RUN = 4
+const ARCHIVE_BATCH_LINES = 512;
+const MAX_BATCHES_PER_RUN = 4;
 
 export interface DrainScrollbackOverflowOptions {
-  scrollbackArchive: ScrollbackArchive
-  liveEmulator: ITerminalEmulator
-  hotScrollbackLimit?: number
-  archiveBatchLines?: number
-  maxBatches?: number
+  scrollbackArchive: ScrollbackArchive;
+  liveEmulator: ITerminalEmulator;
+  hotScrollbackLimit?: number;
+  archiveBatchLines?: number;
+  maxBatches?: number;
 }
 
 export interface DrainScrollbackOverflowResult {
-  batches: number
-  linesArchived: number
-  placementsArchived: number
-  remainingOverflow: number
+  batches: number;
+  linesArchived: number;
+  placementsArchived: number;
+  remainingOverflow: number;
 }
 
 export async function drainScrollbackOverflow(
@@ -36,7 +39,7 @@ export async function drainScrollbackOverflow(
     hotScrollbackLimit = HOT_SCROLLBACK_LIMIT,
     archiveBatchLines = ARCHIVE_BATCH_LINES,
     maxBatches = MAX_BATCHES_PER_RUN,
-  } = options
+  } = options;
 
   if (liveEmulator.isDisposed || liveEmulator.isAlternateScreen()) {
     return {
@@ -44,48 +47,48 @@ export async function drainScrollbackOverflow(
       linesArchived: 0,
       placementsArchived: 0,
       remainingOverflow: 0,
-    }
+    };
   }
 
-  const overflow = liveEmulator.getScrollbackLength() - hotScrollbackLimit
+  const overflow = liveEmulator.getScrollbackLength() - hotScrollbackLimit;
   if (overflow <= 0) {
     return {
       batches: 0,
       linesArchived: 0,
       placementsArchived: 0,
       remainingOverflow: 0,
-    }
+    };
   }
 
-  const maxLinesPerRun = archiveBatchLines * maxBatches
-  const targetLineCount = Math.min(overflow, maxLinesPerRun)
-  const archiveStartOffset = scrollbackArchive.length
-  const lines = captureLines({ liveEmulator, count: targetLineCount })
+  const maxLinesPerRun = archiveBatchLines * maxBatches;
+  const targetLineCount = Math.min(overflow, maxLinesPerRun);
+  const archiveStartOffset = scrollbackArchive.length;
+  const lines = captureLines({ liveEmulator, count: targetLineCount });
   if (lines.length === 0) {
     return {
       batches: 0,
       linesArchived: 0,
       placementsArchived: 0,
       remainingOverflow: overflow,
-    }
+    };
   }
 
   const placements = capturePlacements({
     liveEmulator,
     linesArchived: lines.length,
     archiveStartOffset,
-  })
+  });
 
-  await scrollbackArchive.appendLines(lines)
+  await scrollbackArchive.appendLines(lines);
   if (placements.length > 0) {
-    await scrollbackArchive.appendPlacements(placements)
+    await scrollbackArchive.appendPlacements(placements);
   }
 
-  if ("trimScrollback" in liveEmulator) {
+  if ('trimScrollback' in liveEmulator) {
     const trimmer = liveEmulator as ITerminalEmulator & {
-      trimScrollback?: (lines: number) => void
-    }
-    trimmer.trimScrollback?.(lines.length)
+      trimScrollback?: (lines: number) => void;
+    };
+    trimmer.trimScrollback?.(lines.length);
   }
 
   return {
@@ -93,23 +96,23 @@ export async function drainScrollbackOverflow(
     linesArchived: lines.length,
     placementsArchived: placements.length,
     remainingOverflow: Math.max(0, liveEmulator.getScrollbackLength() - hotScrollbackLimit),
-  }
+  };
 }
 
 function captureLines(options: {
-  liveEmulator: ITerminalEmulator
-  count: number
+  liveEmulator: ITerminalEmulator;
+  count: number;
 }): TerminalCell[][] {
-  const { liveEmulator, count } = options
-  const lines: TerminalCell[][] = []
+  const { liveEmulator, count } = options;
+  const lines: TerminalCell[][] = [];
 
   for (let i = 0; i < count; i++) {
-    const line = liveEmulator.getScrollbackLine(i)
-    if (!line) break
-    lines.push(line)
+    const line = liveEmulator.getScrollbackLine(i);
+    if (!line) break;
+    lines.push(line);
   }
 
-  return lines
+  return lines;
 }
 
 /**
@@ -117,48 +120,48 @@ function captureLines(options: {
  * This must be called BEFORE trimScrollback() to avoid losing placement data.
  */
 function capturePlacements(options: {
-  liveEmulator: ITerminalEmulator
-  linesArchived: number
-  archiveStartOffset: number
+  liveEmulator: ITerminalEmulator;
+  linesArchived: number;
+  archiveStartOffset: number;
 }): ArchivePlacement[] {
-  const { liveEmulator, linesArchived, archiveStartOffset } = options
+  const { liveEmulator, linesArchived, archiveStartOffset } = options;
 
-  if (!liveEmulator.getKittyPlacements) {
-    return []
+  if (!isKittyGraphicsEmulator(liveEmulator)) {
+    return [];
   }
 
-  const placements = liveEmulator.getKittyPlacements()
+  const placements = liveEmulator.getKittyPlacements();
   if (!placements || placements.length === 0) {
-    return []
+    return [];
   }
 
-  const archivedPlacements: ArchivePlacement[] = []
+  const archivedPlacements: ArchivePlacement[] = [];
 
   for (const placement of placements) {
-    const placementStartY = placement.screenY
-    const placementRows = Math.max(1, placement.rows)
-    const placementEndYExclusive = placementStartY + placementRows
+    const placementStartY = placement.screenY;
+    const placementRows = Math.max(1, placement.rows);
+    const placementEndYExclusive = placementStartY + placementRows;
 
     if (placementEndYExclusive <= 0 || placementStartY >= linesArchived) {
-      continue
+      continue;
     }
 
-    const archiveLine = Math.max(0, placementStartY)
+    const archiveLine = Math.max(0, placementStartY);
     archivedPlacements.push({
       ...placement,
       archiveOffset: archiveStartOffset + archiveLine,
       originalScreenY: placement.screenY,
       screenY: archiveLine,
-    })
+    });
   }
 
-  return archivedPlacements
+  return archivedPlacements;
 }
 
 export class ScrollbackArchiver {
-  private scheduled = false
-  private running = false
-  private pending = false
+  private scheduled = false;
+  private running = false;
+  private pending = false;
 
   constructor(
     private session: InternalPtySession,
@@ -167,37 +170,38 @@ export class ScrollbackArchiver {
 
   schedule(): void {
     if (this.scheduled) {
-      this.pending = true
-      return
+      this.pending = true;
+      return;
     }
-    this.scheduled = true
+    this.scheduled = true;
     deferMacrotask(() => {
-      void this.run()
-    })
+      void this.run();
+    });
   }
 
   reset(): void {
-    this.pending = false
-    this.scheduled = false
+    this.pending = false;
+    this.scheduled = false;
   }
 
   private async run(): Promise<void> {
-    this.scheduled = false
+    this.scheduled = false;
     if (this.running) {
-      this.pending = true
-      return
+      this.pending = true;
+      return;
     }
 
-    this.running = true
-    const startedAt = typeof performance !== "undefined" ? performance.now() : Date.now()
+    this.running = true;
+    const startedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
     try {
       const result = await drainScrollbackOverflow({
         scrollbackArchive: this.session.scrollbackArchive,
         liveEmulator: this.liveEmulator,
-      })
-      const durationMs = (typeof performance !== "undefined" ? performance.now() : Date.now()) - startedAt
+      });
+      const durationMs =
+        (typeof performance !== 'undefined' ? performance.now() : Date.now()) - startedAt;
       if (result.linesArchived > 0 || durationMs >= 8) {
-        tracePtyEvent("scrollback-archiver-run", {
+        tracePtyEvent('scrollback-archiver-run', {
           ptyId: this.session.id,
           durationMs,
           linesArchived: result.linesArchived,
@@ -206,18 +210,18 @@ export class ScrollbackArchiver {
           remainingOverflow: result.remainingOverflow,
           archiveLength: this.session.scrollbackArchive.length,
           liveScrollbackLength: this.liveEmulator.getScrollbackLength(),
-        })
+        });
       }
       if (result.remainingOverflow > 0) {
-        this.pending = true
+        this.pending = true;
       }
     } catch {
       // Best-effort: ignore archive errors to avoid blocking PTY flow.
     } finally {
-      this.running = false
+      this.running = false;
       if (this.pending) {
-        this.pending = false
-        this.schedule()
+        this.pending = false;
+        this.schedule();
       }
     }
   }

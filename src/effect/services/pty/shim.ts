@@ -1,6 +1,6 @@
 /**
  * Shim PTY Service Implementation
- * Proxies PTY operations through the background shim process
+ * Proxies PTY operations through the background shim process.
  */
 import * as ShimClient from '../../../shim/client';
 import type { TerminalState, UnifiedTerminalUpdate } from '../../../core/types';
@@ -9,14 +9,13 @@ import type { TerminalColors } from '../../../terminal/terminal-colors';
 import { PtyNotFoundError } from '../../errors';
 import type { PtyId } from '../../types';
 import type { PtySession } from '../../models';
-import type { GitDiffStats, GitInfo } from './helpers';
-import type { PtyService } from './interface';
+import type { GitInfo } from './helpers';
+import type { GetPtyGitInfoOptions, PtyService, PtyTitleChangeEvent } from './interface';
 
 /**
- * Create shim PTY service - proxies PTY operations through the background shim process
+ * Create shim PTY service - proxies PTY operations through the background shim process.
  */
 export function createShimPtyService(): PtyService {
-  // Ensure shim client is ready
   let shimReady = false;
   const shimReadyPromise = ShimClient.waitForShim().then(() => {
     shimReady = true;
@@ -26,6 +25,55 @@ export function createShimPtyService(): PtyService {
     if (!shimReady) {
       await shimReadyPromise;
     }
+  }
+
+  function getEmulator(id: PtyId, options: { sync: true }): ITerminalEmulator | null;
+  function getEmulator(
+    id: PtyId,
+    options?: { sync?: false }
+  ): Promise<PtyNotFoundError | ITerminalEmulator>;
+  function getEmulator(
+    id: PtyId,
+    options: { sync?: boolean } = {}
+  ): ITerminalEmulator | null | Promise<PtyNotFoundError | ITerminalEmulator> {
+    if (options.sync) {
+      return null;
+    }
+
+    return (async () => {
+      await ensureShim();
+      return ShimClient.getEmulator(String(id));
+    })();
+  }
+
+  function subscribeToTitle(
+    id: PtyId,
+    callback: (title: string) => void
+  ): Promise<PtyNotFoundError | (() => void)>;
+  function subscribeToTitle(callback: (event: PtyTitleChangeEvent) => void): () => void;
+  function subscribeToTitle(
+    idOrCallback: PtyId | ((event: PtyTitleChangeEvent) => void),
+    maybeCallback?: (title: string) => void
+  ): Promise<PtyNotFoundError | (() => void)> | (() => void) {
+    if (typeof idOrCallback === 'function') {
+      let unsubscribe: (() => void) | null = null;
+      void ensureShim().then(() => {
+        unsubscribe = ShimClient.subscribeToAllTitles((event) => {
+          idOrCallback({ ptyId: event.ptyId as PtyId, title: event.title });
+        });
+      });
+      return () => {
+        unsubscribe?.();
+      };
+    }
+
+    return (async () => {
+      await ensureShim();
+      return ShimClient.subscribeToTitle(
+        String(idOrCallback),
+        maybeCallback as (title: string) => void
+      );
+    })();
   }
 
   return {
@@ -60,7 +108,7 @@ export function createShimPtyService(): PtyService {
     },
     getCwd: async (id) => {
       await ensureShim();
-      return await ShimClient.getPtyCwd(String(id));
+      return ShimClient.getPtyCwd(String(id));
     },
     destroy: async (id) => {
       await ensureShim();
@@ -72,14 +120,22 @@ export function createShimPtyService(): PtyService {
       if (!session) {
         return new PtyNotFoundError({ ptyId: id });
       }
-      return {
-        id: session.id as PtyId,
-        pid: session.pid,
-        cols: session.cols as import('../../types').Cols,
-        rows: session.rows as import('../../types').Rows,
-        cwd: session.cwd,
-        shell: session.shell,
+
+      const runtimeSession = session as typeof session & {
+        title?: string;
+        lastCommand?: string;
       };
+
+      return {
+        id: runtimeSession.id as PtyId,
+        pid: runtimeSession.pid,
+        cols: runtimeSession.cols as import('../../types').Cols,
+        rows: runtimeSession.rows as import('../../types').Rows,
+        cwd: runtimeSession.cwd,
+        shell: runtimeSession.shell,
+        title: runtimeSession.title,
+        lastCommand: runtimeSession.lastCommand,
+      } satisfies PtySession;
     },
     getTerminalState: async (id) => {
       await ensureShim();
@@ -91,15 +147,10 @@ export function createShimPtyService(): PtyService {
     },
     subscribe: async (id, callback) => {
       await ensureShim();
-      return ShimClient.subscribeState(String(id), callback);
-    },
-    subscribeToScroll: async (id, callback) => {
-      await ensureShim();
-      return ShimClient.subscribeScroll(String(id), callback);
-    },
-    subscribeUnified: async (id, callback) => {
-      await ensureShim();
-      return ShimClient.subscribeUnified(String(id), callback);
+      return ShimClient.subscribeUnified(
+        String(id),
+        callback as (update: UnifiedTerminalUpdate) => void
+      );
     },
     onExit: async (id, callback) => {
       await ensureShim();
@@ -121,12 +172,8 @@ export function createShimPtyService(): PtyService {
       await ensureShim();
       await ShimClient.setUpdateEnabled(String(id), enabled);
     },
-    getEmulator: async (id) => {
-      await ensureShim();
-      return ShimClient.getEmulator(String(id));
-    },
-    getEmulatorSync: () => null,
-    setHostColors: async (colors) => {
+    getEmulator,
+    setHostColors: async (colors: TerminalColors) => {
       await ensureShim();
       await ShimClient.setHostColors(colors);
     },
@@ -141,54 +188,26 @@ export function createShimPtyService(): PtyService {
     },
     getForegroundProcess: async (id) => {
       await ensureShim();
-      return await ShimClient.getForegroundProcess(String(id));
+      return ShimClient.getForegroundProcess(String(id));
     },
-    getGitBranch: async (id) => {
+    getGitInfo: async (id, options: GetPtyGitInfoOptions = {}): Promise<GitInfo | undefined> => {
       await ensureShim();
-      return await ShimClient.getGitBranch(String(id));
-    },
-    getGitInfo: async (id) => {
-      await ensureShim();
-      return await ShimClient.getGitInfo(String(id));
-    },
-    getGitDiffStats: async (id) => {
-      await ensureShim();
-      return await ShimClient.getGitDiffStats(String(id));
+      const info = await ShimClient.getGitInfo(String(id));
+      if (!info || !options.includeDiffStats) {
+        return info;
+      }
+      const diffStats = await ShimClient.getGitDiffStats(String(id));
+      return { ...info, diffStats };
     },
     subscribeToLifecycle: (callback) => {
       void ensureShim().then(() => {
-        // This is synchronous return, but ShimClient.subscribeToLifecycle returns void
-        // So we call it here for side effects
         ShimClient.subscribeToLifecycle((event) => {
           callback({ type: event.type, ptyId: event.ptyId as PtyId });
         });
       });
-      // Return a no-op cleanup for now
       return () => {};
     },
-    getTitle: async (id) => {
-      await ensureShim();
-      return await ShimClient.getTitle(String(id));
-    },
-    getLastCommand: async (id) => {
-      await ensureShim();
-      return await ShimClient.getLastCommand(String(id));
-    },
-    subscribeToTitleChange: async (id, callback) => {
-      await ensureShim();
-      return ShimClient.subscribeToTitle(String(id), callback);
-    },
-    subscribeToAllTitleChanges: (callback) => {
-      let unsubscribe: (() => void) | null = null;
-      void ensureShim().then(() => {
-        unsubscribe = ShimClient.subscribeToAllTitles((event) => {
-          callback({ ptyId: event.ptyId as PtyId, title: event.title });
-        });
-      });
-      return () => {
-        unsubscribe?.();
-      };
-    },
+    subscribeToTitle,
     subscribeToAllActivity: (callback) => {
       let unsubscribe: (() => void) | null = null;
       void ensureShim().then(() => {
@@ -201,7 +220,7 @@ export function createShimPtyService(): PtyService {
       };
     },
     dispose: () => {
-      // Shim service doesn't need cleanup - it's a proxy
+      // Shim service doesn't need cleanup - it's a proxy.
     },
   };
 }

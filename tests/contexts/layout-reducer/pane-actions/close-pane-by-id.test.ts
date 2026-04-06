@@ -1,6 +1,6 @@
-import { describe, it, expect } from "bun:test";
+import { describe, it, expect } from 'bun:test';
 import type { PaneData } from '../../../../src/core/types';
-import { layoutReducer } from '../../../../src/core/operations/layout-actions';
+import { layoutReducer, generatePaneId } from '../../../../src/core/operations/layout-actions';
 import { createInitialState, createWorkspaceWithPanes, setupLayoutReducerTest } from '../fixtures';
 
 describe('Layout Reducer', () => {
@@ -43,11 +43,7 @@ describe('Layout Reducer', () => {
 
     it('should adjust activeStackIndex when closing pane before it', () => {
       const mainPane: PaneData = { id: 'pane-1' };
-      const stackPanes: PaneData[] = [
-        { id: 'pane-2' },
-        { id: 'pane-3' },
-        { id: 'pane-4' },
-      ];
+      const stackPanes: PaneData[] = [{ id: 'pane-2' }, { id: 'pane-3' }, { id: 'pane-4' }];
       const workspace = createWorkspaceWithPanes(1, mainPane, stackPanes, {
         focusedPaneId: 'pane-4',
         activeStackIndex: 2,
@@ -108,6 +104,54 @@ describe('Layout Reducer', () => {
 
       expect(updatedWorkspace2.stackPanes).toHaveLength(0);
       expect(updatedWorkspace2.focusedPaneId).toBe('pane-2');
+    });
+
+    it('should preserve focus when closing a different pane inside the main split tree', () => {
+      const mainPane: PaneData = { id: generatePaneId() };
+      let state = createInitialState({
+        workspaces: {
+          1: createWorkspaceWithPanes(1, mainPane, [], { focusedPaneId: mainPane.id }),
+        },
+      });
+
+      state = layoutReducer(state, { type: 'SPLIT_PANE', direction: 'vertical' });
+      const splitPaneId = state.workspaces[1]!.focusedPaneId!;
+      state = layoutReducer(state, { type: 'FOCUS_PANE', paneId: mainPane.id });
+
+      const newState = layoutReducer(state, {
+        type: 'CLOSE_PANE_BY_ID',
+        paneId: splitPaneId,
+      });
+      const newWorkspace = newState.workspaces[1]!;
+
+      expect(newWorkspace.focusedPaneId).toBe(mainPane.id);
+      expect(newWorkspace.mainPane?.id).toBe(mainPane.id);
+    });
+
+    it('should preserve focus when closing a different pane inside the active stack split tree', () => {
+      const mainPane: PaneData = { id: generatePaneId() };
+      const stackPane: PaneData = { id: generatePaneId() };
+      let state = createInitialState({
+        workspaces: {
+          1: createWorkspaceWithPanes(1, mainPane, [stackPane], {
+            focusedPaneId: stackPane.id,
+            activeStackIndex: 0,
+          }),
+        },
+      });
+
+      state = layoutReducer(state, { type: 'SPLIT_PANE', direction: 'horizontal' });
+      const splitPaneId = state.workspaces[1]!.focusedPaneId!;
+      state = layoutReducer(state, { type: 'FOCUS_PANE', paneId: stackPane.id });
+
+      const newState = layoutReducer(state, {
+        type: 'CLOSE_PANE_BY_ID',
+        paneId: splitPaneId,
+      });
+      const newWorkspace = newState.workspaces[1]!;
+
+      expect(newWorkspace.focusedPaneId).toBe(stackPane.id);
+      expect(newWorkspace.activeStackIndex).toBe(0);
     });
   });
 });

@@ -54,7 +54,13 @@ describe('createServerHandlers detach behavior', () => {
 
     const unifiedUnsub = vi.fn();
     const exitUnsub = vi.fn();
-    state.ptySubscriptions.set('pty-1', { unifiedUnsub, exitUnsub });
+    // Use combined unsubscribe function matching the current PtySubscriptionHandle structure
+    state.ptySubscriptions.set('pty-1', {
+      unsubscribe: () => {
+        unifiedUnsub();
+        exitUnsub();
+      },
+    });
     state.ptyEmulators.set('pty-1', {} as never);
 
     const transmitSeq = '\x1b_Ga=t,f=24,i=1;AQID\x1b\\';

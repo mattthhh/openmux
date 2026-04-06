@@ -158,8 +158,6 @@ export async function createSession(
     cwd,
     shell,
     closing: false,
-    subscribers: new Set(),
-    scrollSubscribers: new Set(),
     unifiedSubscribers: new Set(),
     exitCallbacks: new Set(),
     titleSubscribers: new Set(),

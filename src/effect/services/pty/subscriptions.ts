@@ -1,19 +1,20 @@
 /**
- * PTY Subscriptions - event subscription handlers (errore version)
+ * PTY subscriptions and metadata helpers.
  */
-import type { TerminalState, UnifiedTerminalUpdate } from '../../../core/types';
+import type { UnifiedTerminalUpdate } from '../../../core/types';
 import type { PtyNotFoundError } from '../../errors';
 import type { PtyId } from '../../types';
 import type { InternalPtySession } from './types';
-import type { GitInfo, GitDiffStats } from './helpers';
+import type { GitInfo } from './helpers';
 import { getCurrentScrollState } from './notification';
-import { getGitInfo, getGitDiffStats } from './helpers';
+import { getGitInfo } from './helpers';
 import type { SubscriptionRegistry } from './subscription-manager';
+import type { GetPtyGitInfoOptions, PtyTitleChangeEvent } from './interface';
 
 export interface SubscriptionsDeps {
   getSessionOrFail: (id: PtyId) => Promise<InternalPtySession | PtyNotFoundError>;
   lifecycleRegistry: SubscriptionRegistry<{ type: 'created' | 'destroyed'; ptyId: PtyId }>;
-  globalTitleRegistry: SubscriptionRegistry<{ ptyId: PtyId; title: string }>;
+  globalTitleRegistry: SubscriptionRegistry<PtyTitleChangeEvent>;
   globalActivityRegistry: SubscriptionRegistry<{ ptyId: PtyId }>;
 }
 
@@ -22,50 +23,16 @@ export function createSubscriptions(deps: SubscriptionsDeps) {
 
   async function subscribe(
     id: PtyId,
-    callback: (state: TerminalState) => void
-  ): Promise<PtyNotFoundError | (() => void)> {
-    const sessionOrError = await getSessionOrFail(id);
-    if (sessionOrError instanceof Error) {
-      return sessionOrError as PtyNotFoundError;
-    }
-    const session = sessionOrError;
-
-    session.subscribers.add(callback);
-    callback(session.emulator.getTerminalState());
-
-    return () => {
-      session.subscribers.delete(callback);
-    };
-  }
-
-  async function subscribeToScroll(
-    id: PtyId,
-    callback: () => void
-  ): Promise<PtyNotFoundError | (() => void)> {
-    const sessionOrError = await getSessionOrFail(id);
-    if (sessionOrError instanceof Error) {
-      return sessionOrError as PtyNotFoundError;
-    }
-    const session = sessionOrError;
-    session.scrollSubscribers.add(callback);
-
-    return () => {
-      session.scrollSubscribers.delete(callback);
-    };
-  }
-
-  async function subscribeUnified(
-    id: PtyId,
     callback: (update: UnifiedTerminalUpdate) => void
   ): Promise<PtyNotFoundError | (() => void)> {
     const sessionOrError = await getSessionOrFail(id);
     if (sessionOrError instanceof Error) {
       return sessionOrError as PtyNotFoundError;
     }
+
     const session = sessionOrError;
     session.unifiedSubscribers.add(callback);
 
-    // Send initial full state
     const scrollState = getCurrentScrollState(session);
     const fullState = session.emulator.getTerminalState();
     const initialUpdate: UnifiedTerminalUpdate = {
@@ -99,8 +66,8 @@ export function createSubscriptions(deps: SubscriptionsDeps) {
     if (sessionOrError instanceof Error) {
       return sessionOrError as PtyNotFoundError;
     }
-    const session = sessionOrError;
 
+    const session = sessionOrError;
     session.exitCallbacks.add(callback);
 
     return () => {
@@ -113,46 +80,23 @@ export function createSubscriptions(deps: SubscriptionsDeps) {
     if (sessionOrError instanceof Error) {
       return sessionOrError as PtyNotFoundError;
     }
-    const session = sessionOrError;
-    // Use native zig-pty method directly (no subprocess spawning)
-    return session.pty.getForegroundProcessName() ?? undefined;
+
+    return sessionOrError.pty.getForegroundProcessName() ?? undefined;
   }
 
-  async function getGitBranchFn(id: PtyId): Promise<PtyNotFoundError | string | undefined> {
+  async function getGitInfoFn(
+    id: PtyId,
+    options: GetPtyGitInfoOptions = {}
+  ): Promise<PtyNotFoundError | GitInfo | undefined> {
     const sessionOrError = await getSessionOrFail(id);
     if (sessionOrError instanceof Error) {
       return sessionOrError as PtyNotFoundError;
     }
-    const session = sessionOrError;
-    // Use native zig-pty method directly (no subprocess spawning)
-    const cwd = session.pty.getCwd();
-    if (!cwd) return undefined;
-    const info = await getGitInfo(cwd);
-    return info?.branch;
-  }
 
-  async function getGitInfoFn(id: PtyId): Promise<PtyNotFoundError | GitInfo | undefined> {
-    const sessionOrError = await getSessionOrFail(id);
-    if (sessionOrError instanceof Error) {
-      return sessionOrError as PtyNotFoundError;
-    }
-    const session = sessionOrError;
-    const cwd = session.pty.getCwd();
+    const cwd = sessionOrError.pty.getCwd();
     if (!cwd) return undefined;
-    return await getGitInfo(cwd);
-  }
 
-  async function getGitDiffStatsFn(
-    id: PtyId
-  ): Promise<PtyNotFoundError | GitDiffStats | undefined> {
-    const sessionOrError = await getSessionOrFail(id);
-    if (sessionOrError instanceof Error) {
-      return sessionOrError as PtyNotFoundError;
-    }
-    const session = sessionOrError;
-    const cwd = session.pty.getCwd();
-    if (!cwd) return undefined;
-    return await getGitDiffStats(cwd);
+    return getGitInfo(cwd, { includeDiffStats: options.includeDiffStats });
   }
 
   function subscribeToLifecycle(
@@ -161,30 +105,38 @@ export function createSubscriptions(deps: SubscriptionsDeps) {
     return lifecycleRegistry.subscribe(callback);
   }
 
-  async function subscribeToTitleChange(
+  function subscribeToTitle(
     id: PtyId,
     callback: (title: string) => void
-  ): Promise<PtyNotFoundError | (() => void)> {
-    const sessionOrError = await getSessionOrFail(id);
-    if (sessionOrError instanceof Error) {
-      return sessionOrError as PtyNotFoundError;
+  ): Promise<PtyNotFoundError | (() => void)>;
+  function subscribeToTitle(callback: (event: PtyTitleChangeEvent) => void): () => void;
+  function subscribeToTitle(
+    idOrCallback: PtyId | ((event: PtyTitleChangeEvent) => void),
+    maybeCallback?: (title: string) => void
+  ): Promise<PtyNotFoundError | (() => void)> | (() => void) {
+    if (typeof idOrCallback === 'function') {
+      return globalTitleRegistry.subscribe(idOrCallback);
     }
-    const session = sessionOrError;
-    session.titleSubscribers.add(callback);
-    // Immediately call with current title if set
-    const currentTitle = session.emulator.getTitle();
-    if (currentTitle) {
-      callback(currentTitle);
-    }
-    return () => {
-      session.titleSubscribers.delete(callback);
-    };
-  }
 
-  function subscribeToAllTitleChanges(
-    callback: (event: { ptyId: PtyId; title: string }) => void
-  ): () => void {
-    return globalTitleRegistry.subscribe(callback);
+    return (async () => {
+      const sessionOrError = await getSessionOrFail(idOrCallback);
+      if (sessionOrError instanceof Error) {
+        return sessionOrError as PtyNotFoundError;
+      }
+
+      const callback = maybeCallback as (title: string) => void;
+      const session = sessionOrError;
+      session.titleSubscribers.add(callback);
+
+      const currentTitle = session.emulator.getTitle();
+      if (currentTitle) {
+        callback(currentTitle);
+      }
+
+      return () => {
+        session.titleSubscribers.delete(callback);
+      };
+    })();
   }
 
   function subscribeToAllActivity(callback: (event: { ptyId: PtyId }) => void): () => void {
@@ -193,16 +145,11 @@ export function createSubscriptions(deps: SubscriptionsDeps) {
 
   return {
     subscribe,
-    subscribeToScroll,
-    subscribeUnified,
     onExit,
     getForegroundProcess,
-    getGitBranch: getGitBranchFn,
     getGitInfo: getGitInfoFn,
-    getGitDiffStats: getGitDiffStatsFn,
     subscribeToLifecycle,
-    subscribeToTitleChange,
-    subscribeToAllTitleChanges,
+    subscribeToTitle,
     subscribeToAllActivity,
   };
 }

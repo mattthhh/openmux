@@ -3,8 +3,6 @@
  * Full PTY management with native zig-pty and libghostty-vt
  */
 import path from 'node:path';
-import type { TerminalState, UnifiedTerminalUpdate } from '../../../core/types';
-import type { ITerminalEmulator } from '../../../terminal/emulator-interface';
 import {
   getHostColors,
   getDefaultColors,
@@ -14,19 +12,16 @@ import {
 import { ScrollbackArchiveManager } from '../../../terminal/scrollback-archive';
 import { SCROLLBACK_ARCHIVE_MAX_BYTES_GLOBAL } from '../../../terminal/scrollback-config';
 import { getConfigDir } from '../../../core/user-config';
-import { PtySpawnError, PtyNotFoundError, type PtyCwdError } from '../../errors';
+import { PtySpawnError, PtyNotFoundError } from '../../errors';
 import type { PtyId, Cols, Rows } from '../../types';
-import type { PtySession } from '../../models';
-import { makePtyId } from '../../types';
 import type { InternalPtySession } from './types';
-import type { GitDiffStats, GitInfo } from './helpers';
 import { disposeGitHelpers } from './helpers';
 import { createSubscriptionRegistry } from './subscription-manager';
 import { createSession } from './session-factory';
 import { createOperations } from './operations';
 import { createSubscriptions } from './subscriptions';
 import { PtyState } from './state';
-import type { PtyService } from './interface';
+import type { PtyService, PtyTitleChangeEvent } from './interface';
 
 /** Configuration for PTY service */
 export interface PtyServiceConfig {
@@ -34,20 +29,16 @@ export interface PtyServiceConfig {
 }
 
 /**
- * Create production PTY service
+ * Create production PTY service.
  */
 export function createPtyService(config: PtyServiceConfig, _fs?: unknown): PtyService {
-  // Internal session storage
   const state = new PtyState();
 
-  // Lifecycle event types
   type LifecycleEvent = { type: 'created' | 'destroyed'; ptyId: PtyId };
-  type TitleChangeEvent = { ptyId: PtyId; title: string };
   type ActivityEvent = { ptyId: PtyId };
 
-  // Subscription registries with synchronous cleanup support
   const lifecycleRegistry = createSubscriptionRegistry<LifecycleEvent>();
-  const globalTitleRegistry = createSubscriptionRegistry<TitleChangeEvent>();
+  const globalTitleRegistry = createSubscriptionRegistry<PtyTitleChangeEvent>();
   const globalActivityRegistry = createSubscriptionRegistry<ActivityEvent>();
   const scrollbackArchiveManager = new ScrollbackArchiveManager(
     SCROLLBACK_ARCHIVE_MAX_BYTES_GLOBAL
@@ -55,7 +46,6 @@ export function createPtyService(config: PtyServiceConfig, _fs?: unknown): PtySe
   const scrollbackArchiveRoot =
     process.env.OPENMUX_SCROLLBACK_ARCHIVE_DIR ?? path.join(getConfigDir(), 'scrollback');
 
-  // Create operations using factory
   const operations = createOperations({
     sessions: state as unknown as Map<PtyId, InternalPtySession>,
     lifecycleRegistry,
@@ -65,7 +55,6 @@ export function createPtyService(config: PtyServiceConfig, _fs?: unknown): PtySe
     void operations.destroy(ptyId);
   };
 
-  // Create session factory
   async function create(options: {
     cols: Cols;
     rows: Rows;
@@ -94,17 +83,11 @@ export function createPtyService(config: PtyServiceConfig, _fs?: unknown): PtySe
     }
 
     const { id, session } = result;
-
-    // Store session
     state.set(id, session);
-
-    // Emit lifecycle event
     lifecycleRegistry.notify({ type: 'created', ptyId: id });
-
     return id;
   }
 
-  // Create subscriptions using factory
   const subscriptions = createSubscriptions({
     getSessionOrFail: (id: PtyId) => {
       const session = state.get(id);
@@ -129,9 +112,7 @@ export function createPtyService(config: PtyServiceConfig, _fs?: unknown): PtySe
   }
 
   function dispose(): void {
-    // Destroy all sessions first
     void operations.destroyAll();
-    // Clean up git helper resources
     disposeGitHelpers();
   }
 
@@ -145,26 +126,18 @@ export function createPtyService(config: PtyServiceConfig, _fs?: unknown): PtySe
     getSession: operations.getSession,
     getTerminalState: operations.getTerminalState,
     subscribe: subscriptions.subscribe,
-    subscribeToScroll: subscriptions.subscribeToScroll,
-    subscribeUnified: subscriptions.subscribeUnified,
     onExit: subscriptions.onExit,
     getScrollState: operations.getScrollState,
     setScrollOffset: operations.setScrollOffset,
     setUpdateEnabled: operations.setUpdateEnabled,
     getEmulator: operations.getEmulator,
-    getEmulatorSync: operations.getEmulatorSync,
     setHostColors,
     destroyAll: operations.destroyAll,
     listAll: operations.listAll,
     getForegroundProcess: subscriptions.getForegroundProcess,
-    getGitBranch: subscriptions.getGitBranch,
     getGitInfo: subscriptions.getGitInfo,
-    getGitDiffStats: subscriptions.getGitDiffStats,
     subscribeToLifecycle: subscriptions.subscribeToLifecycle,
-    getTitle: operations.getTitle,
-    getLastCommand: operations.getLastCommand,
-    subscribeToTitleChange: subscriptions.subscribeToTitleChange,
-    subscribeToAllTitleChanges: subscriptions.subscribeToAllTitleChanges,
+    subscribeToTitle: subscriptions.subscribeToTitle,
     subscribeToAllActivity: subscriptions.subscribeToAllActivity,
     dispose,
   };

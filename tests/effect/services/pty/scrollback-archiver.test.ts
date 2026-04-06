@@ -1,13 +1,13 @@
-import { describe, expect, test, beforeEach, vi } from "bun:test";
-import { ScrollbackArchiver } from "../../../../src/effect/services/pty/scrollback-archiver";
-import type { InternalPtySession } from "../../../../src/effect/services/pty/types";
+import { describe, expect, test, beforeEach, vi } from 'bun:test';
+import { ScrollbackArchiver } from '../../../../src/effect/services/pty/scrollback-archiver';
+import type { InternalPtySession } from '../../../../src/effect/services/pty/types';
 import type {
   ITerminalEmulator,
   KittyGraphicsPlacement,
-} from "../../../../src/terminal/emulator-interface";
-import type { TerminalCell } from "../../../../src/core/types";
-import type { ScrollbackArchive } from "../../../../src/terminal/scrollback-archive";
-import { HOT_SCROLLBACK_LIMIT } from "../../../../src/terminal/scrollback-config";
+} from '../../../../src/terminal/emulator-interface';
+import type { TerminalCell } from '../../../../src/core/types';
+import type { ScrollbackArchive } from '../../../../src/terminal/scrollback-archive';
+import { HOT_SCROLLBACK_LIMIT } from '../../../../src/terminal/scrollback-config';
 
 /**
  * Create a mock terminal emulator for testing.
@@ -41,7 +41,7 @@ function createMockEmulator(
       if (offset < 0 || offset >= currentScrollbackLength) return null;
       // Return a simple line with some cells
       return Array.from({ length: 80 }, (_, i) => ({
-        char: "X",
+        char: 'X',
         fg: { r: 255, g: 255, b: 255 },
         bg: { r: 0, g: 0, b: 0 },
         bold: false,
@@ -57,7 +57,7 @@ function createMockEmulator(
     getDirtyUpdate: vi.fn(),
     getTerminalState: vi.fn(),
     getCursor: vi.fn(() => ({ x: 0, y: 0, visible: true })),
-    getCursorKeyMode: vi.fn(() => "normal" as const),
+    getCursorKeyMode: vi.fn(() => 'normal' as const),
     getKittyKeyboardFlags: vi.fn(() => 0),
     isMouseTrackingEnabled: vi.fn(() => false),
     isAlternateScreen: vi.fn(() => false),
@@ -66,13 +66,18 @@ function createMockEmulator(
       background: { r: 0, g: 0, b: 0 },
       foreground: { r: 255, g: 255, b: 255 },
     })),
-    getTitle: vi.fn(() => ""),
+    getTitle: vi.fn(() => ''),
     onTitleChange: vi.fn(() => () => {}),
     onUpdate: vi.fn(() => () => {}),
     onModeChange: vi.fn(() => () => {}),
     search: vi.fn(async () => ({ matches: [], hasMore: false })),
     // Kitty graphics support (optional)
     ...(supportsKittyGraphics && {
+      getKittyImagesDirty: vi.fn(() => false),
+      clearKittyImagesDirty: vi.fn(),
+      getKittyImageIds: vi.fn(() => []),
+      getKittyImageInfo: vi.fn(() => null),
+      getKittyImageData: vi.fn(() => null),
       getKittyPlacements: vi.fn(() => placements),
     }),
   } as ITerminalEmulator & { trimScrollback?: (lines: number) => void };
@@ -126,9 +131,8 @@ function createMockScrollbackArchive(
     ).appendPlacements = vi.fn(async (placements: unknown[]) => {
       storedPlacements.push(...placements);
     });
-    (
-      archive as ScrollbackArchive & { getStoredPlacements: () => unknown[] }
-    ).getStoredPlacements = () => storedPlacements;
+    (archive as ScrollbackArchive & { getStoredPlacements: () => unknown[] }).getStoredPlacements =
+      () => storedPlacements;
   }
 
   return archive;
@@ -142,21 +146,21 @@ function createMockSession(
   emulator: ITerminalEmulator
 ): InternalPtySession {
   return {
-    id: "test-pty",
-    pty: {} as unknown as InternalPtySession["pty"],
+    id: 'test-pty',
+    pty: {} as unknown as InternalPtySession['pty'],
     emulator,
     liveEmulator: emulator,
     scrollbackArchive: archive,
     scrollbackArchiver: null as unknown as ScrollbackArchiver,
-    queryPassthrough: {} as unknown as InternalPtySession["queryPassthrough"],
+    queryPassthrough: {} as unknown as InternalPtySession['queryPassthrough'],
     cols: 80,
     rows: 24,
     pixelWidth: 800,
     pixelHeight: 600,
     cellWidth: 10,
     cellHeight: 20,
-    cwd: "/home/test",
-    shell: "/bin/bash",
+    cwd: '/home/test',
+    shell: '/bin/bash',
     closing: false,
     subscribers: new Set(),
     scrollSubscribers: new Set(),
@@ -178,9 +182,9 @@ function createMockSession(
 
 const overflowScrollbackLength = HOT_SCROLLBACK_LIMIT + 500;
 
-describe("ScrollbackArchiver", () => {
-  describe("capturePlacements (via run integration)", () => {
-    test("handles emulator without Kitty graphics support gracefully", async () => {
+describe('ScrollbackArchiver', () => {
+  describe('capturePlacements (via run integration)', () => {
+    test('handles emulator without Kitty graphics support gracefully', async () => {
       const emulator = createMockEmulator({
         scrollbackLength: overflowScrollbackLength,
         supportsKittyGraphics: false,
@@ -199,7 +203,7 @@ describe("ScrollbackArchiver", () => {
       expect(archive.appendLines).toHaveBeenCalled();
     });
 
-    test("captures placements overlapping archived line range", async () => {
+    test('captures placements overlapping archived line range', async () => {
       // Create placements that overlap with the lines being archived
       const scrollbackLength = overflowScrollbackLength;
       const placements: KittyGraphicsPlacement[] = [
@@ -284,16 +288,14 @@ describe("ScrollbackArchiver", () => {
       };
 
       if (archiveWithPlacements.appendLinesWithPlacements) {
-        expect(
-          archiveWithPlacements.appendLinesWithPlacements
-        ).toHaveBeenCalled();
+        expect(archiveWithPlacements.appendLinesWithPlacements).toHaveBeenCalled();
         const storedPlacements = archiveWithPlacements.getStoredPlacements();
         // Should only have captured placements on lines 0 and 500
         expect(storedPlacements.length).toBeGreaterThanOrEqual(0);
       }
     });
 
-    test("preserves original screenY in placement metadata", async () => {
+    test('preserves original screenY in placement metadata', async () => {
       const scrollbackLength = overflowScrollbackLength;
       const originalScreenY = -scrollbackLength;
       const placements: KittyGraphicsPlacement[] = [
@@ -334,7 +336,7 @@ describe("ScrollbackArchiver", () => {
       expect(archive.appendLines).toHaveBeenCalled();
     });
 
-    test("returns empty array when no placements exist", async () => {
+    test('returns empty array when no placements exist', async () => {
       const emulator = createMockEmulator({
         scrollbackLength: overflowScrollbackLength,
         placements: [],
@@ -355,8 +357,8 @@ describe("ScrollbackArchiver", () => {
     });
   });
 
-  describe("coordinate mapping", () => {
-    test("calculates archiveOffset correctly", async () => {
+  describe('coordinate mapping', () => {
+    test('calculates archiveOffset correctly', async () => {
       const scrollbackLength = overflowScrollbackLength;
       const archiveStartOffset = 500; // Archive already has 500 lines
       const placements: KittyGraphicsPlacement[] = [
@@ -400,7 +402,7 @@ describe("ScrollbackArchiver", () => {
       expect(archive.appendLines).toHaveBeenCalled();
     });
 
-    test("captures top-of-history placements using positive Ghostty coordinates", async () => {
+    test('captures top-of-history placements using positive Ghostty coordinates', async () => {
       const scrollbackLength = overflowScrollbackLength;
       const placements: KittyGraphicsPlacement[] = [
         {
@@ -450,7 +452,11 @@ describe("ScrollbackArchiver", () => {
       await new Promise((resolve) => setTimeout(resolve, 100));
 
       const placementsArchive = archive as ScrollbackArchive & {
-        getStoredPlacements: () => Array<{ imageId: number; archiveOffset: number; screenY: number }>;
+        getStoredPlacements: () => Array<{
+          imageId: number;
+          archiveOffset: number;
+          screenY: number;
+        }>;
       };
       const stored = placementsArchive.getStoredPlacements();
 
@@ -462,8 +468,8 @@ describe("ScrollbackArchiver", () => {
     });
   });
 
-  describe("edge cases", () => {
-    test("handles placement partially overlapping archived range", async () => {
+  describe('edge cases', () => {
+    test('handles placement partially overlapping archived range', async () => {
       const scrollbackLength = overflowScrollbackLength;
       // Placement spans lines 100-109, batch archives 0-255
       // So this placement IS fully within the archived range
@@ -501,13 +507,14 @@ describe("ScrollbackArchiver", () => {
       expect(archive.appendLines).toHaveBeenCalled();
     });
 
-    test("handles emulator returning undefined for getKittyPlacements", async () => {
+    test('handles emulator returning undefined for getKittyPlacements', async () => {
       const emulator = createMockEmulator({
         scrollbackLength: overflowScrollbackLength,
         supportsKittyGraphics: true,
       });
       // Override to return undefined
-      (emulator as ITerminalEmulator & { getKittyPlacements: () => undefined }).getKittyPlacements = () => undefined as unknown as undefined;
+      (emulator as ITerminalEmulator & { getKittyPlacements: () => undefined }).getKittyPlacements =
+        () => undefined as unknown as undefined;
 
       const archive = createMockScrollbackArchive();
       const session = createMockSession(archive, emulator);

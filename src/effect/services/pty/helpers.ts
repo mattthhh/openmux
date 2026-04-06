@@ -38,6 +38,7 @@ export interface GitInfo {
   state: GitRepoState | undefined;
   detached: boolean;
   repoKey: string;
+  diffStats?: GitDiffStats;
 }
 
 /**
@@ -332,7 +333,7 @@ async function getRepoEntry(
  */
 export async function getGitInfo(
   cwd: string,
-  options?: { force?: boolean; maxAgeMs?: number }
+  options?: { force?: boolean; maxAgeMs?: number; includeDiffStats?: boolean }
 ): Promise<GitInfo | undefined> {
   const entryResult = await errore.tryAsync<RepoEntry | null, GitInfoError>({
     try: () => getRepoEntry(cwd, options),
@@ -341,6 +342,8 @@ export async function getGitInfo(
 
   if (entryResult instanceof GitInfoError) return undefined;
   if (!entryResult) return undefined;
+
+  const diffStats = options?.includeDiffStats ? await getGitDiffStats(cwd) : undefined;
 
   return {
     branch: entryResult.branch,
@@ -355,6 +358,7 @@ export async function getGitInfo(
     state: entryResult.state,
     detached: entryResult.detached,
     repoKey: entryResult.key,
+    diffStats,
   };
 }
 
