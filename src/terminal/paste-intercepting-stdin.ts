@@ -27,28 +27,15 @@ export interface TtyProperties {
 /** Readable stream with TTY properties (compatible with OpenTUI stdin) */
 export type TtyReadStream = NodeJS.ReadStream & TtyProperties;
 
-/** Helper to safely access optional TTY properties on a ReadStream */
-function getTtyProperties(stream: NodeJS.ReadStream): TtyProperties {
-  // Use property access through index signature
-  const s = stream as NodeJS.ReadStream & Record<string, unknown>;
-  return {
-    setRawMode:
-      typeof s.setRawMode === 'function'
-        ? (s.setRawMode as (mode: boolean) => boolean | NodeJS.ReadStream)
-        : undefined,
-    isTTY: typeof s.isTTY === 'boolean' ? s.isTTY : undefined,
-  };
-}
-
 /** Helper to apply TTY properties to a PassThrough stream */
 function applyTtyProperties(
   passthrough: PassThrough,
   realStdin: NodeJS.ReadStream
 ): PassThrough & TtyProperties {
-  const ttyProps = getTtyProperties(realStdin);
   const extended = passthrough as PassThrough & TtyProperties;
-  extended.setRawMode = ttyProps.setRawMode;
-  extended.isTTY = ttyProps.isTTY;
+  // Bind setRawMode to realStdin to preserve 'this' context (fd access)
+  extended.setRawMode = realStdin.setRawMode?.bind(realStdin);
+  extended.isTTY = realStdin.isTTY;
   return extended;
 }
 
