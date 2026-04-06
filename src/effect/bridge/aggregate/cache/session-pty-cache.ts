@@ -94,6 +94,20 @@ export function invalidateSessionCache(sessionId: string): void {
   aggregateSessionMappings.delete(sessionId);
 }
 
+export function getAggregateSessionForPty(
+  ptyId: string
+): { sessionId: string; paneId: string } | null {
+  for (const [sessionId, mapping] of aggregateSessionMappings) {
+    for (const [paneId, mappedPtyId] of mapping) {
+      if (mappedPtyId === ptyId) {
+        return { sessionId, paneId };
+      }
+    }
+  }
+
+  return null;
+}
+
 /** Remove aggregate-local mappings that point at a destroyed PTY */
 export function removeAggregateSessionMappingForPty(ptyId: string): void {
   for (const [sessionId, mapping] of aggregateSessionMappings) {

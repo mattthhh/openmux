@@ -41,6 +41,7 @@ import {
   setAggregateSessionOrder,
 } from '../effect/bridge/session-bridge';
 import { getSessionCwd as getStoredSessionCwd } from '../effect/bridge';
+import { getAggregateSessionForPty } from '../effect/bridge/aggregate/cache/session-pty-cache';
 
 const AggregateViewContext = createContext<AggregateViewContextValue | null>(null);
 
@@ -64,6 +65,15 @@ export function AggregateViewProvider(props: AggregateViewProviderProps) {
         sessionId: tracked.sessionId,
         paneId: tracked.paneId,
         workspaceId,
+      };
+    }
+
+    const aggregateOwned = getAggregateSessionForPty(ptyId);
+    if (aggregateOwned) {
+      return {
+        sessionId: aggregateOwned.sessionId,
+        paneId: aggregateOwned.paneId,
+        workspaceId: undefined,
       };
     }
 

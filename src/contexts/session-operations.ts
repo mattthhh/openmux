@@ -144,6 +144,10 @@ export function createSessionOperations(params: SessionOperationsParams) {
     await using _switchGuard = new SwitchingGuard(dispatch, true);
     void _switchGuard;
 
+    const dataPromise = options.preloadedData
+      ? Promise.resolve(options.preloadedData)
+      : loadSessionData(id);
+
     const switchResult = await switchToSession(id);
     if (
       switchResult instanceof SessionNotFoundError ||
@@ -154,8 +158,8 @@ export function createSessionOperations(params: SessionOperationsParams) {
       return;
     }
 
-    // Use preloaded data if available, otherwise load from disk after switching.
-    const data = options.preloadedData ?? (await loadSessionData(id));
+    // Use preloaded data if available, otherwise consume the in-flight load.
+    const data = await dataPromise;
 
     if (data === null) {
       return;

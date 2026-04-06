@@ -1,5 +1,10 @@
 import { describe, it, expect, beforeEach } from 'bun:test';
-import { SessionPtyCache, DEFAULT_CACHE_MAX_AGE_MS } from './session-pty-cache';
+import {
+  SessionPtyCache,
+  DEFAULT_CACHE_MAX_AGE_MS,
+  aggregateSessionMappings,
+  getAggregateSessionForPty,
+} from './session-pty-cache';
 import type { PtyId, SessionId } from '../../../types';
 
 describe('SessionPtyCache (litmus)', () => {
@@ -7,6 +12,7 @@ describe('SessionPtyCache (litmus)', () => {
 
   beforeEach(() => {
     cache = new SessionPtyCache();
+    aggregateSessionMappings.clear();
   });
 
   it('should store and retrieve session-PTY mappings', () => {
@@ -44,5 +50,21 @@ describe('SessionPtyCache (litmus)', () => {
       const entry = shortCache.get(sessionId);
       expect(entry).toBeUndefined();
     });
+  });
+
+  it('should prefer aggregate-local session ownership for background-loaded PTYs', () => {
+    aggregateSessionMappings.set(
+      'session-dwarves',
+      new Map([
+        ['pane-dwarves-1', 'pty-shared'],
+        ['pane-dwarves-2', 'pty-dwarves-2'],
+      ])
+    );
+
+    expect(getAggregateSessionForPty('pty-shared')).toEqual({
+      sessionId: 'session-dwarves',
+      paneId: 'pane-dwarves-1',
+    });
+    expect(getAggregateSessionForPty('pty-missing')).toBeNull();
   });
 });
