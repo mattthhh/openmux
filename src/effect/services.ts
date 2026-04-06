@@ -72,7 +72,7 @@ export async function initializeServices(
   const fs = createFileSystem();
 
   // Create PTY service for app or shim mode
-  const pty = mode === 'app' ? createPtyService(config, fs) : createShimPtyService();
+  const pty = mode === 'shim' ? createPtyService(config, fs) : createShimPtyService();
 
   // Create session storage
   const sessionStorage = await createSessionStorage(fs, config);
