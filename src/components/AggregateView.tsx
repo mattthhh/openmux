@@ -409,7 +409,7 @@ export function AggregateView(props: AggregateViewProps) {
                 onScrollUp: aggregate.scrollListUp,
                 onScrollDown: aggregate.scrollListDown,
                 onExitPreview: aggregate.exitPreviewMode,
-                onPlaceholderClick: aggregate.loadSessionPtys,
+                onPlaceholderClick: () => {},
               }}
               shimmerTargetColor={hostBgColor()}
             >

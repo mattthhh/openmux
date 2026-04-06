@@ -20,7 +20,6 @@ import type {
 import type { PendingAggregatePaneFocus } from '../pending-pane-focus';
 import { getNextPendingPaneCreationOrder } from '../../../contexts/aggregate-view-pending-insertions';
 import { resolvePendingAggregatePaneFocus } from '../pending-pane-focus';
-import { getSelectedSessionIdForAutoLoad } from '../auto-load-selected-session';
 import { findPtyLocation, findPaneLocation } from '../utils';
 
 export interface AggregateStateManagerProps {
@@ -168,23 +167,6 @@ export function AggregateStateManager(props: AggregateStateManagerProps) {
       if (props.isActive()) {
         enterAggregateMode();
       }
-    }
-  });
-
-  // Auto-load session PTYs when an unloaded session or its placeholder is selected.
-  createEffect(() => {
-    if (!props.isActive()) return;
-
-    const sessionId = getSelectedSessionIdForAutoLoad({
-      selectedItem: props.flattenedTree()[props.selectedIndex()],
-      pendingPaneCreations: props.pendingPaneCreations(),
-      pendingPaneFocus: pendingPaneFocus(),
-    });
-    if (!sessionId) return;
-
-    const loadState = props.state.sessionLoadStates.get(sessionId);
-    if (loadState?.status === 'unloaded' && !props.loadAttemptedSessionIds().has(sessionId)) {
-      props.loadSessionPtys(sessionId);
     }
   });
 
