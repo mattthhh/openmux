@@ -5,6 +5,7 @@ import type net from 'net';
 import type { TerminalColors } from '../../terminal/terminal-colors';
 import type { ShimServerState } from '../server-state';
 import type { ShimHeader } from '../protocol';
+import type { KittyHandlers } from '../server/kitty';
 
 /** PTY accessor function type */
 export type WithPty = <A>(fn: (pty: any) => Promise<A> | A) => Promise<A>;
@@ -16,14 +17,6 @@ export type ShimServerOptions = {
   setHostColors?: (colors: TerminalColors) => void;
 };
 
-/** Dependencies for handler modules */
-export interface HandlerDeps {
-  state: ShimServerState;
-  withPty: WithPty;
-  socketPath: string;
-  socketDir: string;
-}
-
 /** Event sender function type */
 export type SendEvent = (
   header: ShimHeader,
@@ -31,11 +24,32 @@ export type SendEvent = (
   options?: { allowWhileBootstrapping?: boolean }
 ) => void;
 
+/** Response sender function type */
+export type SendResponse = (
+  socket: net.Socket,
+  requestId: number,
+  result?: unknown,
+  payloads?: ArrayBuffer[]
+) => void;
+
+/** Error sender function type */
+export type SendError = (socket: net.Socket, requestId: number, error: string) => void;
+
+/** Shared shim handler context */
+export interface ShimHandlerContext {
+  state: ShimServerState;
+  withPty: WithPty;
+  sendEvent: SendEvent;
+  sendResponse: SendResponse;
+  sendError: SendError;
+  kittyHandlers: KittyHandlers;
+  applyHostColors: (colors: TerminalColors) => Promise<void> | void;
+}
+
 /** Attach context for bootstrap operations */
 export interface AttachContext {
   socket: net.Socket;
   clientId: string;
-  attachEpoch: number;
 }
 
 /** Bootstrap options for subscription operations */

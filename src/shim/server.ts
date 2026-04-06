@@ -9,14 +9,24 @@ import { ShimConnectionError } from '../effect/errors';
 
 const shimState = createShimServerState();
 
+/**
+ * Ensures the socket directory exists, creating it if necessary.
+ * @param socketDir - Path to the socket directory
+ * @returns void on success, ShimConnectionError on failure
+ */
 async function ensureSocketDir(socketDir: string): Promise<void | ShimConnectionError> {
   const result = await errore.tryAsync<string | undefined, ShimConnectionError>({
     try: () => fs.mkdir(socketDir, { recursive: true }),
-    catch: (e) => new ShimConnectionError({ reason: `Failed to create socket directory: ${e}`, cause: e }),
+    catch: (e) =>
+      new ShimConnectionError({ reason: `Failed to create socket directory: ${e}`, cause: e }),
   });
   if (result instanceof ShimConnectionError) return result;
 }
 
+/**
+ * Removes the socket file if it exists, ignoring errors.
+ * @param socketPath - Path to the socket file to remove
+ */
 async function removeSocketFile(socketPath: string): Promise<void> {
   try {
     await fs.unlink(socketPath);
@@ -25,14 +35,22 @@ async function removeSocketFile(socketPath: string): Promise<void> {
   }
 }
 
-export async function startShimServer(options?: ShimServerOptions): Promise<net.Server | ShimConnectionError> {
+/**
+ * Starts the shim server listening on a Unix socket.
+ * Creates server handlers and manages client connections with single-client lock semantics.
+ * @param options - Optional server configuration including socket path and PTY provider
+ * @returns net.Server on success, ShimConnectionError on failure
+ */
+export async function startShimServer(
+  options?: ShimServerOptions
+): Promise<net.Server | ShimConnectionError> {
   resetShimServerState(shimState);
 
   const handlers = createServerHandlers(shimState, options);
-  
+
   const dirResult = await ensureSocketDir(handlers.socketDir);
   if (dirResult instanceof ShimConnectionError) return dirResult;
-  
+
   await removeSocketFile(handlers.socketPath);
 
   const server = net.createServer((socket) => {
@@ -63,13 +81,14 @@ export async function startShimServer(options?: ShimServerOptions): Promise<net.
   });
 
   const listenResult = await errore.tryAsync<void, ShimConnectionError>({
-    try: () => new Promise((resolve, reject) => {
-      server.listen(handlers.socketPath, () => resolve());
-      server.once('error', reject);
-    }),
+    try: () =>
+      new Promise((resolve, reject) => {
+        server.listen(handlers.socketPath, () => resolve());
+        server.once('error', reject);
+      }),
     catch: (e) => new ShimConnectionError({ reason: `Failed to start server: ${e}`, cause: e }),
   });
-  
+
   if (listenResult instanceof ShimConnectionError) return listenResult;
 
   return server;

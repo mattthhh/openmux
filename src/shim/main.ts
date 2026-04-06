@@ -2,6 +2,12 @@ import { startShimServer } from './server';
 import { initializeServices } from '../effect/services';
 import { setServices } from '../effect/bridge/services-instance';
 
+/**
+ * Runs the shim server process.
+ * Initializes services and starts the Unix socket server.
+ * Handles SIGTERM and SIGINT for graceful shutdown.
+ * @throws Error if service initialization or server startup fails
+ */
 export async function runShim(): Promise<void> {
   // Initialize services for shim mode
   const services = await initializeServices({ mode: 'shim' });
@@ -25,6 +31,7 @@ export async function runShim(): Promise<void> {
   process.on('SIGINT', cleanup);
 }
 
+/** Entry point when running as main module */
 if (import.meta.main) {
   runShim().catch((error) => {
     console.error('Failed to start shim:', error);

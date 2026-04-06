@@ -36,6 +36,13 @@ let socketDataStop: (() => void) | null = null;
 
 const detachedSubscribers = new Set<() => void>();
 
+/**
+ * Handles incoming response frames from the shim server.
+ * Resolves pending requests based on requestId matching.
+ * @param header - Response frame header
+ * @param payloads - Binary payloads attached to the response
+ * @returns true if the frame was handled as a response
+ */
 function handleResponseFrame(header: ShimHeader, payloads: Buffer[]): boolean {
   if (header.type !== 'response' || header.requestId === undefined) {
     return false;
@@ -61,6 +68,11 @@ const handleFrame = createFrameHandler({
   },
 } satisfies FrameHandlerDeps);
 
+/**
+ * Connects to the shim server socket, creating directory if needed.
+ * Sets up frame reader and event handlers.
+ * @returns void on success, ShimConnectionError on failure
+ */
 async function connectSocket(): Promise<void | ShimConnectionError> {
   const mkdirResult = await errore.tryAsync<string | undefined, ShimConnectionError>({
     try: () => fs.mkdir(SHIM_SOCKET_DIR, { recursive: true }),
@@ -131,6 +143,10 @@ async function connectSocket(): Promise<void | ShimConnectionError> {
   }
 }
 
+/**
+ * Spawns a new shim server process in the background.
+ * Uses Bun.spawn when available, otherwise uses child_process.spawn.
+ */
 function spawnShimProcess(): void {
   if (spawnAttempted) return;
   spawnAttempted = true;
@@ -156,6 +172,12 @@ function spawnShimProcess(): void {
   child.unref();
 }
 
+/**
+ * Connects with retry logic for handling race conditions during shim startup.
+ * @param attempts - Number of connection attempts (default: 25)
+ * @param delayMs - Delay between attempts in milliseconds (default: 120)
+ * @returns void on success, ShimConnectionError on failure
+ */
 async function connectWithRetry(attempts = 25, delayMs = 120): Promise<void | ShimConnectionError> {
   let lastError: Error | undefined;
 
@@ -172,6 +194,11 @@ async function connectWithRetry(attempts = 25, delayMs = 120): Promise<void | Sh
     : new ShimConnectionError({ reason: 'Failed to connect to shim after retries' });
 }
 
+/**
+ * Ensures connection without spawning a new shim process.
+ * Used during shutdown to avoid spawning while trying to shut down.
+ * @returns true if connected, false otherwise
+ */
 async function ensureConnectedWithoutSpawn(): Promise<boolean> {
   if (socket && !socket.destroyed) return true;
 
@@ -179,6 +206,11 @@ async function ensureConnectedWithoutSpawn(): Promise<boolean> {
   return !(result instanceof ShimConnectionError);
 }
 
+/**
+ * Ensures connection to the shim server, spawning if necessary.
+ * Implements single-flight pattern to prevent concurrent connection attempts.
+ * @returns void on success, ShimConnectionError on failure
+ */
 async function ensureConnected(): Promise<void | ShimConnectionError> {
   if (detached) {
     return new ShimConnectionError({ reason: 'Shim client detached' });
@@ -210,6 +242,15 @@ async function ensureConnected(): Promise<void | ShimConnectionError> {
   }
 }
 
+/**
+ * Sends a request to the shim server without automatic connection handling.
+ * Used internally for shutdown and other low-level operations.
+ * @param method - RPC method name
+ * @param params - Method parameters
+ * @param payloads - Binary payloads to include
+ * @param timeoutMs - Optional timeout in milliseconds
+ * @returns Response header and payloads, or ShimConnectionError
+ */
 export async function sendRequestDirect(
   method: string,
   params?: Record<string, unknown>,
@@ -251,6 +292,15 @@ export async function sendRequestDirect(
   });
 }
 
+/**
+ * Sends a request to the shim server with automatic connection handling.
+ * Ensures connection before sending, spawns shim if needed.
+ * @param method - RPC method name
+ * @param params - Method parameters
+ * @param payloads - Binary payloads to include
+ * @returns Response header and payloads
+ * @throws ShimConnectionError if connection fails
+ */
 export async function sendRequest(
   method: string,
   params?: Record<string, unknown>,
@@ -275,6 +325,12 @@ export async function sendRequest(
   });
 }
 
+/**
+ * Registers a callback for shim detach events.
+ * Called when this client loses the single-client lock.
+ * @param callback - Function to call when detached
+ * @returns Unsubscribe function
+ */
 export function onShimDetached(callback: () => void): () => void {
   detachedSubscribers.add(callback);
   return () => {
@@ -282,6 +338,10 @@ export function onShimDetached(callback: () => void): () => void {
   };
 }
 
+/**
+ * Shuts down the shim server gracefully.
+ * Attempts to send shutdown request, falls back to SIGTERM.
+ */
 export async function shutdownShim(): Promise<void> {
   if (connecting) {
     await connecting.catch((e) => {
@@ -304,6 +364,10 @@ export async function shutdownShim(): Promise<void> {
   }
 }
 
+/**
+ * Waits for connection to the shim server.
+ * @returns void on success, ShimConnectionError on failure
+ */
 export async function waitForShim(): Promise<void | ShimConnectionError> {
   const result = await ensureConnected();
   if (result instanceof ShimConnectionError) {
@@ -311,6 +375,10 @@ export async function waitForShim(): Promise<void | ShimConnectionError> {
   }
 }
 
+/**
+ * Marks this client as detached and notifies all subscribers.
+ * Called when the shim server revokes our client lock.
+ */
 function markDetached(): void {
   if (detached) return;
   detached = true;

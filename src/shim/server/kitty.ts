@@ -1,6 +1,11 @@
 import { Buffer } from 'buffer';
 import fs from 'node:fs';
-import type { ITerminalEmulator, KittyGraphicsImageInfo, KittyGraphicsPlacement } from '../../terminal/emulator-interface';
+import {
+  isKittyGraphicsEmulator,
+  type ITerminalEmulator,
+  type KittyGraphicsImageInfo,
+  type KittyGraphicsPlacement,
+} from '../../terminal/emulator-interface';
 import {
   buildGuestKey,
   decodeKittyFilePayload,
@@ -13,7 +18,12 @@ import { tracePtyEvent } from '../../terminal/pty-trace';
 import type { ShimHeader } from '../protocol';
 import type { KittyScreenImages, KittyScreenKey, ShimServerState } from '../server-state';
 
+/**
+ * Handlers for Kitty graphics protocol operations.
+ * Manages transmit caching, update queuing, and client forwarding.
+ */
 export type KittyHandlers = {
+  /** Sends a Kitty graphics transmit sequence to the client */
   sendKittyTransmit: (
     ptyId: string,
     sequence: string,
@@ -23,13 +33,16 @@ export type KittyHandlers = {
       allowWhileBootstrapping?: boolean;
     }
   ) => void;
+  /** Sends a Kitty graphics update to the client */
   sendKittyUpdate: (
     ptyId: string,
     emulator: ITerminalEmulator,
     force?: boolean,
     options?: { allowWhileBootstrapping?: boolean }
   ) => void;
+  /** Queues a Kitty update for batch processing */
   queueKittyUpdate: (ptyId: string) => void;
+  /** Checks if a cached transmit exists for an image */
   hasCachedTransmit: (ptyId: string, info: KittyGraphicsImageInfo) => boolean;
 };
 
@@ -72,14 +85,13 @@ const serializeKittyPlacement = (placement: KittyGraphicsPlacement) => ({
   z: placement.z,
 });
 
-const isSameKittyImage = (a: KittyGraphicsImageInfo, b: KittyGraphicsImageInfo) => (
+const isSameKittyImage = (a: KittyGraphicsImageInfo, b: KittyGraphicsImageInfo) =>
   a.transmitTime === b.transmitTime &&
   a.dataLength === b.dataLength &&
   a.width === b.width &&
   a.height === b.height &&
   a.format === b.format &&
-  a.compression === b.compression
-);
+  a.compression === b.compression;
 
 const toArrayBuffer = (data: Uint8Array): ArrayBuffer => {
   const copy = new Uint8Array(data.byteLength);
@@ -121,6 +133,13 @@ function normalizeCachedTransmitSequence(sequence: string): string {
   return `${parsed.prefix}${control};${payload}${parsed.suffix}`;
 }
 
+/**
+ * Creates Kitty graphics protocol handlers.
+ * Manages image caching, transmit persistence, and client forwarding.
+ * @param state - Server state for storing Kitty data
+ * @param sendEvent - Function to send events to the active client
+ * @returns Kitty handlers for transmit and update operations
+ */
 export function createKittyHandlers(state: ShimServerState, sendEvent: SendEvent): KittyHandlers {
   const getTransmitCache = (ptyId: string): Map<string, string[]> => {
     let cache = state.kittyTransmitCache.get(ptyId);
@@ -177,7 +196,10 @@ export function createKittyHandlers(state: ShimServerState, sendEvent: SendEvent
         if (!guestKey) return;
         state.kittyTransmitCache.get(ptyId)?.delete(guestKey);
         state.kittyTransmitPending.get(ptyId)?.delete(guestKey);
-        const invalidated = state.kittyTransmitInvalidated.get(ptyId) ?? { all: false, keys: new Set<string>() };
+        const invalidated = state.kittyTransmitInvalidated.get(ptyId) ?? {
+          all: false,
+          keys: new Set<string>(),
+        };
         if (!invalidated.all) {
           invalidated.keys.add(guestKey);
           state.kittyTransmitInvalidated.set(ptyId, invalidated);
@@ -232,7 +254,10 @@ export function createKittyHandlers(state: ShimServerState, sendEvent: SendEvent
     cache.set(guestKey, [cacheSequence]);
   };
 
-  const getCachedTransmitChunks = (ptyId: string, info: KittyGraphicsImageInfo): string[] | null => {
+  const getCachedTransmitChunks = (
+    ptyId: string,
+    info: KittyGraphicsImageInfo
+  ): string[] | null => {
     const cache = state.kittyTransmitCache.get(ptyId);
     if (!cache || cache.size === 0) return null;
 
@@ -272,7 +297,10 @@ export function createKittyHandlers(state: ShimServerState, sendEvent: SendEvent
     return true;
   };
 
-  const getKittyImagesForScreen = (ptyId: string, screen: KittyScreenKey): Map<number, KittyGraphicsImageInfo> => {
+  const getKittyImagesForScreen = (
+    ptyId: string,
+    screen: KittyScreenKey
+  ): Map<number, KittyGraphicsImageInfo> => {
     let screens = state.kittyImages.get(ptyId);
     if (!screens) {
       screens = { main: new Map(), alt: new Map() };
@@ -310,11 +338,15 @@ export function createKittyHandlers(state: ShimServerState, sendEvent: SendEvent
     }
 
     const payload = Buffer.from(sequence, 'utf8');
-    sendEvent({
-      type: 'ptyKittyTransmit',
-      ptyId,
-      payloadLengths: [payload.byteLength],
-    }, [toArrayBuffer(payload)], { allowWhileBootstrapping: options?.allowWhileBootstrapping });
+    sendEvent(
+      {
+        type: 'ptyKittyTransmit',
+        ptyId,
+        payloadLengths: [payload.byteLength],
+      },
+      [toArrayBuffer(payload)],
+      { allowWhileBootstrapping: options?.allowWhileBootstrapping }
+    );
   };
 
   const sendKittyUpdate = (
@@ -324,9 +356,9 @@ export function createKittyHandlers(state: ShimServerState, sendEvent: SendEvent
     options?: { allowWhileBootstrapping?: boolean }
   ): void => {
     if (!state.activeClient) return;
-    if (!emulator.getKittyImageIds || !emulator.getKittyPlacements) return;
+    if (!isKittyGraphicsEmulator(emulator)) return;
 
-    const dirty = emulator.getKittyImagesDirty?.() ?? false;
+    const dirty = emulator.getKittyImagesDirty();
     if (!dirty && !force) return;
 
     const alternateScreen = emulator.isAlternateScreen?.() ?? false;
@@ -341,9 +373,9 @@ export function createKittyHandlers(state: ShimServerState, sendEvent: SendEvent
     let usedInvalidationKeys: Set<string> | null = invalidation?.keys ? new Set<string>() : null;
     let sentInvalidated = false;
 
-    const ids = emulator.getKittyImageIds?.() ?? [];
+    const ids = emulator.getKittyImageIds();
     for (const id of ids) {
-      const info = emulator.getKittyImageInfo?.(id);
+      const info = emulator.getKittyImageInfo(id);
       if (!info) continue;
       images.push(serializeKittyImage(info));
 
@@ -353,9 +385,10 @@ export function createKittyHandlers(state: ShimServerState, sendEvent: SendEvent
         invalidation?.all || (guestKey && invalidation?.keys?.has(guestKey))
       );
       const changed = force || shouldForceData || !prev || !isSameKittyImage(prev, info);
-      const shouldIncludeData = shouldForceData || (changed && !hasReplayableCachedTransmit(ptyId, info));
+      const shouldIncludeData =
+        shouldForceData || (changed && !hasReplayableCachedTransmit(ptyId, info));
       if (shouldIncludeData) {
-        const data = emulator.getKittyImageData?.(id);
+        const data = emulator.getKittyImageData(id);
         if (data) {
           imageDataIds.push(id);
           payloads.push(toArrayBuffer(data));
@@ -386,18 +419,22 @@ export function createKittyHandlers(state: ShimServerState, sendEvent: SendEvent
       }
     }
 
-    const screens: KittyScreenImages = state.kittyImages.get(ptyId) ?? { main: new Map(), alt: new Map() };
+    const screens: KittyScreenImages = state.kittyImages.get(ptyId) ?? {
+      main: new Map(),
+      alt: new Map(),
+    };
     screens[screenKey] = nextImages;
     state.kittyImages.set(ptyId, screens);
 
-    const placements = emulator.getKittyPlacements?.() ?? [];
+    const placements = emulator.getKittyPlacements();
     const header: ShimHeader = {
       type: 'ptyKitty',
       ptyId,
       kitty: {
         images,
-        placements: placements.map((placement: KittyGraphicsPlacement): KittyWirePlacement =>
-          serializeKittyPlacement(placement)
+        placements: placements.map(
+          (placement: KittyGraphicsPlacement): KittyWirePlacement =>
+            serializeKittyPlacement(placement)
         ),
         removedImageIds,
         imageDataIds,
@@ -419,7 +456,7 @@ export function createKittyHandlers(state: ShimServerState, sendEvent: SendEvent
     });
 
     sendEvent(header, payloads, { allowWhileBootstrapping: options?.allowWhileBootstrapping });
-    emulator.clearKittyImagesDirty?.();
+    emulator.clearKittyImagesDirty();
 
     if (invalidation) {
       if (invalidation.all) {

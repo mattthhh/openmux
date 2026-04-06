@@ -1,6 +1,6 @@
 /**
  * Shim PTY Subscription Management
- * Handles subscribing and unsubscribing from PTY updates
+ * Handles subscribing and unsubscribing from PTY updates.
  */
 import * as errore from 'errore';
 import type { UnifiedTerminalUpdate } from '../../core/types';
@@ -8,35 +8,151 @@ import { packDirtyUpdate } from '../../terminal/cell-serialization';
 import { ShimConnectionError } from '../../effect/errors';
 import { asPtyId } from '../../effect/types';
 import { ResourceStack } from '../../effect/resources';
-import type { KittyHandlers } from '../server/kitty';
+import type { ITerminalEmulator } from '../../terminal/emulator-interface';
 import type { ShimServerState } from '../server-state';
-import type { SendEvent, WithPty, BootstrapOptions } from './types';
+import type { BootstrapOptions, ShimHandlerContext } from './types';
 import { allowBootstrapReplay } from './replay';
 import { removeMappingForPty } from './mapping';
 
+type PtyStreamEvent =
+  | { type: 'update'; update: UnifiedTerminalUpdate }
+  | { type: 'exit'; exitCode: number };
+
+async function callPty<A>(
+  context: Pick<ShimHandlerContext, 'withPty'>,
+  operation: string,
+  fn: (pty: any) => Promise<A | Error> | A | Error
+): Promise<A | ShimConnectionError> {
+  const result = await errore.tryAsync<A | Error, ShimConnectionError>({
+    try: () => context.withPty(fn) as Promise<A | Error>,
+    catch: (e) => new ShimConnectionError({ reason: `${operation}: ${e}`, cause: e }),
+  });
+
+  if (result instanceof ShimConnectionError) {
+    return result;
+  }
+
+  if (result instanceof Error) {
+    return new ShimConnectionError({ reason: `${operation}: ${result.message}`, cause: result });
+  }
+
+  return result;
+}
+
+async function subscribeToPtyStream(
+  context: ShimHandlerContext,
+  ptyId: string,
+  callback: (event: PtyStreamEvent) => void
+): Promise<(() => void) | ShimConnectionError> {
+  const unifiedUnsub = await callPty<() => void>(
+    context,
+    `Failed to subscribe to unified updates for PTY ${ptyId}`,
+    (pty) =>
+      pty.subscribeUnified(asPtyId(ptyId), (update: UnifiedTerminalUpdate) => {
+        callback({ type: 'update', update });
+      })
+  );
+  if (unifiedUnsub instanceof ShimConnectionError) {
+    return unifiedUnsub;
+  }
+
+  const exitUnsub = await callPty<() => void>(
+    context,
+    `Failed to subscribe to exit events for PTY ${ptyId}`,
+    (pty) =>
+      pty.onExit(asPtyId(ptyId), (exitCode: number) => {
+        callback({ type: 'exit', exitCode });
+      })
+  );
+  if (exitUnsub instanceof ShimConnectionError) {
+    unifiedUnsub();
+    return exitUnsub;
+  }
+
+  return () => {
+    exitUnsub();
+    unifiedUnsub();
+  };
+}
+
+function sendUnifiedUpdate(
+  context: ShimHandlerContext,
+  ptyId: string,
+  update: UnifiedTerminalUpdate,
+  allowWhileBootstrapping: boolean
+): void {
+  const { state, sendEvent, kittyHandlers } = context;
+  state.ptyScrollStates.set(ptyId, update.scrollState);
+
+  const packed = packDirtyUpdate(update.terminalUpdate);
+  const payloads: ArrayBuffer[] = [
+    packed.dirtyRowIndices.buffer.slice(0) as ArrayBuffer,
+    packed.dirtyRowData as ArrayBuffer,
+    (packed.fullStateData ?? new ArrayBuffer(0)) as ArrayBuffer,
+  ];
+
+  sendEvent(
+    {
+      type: 'ptyUpdate',
+      ptyId,
+      packed: {
+        cursor: packed.cursor,
+        cols: packed.cols,
+        rows: packed.rows,
+        scrollbackLength: packed.scrollbackLength,
+        isFull: packed.isFull,
+        alternateScreen: packed.alternateScreen,
+        mouseTracking: packed.mouseTracking,
+        cursorKeyMode: packed.cursorKeyMode,
+        kittyKeyboardFlags: packed.kittyKeyboardFlags,
+        inBandResize: packed.inBandResize,
+      },
+      scrollState: {
+        viewportOffset: update.scrollState.viewportOffset,
+        isAtBottom: update.scrollState.isAtBottom,
+      },
+      payloadLengths: payloads.map((payload) => payload.byteLength),
+    },
+    payloads,
+    { allowWhileBootstrapping }
+  );
+
+  const emulator = state.ptyEmulators.get(ptyId);
+  if (!emulator) {
+    return;
+  }
+
+  kittyHandlers.sendKittyUpdate(ptyId, emulator, false, {
+    allowWhileBootstrapping,
+  });
+}
+
 /**
- * Subscribe to a PTY and begin receiving updates
+ * Subscribe to a PTY and begin receiving updates.
  */
 export async function subscribeToPty(
-  state: ShimServerState,
-  withPty: WithPty,
-  sendEvent: SendEvent,
-  kittyHandlers: KittyHandlers,
+  context: ShimHandlerContext,
   ptyId: string,
   options?: BootstrapOptions
 ): Promise<void | ShimConnectionError> {
-  const canBootstrapReplay = (): boolean => allowBootstrapReplay(state, options);
+  const { state } = context;
+  const canBootstrapReplay = () => allowBootstrapReplay(state, options);
 
-  // Already subscribed - handle bootstrap replay if needed
   if (state.ptySubscriptions.has(ptyId)) {
-    if (!options?.bootstrap) return;
-    if (!canBootstrapReplay()) return;
+    if (!options?.bootstrap || !canBootstrapReplay()) {
+      return;
+    }
 
     state.bootstrappingPtyIds.add(ptyId);
     const { replayPtyState } = await import('./replay');
-    const replayResult = await replayPtyState(state, withPty, sendEvent, kittyHandlers, ptyId, {
-      allowWhileBootstrapping: true,
-    });
+    const replayResult = await replayPtyState(
+      state,
+      context.withPty,
+      context.sendEvent,
+      context.kittyHandlers,
+      ptyId,
+      { allowWhileBootstrapping: true }
+    );
     state.bootstrappingPtyIds.delete(ptyId);
     return replayResult;
   }
@@ -46,115 +162,46 @@ export async function subscribeToPty(
     state.bootstrappingPtyIds.add(ptyId);
   }
 
-  // Get emulator
-  const emulatorResult = await errore.tryAsync<
-    import('../../terminal/emulator-interface').ITerminalEmulator,
-    ShimConnectionError
-  >({
-    try: () =>
-      withPty((pty) => pty.getEmulator(asPtyId(ptyId))) as Promise<
-        import('../../terminal/emulator-interface').ITerminalEmulator
-      >,
-    catch: (e) =>
-      new ShimConnectionError({
-        reason: `Failed to get emulator for PTY ${ptyId}: ${e}`,
-        cause: e,
-      }),
-  });
-
-  if (emulatorResult instanceof ShimConnectionError) {
-    if (bootstrap) state.bootstrappingPtyIds.delete(ptyId);
-    return emulatorResult;
+  const emulator = await callPty<ITerminalEmulator>(
+    context,
+    `Failed to get emulator for PTY ${ptyId}`,
+    (pty) => pty.getEmulator(asPtyId(ptyId)) as Promise<ITerminalEmulator | Error>
+  );
+  if (emulator instanceof ShimConnectionError) {
+    if (bootstrap) {
+      state.bootstrappingPtyIds.delete(ptyId);
+    }
+    return emulator;
   }
 
-  state.ptyEmulators.set(ptyId, emulatorResult);
+  state.ptyEmulators.set(ptyId, emulator);
 
-  // Subscribe to unified updates
-  const unifiedUnsubResult = await errore.tryAsync<() => void, ShimConnectionError>({
-    try: () =>
-      withPty((pty) =>
-        pty.subscribeUnified(asPtyId(ptyId), (update: UnifiedTerminalUpdate) => {
-          state.ptyScrollStates.set(ptyId, update.scrollState);
+  const unsubscribe = await subscribeToPtyStream(context, ptyId, (event) => {
+    if (event.type === 'update') {
+      sendUnifiedUpdate(context, ptyId, event.update, canBootstrapReplay());
+      return;
+    }
 
-          const packed = packDirtyUpdate(update.terminalUpdate);
-          const payloads: ArrayBuffer[] = [
-            packed.dirtyRowIndices.buffer.slice(0) as ArrayBuffer,
-            packed.dirtyRowData as ArrayBuffer,
-            (packed.fullStateData ?? new ArrayBuffer(0)) as ArrayBuffer,
-          ];
-
-          sendEvent(
-            {
-              type: 'ptyUpdate',
-              ptyId,
-              packed: {
-                cursor: packed.cursor,
-                cols: packed.cols,
-                rows: packed.rows,
-                scrollbackLength: packed.scrollbackLength,
-                isFull: packed.isFull,
-                alternateScreen: packed.alternateScreen,
-                mouseTracking: packed.mouseTracking,
-                cursorKeyMode: packed.cursorKeyMode,
-                kittyKeyboardFlags: packed.kittyKeyboardFlags,
-                inBandResize: packed.inBandResize,
-              },
-              scrollState: {
-                viewportOffset: update.scrollState.viewportOffset,
-                isAtBottom: update.scrollState.isAtBottom,
-              },
-              payloadLengths: payloads.map((payload) => payload.byteLength),
-            },
-            payloads,
-            { allowWhileBootstrapping: canBootstrapReplay() }
-          );
-
-          const kittyEmulator = state.ptyEmulators.get(ptyId);
-          if (kittyEmulator) {
-            kittyHandlers.sendKittyUpdate(ptyId, kittyEmulator, false, {
-              allowWhileBootstrapping: canBootstrapReplay(),
-            });
-          }
-        })
-      ),
-    catch: (e) =>
-      new ShimConnectionError({ reason: `Failed to subscribe to unified updates: ${e}`, cause: e }),
+    removeMappingForPty(state, ptyId);
+    context.sendEvent({ type: 'ptyExit', ptyId, exitCode: event.exitCode });
   });
 
-  if (unifiedUnsubResult instanceof ShimConnectionError) {
-    if (bootstrap) state.bootstrappingPtyIds.delete(ptyId);
-    return unifiedUnsubResult;
+  if (unsubscribe instanceof ShimConnectionError) {
+    state.ptyEmulators.delete(ptyId);
+    if (bootstrap) {
+      state.bootstrappingPtyIds.delete(ptyId);
+    }
+    return unsubscribe;
   }
 
-  // Subscribe to exit events
-  const exitUnsubResult = await errore.tryAsync<() => void, ShimConnectionError>({
-    try: () =>
-      withPty((pty) =>
-        pty.onExit(asPtyId(ptyId), (exitCode: number) => {
-          removeMappingForPty(state, ptyId);
-          sendEvent({ type: 'ptyExit', ptyId, exitCode });
-        })
-      ),
-    catch: (e) =>
-      new ShimConnectionError({ reason: `Failed to subscribe to exit events: ${e}`, cause: e }),
-  });
-
-  if (exitUnsubResult instanceof ShimConnectionError) {
-    if (bootstrap) state.bootstrappingPtyIds.delete(ptyId);
-    return exitUnsubResult;
-  }
-
-  state.ptySubscriptions.set(ptyId, {
-    unifiedUnsub: unifiedUnsubResult,
-    exitUnsub: exitUnsubResult,
-  });
+  state.ptySubscriptions.set(ptyId, { unsubscribe });
   if (bootstrap) {
     state.bootstrappingPtyIds.delete(ptyId);
   }
 }
 
 /**
- * Unsubscribe from a PTY and cleanup resources
+ * Unsubscribe from a PTY and cleanup resources.
  */
 export async function unsubscribeFromPty(
   state: ShimServerState,
@@ -166,8 +213,7 @@ export async function unsubscribeFromPty(
 
   await using resources = new ResourceStack();
 
-  resources.registerSubscription(subs.unifiedUnsub);
-  resources.registerSubscription(subs.exitUnsub);
+  resources.registerSubscription(subs.unsubscribe);
 
   resources.deferSafe(() => {
     state.ptySubscriptions.delete(ptyId);
@@ -199,43 +245,35 @@ export async function unsubscribeFromPty(
 }
 
 /**
- * Subscribe to all active PTYs
+ * Subscribe to all active PTYs.
  */
 export async function subscribeAllPtys(
-  state: ShimServerState,
-  withPty: WithPty,
-  sendEvent: SendEvent,
-  kittyHandlers: KittyHandlers,
+  context: ShimHandlerContext,
   options?: BootstrapOptions
 ): Promise<string[] | ShimConnectionError> {
-  const ptyIdsResult = await errore.tryAsync<string[], ShimConnectionError>({
-    try: () => withPty((pty) => pty.listAll()) as Promise<string[]>,
-    catch: (e) => new ShimConnectionError({ reason: `Failed to list PTYs: ${e}`, cause: e }),
-  });
-
-  if (ptyIdsResult instanceof ShimConnectionError) return ptyIdsResult;
+  const ptyIds = await callPty<string[]>(
+    context,
+    'Failed to list PTYs',
+    (pty) => pty.listAll() as Promise<string[] | Error>
+  );
+  if (ptyIds instanceof ShimConnectionError) {
+    return ptyIds;
+  }
 
   await Promise.all(
-    ptyIdsResult.map(async (id) => {
-      const result = await subscribeToPty(
-        state,
-        withPty,
-        sendEvent,
-        kittyHandlers,
-        String(id),
-        options
-      );
+    ptyIds.map(async (id) => {
+      const result = await subscribeToPty(context, String(id), options);
       if (result instanceof ShimConnectionError) {
         console.warn(`Failed to subscribe to PTY ${id}:`, result.message);
       }
     })
   );
 
-  return ptyIdsResult;
+  return ptyIds;
 }
 
 /**
- * Cleanup all current client subscriptions
+ * Cleanup all current client subscriptions.
  */
 export async function cleanupCurrentClientBindings(
   state: ShimServerState,

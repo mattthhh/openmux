@@ -22,11 +22,21 @@ import {
 } from './state';
 import type { ShimHeader } from '../protocol';
 
+/** Dependencies for creating a frame handler */
 export type FrameHandlerDeps = {
+  /** Callback for handling response frames */
   onResponse: (header: ShimHeader, payloads: Buffer[]) => boolean;
+  /** Callback when client is detached by server */
   onDetached: () => void;
 };
 
+/**
+ * Builds a packed dirty update from a frame header and payloads.
+ * Deserializes the packed metadata and binary data.
+ * @param header - Frame header with packed metadata
+ * @param payloads - Binary payloads containing row data
+ * @returns Serialized dirty update or null if invalid
+ */
 function buildPackedUpdate(header: ShimHeader, payloads: Buffer[]): SerializedDirtyUpdate | null {
   const packedMeta = header.packed as
     | {
@@ -68,11 +78,23 @@ function buildPackedUpdate(header: ShimHeader, payloads: Buffer[]): SerializedDi
   };
 }
 
+/**
+ * Reads a boolean environment variable.
+ * @param name - Environment variable name
+ * @returns true if the value is '1', 'true', or 'on'
+ */
 function readBoolEnv(name: string): boolean {
   const raw = (process.env[name] ?? '').toLowerCase();
   return raw === '1' || raw === 'true' || raw === 'on';
 }
 
+/**
+ * Handles desktop notifications from the shim server.
+ * Routes to macOS native notifications when host focused and pane unfocused,
+ * otherwise uses standard desktop notifications.
+ * @param params - Notification parameters including focus state
+ * @param deps - Notification sender dependencies
+ */
 export function handlePtyNotification(
   params: {
     notification: DesktopNotification;
@@ -108,6 +130,12 @@ export function handlePtyNotification(
   deps.sendDesktopNotification({ notification, subtitle });
 }
 
+/**
+ * Creates a frame handler for processing shim server messages.
+ * Routes different frame types to appropriate handlers.
+ * @param deps - Frame handler dependencies
+ * @returns Handler function for incoming frames
+ */
 export function createFrameHandler(
   deps: FrameHandlerDeps
 ): (header: ShimHeader, payloads: Buffer[]) => void {

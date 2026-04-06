@@ -10,6 +10,7 @@ import type {
   KittyGraphicsPlacement,
 } from '../../terminal/emulator-interface';
 import { tracePtyEvent } from '../../terminal/pty-trace';
+import type { ShimPtyMetadata } from '../pty-metadata';
 
 type ScrollbackAwareEmulator = ITerminalEmulator & {
   handleScrollbackChange?: (newLength: number, isAtScrollbackLimit: boolean) => void;
@@ -67,6 +68,28 @@ const ptyStates = new Map<string, PtyState>();
 const emulatorCache = new Map<string, ScrollbackAwareEmulator>();
 let emulatorFactory: ((ptyId: string) => ScrollbackAwareEmulator) | null = null;
 const kittyStates = new Map<string, KittyScreenState>();
+
+// Metadata cache
+type MetadataCacheEntry = {
+  value: ShimPtyMetadata;
+  fetchedAt: number;
+  stale: boolean;
+};
+const metadataCache = new Map<string, MetadataCacheEntry>();
+
+// In-flight metadata requests for deduplication
+const metadataRequests = new Map<string, Promise<ShimPtyMetadata> | null>();
+
+export function getPtyMetadataRequest(ptyId: string): Promise<ShimPtyMetadata> | undefined {
+  return metadataRequests.get(ptyId) ?? undefined;
+}
+
+export function setPtyMetadataRequest(
+  ptyId: string,
+  request: Promise<ShimPtyMetadata> | null
+): void {
+  metadataRequests.set(ptyId, request);
+}
 
 function clearPtySubscribers(ptyId: string): void {
   unifiedSubscribers.delete(ptyId);
@@ -153,6 +176,9 @@ export function handlePtyTitle(ptyId: string, title: string): void {
     });
   }
 
+  // Update title in cached metadata
+  updateCachedMetadataTitle(ptyId, title);
+
   const perPty = titleSubscribers.get(ptyId);
   if (perPty) {
     for (const callback of perPty) {
@@ -165,8 +191,59 @@ export function handlePtyTitle(ptyId: string, title: string): void {
 }
 
 export function handlePtyActivity(ptyId: string): void {
+  // Mark cached metadata as stale
+  const cached = metadataCache.get(ptyId);
+  if (cached) {
+    cached.stale = true;
+  }
+
   for (const callback of activitySubscribers) {
     callback({ ptyId });
+  }
+}
+
+/**
+ * Stores metadata for a PTY in the cache.
+ * @param ptyId - PTY identifier
+ * @param metadata - Metadata to cache
+ */
+export function setCachedPtyMetadata(ptyId: string, metadata: ShimPtyMetadata): void {
+  metadataCache.set(ptyId, {
+    value: metadata,
+    fetchedAt: Date.now(),
+    stale: false,
+  });
+}
+
+/**
+ * Gets cached metadata for a PTY if available.
+ * @param ptyId - PTY identifier
+ * @returns Cached metadata with fetch time and staleness, or undefined
+ */
+export function getCachedPtyMetadata(
+  ptyId: string
+): { value: ShimPtyMetadata; fetchedAt: number; stale: boolean } | undefined {
+  const entry = metadataCache.get(ptyId);
+  if (!entry) {
+    return undefined;
+  }
+  return {
+    value: entry.value,
+    fetchedAt: entry.fetchedAt,
+    stale: entry.stale,
+  };
+}
+
+/**
+ * Updates the title in cached metadata and marks it stale on activity.
+ * This is called by handlePtyTitle to keep metadata in sync.
+ * @param ptyId - PTY identifier
+ * @param title - New terminal title
+ */
+function updateCachedMetadataTitle(ptyId: string, title: string): void {
+  const cached = metadataCache.get(ptyId);
+  if (cached) {
+    cached.value.title = title;
   }
 }
 
@@ -485,4 +562,40 @@ function notifySubscribers(ptyId: string, update: UnifiedTerminalUpdate): void {
       callback();
     }
   }
+}
+
+/**
+ * Resets all global state. Used for test isolation.
+ * @internal
+ */
+export function resetAllPtyState(): void {
+  // Dispose all cached emulators before clearing
+  for (const emulator of emulatorCache.values()) {
+    emulator.dispose?.();
+  }
+
+  // Clear all Maps
+  unifiedSubscribers.clear();
+  stateSubscribers.clear();
+  scrollSubscribers.clear();
+  exitSubscribers.clear();
+  titleSubscribers.clear();
+  ptyStates.clear();
+  emulatorCache.clear();
+  kittyStates.clear();
+  metadataCache.clear();
+  metadataRequests.clear();
+
+  // Clear all Sets
+  globalTitleSubscribers.clear();
+  activitySubscribers.clear();
+  lifecycleSubscribers.clear();
+  kittyTransmitSubscribers.clear();
+  kittyUpdateSubscribers.clear();
+
+  // Clear pending events array
+  pendingKittyTransmitEvents.length = 0;
+
+  // Reset factory
+  emulatorFactory = null;
 }

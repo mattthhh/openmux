@@ -8,28 +8,23 @@ import { dirname } from 'path';
 import type { TerminalColors } from '../terminal/terminal-colors';
 import { setHostColors as setHostColorsDefault } from '../terminal/terminal-colors';
 import { SHIM_SOCKET_PATH } from './protocol';
-import { setKittyTransmitForwarder, setKittyUpdateForwarder } from './kitty-forwarder';
-import { setNotificationForwarder } from './notification-forwarder';
-import type { ShimServerState } from './server-state';
 import { createRequestHandler } from './server-requests';
 import { sendResponse, sendError } from './server/frames';
 import { createKittyHandlers } from './server/kitty';
 import { getPtyService, hasServices } from '../effect/bridge/services-instance';
 import { ServicesNotInitializedError } from '../effect/errors';
 
-// Import modular handlers
 import {
   createEventSender,
-  registerMapping,
-  removeMappingForPty,
   attachClient,
   detachClient,
   applyHostColors,
+  type ShimHandlerContext,
   type WithPty,
   type ShimServerOptions,
 } from './handlers';
+import type { ShimServerState } from './server-state';
 
-// Default PTY accessor
 const defaultWithPty: WithPty = async (fn) => {
   if (!hasServices()) {
     return new ServicesNotInitializedError({ operation: 'withPty' });
@@ -40,8 +35,10 @@ const defaultWithPty: WithPty = async (fn) => {
 };
 
 /**
- * Create shim server handlers
- * Orchestrates modular handler packages for different concerns
+ * Creates shim server handlers with configured context.
+ * @param state - Shared server state instance
+ * @param options - Optional server configuration
+ * @returns Server handlers including socket path, request handler, and lifecycle methods
  */
 export function createServerHandlers(state: ShimServerState, options?: ShimServerOptions) {
   const socketPath = options?.socketPath ?? SHIM_SOCKET_PATH;
@@ -49,32 +46,28 @@ export function createServerHandlers(state: ShimServerState, options?: ShimServe
   const withPty = options?.withPty ?? defaultWithPty;
   const setHostColors = options?.setHostColors ?? setHostColorsDefault;
 
-  // Create event sender
   const sendEvent = createEventSender(state);
-
-  // Create kitty handlers
   const kittyHandlers = createKittyHandlers(state, sendEvent);
 
-  // Create request handler with dependencies
-  const handleRequest = createRequestHandler({
+  const context: ShimHandlerContext = {
     state,
     withPty,
-    applyHostColors: (colors) => applyHostColors(withPty, setHostColors, colors),
+    sendEvent,
     sendResponse,
     sendError,
-    attachClient: (socket, clientId) =>
-      attachClient(state, withPty, sendEvent, kittyHandlers, socket, clientId),
-    registerMapping: (sessionId, paneId, ptyId) => registerMapping(state, sessionId, paneId, ptyId),
-    removeMappingForPty: (ptyId) => removeMappingForPty(state, ptyId),
-  });
+    kittyHandlers,
+    applyHostColors: (colors: TerminalColors) => applyHostColors(withPty, setHostColors, colors),
+  };
 
   return {
     socketPath,
     socketDir,
-    handleRequest,
-    detachClient: (socket: net.Socket) => detachClient(state, socket),
+    handleRequest: createRequestHandler(context),
+    detachClient: (socket: net.Socket) => detachClient(context, socket),
+    attachClient: (socket: net.Socket, clientId: string) =>
+      attachClient(context, { socket, clientId }),
+    context,
   };
 }
 
-// Re-export handler types for convenience
-export type { WithPty, ShimServerOptions } from './handlers';
+export type { ShimHandlerContext, WithPty, ShimServerOptions } from './handlers';

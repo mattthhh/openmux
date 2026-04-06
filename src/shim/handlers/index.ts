@@ -7,8 +7,10 @@
 export type {
   WithPty,
   ShimServerOptions,
-  HandlerDeps,
   SendEvent,
+  SendResponse,
+  SendError,
+  ShimHandlerContext,
   AttachContext,
   BootstrapOptions,
 } from './types';
@@ -31,11 +33,7 @@ export {
 } from './mapping';
 
 // Replay
-export {
-  sendFullSnapshot,
-  replayPtyState,
-  allowBootstrapReplay,
-} from './replay';
+export { sendFullSnapshot, replayPtyState, allowBootstrapReplay } from './replay';
 
 // Subscription management
 export {
@@ -46,15 +44,7 @@ export {
 } from './subscription';
 
 // Lifecycle and titles
-export {
-  handleLifecycle,
-  handleTitles,
-} from './lifecycle';
+export { handleLifecycle, handleTitles } from './lifecycle';
 
 // Bootstrap and attach
-export {
-  startAttachBootstrap,
-  attachClient,
-  detachClient,
-  applyHostColors,
-} from './bootstrap';
+export { startAttachBootstrap, attachClient, detachClient, applyHostColors } from './bootstrap';

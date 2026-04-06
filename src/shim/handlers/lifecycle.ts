@@ -4,28 +4,25 @@
  */
 import * as errore from 'errore';
 import { ShimConnectionError } from '../../effect/errors';
-import type { ShimServerState } from '../server-state';
-import type { SendEvent, WithPty } from './types';
+import type { ShimHandlerContext } from './types';
 import { subscribeToPty, unsubscribeFromPty } from './subscription';
 import { removeMappingForPty } from './mapping';
-import type { KittyHandlers } from '../server/kitty';
 
 /**
- * Subscribe to PTY lifecycle events (created/destroyed)
+ * Subscribe to PTY lifecycle events (created/destroyed).
  */
 export async function handleLifecycle(
-  state: ShimServerState,
-  withPty: WithPty,
-  sendEvent: SendEvent,
-  kittyHandlers: KittyHandlers
+  context: ShimHandlerContext
 ): Promise<void | ShimConnectionError> {
+  const { state, withPty, sendEvent, kittyHandlers } = context;
+
   const result = await errore.tryAsync<() => void, ShimConnectionError>({
     try: () =>
       withPty((pty) =>
         pty.subscribeToLifecycle((event: { type: 'created' | 'destroyed'; ptyId: string }) => {
           const ptyId = String(event.ptyId);
           if (event.type === 'created') {
-            subscribeToPty(state, withPty, sendEvent, kittyHandlers, ptyId).catch((e) => {
+            subscribeToPty(context, ptyId).catch((e) => {
               console.warn(`Failed to subscribe to new PTY ${ptyId}:`, e);
             });
           } else {
@@ -49,13 +46,13 @@ export async function handleLifecycle(
 }
 
 /**
- * Subscribe to title changes across all PTYs
+ * Subscribe to title changes across all PTYs.
  */
 export async function handleTitles(
-  state: ShimServerState,
-  withPty: WithPty,
-  sendEvent: SendEvent
+  context: ShimHandlerContext
 ): Promise<void | ShimConnectionError> {
+  const { state, withPty, sendEvent } = context;
+
   const result = await errore.tryAsync<() => void, ShimConnectionError>({
     try: () =>
       withPty((pty) =>
@@ -75,10 +72,10 @@ export async function handleTitles(
  * Subscribe to raw stdout activity across all PTYs.
  */
 export async function handleActivity(
-  state: ShimServerState,
-  withPty: WithPty,
-  sendEvent: SendEvent
+  context: ShimHandlerContext
 ): Promise<void | ShimConnectionError> {
+  const { state, withPty, sendEvent } = context;
+
   const result = await errore.tryAsync<() => void, ShimConnectionError>({
     try: () =>
       withPty((pty) =>

@@ -209,10 +209,6 @@ export function allowBootstrapReplay(
   options?: { bootstrap?: boolean; attach?: AttachContext }
 ): boolean {
   if (!options?.bootstrap || !options.attach) return false;
-  const { socket, clientId, attachEpoch } = options.attach;
-  return (
-    state.activeClient === socket &&
-    state.activeClientId === clientId &&
-    state.attachEpoch === attachEpoch
-  );
+  const { socket, clientId } = options.attach;
+  return state.activeClient === socket && state.activeClientId === clientId;
 }

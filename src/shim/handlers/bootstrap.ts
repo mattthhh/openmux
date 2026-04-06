@@ -8,99 +8,92 @@ import { ShimConnectionError } from '../../effect/errors';
 import { ResourceStack } from '../../effect/resources';
 import { setKittyTransmitForwarder, setKittyUpdateForwarder } from '../kitty-forwarder';
 import { setNotificationForwarder } from '../notification-forwarder';
-import type { ShimServerState } from '../server-state';
-import type { SendEvent, WithPty, AttachContext } from './types';
+import { rememberRevokedClientId } from '../server-state';
+import type { AttachContext, ShimHandlerContext, WithPty } from './types';
 import { isCurrentAttach, sendDetached } from './events';
 import { cleanupCurrentClientBindings, subscribeAllPtys } from './subscription';
 import { handleActivity, handleLifecycle, handleTitles } from './lifecycle';
-import type { KittyHandlers } from '../server/kitty';
 
 /**
- * Start attach bootstrap - subscribe to all PTYs and set up event handlers
+ * Start attach bootstrap - subscribe to all PTYs and set up event handlers.
+ *
+ * Connection identity (`socket` + `clientId`) is the attach guard. Every async
+ * stage re-checks the active pair before sending replay frames or wiring global
+ * subscriptions, so superseded bootstraps become no-ops.
  */
-export function startAttachBootstrap(
-  state: ShimServerState,
-  withPty: WithPty,
-  sendEvent: SendEvent,
-  kittyHandlers: KittyHandlers,
-  socket: net.Socket,
-  clientId: string,
-  attachEpoch: number
-): void {
+export function startAttachBootstrap(context: ShimHandlerContext, attach: AttachContext): void {
+  const { state } = context;
+  const { socket, clientId } = attach;
+
   void (async () => {
-    const ptyIdsResult = await subscribeAllPtys(state, withPty, sendEvent, kittyHandlers, {
+    const ptyIdsResult = await subscribeAllPtys(context, {
       bootstrap: true,
-      attach: { socket, clientId, attachEpoch },
+      attach,
     });
 
     if (ptyIdsResult instanceof ShimConnectionError) {
-      if (isCurrentAttach(state, socket, clientId, attachEpoch)) {
+      if (isCurrentAttach(state, socket, clientId)) {
         console.warn('Failed to subscribe to PTYs:', ptyIdsResult.message);
       }
       return;
     }
 
-    if (!isCurrentAttach(state, socket, clientId, attachEpoch)) return;
+    if (!isCurrentAttach(state, socket, clientId)) return;
 
-    // Set up lifecycle handler
     if (!state.lifecycleUnsub) {
-      const lifecycleResult = await handleLifecycle(state, withPty, sendEvent, kittyHandlers);
+      const lifecycleResult = await handleLifecycle(context);
       if (lifecycleResult instanceof ShimConnectionError) {
         console.warn('Failed to subscribe to lifecycle:', lifecycleResult.message);
       }
     }
 
-    if (!isCurrentAttach(state, socket, clientId, attachEpoch)) return;
+    if (!isCurrentAttach(state, socket, clientId)) return;
 
-    // Set up titles handler
     if (!state.titleUnsub) {
-      const titlesResult = await handleTitles(state, withPty, sendEvent);
+      const titlesResult = await handleTitles(context);
       if (titlesResult instanceof ShimConnectionError) {
         console.warn('Failed to subscribe to titles:', titlesResult.message);
       }
     }
 
-    if (!isCurrentAttach(state, socket, clientId, attachEpoch)) return;
+    if (!isCurrentAttach(state, socket, clientId)) return;
 
     if (!state.activityUnsub) {
-      const activityResult = await handleActivity(state, withPty, sendEvent);
+      const activityResult = await handleActivity(context);
       if (activityResult instanceof ShimConnectionError) {
         console.warn('Failed to subscribe to activity:', activityResult.message);
       }
     }
   })().catch((e) => {
-    if (!isCurrentAttach(state, socket, clientId, attachEpoch)) return;
+    if (!isCurrentAttach(state, socket, clientId)) return;
     console.warn('[shim] Attach bootstrap failed:', e);
   });
 }
 
 /**
- * Attach a new client, detaching any existing client
+ * Attach a new client, detaching any existing client.
  */
 export async function attachClient(
-  state: ShimServerState,
-  withPty: WithPty,
-  sendEvent: SendEvent,
-  kittyHandlers: KittyHandlers,
-  socket: net.Socket,
-  clientId: string
+  context: ShimHandlerContext,
+  attach: AttachContext
 ): Promise<void> {
+  const { state, sendEvent, kittyHandlers } = context;
+  const { socket, clientId } = attach;
+
   await using resources = new ResourceStack();
 
   const previousClient = state.activeClient;
   const previousClientId = previousClient ? (state.clientIds.get(previousClient) ?? null) : null;
 
-  // Clean up current bindings
   await cleanupCurrentClientBindings(state, { preserveKittyState: true });
 
-  // Detach previous client
   if (previousClient && !previousClient.destroyed) {
     sendDetached(previousClient);
     previousClient.end();
     const prevClientRef = previousClient;
     resources.defer(() => {
       setTimeout(() => {
-        if (prevClientRef && !prevClientRef.destroyed) {
+        if (!prevClientRef.destroyed) {
           prevClientRef.destroy();
         }
       }, 250);
@@ -108,16 +101,13 @@ export async function attachClient(
   }
 
   if (previousClientId) {
-    state.revokedClientIds.add(previousClientId);
+    rememberRevokedClientId(state, previousClientId);
   }
 
-  // Set new active client
   state.clientIds.set(socket, clientId);
   state.activeClient = socket;
   state.activeClientId = clientId;
-  state.attachEpoch += 1;
 
-  // Set up forwarders
   setKittyTransmitForwarder(kittyHandlers.sendKittyTransmit);
   setKittyUpdateForwarder(kittyHandlers.queueKittyUpdate);
   setNotificationForwarder((event) => {
@@ -129,22 +119,14 @@ export async function attachClient(
     });
   });
 
-  // Start bootstrap
-  startAttachBootstrap(
-    state,
-    withPty,
-    sendEvent,
-    kittyHandlers,
-    socket,
-    clientId,
-    state.attachEpoch
-  );
+  startAttachBootstrap(context, attach);
 }
 
 /**
- * Detach current client
+ * Detach current client.
  */
-export async function detachClient(state: ShimServerState, socket: net.Socket): Promise<void> {
+export async function detachClient(context: ShimHandlerContext, socket: net.Socket): Promise<void> {
+  const { state } = context;
   if (state.activeClient !== socket) return;
 
   state.activeClient = null;
@@ -152,8 +134,7 @@ export async function detachClient(state: ShimServerState, socket: net.Socket): 
   state.bootstrappingPtyIds.clear();
 
   // Keep the kitty transmit forwarder active so it continues caching transmits
-  // sendKittyTransmit will record to cache but skip socket sends when no active client
-  // setKittyUpdateForwarder and setNotificationForwarder are cleared as they need a client
+  // while detached. Update + notification forwarders require an attached client.
   setKittyUpdateForwarder(null);
   setNotificationForwarder(null);
 
@@ -161,7 +142,7 @@ export async function detachClient(state: ShimServerState, socket: net.Socket): 
 }
 
 /**
- * Apply host colors to all emulators
+ * Apply host colors to all emulators.
  */
 export async function applyHostColors(
   withPty: WithPty,

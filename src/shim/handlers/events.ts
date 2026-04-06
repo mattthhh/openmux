@@ -19,7 +19,9 @@ export function shouldSuppressBootstrappingEvent(
   const ptyId = typeof header.ptyId === 'string' ? header.ptyId : null;
   if (!ptyId || !state.bootstrappingPtyIds.has(ptyId)) return false;
   if (options?.allowWhileBootstrapping) return false;
-  return header.type === 'ptyUpdate' || header.type === 'ptyKitty' || header.type === 'ptyKittyTransmit';
+  return (
+    header.type === 'ptyUpdate' || header.type === 'ptyKitty' || header.type === 'ptyKittyTransmit'
+  );
 }
 
 /**
@@ -28,18 +30,15 @@ export function shouldSuppressBootstrappingEvent(
 export function isCurrentAttach(
   state: ShimServerState,
   socket: net.Socket,
-  clientId: string,
-  attachEpoch: number
+  clientId: string
 ): boolean {
-  return state.activeClient === socket && state.activeClientId === clientId && state.attachEpoch === attachEpoch;
+  return state.activeClient === socket && state.activeClientId === clientId;
 }
 
 /**
  * Create event sender function bound to server state
  */
-export function createEventSender(
-  state: ShimServerState
-): SendEvent {
+export function createEventSender(state: ShimServerState): SendEvent {
   return (
     header: ShimHeader,
     payloads: ArrayBuffer[] = [],

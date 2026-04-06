@@ -4,22 +4,135 @@ import { asPtyId, makeCols, makeRows } from '../effect/types';
 import type { TerminalScrollState, TerminalState } from '../core/types';
 import type { ITerminalEmulator } from '../terminal/emulator-interface';
 import { packTerminalState, packRow } from '../terminal/cell-serialization';
-import type { TerminalColors } from '../terminal/terminal-colors';
 import { captureEmulator, type CaptureFormat } from '../control/capture';
 import type { ShimHeader } from './protocol';
-import type { ShimServerState } from './server-state';
-import type { WithPty } from './server-handlers';
+import {
+  attachClient,
+  registerMapping,
+  removeMappingForPty,
+  type ShimHandlerContext,
+} from './handlers';
+import type { ShimPtyMetadata, ShimPtySessionInfo } from './pty-metadata';
 
-export function createRequestHandler(params: {
-  state: ShimServerState;
-  withPty: WithPty;
-  applyHostColors: (colors: TerminalColors) => Promise<void> | void;
-  sendResponse: (socket: net.Socket, requestId: number, result?: unknown, payloads?: ArrayBuffer[]) => void;
-  sendError: (socket: net.Socket, requestId: number, error: string) => void;
-  attachClient: (socket: net.Socket, clientId: string) => Promise<void>;
-  registerMapping: (sessionId: string, paneId: string, ptyId: string) => void;
-  removeMappingForPty: (ptyId: string) => void;
-}) {
+/**
+ * Reads a value from the PTY service, handling errors gracefully.
+ * Returns null if the operation fails.
+ * @param context - Handler context with PTY access
+ * @param fn - Function to execute with PTY service
+ * @returns Retrieved value or null on error
+ */
+async function readPtyValue<T>(
+  context: Pick<ShimHandlerContext, 'withPty'>,
+  fn: (pty: any) => Promise<T | Error> | T | Error
+): Promise<T | null> {
+  try {
+    const result = (await context.withPty(fn)) as T | Error;
+    return result instanceof Error ? null : result;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Serializes a session object from the PTY service into ShimPtySessionInfo.
+ * Validates required fields and coerces types.
+ * @param session - Raw session data from PTY service
+ * @returns Validated session info or null if invalid
+ */
+function serializeSession(session: unknown): ShimPtySessionInfo | null {
+  if (!session || typeof session !== 'object') {
+    return null;
+  }
+
+  const value = session as {
+    id?: string | number;
+    pid?: number;
+    cols?: number;
+    rows?: number;
+    cwd?: string;
+    shell?: string;
+  };
+
+  if (!value.id || typeof value.pid !== 'number') {
+    return null;
+  }
+
+  return {
+    id: String(value.id),
+    pid: value.pid,
+    cols: Number(value.cols ?? 0),
+    rows: Number(value.rows ?? 0),
+    cwd: value.cwd ?? '',
+    shell: value.shell ?? '',
+  };
+}
+
+/**
+ * Retrieves comprehensive metadata for a PTY.
+ * Aggregates session info, CWD, foreground process, git info, title, and last command.
+ * @param context - Handler context with PTY access
+ * @param ptyId - PTY identifier
+ * @returns Complete PTY metadata
+ */
+async function getPtyMetadata(
+  context: ShimHandlerContext,
+  ptyId: string
+): Promise<ShimPtyMetadata> {
+  const [sessionValue, cwd, foregroundProcess, gitInfo, gitDiffStats, title, lastCommand] =
+    await Promise.all([
+      readPtyValue(context, (pty) => pty.getSession(asPtyId(ptyId))),
+      readPtyValue(context, (pty) => pty.getCwd(asPtyId(ptyId))),
+      readPtyValue(context, (pty) => pty.getForegroundProcess(asPtyId(ptyId))),
+      readPtyValue(context, (pty) => pty.getGitInfo(asPtyId(ptyId))),
+      readPtyValue(context, (pty) => pty.getGitDiffStats(asPtyId(ptyId))),
+      readPtyValue(context, (pty) => pty.getTitle(asPtyId(ptyId))),
+      readPtyValue(context, (pty) => pty.getLastCommand(asPtyId(ptyId))),
+    ]);
+
+  const session = serializeSession(sessionValue);
+
+  return {
+    session,
+    cwd: cwd ?? session?.cwd ?? null,
+    foregroundProcess: foregroundProcess ?? undefined,
+    gitInfo: gitInfo ?? undefined,
+    gitDiffStats: gitDiffStats ?? undefined,
+    title: title ?? '',
+    lastCommand: lastCommand ?? undefined,
+  };
+}
+
+/**
+ * Validates and extracts ptyId from request parameters.
+ * Sends error response if ptyId is missing.
+ * @param context - Handler context for error responses
+ * @param socket - Client socket for error response
+ * @param requestId - Request identifier for error response
+ * @param requestParams - Request parameters to extract ptyId from
+ * @returns Valid ptyId string or null if missing
+ */
+function requirePtyId(
+  context: Pick<ShimHandlerContext, 'sendError'>,
+  socket: net.Socket,
+  requestId: number,
+  requestParams: Record<string, unknown>
+): string | null {
+  const ptyId = typeof requestParams.ptyId === 'string' ? requestParams.ptyId : null;
+  if (ptyId) {
+    return ptyId;
+  }
+
+  context.sendError(socket, requestId, 'Missing ptyId');
+  return null;
+}
+
+/**
+ * Creates the main request handler for shim server RPC calls.
+ * Routes requests to appropriate handlers based on method name.
+ * @param context - Handler context with state, PTY access, and response utilities
+ * @returns Request handler function for processing incoming requests
+ */
+export function createRequestHandler(context: ShimHandlerContext) {
   return async function handleRequest(
     socket: net.Socket,
     header: ShimHeader,
@@ -32,135 +145,182 @@ export function createRequestHandler(params: {
     const requestParams = (header.params as Record<string, unknown>) ?? {};
 
     try {
-      if (method !== 'hello' && params.state.activeClient !== socket) {
-        params.sendError(socket, requestId, 'Inactive client');
+      if (method !== 'hello' && context.state.activeClient !== socket) {
+        context.sendError(socket, requestId, 'Inactive client');
         socket.end();
         return;
       }
 
       switch (method) {
-        case 'hello':
-          {
-            const clientId = typeof requestParams.clientId === 'string' ? requestParams.clientId : null;
-            if (!clientId) {
-              params.sendError(socket, requestId, 'Missing clientId');
-              socket.end();
-              return;
-            }
-            if (params.state.revokedClientIds.has(clientId)) {
-              params.sendError(socket, requestId, 'Client is detached');
-              socket.end();
-              return;
-            }
-            if (params.state.activeClient === socket && params.state.activeClientId === clientId) {
-              params.sendResponse(socket, requestId, { pid: process.pid, clientId });
-              return;
-            }
-            await params.attachClient(socket, clientId);
-            params.sendResponse(socket, requestId, { pid: process.pid, clientId });
+        case 'hello': {
+          const clientId =
+            typeof requestParams.clientId === 'string' ? requestParams.clientId : null;
+          if (!clientId) {
+            context.sendError(socket, requestId, 'Missing clientId');
+            socket.end();
+            return;
           }
-          return;
-
-        case 'setHostColors':
-          if (requestParams.colors) {
-            await params.applyHostColors(requestParams.colors as any);
-            params.state.hostColorsSet = true;
+          if (context.state.revokedClientIds.has(clientId)) {
+            context.sendError(socket, requestId, 'Client is detached');
+            socket.end();
+            return;
           }
-          params.sendResponse(socket, requestId, { applied: params.state.hostColorsSet });
-          return;
-
-        case 'createPty': {
-          const ptyId = await params.withPty((pty) => pty.create({
-            cols: makeCols(requestParams.cols as number),
-            rows: makeRows(requestParams.rows as number),
-            cwd: requestParams.cwd as string | undefined,
-            pixelWidth: requestParams.pixelWidth as number | undefined,
-            pixelHeight: requestParams.pixelHeight as number | undefined,
-          }));
-          params.sendResponse(socket, requestId, { ptyId: String(ptyId) });
+          if (context.state.activeClient === socket && context.state.activeClientId === clientId) {
+            context.sendResponse(socket, requestId, { pid: process.pid, clientId });
+            return;
+          }
+          await attachClient(context, { socket, clientId });
+          context.sendResponse(socket, requestId, { pid: process.pid, clientId });
           return;
         }
 
-        case 'write':
-          await params.withPty((pty) => pty.write(asPtyId(requestParams.ptyId as string), requestParams.data as string));
-          params.sendResponse(socket, requestId);
+        case 'setHostColors':
+          if (requestParams.colors) {
+            await context.applyHostColors(requestParams.colors as any);
+            context.state.hostColorsSet = true;
+          }
+          context.sendResponse(socket, requestId, { applied: context.state.hostColorsSet });
           return;
 
-        case 'sendFocusEvent':
-          await params.withPty((pty) => pty.sendFocusEvent(
-            asPtyId(requestParams.ptyId as string),
-            Boolean(requestParams.focused)
-          ));
-          params.sendResponse(socket, requestId);
+        case 'createPty': {
+          const ptyId = await context.withPty((pty) =>
+            pty.create({
+              cols: makeCols(requestParams.cols as number),
+              rows: makeRows(requestParams.rows as number),
+              cwd: requestParams.cwd as string | undefined,
+              pixelWidth: requestParams.pixelWidth as number | undefined,
+              pixelHeight: requestParams.pixelHeight as number | undefined,
+            })
+          );
+          context.sendResponse(socket, requestId, { ptyId: String(ptyId) });
           return;
+        }
 
-        case 'resize':
-          await params.withPty((pty) => pty.resize(
-            asPtyId(requestParams.ptyId as string),
-            makeCols(requestParams.cols as number),
-            makeRows(requestParams.rows as number),
-            requestParams.pixelWidth as number | undefined,
-            requestParams.pixelHeight as number | undefined
-          ));
-          params.sendResponse(socket, requestId);
+        case 'write': {
+          const ptyId = requirePtyId(context, socket, requestId, requestParams);
+          if (!ptyId) return;
+          await context.withPty((pty) => pty.write(asPtyId(ptyId), requestParams.data as string));
+          context.sendResponse(socket, requestId);
           return;
+        }
 
-        case 'destroy':
-          params.removeMappingForPty(requestParams.ptyId as string);
-          await params.withPty((pty) => pty.destroy(asPtyId(requestParams.ptyId as string)));
-          params.sendResponse(socket, requestId);
+        case 'sendFocusEvent': {
+          const ptyId = requirePtyId(context, socket, requestId, requestParams);
+          if (!ptyId) return;
+          await context.withPty((pty) =>
+            pty.sendFocusEvent(asPtyId(ptyId), Boolean(requestParams.focused))
+          );
+          context.sendResponse(socket, requestId);
           return;
+        }
+
+        case 'resize': {
+          const ptyId = requirePtyId(context, socket, requestId, requestParams);
+          if (!ptyId) return;
+          await context.withPty((pty) =>
+            pty.resize(
+              asPtyId(ptyId),
+              makeCols(requestParams.cols as number),
+              makeRows(requestParams.rows as number),
+              requestParams.pixelWidth as number | undefined,
+              requestParams.pixelHeight as number | undefined
+            )
+          );
+          context.sendResponse(socket, requestId);
+          return;
+        }
+
+        case 'destroy': {
+          const ptyId = requirePtyId(context, socket, requestId, requestParams);
+          if (!ptyId) return;
+          removeMappingForPty(context.state, ptyId);
+          await context.withPty((pty) => pty.destroy(asPtyId(ptyId)));
+          context.sendResponse(socket, requestId);
+          return;
+        }
 
         case 'destroyAll':
-          await params.withPty((pty) => pty.destroyAll());
-          params.sendResponse(socket, requestId);
+          await context.withPty((pty) => pty.destroyAll());
+          context.sendResponse(socket, requestId);
           return;
 
         case 'shutdown':
-          await params.withPty((pty) => pty.destroyAll());
-          params.sendResponse(socket, requestId);
+          await context.withPty((pty) => pty.destroyAll());
+          context.sendResponse(socket, requestId);
           setTimeout(() => {
             process.exit(0);
           }, 10);
           return;
 
+        case 'getPtyMetadata': {
+          const ptyId = requirePtyId(context, socket, requestId, requestParams);
+          if (!ptyId) return;
+          const metadata = await getPtyMetadata(context, ptyId);
+          context.sendResponse(socket, requestId, { metadata });
+          return;
+        }
+
         case 'getCwd': {
-          const cwd = await params.withPty((pty) => pty.getCwd(asPtyId(requestParams.ptyId as string)));
-          params.sendResponse(socket, requestId, { cwd });
+          const ptyId = requirePtyId(context, socket, requestId, requestParams);
+          if (!ptyId) return;
+          const metadata = await getPtyMetadata(context, ptyId);
+          context.sendResponse(socket, requestId, {
+            cwd: metadata.cwd ?? metadata.session?.cwd ?? '',
+          });
           return;
         }
 
         case 'getTerminalState': {
-          const state = await params.withPty((pty) => pty.getTerminalState(asPtyId(requestParams.ptyId as string))) as TerminalState;
+          const ptyId = requirePtyId(context, socket, requestId, requestParams);
+          if (!ptyId) return;
+          const state = (await context.withPty((pty) =>
+            pty.getTerminalState(asPtyId(ptyId))
+          )) as TerminalState;
           const payload = packTerminalState(state);
-          params.sendResponse(socket, requestId, { cols: state.cols, rows: state.rows }, [payload]);
+          context.sendResponse(socket, requestId, { cols: state.cols, rows: state.rows }, [
+            payload,
+          ]);
           return;
         }
 
         case 'getScrollState': {
-          const scrollState = await params.withPty((pty) => pty.getScrollState(asPtyId(requestParams.ptyId as string))) as TerminalScrollState;
-          params.sendResponse(socket, requestId, scrollState);
+          const ptyId = requirePtyId(context, socket, requestId, requestParams);
+          if (!ptyId) return;
+          const scrollState = (await context.withPty((pty) =>
+            pty.getScrollState(asPtyId(ptyId))
+          )) as TerminalScrollState;
+          context.sendResponse(socket, requestId, scrollState);
           return;
         }
 
-        case 'setScrollOffset':
-          await params.withPty((pty) => pty.setScrollOffset(asPtyId(requestParams.ptyId as string), requestParams.offset as number));
-          params.sendResponse(socket, requestId);
+        case 'setScrollOffset': {
+          const ptyId = requirePtyId(context, socket, requestId, requestParams);
+          if (!ptyId) return;
+          await context.withPty((pty) =>
+            pty.setScrollOffset(asPtyId(ptyId), requestParams.offset as number)
+          );
+          context.sendResponse(socket, requestId);
           return;
+        }
 
-        case 'setUpdateEnabled':
-          await params.withPty((pty) => pty.setUpdateEnabled(
-            asPtyId(requestParams.ptyId as string),
-            Boolean(requestParams.enabled)
-          ));
-          params.sendResponse(socket, requestId);
+        case 'setUpdateEnabled': {
+          const ptyId = requirePtyId(context, socket, requestId, requestParams);
+          if (!ptyId) return;
+          await context.withPty((pty) =>
+            pty.setUpdateEnabled(asPtyId(ptyId), Boolean(requestParams.enabled))
+          );
+          context.sendResponse(socket, requestId);
           return;
+        }
 
         case 'getScrollbackLines': {
-          const ptyId = requestParams.ptyId as string;
+          const ptyId = requirePtyId(context, socket, requestId, requestParams);
+          if (!ptyId) return;
           const startOffset = requestParams.startOffset as number;
           const count = requestParams.count as number;
-          const emulator = await params.withPty((pty) => pty.getEmulator(asPtyId(ptyId))) as ITerminalEmulator;
+          const emulator = (await context.withPty((pty) =>
+            pty.getEmulator(asPtyId(ptyId))
+          )) as ITerminalEmulator;
 
           const lineOffsets: number[] = [];
           const payloads: ArrayBuffer[] = [];
@@ -182,98 +342,106 @@ export function createRequestHandler(params: {
             writeOffset += payload.byteLength;
           }
 
-          params.sendResponse(socket, requestId, { lineOffsets }, [combined]);
+          context.sendResponse(socket, requestId, { lineOffsets }, [combined]);
           return;
         }
 
         case 'capturePane': {
-          const ptyId = requestParams.ptyId as string | undefined;
-          if (!ptyId) {
-            params.sendError(socket, requestId, 'Missing ptyId');
-            return;
-          }
-          const requestedLines = typeof requestParams.lines === 'number'
-            ? requestParams.lines
-            : Number.NaN;
+          const ptyId = requirePtyId(context, socket, requestId, requestParams);
+          if (!ptyId) return;
+          const requestedLines =
+            typeof requestParams.lines === 'number' ? requestParams.lines : Number.NaN;
           const lines = Number.isFinite(requestedLines)
             ? Math.max(1, Math.floor(requestedLines))
             : 200;
           const formatParam = requestParams.format;
           const format: CaptureFormat = formatParam === 'ansi' ? 'ansi' : 'text';
           const raw = requestParams.raw === true;
-          const emulator = await params.withPty((pty) => pty.getEmulator(asPtyId(ptyId))) as ITerminalEmulator;
+          const emulator = (await context.withPty((pty) =>
+            pty.getEmulator(asPtyId(ptyId))
+          )) as ITerminalEmulator;
           const text = captureEmulator(emulator, {
             lines,
             format,
             trimTrailing: !raw,
             trimTrailingLines: !raw,
           });
-          params.sendResponse(socket, requestId, { text, lines, format });
+          context.sendResponse(socket, requestId, { text, lines, format });
           return;
         }
 
         case 'search': {
-          const ptyId = requestParams.ptyId as string;
+          const ptyId = requirePtyId(context, socket, requestId, requestParams);
+          if (!ptyId) return;
           const query = requestParams.query as string;
           const limit = requestParams.limit as number | undefined;
-          const emulator = await params.withPty((pty) => pty.getEmulator(asPtyId(ptyId))) as ITerminalEmulator;
+          const emulator = (await context.withPty((pty) =>
+            pty.getEmulator(asPtyId(ptyId))
+          )) as ITerminalEmulator;
           const result = await emulator.search(query, { limit });
-          params.sendResponse(socket, requestId, result);
+          context.sendResponse(socket, requestId, result);
           return;
         }
 
         case 'listAll': {
-          const ids = await params.withPty((pty) => pty.listAll()) as Array<string>;
-          params.sendResponse(socket, requestId, { ptyIds: ids.map(String) });
+          const ids = (await context.withPty((pty) => pty.listAll())) as Array<string>;
+          context.sendResponse(socket, requestId, { ptyIds: ids.map(String) });
           return;
         }
 
         case 'getSession': {
-          const session = await params.withPty((pty) => pty.getSession(asPtyId(requestParams.ptyId as string))) as any;
-          params.sendResponse(socket, requestId, { session: session ? {
-            id: String(session.id),
-            pid: session.pid,
-            cols: session.cols,
-            rows: session.rows,
-            cwd: session.cwd,
-            shell: session.shell,
-          } : null });
+          const ptyId = requirePtyId(context, socket, requestId, requestParams);
+          if (!ptyId) return;
+          const metadata = await getPtyMetadata(context, ptyId);
+          context.sendResponse(socket, requestId, { session: metadata.session });
           return;
         }
 
         case 'getForegroundProcess': {
-          const proc = await params.withPty((pty) => pty.getForegroundProcess(asPtyId(requestParams.ptyId as string)));
-          params.sendResponse(socket, requestId, { process: proc });
+          const ptyId = requirePtyId(context, socket, requestId, requestParams);
+          if (!ptyId) return;
+          const metadata = await getPtyMetadata(context, ptyId);
+          context.sendResponse(socket, requestId, { process: metadata.foregroundProcess });
           return;
         }
 
         case 'getGitBranch': {
-          const branch = await params.withPty((pty) => pty.getGitBranch(asPtyId(requestParams.ptyId as string)));
-          params.sendResponse(socket, requestId, { branch });
+          const ptyId = requirePtyId(context, socket, requestId, requestParams);
+          if (!ptyId) return;
+          const metadata = await getPtyMetadata(context, ptyId);
+          context.sendResponse(socket, requestId, { branch: metadata.gitInfo?.branch });
           return;
         }
 
         case 'getGitInfo': {
-          const info = await params.withPty((pty) => pty.getGitInfo(asPtyId(requestParams.ptyId as string)));
-          params.sendResponse(socket, requestId, { info });
+          const ptyId = requirePtyId(context, socket, requestId, requestParams);
+          if (!ptyId) return;
+          const metadata = await getPtyMetadata(context, ptyId);
+          context.sendResponse(socket, requestId, { info: metadata.gitInfo });
           return;
         }
 
         case 'getGitDiffStats': {
-          const diff = await params.withPty((pty) => pty.getGitDiffStats(asPtyId(requestParams.ptyId as string)));
-          params.sendResponse(socket, requestId, { diff });
+          const ptyId = requirePtyId(context, socket, requestId, requestParams);
+          if (!ptyId) return;
+          const metadata = await getPtyMetadata(context, ptyId);
+          context.sendResponse(socket, requestId, { diff: metadata.gitDiffStats });
           return;
         }
 
         case 'getTitle': {
-          const title = await params.withPty((pty) => pty.getTitle(asPtyId(requestParams.ptyId as string)));
-          params.sendResponse(socket, requestId, { title });
+          const ptyId = requirePtyId(context, socket, requestId, requestParams);
+          if (!ptyId) return;
+          const metadata = await getPtyMetadata(context, ptyId);
+          context.sendResponse(socket, requestId, { title: metadata.title });
           return;
         }
 
         case 'getLastCommand': {
-          const command = await params.withPty((pty) => pty.getLastCommand(asPtyId(requestParams.ptyId as string)));
-          params.sendResponse(socket, requestId, { command });
+          const ptyId = requirePtyId(context, socket, requestId, requestParams);
+          if (!ptyId) return;
+          const metadata = await getPtyMetadata(context, ptyId);
+          context.sendResponse(socket, requestId, { command: metadata.lastCommand });
           return;
         }
 
@@ -282,20 +450,20 @@ export function createRequestHandler(params: {
           const paneId = requestParams.paneId as string;
           const ptyId = requestParams.ptyId as string;
           if (sessionId && paneId && ptyId) {
-            params.registerMapping(sessionId, paneId, ptyId);
+            registerMapping(context.state, sessionId, paneId, ptyId);
           }
-          params.sendResponse(socket, requestId);
+          context.sendResponse(socket, requestId);
           return;
         }
 
         case 'getSessionMapping': {
           const sessionId = requestParams.sessionId as string;
-          const sessionPanes = params.state.sessionPanes.get(sessionId);
+          const sessionPanes = context.state.sessionPanes.get(sessionId);
           const stalePaneIds: string[] = [];
 
           if (sessionPanes && sessionPanes.size > 0) {
-            try {
-              const activePtys = await params.withPty((pty) => pty.listAll()) as Array<string>;
+            const activePtys = await readPtyValue<Array<string>>(context, (pty) => pty.listAll());
+            if (activePtys) {
               const activeSet = new Set(activePtys.map((id) => String(id)));
               const stalePtyIds: string[] = [];
 
@@ -307,23 +475,27 @@ export function createRequestHandler(params: {
               }
 
               for (const ptyId of stalePtyIds) {
-                params.removeMappingForPty(ptyId);
+                removeMappingForPty(context.state, ptyId);
               }
-            } catch {
-              // Ignore prune errors - return existing mapping as-is.
             }
           }
 
-          const entries = Array.from(params.state.sessionPanes.get(sessionId)?.entries() ?? []).map(([paneId, ptyId]) => ({ paneId, ptyId }));
-          params.sendResponse(socket, requestId, { entries, stalePaneIds });
+          const entries = Array.from(
+            context.state.sessionPanes.get(sessionId)?.entries() ?? []
+          ).map(([paneId, ptyId]) => ({ paneId, ptyId }));
+          context.sendResponse(socket, requestId, { entries, stalePaneIds });
           return;
         }
 
         default:
-          params.sendError(socket, requestId, `Unknown method: ${method}`);
+          context.sendError(socket, requestId, `Unknown method: ${method}`);
       }
     } catch (error) {
-      params.sendError(socket, requestId, error instanceof Error ? error.message : 'Request failed');
+      context.sendError(
+        socket,
+        requestId,
+        error instanceof Error ? error.message : 'Request failed'
+      );
     }
   };
 }

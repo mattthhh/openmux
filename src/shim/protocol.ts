@@ -2,21 +2,41 @@ import { homedir } from 'os';
 import { join } from 'path';
 import { Buffer } from 'buffer';
 
+/** Directory where shim socket files are stored */
 export const SHIM_SOCKET_DIR = join(homedir(), '.config', 'openmux', 'sockets');
+
+/** Path to the main shim Unix socket */
 export const SHIM_SOCKET_PATH = join(SHIM_SOCKET_DIR, 'openmux.sock');
 
+/** Frame header for shim protocol messages */
 export type ShimHeader = {
+  /** Message type (request, response, event) */
   type: string;
+  /** Unique request identifier for correlation */
   requestId?: number;
+  /** RPC method name for requests */
   method?: string;
+  /** Method parameters */
   params?: Record<string, unknown>;
+  /** Success indicator for responses */
   ok?: boolean;
+  /** Response result data */
   result?: unknown;
+  /** Error message if request failed */
   error?: string;
+  /** Lengths of binary payloads following the header */
   payloadLengths?: number[];
+  /** Additional header fields */
   [key: string]: unknown;
 };
 
+/**
+ * Encodes a frame with header and optional binary payloads for shim protocol transmission.
+ * Frame format: [4 bytes: total frame length][4 bytes: header length][header JSON][payloads...]
+ * @param header - Protocol header with metadata
+ * @param payloads - Optional binary payloads to include
+ * @returns Encoded buffer ready for socket transmission
+ */
 export function encodeFrame(header: ShimHeader, payloads: ArrayBuffer[] = []): Buffer {
   const headerJson = JSON.stringify(header);
   const headerBuffer = Buffer.from(headerJson, 'utf8');
@@ -38,9 +58,19 @@ export function encodeFrame(header: ShimHeader, payloads: ArrayBuffer[] = []): B
   return buffer;
 }
 
+/**
+ * Incremental frame reader for shim protocol messages.
+ * Buffers incoming data and extracts complete frames for processing.
+ */
 export class FrameReader {
   private buffer = Buffer.alloc(0);
 
+  /**
+   * Feed incoming socket data to the frame reader.
+   * Parses complete frames and invokes the callback for each one.
+   * @param chunk - Raw socket data buffer
+   * @param onFrame - Callback invoked when a complete frame is received
+   */
   feed(chunk: Buffer, onFrame: (header: ShimHeader, payloads: Buffer[]) => void): void {
     this.buffer = Buffer.concat([this.buffer, chunk]);
 
