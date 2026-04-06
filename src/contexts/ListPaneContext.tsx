@@ -8,12 +8,11 @@
  * - State references (selectedIndex, activeSessionId, etc.)
  */
 
-import { createContext, useContext, type ParentProps, createMemo } from 'solid-js';
+import { createContext, useContext, type ParentProps } from 'solid-js';
 import { useTheme } from './ThemeContext';
 import { useOverlayColors } from '../components/overlay-colors';
-import type { FlattenedTreeItem, TreeNode } from './aggregate-view-types';
+import type { FlattenedTreeItem } from './aggregate-view-types';
 import type { MouseEvent as OpenTUIMouseEvent } from '@opentui/core';
-import type { SessionLoadState } from './aggregate-view-types';
 
 /** Layout dimensions for the list pane */
 export interface ListLayout {
@@ -123,18 +122,38 @@ export interface ListPaneProviderProps extends ParentProps {
   shimmerTargetColor: string;
 }
 
-export function ListPaneProvider(props: ListPaneProviderProps) {
-  const value: ListPaneContextValue = {
-    layout: props.layout,
-    viewport: props.viewport,
-    state: props.state,
-    selectionHandlers: props.selectionHandlers,
-    dragHandlers: props.dragHandlers,
-    scrollHandlers: props.scrollHandlers,
-    shimmerTargetColor: props.shimmerTargetColor,
+export function createListPaneContextValue(props: ListPaneProviderProps): ListPaneContextValue {
+  return {
+    get layout() {
+      return props.layout;
+    },
+    get viewport() {
+      return props.viewport;
+    },
+    get state() {
+      return props.state;
+    },
+    get selectionHandlers() {
+      return props.selectionHandlers;
+    },
+    get dragHandlers() {
+      return props.dragHandlers;
+    },
+    get scrollHandlers() {
+      return props.scrollHandlers;
+    },
+    get shimmerTargetColor() {
+      return props.shimmerTargetColor;
+    },
   };
+}
 
-  return <ListPaneContext.Provider value={value}>{props.children}</ListPaneContext.Provider>;
+export function ListPaneProvider(props: ListPaneProviderProps) {
+  return (
+    <ListPaneContext.Provider value={createListPaneContextValue(props)}>
+      {props.children}
+    </ListPaneContext.Provider>
+  );
 }
 
 export function useListPane(): ListPaneContextValue {
