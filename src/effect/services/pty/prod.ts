@@ -47,7 +47,7 @@ export function createPtyService(config: PtyServiceConfig, _fs?: unknown): PtySe
     process.env.OPENMUX_SCROLLBACK_ARCHIVE_DIR ?? path.join(getConfigDir(), 'scrollback');
 
   const operations = createOperations({
-    sessions: state as unknown as Map<PtyId, InternalPtySession>,
+    sessions: state,
     lifecycleRegistry,
   });
 

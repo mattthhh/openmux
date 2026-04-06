@@ -22,7 +22,7 @@ export interface InternalPtySession {
   /** Disk-backed scrollback archive */
   scrollbackArchive: ScrollbackArchive;
   /** Archiver for spilling scrollback to disk */
-  scrollbackArchiver: ScrollbackArchiver;
+  scrollbackArchiver?: ScrollbackArchiver;
   queryPassthrough: TerminalQueryPassthrough;
   kittyRelayDispose?: () => void;
   cols: number;

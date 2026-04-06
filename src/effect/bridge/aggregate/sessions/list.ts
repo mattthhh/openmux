@@ -11,6 +11,16 @@ import { sessionPtyCache, asPtyId } from '../cache/session-pty-cache';
 import { batchFetchPtyMetadata } from '../metadata/fetch';
 import { getPtyService, getSessionManager, hasServices } from '../../services-instance';
 import { ServicesNotInitializedError } from '../../../errors';
+import type { SessionMetadata } from '../../../models';
+
+/**
+ * PTY metadata with session context attached.
+ * Used when aggregating PTYs by session in the tree view.
+ */
+interface PtyMetadataWithSession extends PtyMetadata {
+  sessionId: string;
+  sessionMetadata: SessionMetadata;
+}
 
 /**
  * List all sessions with their PTYs for the aggregate view.
@@ -91,7 +101,7 @@ export async function listSessionsWithPtysWithService(
         });
       } else {
         // Fetch PTY metadata asynchronously
-        const ptys: PtyMetadata[] = [];
+        const ptys: PtyMetadataWithSession[] = [];
 
         // Start async fetch but don't block
         const loadPromise = (async () => {
@@ -102,10 +112,12 @@ export async function listSessionsWithPtysWithService(
               { skipGitDiffStats },
               batchSize
             )) {
-              // Attach session metadata to each PTY
-              (metadata as unknown as Record<string, unknown>).sessionId = session.id;
-              (metadata as unknown as Record<string, unknown>).sessionMetadata = session;
-              ptys.push(metadata);
+              const metadataWithSession: PtyMetadataWithSession = {
+                ...metadata,
+                sessionId: session.id,
+                sessionMetadata: session,
+              };
+              ptys.push(metadataWithSession);
             }
           } catch (e) {
             console.warn(`Failed to fetch PTYs for session ${session.id}:`, e);
@@ -127,7 +139,7 @@ export async function listSessionsWithPtysWithService(
     // No cache - need to determine if session is loaded
     if (isActive) {
       // Active session: all active PTYs belong to this session
-      const ptys: PtyMetadata[] = [];
+      const ptys: PtyMetadataWithSession[] = [];
 
       // For active session, use all active PTY IDs
       // (The active session owns all currently running PTYs)
@@ -142,10 +154,12 @@ export async function listSessionsWithPtysWithService(
             { skipGitDiffStats },
             batchSize
           )) {
-            // Attach session metadata to each PTY
-            (metadata as unknown as Record<string, unknown>).sessionId = session.id;
-            (metadata as unknown as Record<string, unknown>).sessionMetadata = session;
-            ptys.push(metadata);
+            const metadataWithSession: PtyMetadataWithSession = {
+              ...metadata,
+              sessionId: session.id,
+              sessionMetadata: session,
+            };
+            ptys.push(metadataWithSession);
           }
 
           // Update cache with actual PTY IDs (not pane IDs)

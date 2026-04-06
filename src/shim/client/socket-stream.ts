@@ -20,7 +20,7 @@ export function createSocketDataHandler(
     frameReader.feed(chunk, handleFrame);
   };
   client.on('data', handleData);
-  
+
   return () => {
     client.off('data', handleData);
   };
@@ -55,7 +55,7 @@ export function createSocketDataStream(
       const handleClose = () => {
         isDone = true;
         if (!resolveNext) return;
-        resolveNext({ value: undefined as unknown as Buffer, done: true });
+        resolveNext({ done: true, value: undefined });
         resolveNext = null;
       };
 
@@ -74,7 +74,7 @@ export function createSocketDataStream(
 
       while (!isDone) {
         let value: Buffer;
-        
+
         if (buffer.length > 0) {
           value = buffer.shift()!;
         } else {
@@ -84,7 +84,7 @@ export function createSocketDataStream(
           if (result.done) break;
           value = result.value;
         }
-        
+
         frameReader.feed(value, handleFrame);
         yield value;
       }

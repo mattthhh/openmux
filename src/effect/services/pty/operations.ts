@@ -7,6 +7,7 @@ import { PtyNotFoundError } from '../../errors';
 import type { PtyId, Cols, Rows } from '../../types';
 import type { PtySession } from '../../models';
 import type { InternalPtySession } from './types';
+import type { PtyState } from './state';
 import { notifySubscribers, notifyScrollSubscribers } from './notification';
 import { HOT_SCROLLBACK_LIMIT } from '../../../terminal/scrollback-config';
 import type { SubscriptionRegistry } from './subscription-manager';
@@ -37,7 +38,7 @@ function getForegroundProcessName(session: InternalPtySession): string | null {
 }
 
 export interface OperationsDeps {
-  sessions: Map<PtyId, InternalPtySession>;
+  sessions: PtyState;
   lifecycleRegistry: SubscriptionRegistry<{ type: 'created' | 'destroyed'; ptyId: PtyId }>;
 }
 

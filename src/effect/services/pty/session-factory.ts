@@ -146,7 +146,7 @@ export async function createSession(
     emulator,
     liveEmulator,
     scrollbackArchive,
-    scrollbackArchiver: null as unknown as ScrollbackArchiver,
+    scrollbackArchiver: undefined,
     queryPassthrough,
     kittyRelayDispose: undefined,
     cols,

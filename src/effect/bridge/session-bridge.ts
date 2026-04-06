@@ -5,7 +5,12 @@
 
 import type { SessionManager } from '../services/SessionManager';
 import type { SessionId } from '../types';
-import type { SerializedSession, SessionMetadata } from '../models';
+import type {
+  SerializedLayoutNode,
+  SerializedSession,
+  SerializedWorkspace,
+  SessionMetadata,
+} from '../models';
 import type {
   SessionMetadata as LegacySessionMetadata,
   Workspace,
@@ -164,7 +169,7 @@ export async function createSessionLegacy(
   const manager = getSessionManager();
   const result = await manager.createSession(name);
   if (result instanceof Error) return result;
-  return result as unknown as LegacySessionMetadata;
+  return toLegacySessionMetadata(result);
 }
 
 /** List all sessions (legacy compatibility) */
@@ -172,7 +177,7 @@ export async function listSessionsLegacy(): Promise<LegacySessionMetadata[]> {
   const manager = getSessionManager();
   const result = await manager.listSessions();
   if (result instanceof Error) return [];
-  return [...result] as unknown as LegacySessionMetadata[];
+  return [...result].map(toLegacySessionMetadata);
 }
 
 /** Get active session ID (legacy compatibility) */
@@ -190,7 +195,16 @@ export async function deleteSessionLegacy(id: string): Promise<void | SessionErr
   return deleteSession(id);
 }
 
-/** Deserialize layout node from stored format */
+/** Convert Effect SessionMetadata to LegacySessionMetadata */
+function toLegacySessionMetadata(metadata: SessionMetadata): LegacySessionMetadata {
+  return {
+    id: metadata.id,
+    name: metadata.name,
+    createdAt: metadata.createdAt,
+    lastSwitchedAt: metadata.lastSwitchedAt,
+    autoNamed: metadata.autoNamed,
+  };
+}
 function deserializeLayoutNode(serialized: {
   type?: string;
   id: string;
@@ -251,50 +265,16 @@ function deserializeLayoutNode(serialized: {
 }
 
 /** Deserialize workspace from stored format */
-function deserializeWorkspace(serialized: {
-  id: number;
-  label?: string;
-  mainPane: unknown;
-  stackPanes: unknown[];
-  focusedPaneId: string | null;
-  activeStackIndex: number;
-  lastFocusedPaneIds?: (string | null)[];
-  layoutMode: string;
-  zoomed: boolean;
-}): Workspace {
+function deserializeWorkspace(serialized: SerializedWorkspace): Workspace {
   return {
     id: serialized.id as WorkspaceId,
-    label: serialized.label ?? undefined,
-    mainPane: serialized.mainPane
-      ? deserializeLayoutNode(
-          serialized.mainPane as {
-            type?: string;
-            id: string;
-            direction?: string;
-            ratio?: number;
-            first?: unknown;
-            second?: unknown;
-            title?: string;
-            cwd?: string;
-          }
-        )
-      : null,
-    stackPanes: (
-      serialized.stackPanes as {
-        type?: string;
-        id: string;
-        direction?: string;
-        ratio?: number;
-        first?: unknown;
-        second?: unknown;
-        title?: string;
-        cwd?: string;
-      }[]
-    ).map(deserializeLayoutNode),
+    label: serialized.label,
+    mainPane: serialized.mainPane ? deserializeLayoutNode(serialized.mainPane) : null,
+    stackPanes: serialized.stackPanes.map(deserializeLayoutNode),
     focusedPaneId: serialized.focusedPaneId,
     activeStackIndex: serialized.activeStackIndex,
     lastFocusedPaneIds: [...(serialized.lastFocusedPaneIds ?? [])],
-    layoutMode: serialized.layoutMode as 'vertical' | 'horizontal' | 'stacked',
+    layoutMode: serialized.layoutMode as Workspace['layoutMode'],
     zoomed: serialized.zoomed,
   };
 }
@@ -407,9 +387,7 @@ export async function loadSessionData(sessionId: string): Promise<
 
   const workspaces: Workspaces = {};
   for (const ws of session.workspaces) {
-    workspaces[ws.id as WorkspaceId] = deserializeWorkspace(
-      ws as unknown as Parameters<typeof deserializeWorkspace>[0]
-    );
+    workspaces[ws.id as WorkspaceId] = deserializeWorkspace(ws);
   }
 
   const storedActiveId = session.activeWorkspaceId as WorkspaceId;

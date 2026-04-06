@@ -18,6 +18,40 @@
 import { PassThrough } from 'stream';
 import { emitHostColorScheme } from './host-color-scheme';
 
+/** Helper type for attaching TTY properties to streams */
+export interface TtyProperties {
+  setRawMode?(mode: boolean): boolean | NodeJS.ReadStream;
+  isTTY?: boolean;
+}
+
+/** Readable stream with TTY properties (compatible with OpenTUI stdin) */
+export type TtyReadStream = NodeJS.ReadStream & TtyProperties;
+
+/** Helper to safely access optional TTY properties on a ReadStream */
+function getTtyProperties(stream: NodeJS.ReadStream): TtyProperties {
+  // Use property access through index signature
+  const s = stream as NodeJS.ReadStream & Record<string, unknown>;
+  return {
+    setRawMode:
+      typeof s.setRawMode === 'function'
+        ? (s.setRawMode as (mode: boolean) => boolean | NodeJS.ReadStream)
+        : undefined,
+    isTTY: typeof s.isTTY === 'boolean' ? s.isTTY : undefined,
+  };
+}
+
+/** Helper to apply TTY properties to a PassThrough stream */
+function applyTtyProperties(
+  passthrough: PassThrough,
+  realStdin: NodeJS.ReadStream
+): PassThrough & TtyProperties {
+  const ttyProps = getTtyProperties(realStdin);
+  const extended = passthrough as PassThrough & TtyProperties;
+  extended.setRawMode = ttyProps.setRawMode;
+  extended.isTTY = ttyProps.isTTY;
+  return extended;
+}
+
 // Bracketed paste mode sequences (DECSET 2004)
 const PASTE_START = Buffer.from('\x1b[200~');
 const PASTE_END = Buffer.from('\x1b[201~');
@@ -121,7 +155,7 @@ function getPartialSequenceLength(buf: Buffer, sequence: Buffer): number {
 export function createPasteInterceptingStdin(
   realStdin: NodeJS.ReadStream,
   config: PasteInterceptorConfig
-): NodeJS.ReadStream {
+): PassThrough & TtyProperties {
   const passthrough = new PassThrough();
 
   let isPasting = false;
@@ -227,16 +261,10 @@ export function createPasteInterceptingStdin(
     passthrough.push(null);
   });
 
-  realStdin.on('error', (err) => {
+  realStdin.on('error', (err: Error) => {
     passthrough.emit('error', err);
   });
 
   // Copy necessary properties from real stdin for OpenTUI compatibility
-  // Using 'as unknown as' to properly cast the PassThrough to ReadStream
-  // OpenTUI only needs setRawMode and isTTY properties
-  (passthrough as any).setRawMode = realStdin.setRawMode?.bind(realStdin);
-  (passthrough as any).isTTY = realStdin.isTTY;
-  (passthrough as any).isRaw = (realStdin as any).isRaw;
-
-  return passthrough as unknown as NodeJS.ReadStream;
+  return applyTtyProperties(passthrough, realStdin);
 }

@@ -25,10 +25,11 @@ export function writeHostSequence(sequence: string): boolean {
   }
 
   const stdout = process.stdout;
-  if (!stdout || typeof stdout.write !== "function") return false;
+  if (!stdout || typeof stdout.write !== 'function') return false;
   stdout.write(sequence);
   if (stdout.isTTY) {
-    (stdout as any)._handle?.flush?.();
+    const ttyStdout = stdout as NodeJS.WriteStream & { _handle?: { flush?: () => void } };
+    ttyStdout._handle?.flush?.();
   }
   return true;
 }

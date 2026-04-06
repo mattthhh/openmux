@@ -14,6 +14,25 @@ import {
   type ShimHandlerContext,
 } from './handlers';
 import type { ShimPtyMetadata, ShimPtySessionInfo } from './pty-metadata';
+import type { TerminalColors } from '../terminal/terminal-colors';
+
+/**
+ * Type guard for validating TerminalColors structure.
+ * @param value - Unknown value to validate
+ * @returns True if value is a valid TerminalColors object
+ */
+function isTerminalColors(value: unknown): value is TerminalColors {
+  if (!value || typeof value !== 'object') return false;
+  const colors = value as Record<string, unknown>;
+  return (
+    typeof colors.foreground === 'number' &&
+    typeof colors.background === 'number' &&
+    Array.isArray(colors.palette) &&
+    colors.palette.length >= 16 &&
+    colors.palette.every((c: unknown) => typeof c === 'number') &&
+    typeof colors.isDefault === 'boolean'
+  );
+}
 
 /**
  * Reads a value from the PTY service, handling errors gracefully.
@@ -196,13 +215,15 @@ export function createRequestHandler(context: ShimHandlerContext) {
           return;
         }
 
-        case 'setHostColors':
-          if (requestParams.colors) {
-            await context.applyHostColors(requestParams.colors as any);
+        case 'setHostColors': {
+          const colors = requestParams.colors;
+          if (colors && isTerminalColors(colors)) {
+            await context.applyHostColors(colors);
             context.state.hostColorsSet = true;
           }
           context.sendResponse(socket, requestId, { applied: context.state.hostColorsSet });
           return;
+        }
 
         case 'createPty': {
           const ptyId = await context.withPty((pty) =>

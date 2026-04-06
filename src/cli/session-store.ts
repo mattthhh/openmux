@@ -64,7 +64,7 @@ export async function loadSessionIndex(): Promise<SessionIndex> {
 
   // Parse JSON with errore (sync operation wrapped in async)
   const parsedResult = errore.try<unknown, FileSystemError>({
-    try: () => JSON.parse(contentResult) as unknown,
+    try: () => JSON.parse(contentResult),
     catch: (e) =>
       new FileSystemError({
         operation: 'read',

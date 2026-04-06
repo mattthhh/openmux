@@ -72,23 +72,22 @@ export async function initializeServices(
   const fs = createFileSystem();
 
   // Create PTY service for app or shim mode
-  const pty = mode === 'shim' ? createPtyService(config, fs) : createShimPtyService();
-  if (pty instanceof Error) return pty as unknown as ServiceInitError;
+  const pty = mode === 'app' ? createPtyService(config, fs) : createShimPtyService();
 
   // Create session storage
   const sessionStorage = await createSessionStorage(fs, config);
-  if (sessionStorage instanceof Error) return sessionStorage as unknown as ServiceInitError;
+  if (sessionStorage instanceof Error) return sessionStorage;
 
   // Create session manager
   const sessionManager = await createSessionManager(sessionStorage, pty);
-  if (sessionManager instanceof Error) return sessionManager as unknown as ServiceInitError;
+  if (sessionManager instanceof Error) return sessionManager;
 
   // Create clipboard
   const clipboard = await createClipboard();
 
   // Create template storage
   const templateStorage = await createTemplateStorage(fs, config);
-  if (templateStorage instanceof Error) return templateStorage as unknown as ServiceInitError;
+  if (templateStorage instanceof Error) return templateStorage;
 
   // Create keyboard router
   const keyboardRouter = createKeyboardRouter();

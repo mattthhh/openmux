@@ -1,28 +1,28 @@
 /**
  * Resource cleanup utilities using AsyncDisposableStack
- * 
+ *
  * Provides consistent patterns for resource management across the codebase.
  * Uses errore's AsyncDisposableStack for guaranteed cleanup on all exit paths.
- * 
+ *
  * @example
  * ```typescript
  * async function fetchWithTimeout(): Promise<Data | Error> {
  *   await using resources = new ResourceStack()
- *   
+ *
  *   const controller = new AbortController()
  *   resources.defer(() => controller.abort())
- *   
+ *
  *   const conn = await connect()
  *   resources.defer(() => conn.close())
- *   
+ *
  *   return await fetchData(conn)
  * }
  * ```
  */
 
-import * as errore from "errore"
+import * as errore from 'errore';
 
-export const AsyncDisposableStack = errore.AsyncDisposableStack
+export const AsyncDisposableStack = errore.AsyncDisposableStack;
 
 /**
  * Resource stack with typed error handling.
@@ -36,11 +36,11 @@ export class ResourceStack extends errore.AsyncDisposableStack {
   deferSafe(cleanup: () => void | Promise<void>): void {
     this.defer(async () => {
       try {
-        await cleanup()
+        await cleanup();
       } catch (error) {
-        console.warn("Resource cleanup failed:", error)
+        console.warn('Resource cleanup failed:', error);
       }
-    })
+    });
   }
 
   /**
@@ -49,7 +49,7 @@ export class ResourceStack extends errore.AsyncDisposableStack {
    */
   deferAll(...cleanups: Array<() => void | Promise<void>>): void {
     for (const cleanup of cleanups) {
-      this.defer(cleanup)
+      this.defer(cleanup);
     }
   }
 
@@ -58,21 +58,21 @@ export class ResourceStack extends errore.AsyncDisposableStack {
    * Returns the timer handle for your use.
    */
   registerTimer(timer: ReturnType<typeof setTimeout>): void {
-    this.defer(() => clearTimeout(timer))
+    this.defer(() => clearTimeout(timer));
   }
 
   /**
    * Register an interval for automatic cleanup.
    */
   registerInterval(interval: ReturnType<typeof setInterval>): void {
-    this.defer(() => clearInterval(interval))
+    this.defer(() => clearInterval(interval));
   }
 
   /**
    * Register an AbortController for automatic abort on cleanup.
    */
   registerAbortController(controller: AbortController): void {
-    this.defer(() => controller.abort())
+    this.defer(() => controller.abort());
   }
 
   /**
@@ -82,15 +82,14 @@ export class ResourceStack extends errore.AsyncDisposableStack {
    * @param handler - Event handler
    */
   registerEventListener<
-    T extends { on?: (event: string, handler: (...args: unknown[]) => void) => void; off?: (event: string, handler: (...args: unknown[]) => void) => void }
-  >(
-    emitter: T,
-    event: string,
-    handler: (...args: unknown[]) => void
-  ): void {
+    T extends {
+      on?: (event: string, handler: (...args: unknown[]) => void) => void;
+      off?: (event: string, handler: (...args: unknown[]) => void) => void;
+    },
+  >(emitter: T, event: string, handler: (...args: unknown[]) => void): void {
     if (emitter.on) {
-      emitter.on(event, handler)
-      this.defer(() => emitter.off?.(event, handler))
+      emitter.on(event, handler);
+      this.defer(() => emitter.off?.(event, handler));
     }
   }
 
@@ -99,16 +98,16 @@ export class ResourceStack extends errore.AsyncDisposableStack {
    */
   registerDisposable<T extends AsyncDisposable>(resource: T): T {
     this.defer(async () => {
-      await resource[Symbol.asyncDispose]()
-    })
-    return resource
+      await resource[Symbol.asyncDispose]();
+    });
+    return resource;
   }
 
   /**
    * Register a subscription with unsubscribe function.
    */
   registerSubscription(unsubscribe: () => void): void {
-    this.defer(unsubscribe)
+    this.defer(unsubscribe);
   }
 }
 
@@ -116,36 +115,34 @@ export class ResourceStack extends errore.AsyncDisposableStack {
  * Helper to check if an error is an AbortError (from AbortController).
  * Re-exported from errore for convenience.
  */
-export const isAbortError = errore.isAbortError
+export const isAbortError = errore.isAbortError;
 
 /**
  * Helper to create a cleanup function that only runs once.
  */
 export function once(cleanup: () => void): () => void {
-  let ran = false
+  let ran = false;
   return () => {
-    if (ran) return
-    ran = true
-    cleanup()
-  }
+    if (ran) return;
+    ran = true;
+    cleanup();
+  };
 }
 
 /**
  * Type guard for disposable resources.
  */
 export function isDisposable<T>(value: T): value is T & Disposable {
-  return value !== null && 
-         typeof value === "object" && 
-         Symbol.dispose in value &&
-         typeof (value as unknown as Disposable)[Symbol.dispose] === "function"
+  if (value === null || typeof value !== 'object') return false;
+  const record = value as Record<symbol, unknown>;
+  return Symbol.dispose in record && typeof record[Symbol.dispose] === 'function';
 }
 
 /**
  * Type guard for async disposable resources.
  */
 export function isAsyncDisposable<T>(value: T): value is T & AsyncDisposable {
-  return value !== null && 
-         typeof value === "object" && 
-         Symbol.asyncDispose in value &&
-         typeof (value as unknown as AsyncDisposable)[Symbol.asyncDispose] === "function"
+  if (value === null || typeof value !== 'object') return false;
+  const record = value as Record<symbol, unknown>;
+  return Symbol.asyncDispose in record && typeof record[Symbol.asyncDispose] === 'function';
 }

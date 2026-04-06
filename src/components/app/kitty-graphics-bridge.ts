@@ -9,8 +9,20 @@ import {
 import { isShimClient } from '../../shim/mode';
 import { subscribeKittyTransmit, subscribeKittyUpdate } from '../../shim/client';
 
+export interface RendererWithNative {
+  renderNative?: () => void;
+  prependInputHandler?: (handler: (data: string) => boolean | void) => void;
+  removeInputHandler?: (handler: (data: string) => boolean | void) => void;
+  requestRender?: () => void;
+  resolution?: { width: number; height: number };
+  terminalWidth?: number;
+  terminalHeight?: number;
+  width?: number;
+  height?: number;
+}
+
 export function createKittyGraphicsBridge(params: {
-  renderer: unknown;
+  renderer: RendererWithNative;
   ensurePixelResize: () => void;
   stopPixelResizePoll: () => void;
 }): KittyGraphicsRenderer {
@@ -21,8 +33,8 @@ export function createKittyGraphicsBridge(params: {
   setKittyTransmitBroker(kittyBroker);
 
   onMount(() => {
-    const rendererAny = renderer as any;
-    const originalRenderNative = rendererAny.renderNative?.bind(rendererAny);
+    const r = renderer as RendererWithNative;
+    const originalRenderNative = r.renderNative?.bind(renderer);
     const pixelResolutionRegex = /\x1b\[4;\d+;\d+t/;
     const kittyResponseStartRegex = /(?:\x1b_G|\x9fG)/;
     const kittyResponseEndRegex = /(?:\x1b\\|\x9c)/;
@@ -55,16 +67,16 @@ export function createKittyGraphicsBridge(params: {
     };
 
     if (originalRenderNative) {
-      rendererAny.renderNative = () => {
+      r.renderNative = () => {
         originalRenderNative();
-        kittyRenderer.flush(rendererAny);
+        kittyRenderer.flush(r);
       };
     }
 
-    kittyBroker.setRenderer(rendererAny);
+    kittyBroker.setRenderer(r);
     kittyBroker.setAutoFlush(false);
     kittyBroker.setFlushScheduler(() => {
-      rendererAny.requestRender?.();
+      r.requestRender?.();
     });
     let unsubscribeTransmit: (() => void) | null = null;
     let unsubscribeKittyUpdate: (() => void) | null = null;
@@ -77,23 +89,23 @@ export function createKittyGraphicsBridge(params: {
       });
       unsubscribeKittyUpdate = subscribeKittyUpdate(() => {
         queueMicrotask(() => {
-          kittyRenderer.flush(rendererAny);
+          kittyRenderer.flush(r);
         });
-        rendererAny.requestRender?.();
+        r.requestRender?.();
       });
     }
-    rendererAny.prependInputHandler?.(handleKittyResponses);
-    rendererAny.prependInputHandler?.(handlePixelResolution);
+    r.prependInputHandler?.(handleKittyResponses);
+    r.prependInputHandler?.(handlePixelResolution);
     ensurePixelResize();
 
     onCleanup(() => {
       if (originalRenderNative) {
-        rendererAny.renderNative = originalRenderNative;
+        r.renderNative = originalRenderNative;
       }
       kittyBroker.setAutoFlush(true);
       kittyBroker.setFlushScheduler(null);
-      rendererAny.removeInputHandler?.(handleKittyResponses);
-      rendererAny.removeInputHandler?.(handlePixelResolution);
+      r.removeInputHandler?.(handleKittyResponses);
+      r.removeInputHandler?.(handlePixelResolution);
       stopPixelResizePoll();
       unsubscribeTransmit?.();
       unsubscribeKittyUpdate?.();

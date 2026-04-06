@@ -219,11 +219,7 @@ export class ArchivedTerminalEmulator implements ITerminalEmulator, IKittyGraphi
     }
 
     const placements: ArchivePlacement[] =
-      (
-        this.archive as unknown as {
-          getPlacementsForLineRange?(start: number, end: number): ArchivePlacement[];
-        }
-      ).getPlacementsForLineRange?.(0, archiveLength) ?? [];
+      this.archive.getPlacementsForLineRange?.(0, archiveLength) ?? [];
 
     const imageIds =
       placements.length === 0

@@ -194,12 +194,16 @@ export function TerminalProvider(props: TerminalProviderProps) {
     newPaneWithPty,
     getNewPaneDimensions,
     getCellMetrics: () => {
-      const rendererAny = renderer as any;
-      const resolution = rendererAny?.resolution ?? null;
-      const terminalWidth =
-        dimensions().width || rendererAny?.terminalWidth || rendererAny?.width || 0;
-      const terminalHeight =
-        dimensions().height || rendererAny?.terminalHeight || rendererAny?.height || 0;
+      const r = renderer as {
+        resolution?: { width: number; height: number } | null;
+        terminalWidth?: number;
+        terminalHeight?: number;
+        width?: number;
+        height?: number;
+      };
+      const resolution = r?.resolution ?? null;
+      const terminalWidth = dimensions().width || r?.terminalWidth || r?.width || 0;
+      const terminalHeight = dimensions().height || r?.terminalHeight || r?.height || 0;
       if (!resolution || terminalWidth <= 0 || terminalHeight <= 0) return null;
       return {
         cellWidth: Math.max(1, Math.floor(resolution.width / terminalWidth)),

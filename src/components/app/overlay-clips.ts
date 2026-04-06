@@ -11,7 +11,44 @@ import type { Workspaces } from '../../core/operations/layout-actions';
 import type { ClipRect, KittyPaneLayer } from '../../terminal/kitty-graphics';
 import type { SearchContextValue } from '../../contexts/search/types';
 
-type ClipRectProvider = (width: number, height: number, ...args: any[]) => Rectangle | null;
+type SessionPickerRectFn = (
+  width: number,
+  height: number,
+  show: boolean,
+  itemCount: number
+) => Rectangle | null;
+type TemplateOverlayRectFn = (
+  width: number,
+  height: number,
+  show: boolean,
+  templateCount: number,
+  workspaces: Workspaces
+) => Rectangle | null;
+type CommandPaletteRectFn = (
+  width: number,
+  height: number,
+  state: CommandPaletteState,
+  commands: CommandPaletteCommand[]
+) => Rectangle | null;
+type PaneRenameRectFn = (width: number, height: number, state: PaneRenameState) => Rectangle | null;
+type WorkspaceLabelRectFn = (
+  width: number,
+  height: number,
+  state: WorkspaceLabelState
+) => Rectangle | null;
+type SearchOverlayRectFn = (width: number, height: number, hasSearch: boolean) => Rectangle | null;
+type ConfirmationRectFn = (width: number, height: number, visible: boolean) => Rectangle | null;
+type CopyNotificationRectFn = (
+  width: number,
+  height: number,
+  notification: { visible: boolean; ptyId: string | null },
+  aggregateState: {
+    showAggregateView: boolean;
+    selectedPtyId: string | null;
+    previewZoomed: boolean;
+  },
+  panes: Array<{ ptyId?: string | null; rectangle?: Rectangle | null }>
+) => Rectangle | null;
 
 export function setupOverlayClipRects(params: {
   getWidth: () => number;
@@ -28,7 +65,11 @@ export function setupOverlayClipRects(params: {
   };
   search: SearchContextValue;
   selection: { copyNotification: { visible: boolean; ptyId: string | null } };
-  aggregateState: { showAggregateView: boolean; selectedPtyId: string | null; previewZoomed: boolean };
+  aggregateState: {
+    showAggregateView: boolean;
+    selectedPtyId: string | null;
+    previewZoomed: boolean;
+  };
   commandPaletteState: CommandPaletteState;
   commandPaletteCommands: CommandPaletteCommand[];
   paneRenameState: PaneRenameState;
@@ -38,14 +79,14 @@ export function setupOverlayClipRects(params: {
     setClipRects: (rects: ClipRect[]) => void;
     setVisibleLayers: (layers: Iterable<KittyPaneLayer>) => void;
   };
-  getSessionPickerRect: ClipRectProvider;
-  getTemplateOverlayRect: ClipRectProvider;
-  getCommandPaletteRect: ClipRectProvider;
-  getPaneRenameRect: ClipRectProvider;
-  getWorkspaceLabelRect: ClipRectProvider;
-  getSearchOverlayRect: ClipRectProvider;
-  getConfirmationRect: ClipRectProvider;
-  getCopyNotificationRect: ClipRectProvider;
+  getSessionPickerRect: SessionPickerRectFn;
+  getTemplateOverlayRect: TemplateOverlayRectFn;
+  getCommandPaletteRect: CommandPaletteRectFn;
+  getPaneRenameRect: PaneRenameRectFn;
+  getWorkspaceLabelRect: WorkspaceLabelRectFn;
+  getSearchOverlayRect: SearchOverlayRectFn;
+  getConfirmationRect: ConfirmationRectFn;
+  getCopyNotificationRect: CopyNotificationRectFn;
 }): void {
   const {
     getWidth,
@@ -82,14 +123,26 @@ export function setupOverlayClipRects(params: {
       }
     };
 
-    pushRect(getSessionPickerRect(w, h, sessionState.showSessionPicker, session.filteredSessions.length));
-    pushRect(getTemplateOverlayRect(w, h, session.showTemplateOverlay, session.templates.length, layout.state.workspaces));
+    pushRect(
+      getSessionPickerRect(w, h, sessionState.showSessionPicker, session.filteredSessions.length)
+    );
+    pushRect(
+      getTemplateOverlayRect(
+        w,
+        h,
+        session.showTemplateOverlay,
+        session.templates.length,
+        layout.state.workspaces
+      )
+    );
     pushRect(getCommandPaletteRect(w, h, commandPaletteState, commandPaletteCommands));
     pushRect(getPaneRenameRect(w, h, paneRenameState));
     pushRect(getWorkspaceLabelRect(w, h, workspaceLabelState));
     pushRect(getSearchOverlayRect(w, h, Boolean(search.searchState)));
     pushRect(getConfirmationRect(w, h, confirmationVisible()));
-    pushRect(getCopyNotificationRect(w, h, selection.copyNotification, aggregateState, layout.panes));
+    pushRect(
+      getCopyNotificationRect(w, h, selection.copyNotification, aggregateState, layout.panes)
+    );
 
     kittyRenderer.setClipRects(rects);
     kittyRenderer.setVisibleLayers(aggregateState.showAggregateView ? ['overlay'] : ['base']);

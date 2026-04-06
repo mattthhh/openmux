@@ -59,6 +59,11 @@ const RAW_PI_SYNC_FULL_REDRAW_START_REGEX =
   /\x1b\[\?2026h(?:\x1b\[2J|\x9b2J)(?:\x1b\[(?:H|1;1H)|\x9b(?:H|1;1H))(?:\x1b\[3J|\x9b3J)/;
 const PI_SYNC_TIMEOUT_MS = 750;
 
+/** PTY interface with optional foreground process name access */
+interface PtyWithForegroundProcess {
+  getForegroundProcessName?: () => string | null;
+}
+
 function normalizeProcessName(value: string | null | undefined): string | null {
   if (!value) return null;
   const trimmed = value.trim();
@@ -69,10 +74,10 @@ function normalizeProcessName(value: string | null | undefined): string | null {
 }
 
 function resolveFocusTrackingOwnerProcess(session: InternalPtySession): string | null {
-  const ptyAny = session.pty as unknown as { getForegroundProcessName?: () => string | null };
-  if (typeof ptyAny.getForegroundProcessName !== 'function') return null;
+  const pty = session.pty as PtyWithForegroundProcess;
+  if (typeof pty.getForegroundProcessName !== 'function') return null;
   try {
-    return normalizeProcessName(ptyAny.getForegroundProcessName());
+    return normalizeProcessName(pty.getForegroundProcessName());
   } catch {
     return null;
   }
@@ -287,7 +292,7 @@ export function createDataHandler(options: DataHandlerOptions) {
 
   const resetScrollbackState = () => {
     session.scrollbackArchive.reset();
-    session.scrollbackArchiver.reset();
+    session.scrollbackArchiver?.reset();
     session.scrollState.viewportOffset = 0;
     session.scrollState.lastScrollbackLength = 0;
     session.scrollState.lastIsAtBottom = true;
@@ -406,7 +411,7 @@ export function createDataHandler(options: DataHandlerOptions) {
     }
 
     if (wrote) {
-      session.scrollbackArchiver.schedule();
+      session.scrollbackArchiver?.schedule();
     }
 
     if (segmentsProcessed > 0) {

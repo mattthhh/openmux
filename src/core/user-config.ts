@@ -72,11 +72,26 @@ export const DEFAULT_USER_CONFIG: UserConfig = {
   keybindings: DEFAULT_KEYBINDINGS,
 };
 
+/** Local definition matching @iarna/toml's JsonMap structure */
+interface JsonMap {
+  [key: string]: AnyJson;
+}
+
+/** Local definition matching @iarna/toml's AnyJson */
+type AnyJson = boolean | number | string | JsonMap | Date | JsonArray | JsonArray[];
+
+type JsonArray = boolean[] | number[] | string[] | JsonMap[] | Date[];
+
+/** TOML-serializable UserConfig - compatible with JsonMap */
+type TomlUserConfig = UserConfig & JsonMap;
+
 const CONFIG_FILE_NAME = 'config.toml';
 
 export function getConfigDir(): string {
   const home = process.env.HOME ?? process.env.USERPROFILE;
-  const base = process.env.XDG_CONFIG_HOME ?? (home ? path.join(home, '.config') : path.join(process.cwd(), '.config'));
+  const base =
+    process.env.XDG_CONFIG_HOME ??
+    (home ? path.join(home, '.config') : path.join(process.cwd(), '.config'));
   return path.join(base, 'openmux');
 }
 
@@ -87,7 +102,7 @@ export function getConfigPath(): string {
 function writeDefaultConfig(configPath: string): void {
   const dir = path.dirname(configPath);
   fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(configPath, TOML.stringify(DEFAULT_USER_CONFIG as unknown as any), 'utf8');
+  fs.writeFileSync(configPath, TOML.stringify(DEFAULT_USER_CONFIG as TomlUserConfig), 'utf8');
 }
 
 function coerceNumber(value: unknown): number | undefined {
@@ -154,7 +169,10 @@ function mergeKeybindingMap(base: KeybindingMap, overrides?: KeybindingMap): Key
   return merged;
 }
 
-function mergeKeybindings(base: KeybindingsConfig, overrides?: Partial<KeybindingsConfig>): KeybindingsConfig {
+function mergeKeybindings(
+  base: KeybindingsConfig,
+  overrides?: Partial<KeybindingsConfig>
+): KeybindingsConfig {
   if (!overrides) return base;
 
   return {
@@ -226,7 +244,9 @@ function mergeUserConfig(base: UserConfig, overrides?: Partial<UserConfig>): Use
     },
     session: {
       autoSaveIntervalMs: overrides.session?.autoSaveIntervalMs ?? base.session.autoSaveIntervalMs,
-      autoCreatePaneOnEmptyWorkspace: overrides.session?.autoCreatePaneOnEmptyWorkspace ?? base.session.autoCreatePaneOnEmptyWorkspace,
+      autoCreatePaneOnEmptyWorkspace:
+        overrides.session?.autoCreatePaneOnEmptyWorkspace ??
+        base.session.autoCreatePaneOnEmptyWorkspace,
     },
     keyboard: {
       vimMode: overrides.keyboard?.vimMode ?? base.keyboard.vimMode,

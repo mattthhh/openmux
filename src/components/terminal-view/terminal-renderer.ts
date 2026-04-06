@@ -3,6 +3,8 @@ import { isAtBottom as checkIsAtBottom } from '../../core/scroll-utils';
 import { BLACK, getCachedRGBA, SELECTION_BG } from '../../terminal/rendering';
 import { extractRgb, getDefaultColors, getHostColors } from '../../terminal/terminal-colors';
 import { getKittyGraphicsRenderer } from '../../terminal/kitty-graphics';
+import type { SelectionRange } from '../../core/coordinates';
+import type { SearchMatch } from '../../contexts/search/types';
 import {
   renderRow,
   renderScrollbar,
@@ -16,20 +18,20 @@ import type { TerminalViewProps } from './types';
 import type { TerminalViewState } from './view-state';
 
 interface SelectionDeps {
-  isCellSelected: (...args: any[]) => boolean;
-  getSelection: (ptyId: string) => { normalizedRange: unknown | null } | undefined;
+  isCellSelected: (ptyId: string, row: number, col: number) => boolean;
+  getSelection: (ptyId: string) => { normalizedRange: SelectionRange | null } | undefined;
 }
 
 interface SearchDeps {
-  isSearchMatch: (...args: any[]) => boolean;
-  isCurrentMatch: (...args: any[]) => boolean;
-  getSearchState: () => { ptyId: string; matches: unknown[] } | null | undefined;
+  isSearchMatch: (ptyId: string, row: number, col: number) => boolean;
+  isCurrentMatch: (ptyId: string, row: number, col: number) => boolean;
+  getSearchState: () => { ptyId: string; matches: SearchMatch[] } | null | undefined;
 }
 
 interface CopyModeDeps {
   isActive: (ptyId?: string) => boolean;
   getCursor: (ptyId: string) => { x: number; absY: number } | null;
-  isCellSelected: (...args: any[]) => boolean;
+  isCellSelected: (ptyId: string, row: number, col: number) => boolean;
   hasSelection: (ptyId: string) => boolean;
 }
 
@@ -96,11 +98,11 @@ export function createTerminalRenderer(params: {
       rowCache: desiredRowCache,
       firstMissingOffset,
       lastMissingOffset,
-    } = fetchRowsForRendering(
-      state,
-      emulator,
-      { viewportOffset: desiredViewportOffset, scrollbackLength: desiredScrollbackLength, rows }
-    );
+    } = fetchRowsForRendering(state, emulator, {
+      viewportOffset: desiredViewportOffset,
+      scrollbackLength: desiredScrollbackLength,
+      rows,
+    });
 
     if (viewState.lastStableScrollbackLength === 0 && desiredScrollbackLength > 0) {
       viewState.lastStableScrollbackLength = desiredScrollbackLength;
@@ -125,10 +127,18 @@ export function createTerminalRenderer(params: {
       desiredScrollbackLength,
       rows
     );
-    const supportsPrefetch = !!emulator &&
-      typeof (emulator as { prefetchScrollbackLines?: unknown }).prefetchScrollbackLines === 'function';
+    const supportsPrefetch =
+      !!emulator &&
+      typeof (emulator as { prefetchScrollbackLines?: unknown }).prefetchScrollbackLines ===
+        'function';
     const shouldPrefetch = guard.isUserScroll || desiredViewportOffset > 0;
-    if (prefetchRequest && supportsPrefetch && !viewState.prefetchInProgress && viewState.executePrefetchFn && shouldPrefetch) {
+    if (
+      prefetchRequest &&
+      supportsPrefetch &&
+      !viewState.prefetchInProgress &&
+      viewState.executePrefetchFn &&
+      shouldPrefetch
+    ) {
       viewState.pendingPrefetch = prefetchRequest;
       queueMicrotask(viewState.executePrefetchFn);
     }
@@ -141,15 +151,18 @@ export function createTerminalRenderer(params: {
 
     if (guard.shouldDefer) {
       renderViewportOffset = Math.min(viewState.lastStableViewportOffset, desiredScrollbackLength);
-      renderScrollbackLength = Math.min(viewState.lastStableScrollbackLength, desiredScrollbackLength);
+      renderScrollbackLength = Math.min(
+        viewState.lastStableScrollbackLength,
+        desiredScrollbackLength
+      );
       if (viewState.lastStableRowCache) {
         rowCache = viewState.lastStableRowCache;
       } else {
-        const renderFetch = fetchRowsForRendering(
-          state,
-          emulator,
-          { viewportOffset: renderViewportOffset, scrollbackLength: renderScrollbackLength, rows }
-        );
+        const renderFetch = fetchRowsForRendering(state, emulator, {
+          viewportOffset: renderViewportOffset,
+          scrollbackLength: renderScrollbackLength,
+          rows,
+        });
         rowCache = renderFetch.rowCache;
       }
     } else {
@@ -168,10 +181,22 @@ export function createTerminalRenderer(params: {
     const currentSearchState = search.getSearchState();
     const hasSearch = currentSearchState?.ptyId === ptyId && currentSearchState.matches.length > 0;
 
-    const copySelectionFg = resolveThemeColor(theme.ui.copyMode.selection.foreground, getCachedRGBA(245, 243, 255));
-    const copySelectionBg = resolveThemeColor(theme.ui.copyMode.selection.background, getCachedRGBA(124, 58, 237));
-    const copyCursorFg = resolveThemeColor(theme.ui.copyMode.cursor.foreground, getCachedRGBA(31, 41, 55));
-    const copyCursorBg = resolveThemeColor(theme.ui.copyMode.cursor.background, getCachedRGBA(196, 181, 253));
+    const copySelectionFg = resolveThemeColor(
+      theme.ui.copyMode.selection.foreground,
+      getCachedRGBA(245, 243, 255)
+    );
+    const copySelectionBg = resolveThemeColor(
+      theme.ui.copyMode.selection.background,
+      getCachedRGBA(124, 58, 237)
+    );
+    const copyCursorFg = resolveThemeColor(
+      theme.ui.copyMode.cursor.foreground,
+      getCachedRGBA(31, 41, 55)
+    );
+    const copyCursorBg = resolveThemeColor(
+      theme.ui.copyMode.cursor.background,
+      getCachedRGBA(196, 181, 253)
+    );
 
     const renderOptions = {
       ptyId,
@@ -203,7 +228,18 @@ export function createTerminalRenderer(params: {
 
     for (let y = 0; y < rows; y++) {
       const row = rowCache[y];
-      renderRow(buffer, row, y, cols, offsetX, offsetY, renderOptions, renderDeps, fallbackFg, fallbackBg);
+      renderRow(
+        buffer,
+        row,
+        y,
+        cols,
+        offsetX,
+        offsetY,
+        renderOptions,
+        renderDeps,
+        fallbackFg,
+        fallbackBg
+      );
     }
 
     if (cols < width || rows < height) {
@@ -216,25 +252,32 @@ export function createTerminalRenderer(params: {
     }
 
     if (!isAtBottom) {
-      renderScrollbar(buffer, rowCache, {
-        viewportOffset: renderViewportOffset,
-        scrollbackLength: renderScrollbackLength,
-        rows,
-        cols,
-        width,
-        offsetX,
-        offsetY,
-        ptyId,
-        hasSelection,
-        hasCopySelection,
-        isCellSelected: selection.isCellSelected,
-        isCopySelected: copyMode.isCellSelected,
-        selectionBg: SELECTION_BG,
-        copySelectionBg,
-      }, fallbackFg);
+      renderScrollbar(
+        buffer,
+        rowCache,
+        {
+          viewportOffset: renderViewportOffset,
+          scrollbackLength: renderScrollbackLength,
+          rows,
+          cols,
+          width,
+          offsetX,
+          offsetY,
+          ptyId,
+          hasSelection,
+          hasCopySelection,
+          isCellSelected: selection.isCellSelected,
+          isCopySelected: copyMode.isCellSelected,
+          selectionBg: SELECTION_BG,
+          copySelectionBg,
+        },
+        fallbackFg
+      );
       const scrollLabelColor = resolveThemeColor(
         isFocused
-          ? (copyModeActive ? theme.pane.copyModeBorderColor : theme.pane.focusedBorderColor)
+          ? copyModeActive
+            ? theme.pane.copyModeBorderColor
+            : theme.pane.focusedBorderColor
           : theme.ui.mutedText,
         getCachedRGBA(160, 160, 160)
       );

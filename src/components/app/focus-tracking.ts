@@ -6,6 +6,11 @@ import { setHostFocusState } from '../../terminal/host-focus';
 const FOCUS_IN_SEQUENCE = '\x1b[I';
 const FOCUS_OUT_SEQUENCE = '\x1b[O';
 
+interface RendererWithInputHandler {
+  prependInputHandler?: (handler: (data: string) => boolean) => void;
+  removeInputHandler?: (handler: (data: string) => boolean) => void;
+}
+
 export function setupFocusedPtyRegistry(getFocusedPtyId: () => string | null | undefined): void {
   createEffect(() => {
     setFocusedPty(getFocusedPtyId() ?? null);
@@ -13,7 +18,7 @@ export function setupFocusedPtyRegistry(getFocusedPtyId: () => string | null | u
 }
 
 export function setupHostFocusTracking(params: {
-  renderer: unknown;
+  renderer: RendererWithInputHandler;
   isPtyActive: (ptyId: string) => boolean;
   getFocusedPtyId: () => string | null | undefined;
 }): void {
@@ -58,14 +63,14 @@ export function setupHostFocusTracking(params: {
       return false;
     };
 
-    const rendererAny = renderer as any;
-    if (typeof rendererAny.prependInputHandler === 'function') {
-      rendererAny.prependInputHandler(handleFocusSequence);
+    const rendererWithHandler = renderer;
+    if (typeof rendererWithHandler.prependInputHandler === 'function') {
+      rendererWithHandler.prependInputHandler(handleFocusSequence);
     }
 
     onCleanup(() => {
-      if (typeof rendererAny.removeInputHandler === 'function') {
-        rendererAny.removeInputHandler(handleFocusSequence);
+      if (typeof rendererWithHandler.removeInputHandler === 'function') {
+        rendererWithHandler.removeInputHandler(handleFocusSequence);
       }
     });
   });
@@ -79,7 +84,7 @@ export function setupHostFocusTracking(params: {
       return;
     }
 
-    const effectiveFocusedPtyId = hostFocused ? focusedPtyId ?? undefined : undefined;
+    const effectiveFocusedPtyId = hostFocused ? (focusedPtyId ?? undefined) : undefined;
 
     if (effectiveFocusedPtyId === lastEffectiveFocusedPtyId) {
       return;
