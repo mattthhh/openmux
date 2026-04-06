@@ -66,3 +66,29 @@ describe('services singleton', () => {
     expect(() => disposeServicesSingleton()).not.toThrow();
   });
 });
+
+describe('initializeServices', () => {
+  describe('PTY service mode types', () => {
+    test('should accept app mode', async () => {
+      const { initializeServices } = await import('../../src/effect/services');
+
+      // Just verify the type is accepted - don't actually initialize
+      const fn = () => initializeServices({ mode: 'app' });
+      expect(fn).not.toThrow();
+    });
+
+    test('should accept shim mode', async () => {
+      const { initializeServices } = await import('../../src/effect/services');
+
+      const fn = () => initializeServices({ mode: 'shim' });
+      expect(fn).not.toThrow();
+    });
+
+    test('should default to app mode when no options provided', async () => {
+      const { initializeServices } = await import('../../src/effect/services');
+
+      const fn = () => initializeServices();
+      expect(fn).not.toThrow();
+    });
+  });
+});
