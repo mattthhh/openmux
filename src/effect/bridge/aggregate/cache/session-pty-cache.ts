@@ -15,7 +15,6 @@ export const DEFAULT_CACHE_MAX_AGE_MS = 30000;
 /** Simple in-memory cache for session→PTY mappings */
 export class SessionPtyCache {
   private cache = new Map<SessionId, SessionPtyCacheEntry>();
-  private ptyToSession = new Map<PtyId, SessionId>();
   private maxAgeMs: number;
 
   constructor(maxAgeMs = DEFAULT_CACHE_MAX_AGE_MS) {
@@ -38,48 +37,37 @@ export class SessionPtyCache {
 
   /** Set cache entry for a session */
   set(sessionId: SessionId, ptyIds: PtyId[], isLoaded: boolean): void {
-    // Remove old mappings
-    const oldEntry = this.cache.get(sessionId);
-    if (oldEntry) {
-      for (const ptyId of oldEntry.ptyIds) {
-        this.ptyToSession.delete(ptyId);
-      }
-    }
-
-    // Add new mappings
-    const newEntry: SessionPtyCacheEntry = {
+    this.cache.set(sessionId, {
       sessionId,
       ptyIds: new Set(ptyIds),
       lastUpdated: Date.now(),
       isLoaded,
-    };
-
-    this.cache.set(sessionId, newEntry);
-    for (const ptyId of ptyIds) {
-      this.ptyToSession.set(ptyId, sessionId);
-    }
+    });
   }
 
-  /** Get session ID for a PTY */
+  /**
+   * Get session ID for a PTY.
+   *
+   * This is only used on small aggregate view datasets, so a linear scan keeps
+   * the cache shape simple and avoids maintaining a second reverse map.
+   */
   getSessionForPty(ptyId: PtyId): SessionId | undefined {
-    return this.ptyToSession.get(ptyId);
+    for (const [sessionId, entry] of this.cache) {
+      if (entry.ptyIds.has(ptyId)) {
+        return sessionId;
+      }
+    }
+    return undefined;
   }
 
   /** Delete cache entry */
   delete(sessionId: SessionId): void {
-    const entry = this.cache.get(sessionId);
-    if (entry) {
-      for (const ptyId of entry.ptyIds) {
-        this.ptyToSession.delete(ptyId);
-      }
-      this.cache.delete(sessionId);
-    }
+    this.cache.delete(sessionId);
   }
 
   /** Clear all cached entries */
   clear(): void {
     this.cache.clear();
-    this.ptyToSession.clear();
   }
 
   /** Get all cached session IDs */

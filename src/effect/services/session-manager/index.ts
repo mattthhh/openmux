@@ -3,7 +3,7 @@
  * Migrated from Effect to errore
  */
 
-export type { SessionError, WorkspaceState } from "./types"
+export type { SessionError, WorkspaceState } from './types';
 
 export {
   getAutoName,
@@ -11,7 +11,7 @@ export {
   collectCwdMap,
   serializeWorkspace,
   serializeSession,
-} from "./serialization"
+} from './serialization';
 
 export {
   createSession,
@@ -20,25 +20,24 @@ export {
   deleteSession,
   listSessions,
   type LifecycleDeps,
-} from "./lifecycle"
+} from './lifecycle';
 
 export {
   renameSession,
   getSessionMetadata,
+  getSessionInfo,
   updateAutoName,
   getSessionSummary,
   type MetadataDeps,
-} from "./metadata"
+  type SessionInfo,
+  type SessionSummary,
+} from './metadata';
 
 export {
   getActiveSessionId,
   setActiveSessionId,
   switchToSession,
   type ActiveSessionDeps,
-} from "./active-session"
+} from './active-session';
 
-export {
-  serializeWorkspaces,
-  quickSave,
-  type QuickSaveDeps,
-} from "./quick-save"
+export { serializeWorkspaces, quickSave, type QuickSaveDeps } from './quick-save';

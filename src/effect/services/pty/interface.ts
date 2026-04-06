@@ -1,6 +1,11 @@
 /**
- * PTY Service interface - defines all PTY operations
- * Extracted from Pty.ts for modularity
+ * PTY Service interface - defines the public PTY operations surface.
+ *
+ * The service intentionally exposes a small, cohesive API:
+ * - unified terminal subscriptions instead of parallel state/scroll channels
+ * - a single emulator accessor with sync/async modes
+ * - consolidated git metadata access through getGitInfo()
+ * - a single title subscription API for per-PTY and global listeners
  */
 import type { TerminalState, UnifiedTerminalUpdate } from '../../../core/types';
 import type { ITerminalEmulator } from '../../../terminal/emulator-interface';
@@ -8,7 +13,16 @@ import type { TerminalColors } from '../../../terminal/terminal-colors';
 import type { PtyNotFoundError, PtySpawnError, PtyCwdError } from '../../errors';
 import type { PtyId, Cols, Rows } from '../../types';
 import type { PtySession } from '../../models';
-import type { GitDiffStats, GitInfo } from './helpers';
+import type { GitInfo } from './helpers';
+
+export interface PtyTitleChangeEvent {
+  ptyId: PtyId;
+  title: string;
+}
+
+export interface GetPtyGitInfoOptions {
+  includeDiffStats?: boolean;
+}
 
 export interface PtyService {
   /** Create a new PTY session */
@@ -42,27 +56,14 @@ export interface PtyService {
   /** Destroy a PTY session */
   destroy(id: PtyId): Promise<void>;
 
-  /** Get session info */
+  /** Get session info plus lightweight runtime metadata snapshots */
   getSession(id: PtyId): Promise<PtyNotFoundError | PtySession>;
 
   /** Get terminal state */
   getTerminalState(id: PtyId): Promise<PtyNotFoundError | TerminalState>;
 
-  /** Subscribe to terminal state updates */
+  /** Subscribe to unified terminal + scroll updates */
   subscribe(
-    id: PtyId,
-    callback: (state: TerminalState) => void
-  ): Promise<PtyNotFoundError | (() => void)>;
-
-  /** Subscribe to scroll state changes (lightweight - no state rebuild) */
-  subscribeToScroll(id: PtyId, callback: () => void): Promise<PtyNotFoundError | (() => void)>;
-
-  /**
-   * Subscribe to unified updates (terminal + scroll combined).
-   * More efficient than separate subscriptions - eliminates race conditions
-   * and reduces render cycles.
-   */
-  subscribeUnified(
     id: PtyId,
     callback: (update: UnifiedTerminalUpdate) => void
   ): Promise<PtyNotFoundError | (() => void)>;
@@ -87,11 +88,14 @@ export interface PtyService {
   /** Enable or disable terminal update notifications (visibility gating) */
   setUpdateEnabled(id: PtyId, enabled: boolean): Promise<PtyNotFoundError | void>;
 
-  /** Get emulator for direct access (e.g., scrollback lines) */
-  getEmulator(id: PtyId): Promise<PtyNotFoundError | ITerminalEmulator>;
-
-  /** Get emulator synchronously (may return null if session not found) */
-  getEmulatorSync(id: PtyId): ITerminalEmulator | null;
+  /**
+   * Get emulator access for advanced operations.
+   *
+   * - async mode returns PtyNotFoundError when the PTY is unknown
+   * - sync mode returns null when the emulator is not available locally
+   */
+  getEmulator(id: PtyId, options: { sync: true }): ITerminalEmulator | null;
+  getEmulator(id: PtyId, options?: { sync?: false }): Promise<PtyNotFoundError | ITerminalEmulator>;
 
   /** Apply host terminal colors to all active emulators */
   setHostColors(colors: TerminalColors): Promise<void>;
@@ -105,36 +109,23 @@ export interface PtyService {
   /** Get foreground process name for a PTY */
   getForegroundProcess(id: PtyId): Promise<PtyNotFoundError | string | undefined>;
 
-  /** Get git branch for a PTY's current directory */
-  getGitBranch(id: PtyId): Promise<PtyNotFoundError | string | undefined>;
-
-  /** Get git branch + dirty state for a PTY's current directory */
-  getGitInfo(id: PtyId): Promise<PtyNotFoundError | GitInfo | undefined>;
-
-  /** Get git diff stats for a PTY's current directory */
-  getGitDiffStats(id: PtyId): Promise<PtyNotFoundError | GitDiffStats | undefined>;
+  /** Get git metadata for a PTY's current directory */
+  getGitInfo(
+    id: PtyId,
+    options?: GetPtyGitInfoOptions
+  ): Promise<PtyNotFoundError | GitInfo | undefined>;
 
   /** Subscribe to PTY lifecycle events (created/destroyed) */
   subscribeToLifecycle(
     callback: (event: { type: 'created' | 'destroyed'; ptyId: PtyId }) => void
   ): () => void;
 
-  /** Get current terminal title for a PTY */
-  getTitle(id: PtyId): Promise<PtyNotFoundError | string>;
-
-  /** Get last shell command captured for a PTY */
-  getLastCommand(id: PtyId): Promise<PtyNotFoundError | string | undefined>;
-
-  /** Subscribe to terminal title changes for a PTY */
-  subscribeToTitleChange(
+  /** Subscribe to title changes for one PTY or across all PTYs */
+  subscribeToTitle(
     id: PtyId,
     callback: (title: string) => void
   ): Promise<PtyNotFoundError | (() => void)>;
-
-  /** Subscribe to title changes across ALL PTYs (for aggregate view) */
-  subscribeToAllTitleChanges(
-    callback: (event: { ptyId: PtyId; title: string }) => void
-  ): () => void;
+  subscribeToTitle(callback: (event: PtyTitleChangeEvent) => void): () => void;
 
   /** Subscribe to stdout activity events across ALL PTYs */
   subscribeToAllActivity(callback: (event: { ptyId: PtyId }) => void): () => void;

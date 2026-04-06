@@ -102,9 +102,18 @@ export async function getPtyForegroundProcess(ptyId: string): Promise<string | u
 /** Get the last shell command for a PTY */
 export async function getPtyLastCommand(ptyId: string): Promise<string | undefined> {
   const pty = getPtyService();
-  const result = await pty.getLastCommand(asPtyId(ptyId));
+  const result = await pty.getSession(asPtyId(ptyId));
   if (result instanceof Error) return undefined;
-  return result;
+  if (result.lastCommand !== undefined) return result.lastCommand;
+
+  if (!isShimClient()) {
+    return undefined;
+  }
+
+  return ShimClient.getLastCommand(ptyId).catch((e) => {
+    console.warn('Failed to get PTY last command from shim:', e);
+    return undefined;
+  });
 }
 
 /** Destroy a PTY */
@@ -242,7 +251,7 @@ export async function subscribeUnifiedToPty(
   callback: (update: UnifiedTerminalUpdate) => void
 ): Promise<() => void> {
   const pty = getPtyService();
-  const result = await pty.subscribeUnified(asPtyId(ptyId), callback);
+  const result = await pty.subscribe(asPtyId(ptyId), callback);
   if (result instanceof Error) {
     console.warn('Failed to subscribe to unified PTY updates:', result.message);
     return () => {};
@@ -261,9 +270,7 @@ export async function getEmulator(ptyId: string): Promise<ITerminalEmulator | nu
 /** Get emulator synchronously (may return null if not cached/available) */
 export function getEmulatorSync(ptyId: string): ITerminalEmulator | null {
   const pty = getPtyService();
-  const result = pty.getEmulatorSync(asPtyId(ptyId));
-  if (result instanceof Error) return null;
-  return result;
+  return pty.getEmulator(asPtyId(ptyId), { sync: true });
 }
 
 /** Set update enabled for a PTY */
@@ -335,7 +342,7 @@ export function subscribeToAllTitleChanges(
 ): Promise<() => void> {
   const pty = getPtyService();
   return Promise.resolve(
-    pty.subscribeToAllTitleChanges((event: { ptyId: string; title: string }) => {
+    pty.subscribeToTitle((event: { ptyId: string; title: string }) => {
       callback({ ptyId: event.ptyId, title: event.title });
     })
   );
@@ -356,10 +363,27 @@ export function subscribeToAllPtyActivity(
 /** Get PTY title */
 export async function getPtyTitle(ptyId: string): Promise<string> {
   const pty = getPtyService();
-  const result = await pty.getTitle(asPtyId(ptyId));
+  const result = await pty.getSession(asPtyId(ptyId));
   if (result instanceof Error) {
     console.warn('Failed to get PTY title:', result.message);
     return '';
   }
-  return result;
+
+  if (result.title) {
+    return result.title;
+  }
+
+  if (isShimClient()) {
+    return ShimClient.getTitle(ptyId).catch((e) => {
+      console.warn('Failed to get PTY title from shim:', e);
+      return '';
+    });
+  }
+
+  const emulator = await pty.getEmulator(asPtyId(ptyId));
+  if (emulator instanceof Error) {
+    console.warn('Failed to get PTY emulator for title lookup:', emulator.message);
+    return '';
+  }
+  return emulator.getTitle();
 }

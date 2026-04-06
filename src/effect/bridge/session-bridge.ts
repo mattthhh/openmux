@@ -92,10 +92,9 @@ export async function switchToSession(id: string): Promise<void | SessionError> 
 
 /** Get session metadata by ID */
 export async function getSessionMetadata(id: string): Promise<SessionMetadata | null> {
-  const manager = getSessionManager();
-  const result = await manager.getSessionMetadata(id as SessionId);
+  const result = await getSessionInfoResult(id);
   if (result instanceof Error) return null;
-  return result;
+  return result?.metadata ?? null;
 }
 
 /** Update auto-name for a session */
@@ -103,6 +102,19 @@ export async function updateAutoName(id: string, cwd: string): Promise<void | Se
   const manager = getSessionManager();
   const result = await manager.updateAutoName(id as SessionId, cwd);
   if (result instanceof Error) return result;
+}
+
+/** Get session info (metadata + summary) without collapsing errors. */
+export async function getSessionInfoResult(id: string): Promise<
+  | {
+      metadata: SessionMetadata;
+      summary: { workspaceCount: number; paneCount: number };
+    }
+  | null
+  | SessionError
+> {
+  const manager = getSessionManager();
+  return manager.getSessionInfo(id as SessionId);
 }
 
 /** Get session summary (workspace/pane counts) */
@@ -118,8 +130,9 @@ export async function getSessionSummary(
 export async function getSessionSummaryResult(
   id: string
 ): Promise<{ workspaceCount: number; paneCount: number } | null | SessionError> {
-  const manager = getSessionManager();
-  return manager.getSessionSummary(id as SessionId);
+  const result = await getSessionInfoResult(id);
+  if (result instanceof Error || result === null) return result;
+  return result.summary;
 }
 
 /** Get persisted aggregate session ordering */
@@ -132,7 +145,7 @@ export async function getAggregateSessionOrder(): Promise<string[]> {
 /** Get persisted aggregate session ordering without collapsing errors to an empty array */
 export async function getAggregateSessionOrderResult(): Promise<string[] | SessionStorageError> {
   const manager = getSessionManager();
-  return manager.getAggregateSessionOrder();
+  return manager.aggregateOrder.get();
 }
 
 /** Persist aggregate session ordering */
@@ -140,7 +153,7 @@ export async function setAggregateSessionOrder(
   order: string[]
 ): Promise<void | SessionStorageError> {
   const manager = getSessionManager();
-  const result = await manager.setAggregateSessionOrder(order);
+  const result = await manager.aggregateOrder.set(order);
   if (result instanceof Error) return result;
 }
 
@@ -350,7 +363,12 @@ export async function saveCurrentSession(
     });
   }
 
-  const result = await manager.quickSave(effectMetadata, workspaceState, activeWorkspaceId, getCwd);
+  const result = await manager.snapshot.save({
+    metadata: effectMetadata,
+    workspaces: workspaceState,
+    activeWorkspaceId,
+    getCwd,
+  });
   if (result instanceof Error) return result;
 }
 

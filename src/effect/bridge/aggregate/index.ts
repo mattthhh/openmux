@@ -1,11 +1,10 @@
 /**
- * Aggregate Bridge
- * Modular architecture for PTY listing with metadata for aggregate view
+ * Aggregate bridge public API.
  *
- * @module aggregate
+ * Explicit service construction lives in `aggregateService.ts`. Lower-level modules
+ * remain available for focused imports and tests.
  */
 
-// Types
 export type {
   PtyMetadata,
   FetchPtyMetadataOptions,
@@ -15,9 +14,9 @@ export type {
   ListAllPtysOptions,
   LoadSessionPtysResult,
   SessionPtyCacheEntry,
+  SessionPtyMapping,
 } from './types';
 
-// Cache
 export {
   SessionPtyCache,
   sessionPtyCache,
@@ -29,21 +28,18 @@ export {
   asPtyId,
 } from './cache/session-pty-cache';
 
-// Metadata fetching
 export { fetchPtyMetadata, batchFetchPtyMetadata, fetchPtyMetadataSafe } from './metadata/fetch';
 
-// Session listing
-export { listSessionsWithPtys, listSessionsWithPtysWithService } from './sessions/list';
+export { listSessionsWithPtysWithService } from './sessions/list';
 
-// Lazy loading
 export {
   loadSessionPtys,
   loadSessionPtysWithService,
   loadSessionPtysOnDemand,
+  loadSessionPtysOnDemandWithService,
   getAggregateSessionPtyMapping,
 } from './sessions/lazy-load';
 
-// Tree building
 export {
   buildSessionTreeNodes,
   countTreeNodes,
@@ -52,12 +48,14 @@ export {
   findSessionNode,
 } from './tree/build';
 
-// Backward-compatible API
+export type { AggregateService, AggregateServiceDeps } from './aggregateService';
 export {
+  createAggregateService,
   getPtyMetadata,
   getPtyMetadataWithService,
   listAllPtyIds,
   listAllPtyIdsWithService,
   listAllPtysWithMetadata,
   listAllPtysWithMetadataWithService,
-} from './api/backward-compat';
+  listSessionsWithPtys,
+} from './aggregateService';

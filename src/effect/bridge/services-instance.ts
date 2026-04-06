@@ -1,30 +1,21 @@
 /**
- * Services singleton for bridge functions
+ * Global bridge service registry.
  *
- * This provides global access to service instances initialized by the application.
- * Bridge functions use this singleton internally to maintain backward compatibility
- * with the old API (where services were not passed as arguments).
+ * The long-term direction is explicit dependency passing from composition roots.
+ * This module remains as the compatibility boundary for parts of the UI that
+ * still resolve services globally.
  */
+
 import type { AppServices } from '../services';
 import { disposeServices } from '../services';
-
 import { ServicesNotInitializedError } from '../errors';
 
-// ... existing imports ...
 let globalServices: AppServices | null = null;
 
-/**
- * Set the global services instance.
- * Call this once after initializing services.
- */
 export function setServices(services: AppServices): void {
   globalServices = services;
 }
 
-/**
- * Get the global services instance.
- * Returns error if services haven't been initialized.
- */
 export function getServices(): AppServices | ServicesNotInitializedError {
   if (!globalServices) {
     return new ServicesNotInitializedError({ operation: 'getServices' });
@@ -32,126 +23,63 @@ export function getServices(): AppServices | ServicesNotInitializedError {
   return globalServices;
 }
 
-/**
- * Check if services have been initialized.
- */
 export function hasServices(): boolean {
   return globalServices !== null;
 }
 
-/**
- * Get the PTY service instance.
- * Throws if services haven't been initialized - this is a programming error.
- */
+function requireServices(): AppServices {
+  const services = getServices();
+  if (services instanceof ServicesNotInitializedError) {
+    throw services;
+  }
+  return services;
+}
+
+function getService<K extends keyof AppServices>(key: K): AppServices[K] {
+  return requireServices()[key];
+}
+
 export function getPtyService(): AppServices['pty'] {
-  const services = getServices();
-  if (services instanceof ServicesNotInitializedError) {
-    throw services;
-  }
-  return services.pty;
+  return getService('pty');
 }
 
-/**
- * Get the SessionManager service instance.
- * Throws if services haven't been initialized - this is a programming error.
- */
 export function getSessionManager(): AppServices['sessionManager'] {
-  const services = getServices();
-  if (services instanceof ServicesNotInitializedError) {
-    throw services;
-  }
-  return services.sessionManager;
+  return getService('sessionManager');
 }
 
-/**
- * Get the SessionStorage service instance.
- * Throws if services haven't been initialized - this is a programming error.
- */
 export function getSessionStorage(): AppServices['sessionStorage'] {
-  const services = getServices();
-  if (services instanceof ServicesNotInitializedError) {
-    throw services;
-  }
-  return services.sessionStorage;
+  return getService('sessionStorage');
 }
 
-/**
- * Get the TemplateStorage service instance.
- * Throws if services haven't been initialized - this is a programming error.
- */
 export function getTemplateStorage(): AppServices['templateStorage'] {
-  const services = getServices();
-  if (services instanceof ServicesNotInitializedError) {
-    throw services;
-  }
-  return services.templateStorage;
+  return getService('templateStorage');
 }
 
-/**
- * Get the Clipboard service instance.
- * Throws if services haven't been initialized - this is a programming error.
- */
 export function getClipboardService(): AppServices['clipboard'] {
-  const services = getServices();
-  if (services instanceof ServicesNotInitializedError) {
-    throw services;
-  }
-  return services.clipboard;
+  return getService('clipboard');
 }
 
-/**
- * Get the FileSystem service instance.
- * Throws if services haven't been initialized - this is a programming error.
- */
 export function getFileSystem(): AppServices['fs'] {
-  const services = getServices();
-  if (services instanceof ServicesNotInitializedError) {
-    throw services;
-  }
-  return services.fs;
+  return getService('fs');
 }
 
-/**
- * Get the KeyboardRouter service instance.
- * Throws if services haven't been initialized - this is a programming error.
- */
 export function getKeyboardRouter(): AppServices['keyboardRouter'] {
-  const services = getServices();
-  if (services instanceof ServicesNotInitializedError) {
-    throw services;
-  }
-  return services.keyboardRouter;
+  return getService('keyboardRouter');
 }
 
-/**
- * Get the AppConfig.
- * Throws if services haven't been initialized - this is a programming error.
- */
 export function getConfig(): AppServices['config'] {
-  const services = getServices();
-  if (services instanceof ServicesNotInitializedError) {
-    throw services;
-  }
-  return services.config;
+  return getService('config');
 }
 
-/**
- * Dispose all services and clean up resources.
- * Call this on application shutdown.
- */
 export function disposeServicesSingleton(): void {
-  if (globalServices) {
-    disposeServices(globalServices);
-    globalServices = null;
+  if (!globalServices) {
+    return;
   }
+
+  disposeServices(globalServices);
+  globalServices = null;
 }
 
-/**
- * Dispose the application runtime (backward compatibility alias).
- *
- * Cleans up all services and resources. Call this on application shutdown
- * to prevent memory leaks from timers, caches, and file watchers.
- */
 export function disposeRuntime(): Promise<void> {
   disposeServicesSingleton();
   return Promise.resolve();

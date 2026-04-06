@@ -62,6 +62,7 @@ export {
   setActiveSessionId,
   switchToSession,
   getSessionMetadata,
+  getSessionInfoResult,
   updateAutoName,
   getSessionSummary,
   getAggregateSessionOrder,
@@ -86,15 +87,14 @@ export {
 
 // Aggregate bridge
 export {
-  listAllPtyIds,
-  listAllPtysWithMetadata,
-  getPtyMetadata,
-  listSessionsWithPtys,
-  loadSessionPtysOnDemand,
+  createAggregateService,
+  type AggregateService,
+  type AggregateServiceDeps,
   type ListAllPtysOptions,
   type PtyMetadata,
   type SessionWithPtys,
   type VisualTreeNode,
+  type LoadSessionPtysResult,
 } from './aggregate-bridge';
 
 // Color bridge

@@ -218,22 +218,14 @@ export async function loadSessionPtysWithService(
  * Load PTYs for a specific session on demand (lazy loading).
  * This does NOT block the current session - it's an async fetch.
  *
- * @param sessionId - The session ID to load PTYs for
- * @returns Load result with PTYs or error
+ * Explicit-service version used by the aggregate bridge service.
  */
-export async function loadSessionPtysOnDemand(
+export async function loadSessionPtysOnDemandWithService(
+  ptyService: PtyService,
+  sessionManager: SessionManager,
   sessionId: string,
   options?: { createIfMissing?: boolean }
-): Promise<
-  LoadSessionPtysResult | SessionError | AggregateBridgeError | ServicesNotInitializedError
-> {
-  if (!hasServices()) {
-    return new ServicesNotInitializedError({ operation: 'aggregate session PTY load' });
-  }
-
-  const ptyService = getPtyService();
-  const sessionManager = getSessionManager();
-
+): Promise<LoadSessionPtysResult | SessionError | AggregateBridgeError> {
   const sessionResult = await sessionManager.loadSession(sessionId as SessionId);
   if (sessionResult instanceof Error) {
     return sessionResult;
@@ -290,4 +282,28 @@ export async function loadSessionPtysOnDemand(
     ptys,
     lastActiveWorkspaceId: sessionResult.activeWorkspaceId,
   };
+}
+
+/**
+ * Load PTYs for a specific session on demand (lazy loading).
+ * This does NOT block the current session - it's an async fetch.
+ *
+ * Backward-compatible wrapper that resolves services from the bridge singleton.
+ */
+export async function loadSessionPtysOnDemand(
+  sessionId: string,
+  options?: { createIfMissing?: boolean }
+): Promise<
+  LoadSessionPtysResult | SessionError | AggregateBridgeError | ServicesNotInitializedError
+> {
+  if (!hasServices()) {
+    return new ServicesNotInitializedError({ operation: 'aggregate session PTY load' });
+  }
+
+  return loadSessionPtysOnDemandWithService(
+    getPtyService(),
+    getSessionManager(),
+    sessionId,
+    options
+  );
 }
