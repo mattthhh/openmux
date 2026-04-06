@@ -14,7 +14,6 @@ describe('shim handlers/replay (litmus)', () => {
     state = createShimServerState();
     state.activeClient = { id: 1 } as unknown as net.Socket;
     state.activeClientId = 'client-1';
-    state.attachEpoch = 5;
   });
 
   describe('allowBootstrapReplay', () => {
@@ -33,7 +32,6 @@ describe('shim handlers/replay (litmus)', () => {
           attach: {
             socket: state.activeClient!,
             clientId: 'client-1',
-            attachEpoch: 5,
           },
         })
       ).toBe(true);
@@ -47,7 +45,6 @@ describe('shim handlers/replay (litmus)', () => {
           attach: {
             socket: otherSocket,
             clientId: 'client-1',
-            attachEpoch: 5,
           },
         })
       ).toBe(false);
@@ -60,20 +57,21 @@ describe('shim handlers/replay (litmus)', () => {
           attach: {
             socket: state.activeClient!,
             clientId: 'client-2',
-            attachEpoch: 5,
           },
         })
       ).toBe(false);
     });
 
-    it('should return false for different epoch', () => {
+    it('should return false when active client is cleared', () => {
+      state.activeClient = null;
+      state.activeClientId = null;
+
       expect(
         allowBootstrapReplay(state, {
           bootstrap: true,
           attach: {
-            socket: state.activeClient!,
+            socket: { id: 3 } as unknown as net.Socket,
             clientId: 'client-1',
-            attachEpoch: 6,
           },
         })
       ).toBe(false);

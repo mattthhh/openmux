@@ -65,13 +65,12 @@ describe('shim handlers/events (litmus)', () => {
   });
 
   describe('isCurrentAttach', () => {
-    it('should return true for matching socket, clientId, and epoch', () => {
+    it('should return true for matching socket and clientId', () => {
       const mockSocket = { id: 1 } as unknown as net.Socket;
       state.activeClient = mockSocket;
       state.activeClientId = 'client-1';
-      state.attachEpoch = 5;
 
-      expect(isCurrentAttach(state, mockSocket, 'client-1', 5)).toBe(true);
+      expect(isCurrentAttach(state, mockSocket, 'client-1')).toBe(true);
     });
 
     it('should return false for different socket', () => {
@@ -79,27 +78,24 @@ describe('shim handlers/events (litmus)', () => {
       const mockSocket2 = { id: 2 } as unknown as net.Socket;
       state.activeClient = mockSocket1;
       state.activeClientId = 'client-1';
-      state.attachEpoch = 5;
 
-      expect(isCurrentAttach(state, mockSocket2, 'client-1', 5)).toBe(false);
+      expect(isCurrentAttach(state, mockSocket2, 'client-1')).toBe(false);
     });
 
     it('should return false for different clientId', () => {
       const mockSocket = { id: 1 } as unknown as net.Socket;
       state.activeClient = mockSocket;
       state.activeClientId = 'client-1';
-      state.attachEpoch = 5;
 
-      expect(isCurrentAttach(state, mockSocket, 'client-2', 5)).toBe(false);
+      expect(isCurrentAttach(state, mockSocket, 'client-2')).toBe(false);
     });
 
-    it('should return false for different epoch', () => {
+    it('should return false when there is no active client match', () => {
       const mockSocket = { id: 1 } as unknown as net.Socket;
-      state.activeClient = mockSocket;
-      state.activeClientId = 'client-1';
-      state.attachEpoch = 5;
+      state.activeClient = null;
+      state.activeClientId = null;
 
-      expect(isCurrentAttach(state, mockSocket, 'client-1', 6)).toBe(false);
+      expect(isCurrentAttach(state, mockSocket, 'client-1')).toBe(false);
     });
   });
 
