@@ -83,7 +83,10 @@ export function AggregateView(props: AggregateViewProps) {
 
   // Hooks
   const vim = useVimMode({ isAggregateVisible: () => aggregate.state.showAggregateView });
-  const emulatorCache = useEmulatorCache({ isActive: () => aggregate.state.showAggregateView });
+  const emulatorCache = useEmulatorCache({
+    isActive: () => aggregate.state.showAggregateView,
+    getSelectedPtyId: () => aggregate.state.selectedPtyId,
+  });
   const sessionDrag = useSessionDrag();
 
   // Local UI state

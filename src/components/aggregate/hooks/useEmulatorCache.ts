@@ -5,9 +5,9 @@
  * fast preview switching without re-fetching emulators.
  */
 
-import { createEffect, onCleanup, type Accessor } from 'solid-js';
+import { createRenderEffect, onCleanup, type Accessor } from 'solid-js';
 import type { ITerminalEmulator } from '../../../terminal/emulator-interface';
-import { getEmulator } from '../../../effect/bridge';
+import { getEmulator } from '../../../effect/bridge/pty-bridge';
 
 /** Error types for emulator cache operations */
 export class EmulatorCacheError extends Error {
@@ -55,6 +55,8 @@ export interface UseEmulatorCacheResult {
  */
 export function useEmulatorCache(options: {
   isActive: Accessor<boolean>;
+  getSelectedPtyId?: Accessor<string | null>;
+  loadEmulator?: (ptyId: string) => Promise<ITerminalEmulator | null>;
 }): UseEmulatorCacheResult {
   // Cache of emulators by PTY ID
   const cache = new Map<string, ITerminalEmulator>();
@@ -81,7 +83,9 @@ export function useEmulatorCache(options: {
     const currentEpoch = epoch;
     pending.add(ptyId);
 
-    void getEmulator(ptyId)
+    const loadEmulator = options.loadEmulator ?? getEmulator;
+
+    void loadEmulator(ptyId)
       .then((emulator) => {
         if (!emulator || currentEpoch !== epoch) return;
         cache.set(ptyId, emulator);
@@ -131,11 +135,16 @@ export function useEmulatorCache(options: {
     clear();
   };
 
-  // Clear cache when component unmounts or becomes inactive
-  createEffect(() => {
+  createRenderEffect(() => {
     if (!options.isActive()) {
       clear();
+      return;
     }
+
+    const selectedPtyId = options.getSelectedPtyId?.();
+    if (!selectedPtyId) return;
+
+    preload(selectedPtyId);
   });
 
   onCleanup(() => {

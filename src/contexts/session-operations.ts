@@ -65,6 +65,12 @@ export function createSessionOperations(params: SessionOperationsParams) {
     refreshSessions,
   } = params;
 
+  const refreshSessionsInBackground = () => {
+    void refreshSessions().catch((error) => {
+      console.warn('[SessionOperations] Failed to refresh sessions:', error);
+    });
+  };
+
   const createSession = async (name?: string): Promise<SessionMetadata | SessionStorageError> => {
     const state = getState();
 
@@ -73,12 +79,7 @@ export function createSessionOperations(params: SessionOperationsParams) {
       const workspaces = getWorkspaces();
       const activeWorkspaceId = getActiveWorkspaceId();
       if (shouldPersistSession(workspaces)) {
-        await saveCurrentSession(
-          state.activeSession,
-          workspaces,
-          activeWorkspaceId,
-          getCwd
-        );
+        await saveCurrentSession(state.activeSession, workspaces, activeWorkspaceId, getCwd);
       }
 
       // Suspend PTYs for current session before switching
@@ -109,7 +110,11 @@ export function createSessionOperations(params: SessionOperationsParams) {
 
   const switchSessionInternal = async (
     id: SessionId,
-    options: { skipSave?: boolean; skipBeforeSwitch?: boolean; preloadedData?: Awaited<ReturnType<typeof loadSessionData>> } = {}
+    options: {
+      skipSave?: boolean;
+      skipBeforeSwitch?: boolean;
+      preloadedData?: Awaited<ReturnType<typeof loadSessionData>>;
+    } = {}
   ): Promise<void> => {
     const state = getState();
     if (id === state.activeSessionId) return;
@@ -119,12 +124,7 @@ export function createSessionOperations(params: SessionOperationsParams) {
       const workspaces = getWorkspaces();
       const activeWorkspaceId = getActiveWorkspaceId();
       if (!options.skipSave && shouldPersistSession(workspaces)) {
-        await saveCurrentSession(
-          state.activeSession,
-          workspaces,
-          activeWorkspaceId,
-          getCwd
-        );
+        await saveCurrentSession(state.activeSession, workspaces, activeWorkspaceId, getCwd);
       }
 
       // Suspend PTYs for current session (save mapping, don't destroy)
@@ -145,14 +145,20 @@ export function createSessionOperations(params: SessionOperationsParams) {
     void _switchGuard;
 
     // Use preloaded data if available, otherwise load new session
-    const data = options.preloadedData ?? await (async () => {
-      const switchResult = await switchToSession(id);
-      if (switchResult instanceof SessionNotFoundError || switchResult instanceof SessionCorruptedError || switchResult instanceof SessionStorageError) {
-        console.error('Failed to switch to session:', switchResult.message);
-        return null;
-      }
-      return loadSessionData(id);
-    })();
+    const data =
+      options.preloadedData ??
+      (await (async () => {
+        const switchResult = await switchToSession(id);
+        if (
+          switchResult instanceof SessionNotFoundError ||
+          switchResult instanceof SessionCorruptedError ||
+          switchResult instanceof SessionStorageError
+        ) {
+          console.error('Failed to switch to session:', switchResult.message);
+          return null;
+        }
+        return loadSessionData(id);
+      })());
 
     if (data === null) {
       return;
@@ -169,17 +175,12 @@ export function createSessionOperations(params: SessionOperationsParams) {
     } else {
       dispatch({ type: 'SET_ACTIVE_SESSION', id, session: data.metadata });
       // IMPORTANT: Await onSessionLoad to ensure CWD map is set before switching completes
-      await onSessionLoad(
-        data.workspaces,
-        data.activeWorkspaceId,
-        data.cwdMap,
-        new Map(),
-        id,
-        { allowPrune: true }
-      );
+      await onSessionLoad(data.workspaces, data.activeWorkspaceId, data.cwdMap, new Map(), id, {
+        allowPrune: true,
+      });
     }
 
-    await refreshSessions();
+    refreshSessionsInBackground();
   };
 
   const switchSession = async (
@@ -189,7 +190,11 @@ export function createSessionOperations(params: SessionOperationsParams) {
 
   const renameSession = async (id: SessionId, name: string): Promise<void> => {
     const result = await renameSessionOnDisk(id, name);
-    if (result instanceof SessionNotFoundError || result instanceof SessionCorruptedError || result instanceof SessionStorageError) {
+    if (
+      result instanceof SessionNotFoundError ||
+      result instanceof SessionCorruptedError ||
+      result instanceof SessionStorageError
+    ) {
       console.error('Failed to rename session:', result.message);
       return;
     }
@@ -226,7 +231,11 @@ export function createSessionOperations(params: SessionOperationsParams) {
     onDeleteSession(id);
 
     const deleteResult = await deleteSessionOnDisk(id);
-    if (deleteResult instanceof SessionNotFoundError || deleteResult instanceof SessionCorruptedError || deleteResult instanceof SessionStorageError) {
+    if (
+      deleteResult instanceof SessionNotFoundError ||
+      deleteResult instanceof SessionCorruptedError ||
+      deleteResult instanceof SessionStorageError
+    ) {
       console.error('Failed to delete session:', deleteResult.message);
       return;
     }
@@ -260,12 +269,7 @@ export function createSessionOperations(params: SessionOperationsParams) {
     const activeWorkspaceId = getActiveWorkspaceId();
 
     if (shouldPersistSession(workspaces)) {
-      await saveCurrentSession(
-        state.activeSession,
-        workspaces,
-        activeWorkspaceId,
-        getCwd
-      );
+      await saveCurrentSession(state.activeSession, workspaces, activeWorkspaceId, getCwd);
       await refreshSessions();
     }
   };

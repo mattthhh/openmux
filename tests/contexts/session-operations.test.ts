@@ -227,4 +227,54 @@ describe('createSessionOperations', () => {
     expect(saveCurrentSession).toHaveBeenCalledWith(sessionA, {}, 1, expect.any(Function));
     expect(refreshSessions).toHaveBeenCalled();
   });
+
+  it('does not block session switching on session list refresh', async () => {
+    const sessionA = createMetadata('session-a');
+    const sessionB = createMetadata('session-b');
+    const state = createState({
+      sessions: [sessionA, sessionB],
+      activeSessionId: sessionA.id,
+      activeSession: sessionA,
+    });
+
+    const dispatch = vi.fn();
+    const onSessionLoad = vi.fn().mockResolvedValue(undefined);
+    const refreshSessions = vi.fn(
+      () =>
+        new Promise<void>(() => {
+          // Intentionally never resolves. Switching should still finish.
+        })
+    );
+
+    const ops = createSessionOperations({
+      getState: () => state,
+      dispatch,
+      getCwd: vi.fn().mockResolvedValue('/tmp'),
+      getWorkspaces: () => ({}),
+      getActiveWorkspaceId: () => 1 as WorkspaceId,
+      shouldPersistSession: () => false,
+      onSessionLoad,
+      onBeforeSwitch: vi.fn().mockResolvedValue(undefined),
+      onDeleteSession: vi.fn(),
+      refreshSessions,
+    });
+
+    (switchToSession as any).mockResolvedValue(undefined);
+    (loadSessionData as any).mockResolvedValue({
+      metadata: sessionB,
+      workspaces: {} as Workspaces,
+      activeWorkspaceId: 1 as WorkspaceId,
+      cwdMap: new Map<string, string>(),
+    });
+
+    const outcome = await Promise.race([
+      ops.switchSession(sessionB.id).then(() => 'resolved' as const),
+      new Promise<'timed-out'>((resolve) => setTimeout(() => resolve('timed-out'), 25)),
+    ]);
+
+    expect(outcome).toBe('resolved');
+    expect(refreshSessions).toHaveBeenCalledTimes(1);
+    expect(onSessionLoad).toHaveBeenCalled();
+    expect(dispatch).toHaveBeenCalledWith({ type: 'SET_SWITCHING', switching: false });
+  });
 });
