@@ -1,63 +1,65 @@
 /**
- * Selection coordinate utilities
- * Pure functions for handling terminal selection coordinates and text extraction
+ * Selection coordinate utilities.
+ * Pure functions for handling terminal selection coordinates and text extraction.
  */
 
-import type { TerminalCell, SelectionBounds } from '../types';
-
+import type { SelectionBounds, TerminalCell } from '../types';
 
 /**
- * A point in the terminal, with both viewport and absolute coordinates
+ * A point in the terminal, with both viewport and absolute coordinates.
  */
 export interface SelectionPoint {
-  /** Column (0-indexed) */
+  /** Column (0-indexed). */
   x: number;
-  /** Row in viewport (0-indexed) */
+  /** Row in viewport (0-indexed). */
   y: number;
-  /** Absolute row including scrollback */
+  /** Absolute row including scrollback. */
   absoluteY: number;
 }
 
 /**
- * Normalized selection range (start is always before end)
- * The focus cell is excluded from selection (Zellij-style)
+ * Normalized selection range (start is always before end).
+ *
+ * Focus exclusion follows Zellij-style semantics: the selection grows away from the
+ * focus cell, so the focus side is always treated as exclusive. Forward selections
+ * exclude `end`, backward selections exclude `start`.
  */
 export interface SelectionRange {
   startX: number;
-  startY: number;  // Absolute Y
+  startY: number;
   endX: number;
-  endY: number;    // Absolute Y
-  /** True if focus is at end position (forward selection), false if at start (backward) */
+  endY: number;
+  /** True when focus is at `end`, false when focus is at `start`. */
   focusAtEnd: boolean;
 }
 
 /**
- * Function to get a line of cells from the terminal
+ * Function to get a line of cells from the terminal.
  */
 export type LineGetter = (absoluteY: number) => TerminalCell[] | null;
 
+type RowSelectionColumns = {
+  startX: number;
+  endX: number;
+};
 
 /**
- * Calculate absolute Y from viewport Y
+ * Calculate absolute Y from viewport Y.
  */
 export function toAbsoluteY(y: number, scrollbackLength: number, scrollOffset: number): number {
   return scrollbackLength - scrollOffset + y;
 }
 
 /**
- * Normalize selection so start is always before end
- * Tracks whether focus is at end (forward) or start (backward) for exclusion
+ * Normalize selection so start is always before end.
+ * Tracks whether focus is at end (forward) or start (backward) for exclusion.
  */
-export function normalizeSelection(
-  anchor: SelectionPoint,
-  focus: SelectionPoint
-): SelectionRange {
+export function normalizeSelection(anchor: SelectionPoint, focus: SelectionPoint): SelectionRange {
   const anchorBefore =
     anchor.absoluteY < focus.absoluteY ||
     (anchor.absoluteY === focus.absoluteY && anchor.x <= focus.x);
 
   if (anchorBefore) {
-    // Forward selection: focus is at end
     return {
       startX: anchor.x,
       startY: anchor.absoluteY,
@@ -65,22 +67,20 @@ export function normalizeSelection(
       endY: focus.absoluteY,
       focusAtEnd: true,
     };
-  } else {
-    // Backward selection: focus is at start
-    return {
-      startX: focus.x,
-      startY: focus.absoluteY,
-      endX: anchor.x,
-      endY: anchor.absoluteY,
-      focusAtEnd: false,
-    };
   }
+
+  return {
+    startX: focus.x,
+    startY: focus.absoluteY,
+    endX: anchor.x,
+    endY: anchor.absoluteY,
+    focusAtEnd: false,
+  };
 }
 
-
 /**
- * Calculate bounding box from normalized selection range
- * Enables O(1) spatial rejection in isCellSelected instead of per-cell checks
+ * Calculate bounding box from normalized selection range.
+ * Enables O(1) spatial rejection in `isCellInRange` instead of per-cell scans.
  */
 export function calculateBounds(range: SelectionRange): SelectionBounds {
   return {
@@ -91,136 +91,103 @@ export function calculateBounds(range: SelectionRange): SelectionBounds {
   };
 }
 
-
 /**
- * Check if a cell at (x, absoluteY) is within the selection range
- * The focus cell is excluded (Zellij-style selection)
+ * Resolve the selected column span for one absolute row.
+ *
+ * Rows that extend "to the end of the line" use `rowLength - 1` as their upper
+ * bound. Callers that only need membership checks can pass `Infinity` to model an
+ * unbounded row while keeping the same focus-exclusion rules.
  */
-export function isCellInRange(
-  x: number,
+function getRowSelectionColumns(
   absoluteY: number,
+  rowLength: number,
   range: SelectionRange
-): boolean {
-  const { startX, startY, endX, endY, focusAtEnd } = range;
-
-  // Outside vertical bounds
-  if (absoluteY < startY || absoluteY > endY) {
-    return false;
+): RowSelectionColumns | null {
+  if (absoluteY < range.startY || absoluteY > range.endY) {
+    return null;
   }
 
-  // Single line selection
-  if (startY === endY) {
-    // Exclude the focus cell
-    if (focusAtEnd) {
-      // Forward: exclude end (focus), so x < endX
-      return x >= startX && x < endX;
-    } else {
-      // Backward: exclude start (focus), so x > startX
-      return x > startX && x <= endX;
+  const maxColumn = rowLength - 1;
+  const columns = (() => {
+    if (range.startY === range.endY) {
+      return range.focusAtEnd
+        ? { startX: range.startX, endX: range.endX - 1 }
+        : { startX: range.startX + 1, endX: range.endX };
     }
-  }
 
-  // Multi-line selection
-  if (absoluteY === startY) {
-    // First line
-    if (!focusAtEnd) {
-      // Backward selection: focus is at start, exclude startX
-      return x > startX;
+    if (absoluteY === range.startY) {
+      return {
+        startX: range.focusAtEnd ? range.startX : range.startX + 1,
+        endX: maxColumn,
+      };
     }
-    // Forward selection: include from startX to end of line
-    return x >= startX;
-  }
-  if (absoluteY === endY) {
-    // Last line
-    if (focusAtEnd) {
-      // Forward selection: focus is at end, exclude endX
-      return x < endX;
-    }
-    // Backward selection: include from start of line to endX
-    return x <= endX;
-  }
 
-  // Middle lines: entire line is selected
-  return true;
+    if (absoluteY === range.endY) {
+      return {
+        startX: 0,
+        endX: range.focusAtEnd ? range.endX - 1 : range.endX,
+      };
+    }
+
+    return {
+      startX: 0,
+      endX: maxColumn,
+    };
+  })();
+
+  return columns.startX <= columns.endX ? columns : null;
 }
 
+/**
+ * Check if a cell at `(x, absoluteY)` is within the selection range.
+ */
+export function isCellInRange(x: number, absoluteY: number, range: SelectionRange): boolean {
+  const columns = getRowSelectionColumns(absoluteY, Number.POSITIVE_INFINITY, range);
+  if (!columns) return false;
+  return x >= columns.startX && x <= columns.endX;
+}
+
+function extractRowText(row: TerminalCell[], startX: number, endX: number): string {
+  let rowText = '';
+
+  for (let x = startX; x <= Math.min(endX, row.length - 1); x++) {
+    const cell = row[x];
+    if (!cell) continue;
+
+    rowText += cell.char;
+
+    if (cell.width === 2) {
+      x += 1;
+    }
+  }
+
+  return rowText.trimEnd();
+}
+
+function processRow(row: TerminalCell[], absoluteY: number, range: SelectionRange): string | null {
+  const columns = getRowSelectionColumns(absoluteY, row.length, range);
+  if (!columns) return null;
+  return extractRowText(row, columns.startX, columns.endX);
+}
 
 /**
- * Extract text from the selected range
- * Respects focusAtEnd to exclude the focus cell (Zellij-style)
+ * Extract text from the selected range.
+ * Respects the Zellij-style rule that the focus cell itself is never copied.
  */
 export function extractSelectedText(
   range: SelectionRange,
-  scrollbackLength: number,
+  _scrollbackLength: number,
   getLine: LineGetter
 ): string {
-  const { startX, startY, endX, endY, focusAtEnd } = range;
   const lines: string[] = [];
 
-  for (let absY = startY; absY <= endY; absY++) {
-    const row = getLine(absY);
+  for (let absoluteY = range.startY; absoluteY <= range.endY; absoluteY++) {
+    const row = getLine(absoluteY);
     if (!row) continue;
 
-    const isFirstRow = absY === startY;
-    const isLastRow = absY === endY;
-    const isSingleLine = startY === endY;
-
-    // Determine start/end X for this row, respecting focus exclusion
-    let rowStartX: number;
-    let rowEndX: number;
-
-    if (isSingleLine) {
-      // Single line: exclude focus cell
-      if (focusAtEnd) {
-        rowStartX = startX;
-        rowEndX = endX - 1;  // Exclude focus at end
-      } else {
-        rowStartX = startX + 1;  // Exclude focus at start
-        rowEndX = endX;
-      }
-    } else if (isFirstRow) {
-      // First row of multi-line
-      if (!focusAtEnd) {
-        // Backward: focus at start, exclude it
-        rowStartX = startX + 1;
-      } else {
-        rowStartX = startX;
-      }
-      rowEndX = row.length - 1;
-    } else if (isLastRow) {
-      // Last row of multi-line
-      rowStartX = 0;
-      if (focusAtEnd) {
-        // Forward: focus at end, exclude it
-        rowEndX = endX - 1;
-      } else {
-        rowEndX = endX;
-      }
-    } else {
-      // Middle row: entire line
-      rowStartX = 0;
-      rowEndX = row.length - 1;
-    }
-
-    // Skip if invalid range (can happen when focus == anchor)
-    if (rowStartX > rowEndX) continue;
-
-    // Extract text from row
-    let rowText = '';
-    for (let x = rowStartX; x <= Math.min(rowEndX, row.length - 1); x++) {
-      const cell = row[x];
-      if (!cell) continue;
-
-      rowText += cell.char;
-
-      // Skip placeholder cell for wide characters
-      if (cell.width === 2) {
-        x++;
-      }
-    }
-
-    // Trim trailing whitespace from each line
-    lines.push(rowText.trimEnd());
+    const rowText = processRow(row, absoluteY, range);
+    if (rowText === null) continue;
+    lines.push(rowText);
   }
 
   return lines.join('\n');

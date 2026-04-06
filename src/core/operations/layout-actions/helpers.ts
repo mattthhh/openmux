@@ -86,51 +86,43 @@ export function getCandidateScore(
   return primaryDistance * 1000 + secondaryDistance + overlapPenalty;
 }
 
-type IdCounterRef = { value: number };
-
-const paneIdCounter: IdCounterRef = { value: 0 };
-const splitIdCounter: IdCounterRef = { value: 0 };
-
 /**
- * Create an ID generator factory for a given prefix.
- * Pass a counter ref to share state across generator, sync, and reset helpers.
+ * Create a simple sequential ID generator.
  */
-export function createIdGenerator(
-  prefix: string,
-  counter: IdCounterRef = { value: 0 }
-): () => string {
-  return () => `${prefix}-${++counter.value}`;
+export function createIdGenerator(prefix: string, initialValue = 0): () => string {
+  let counter = initialValue;
+  return () => `${prefix}-${++counter}`;
 }
 
-const nextPaneId = createIdGenerator('pane', paneIdCounter);
-const nextSplitId = createIdGenerator('split', splitIdCounter);
+let paneIdGenerator = createIdGenerator('pane', 0);
+let splitIdGenerator = createIdGenerator('split', 0);
 
 /**
  * Generate a unique pane ID
  */
 export function generatePaneId(): string {
-  return nextPaneId();
+  return paneIdGenerator();
 }
 
 /**
  * Generate a unique split ID
  */
 export function generateSplitId(): string {
-  return nextSplitId();
+  return splitIdGenerator();
 }
 
 /**
  * Reset pane ID counter (for testing)
  */
 export function resetPaneIdCounter(): void {
-  paneIdCounter.value = 0;
+  paneIdGenerator = createIdGenerator('pane', 0);
 }
 
 /**
  * Reset split ID counter (for testing)
  */
 export function resetSplitIdCounter(): void {
-  splitIdCounter.value = 0;
+  splitIdGenerator = createIdGenerator('split', 0);
 }
 
 /**
@@ -138,7 +130,7 @@ export function resetSplitIdCounter(): void {
  * Called when loading a session with existing pane IDs
  */
 export function syncPaneIdCounter(workspaces: Workspaces): void {
-  let maxId = paneIdCounter.value;
+  let maxId = 0;
   for (const workspace of Object.values(workspaces)) {
     if (!workspace) continue;
     const panes: LayoutNode[] = [];
@@ -153,14 +145,14 @@ export function syncPaneIdCounter(workspaces: Workspaces): void {
       }
     }
   }
-  paneIdCounter.value = maxId;
+  paneIdGenerator = createIdGenerator('pane', maxId);
 }
 
 /**
  * Sync split ID counter with loaded splits to avoid ID conflicts
  */
 export function syncSplitIdCounter(workspaces: Workspaces): void {
-  let maxId = splitIdCounter.value;
+  let maxId = 0;
   const scan = (node: LayoutNode | null) => {
     if (!node) return;
     if (isSplitNode(node)) {
@@ -181,7 +173,7 @@ export function syncSplitIdCounter(workspaces: Workspaces): void {
     }
   }
 
-  splitIdCounter.value = maxId;
+  splitIdGenerator = createIdGenerator('split', maxId);
 }
 
 /**

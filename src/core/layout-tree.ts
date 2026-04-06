@@ -4,8 +4,52 @@
 
 import type { Direction, LayoutNode, PaneData, SplitDirection, SplitNode } from './types';
 
+type TraversedNode = LayoutNode | null;
+
+type TraverseOptions<TResult extends TraversedNode> = {
+  onSplit?: (split: SplitNode, children: { first: TResult; second: TResult }) => TResult;
+};
+
+function mergeTraversedChildren<TResult extends TraversedNode>(
+  split: SplitNode,
+  first: TResult,
+  second: TResult
+): TResult {
+  if (!first && !second) return null as TResult;
+  if (!first) return second;
+  if (!second) return first;
+  if (first === split.first && second === split.second) return split as TResult;
+  return { ...split, first, second } as TResult;
+}
+
 export function isSplitNode(node: LayoutNode): node is SplitNode {
   return (node as SplitNode).type === 'split';
+}
+
+/**
+ * Traverse a layout tree and rebuild only the ancestor chain whose children changed.
+ *
+ * By default, split nodes preserve structural sharing and collapse when one child
+ * is removed. Callers can override split handling for transforms such as cloning
+ * or rectangle clearing.
+ */
+export function traverse<TResult extends TraversedNode>(
+  node: LayoutNode,
+  visitPane: (pane: PaneData) => TResult,
+  options?: TraverseOptions<TResult>
+): TResult {
+  if (!isSplitNode(node)) {
+    return visitPane(node);
+  }
+
+  const first = traverse(node.first, visitPane, options);
+  const second = traverse(node.second, visitPane, options);
+
+  if (options?.onSplit) {
+    return options.onSplit(node, { first, second });
+  }
+
+  return mergeTraversedChildren(node, first, second);
 }
 
 export function collectPanes(node: LayoutNode | null, panes: PaneData[] = []): PaneData[] {
@@ -40,16 +84,11 @@ export function updatePaneInNode(
   paneId: string,
   update: (pane: PaneData) => PaneData
 ): LayoutNode {
-  if (!isSplitNode(node)) {
-    if (node.id !== paneId) return node;
-    const updated = update(node);
-    return updated === node ? node : updated;
-  }
-
-  const updatedFirst = updatePaneInNode(node.first, paneId, update);
-  const updatedSecond = updatePaneInNode(node.second, paneId, update);
-  if (updatedFirst === node.first && updatedSecond === node.second) return node;
-  return { ...node, first: updatedFirst, second: updatedSecond };
+  return traverse(node, (pane) => {
+    if (pane.id !== paneId) return pane;
+    const updated = update(pane);
+    return updated === pane ? pane : updated;
+  });
 }
 
 export function replacePaneWithSplit(
@@ -60,38 +99,21 @@ export function replacePaneWithSplit(
   ratio: number,
   splitId: string
 ): LayoutNode {
-  if (!isSplitNode(node)) {
-    if (node.id !== paneId) return node;
+  return traverse(node, (pane) => {
+    if (pane.id !== paneId) return pane;
     return {
       type: 'split',
       id: splitId,
       direction,
       ratio,
-      first: node,
+      first: pane,
       second: newPane,
     };
-  }
-
-  const updatedFirst = replacePaneWithSplit(node.first, paneId, newPane, direction, ratio, splitId);
-  const updatedSecond = replacePaneWithSplit(node.second, paneId, newPane, direction, ratio, splitId);
-  if (updatedFirst === node.first && updatedSecond === node.second) return node;
-  return { ...node, first: updatedFirst, second: updatedSecond };
+  });
 }
 
 export function removePaneFromNode(node: LayoutNode, paneId: string): LayoutNode | null {
-  if (!isSplitNode(node)) {
-    return node.id === paneId ? null : node;
-  }
-
-  const updatedFirst = removePaneFromNode(node.first, paneId);
-  const updatedSecond = removePaneFromNode(node.second, paneId);
-
-  if (!updatedFirst && !updatedSecond) return null;
-  if (!updatedFirst) return updatedSecond;
-  if (!updatedSecond) return updatedFirst;
-
-  if (updatedFirst === node.first && updatedSecond === node.second) return node;
-  return { ...node, first: updatedFirst, second: updatedSecond };
+  return traverse(node, (pane) => (pane.id === paneId ? null : pane));
 }
 
 export function getFirstPane(node: LayoutNode | null): PaneData | null {
@@ -170,7 +192,11 @@ export function swapPaneInDirection(
     }
     // Only swap if both siblings are simple panes (not splits)
     // Otherwise, fall through to geometry-based swap which swaps individual pane data
-    if (getSiblingForDirection(node, 'first', direction) && !isSplitNode(node.first) && !isSplitNode(node.second)) {
+    if (
+      getSiblingForDirection(node, 'first', direction) &&
+      !isSplitNode(node.first) &&
+      !isSplitNode(node.second)
+    ) {
       return { node: { ...node, first: node.second, second: node.first }, swapped: true };
     }
     return { node, swapped: false };
@@ -183,7 +209,11 @@ export function swapPaneInDirection(
       return { node: nextNode, swapped: true };
     }
     // Only swap if both siblings are simple panes (not splits)
-    if (getSiblingForDirection(node, 'second', direction) && !isSplitNode(node.first) && !isSplitNode(node.second)) {
+    if (
+      getSiblingForDirection(node, 'second', direction) &&
+      !isSplitNode(node.first) &&
+      !isSplitNode(node.second)
+    ) {
       return { node: { ...node, first: node.second, second: node.first }, swapped: true };
     }
     return { node, swapped: false };
@@ -203,22 +233,15 @@ export function swapTwoPanesById(
   paneId2: string,
   pane2Data: PaneData
 ): LayoutNode {
-  if (!isSplitNode(node)) {
-    if (node.id === paneId1) {
-      // Replace pane1 position with pane2's data
-      return { ...pane2Data, rectangle: node.rectangle };
+  return traverse(node, (pane) => {
+    if (pane.id === paneId1) {
+      return { ...pane2Data, rectangle: pane.rectangle };
     }
-    if (node.id === paneId2) {
-      // Replace pane2 position with pane1's data
-      return { ...pane1Data, rectangle: node.rectangle };
+    if (pane.id === paneId2) {
+      return { ...pane1Data, rectangle: pane.rectangle };
     }
-    return node;
-  }
-
-  const updatedFirst = swapTwoPanesById(node.first, paneId1, pane1Data, paneId2, pane2Data);
-  const updatedSecond = swapTwoPanesById(node.second, paneId1, pane1Data, paneId2, pane2Data);
-  if (updatedFirst === node.first && updatedSecond === node.second) return node;
-  return { ...node, first: updatedFirst, second: updatedSecond };
+    return pane;
+  });
 }
 
 /**
@@ -227,24 +250,29 @@ export function swapTwoPanesById(
  */
 export function clearNodeRectangles(node: LayoutNode | null): LayoutNode | null {
   if (!node) return null;
-  if (!isSplitNode(node)) {
-    // Leaf node: only create new object if rectangle exists
-    if (!node.rectangle) return node;
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { rectangle, ...rest } = node;
-    return rest as PaneData;
-  }
-  const clearedFirst = clearNodeRectangles(node.first);
-  const clearedSecond = clearNodeRectangles(node.second);
-  if (clearedFirst === node.first && clearedSecond === node.second && !node.rectangle) {
-    return node;
-  }
-  return {
-    ...node,
-    rectangle: undefined,
-    first: clearedFirst ?? node.first,
-    second: clearedSecond ?? node.second,
-  };
+
+  return traverse(
+    node,
+    (pane) => {
+      if (!pane.rectangle) return pane;
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { rectangle, ...rest } = pane;
+      return rest as PaneData;
+    },
+    {
+      onSplit: (split, { first, second }) => {
+        if (!split.rectangle && first === split.first && second === split.second) {
+          return split;
+        }
+        return {
+          ...split,
+          rectangle: undefined,
+          first,
+          second,
+        };
+      },
+    }
+  );
 }
 
 /**
@@ -253,12 +281,12 @@ export function clearNodeRectangles(node: LayoutNode | null): LayoutNode | null 
  */
 export function cloneLayoutNode(node: LayoutNode | null): LayoutNode | null {
   if (!node) return null;
-  if (!isSplitNode(node)) {
-    return { ...node };
-  }
-  return {
-    ...node,
-    first: cloneLayoutNode(node.first)!,
-    second: cloneLayoutNode(node.second)!,
-  };
+
+  return traverse(node, (pane) => ({ ...pane }), {
+    onSplit: (split, { first, second }) => ({
+      ...split,
+      first,
+      second,
+    }),
+  });
 }

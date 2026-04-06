@@ -7,7 +7,14 @@
  * - stacked: main pane left (50%), stack panes tabbed on right (only active visible)
  */
 
-import type { Rectangle, Workspace, PaneData, LayoutMode, LayoutNode, SplitDirection } from '../types';
+import type {
+  Rectangle,
+  Workspace,
+  PaneData,
+  LayoutMode,
+  LayoutNode,
+  SplitDirection,
+} from '../types';
 import type { LayoutConfig } from '../config';
 import { collectPanes, containsPane, findPane, isSplitNode } from '../layout-tree';
 
@@ -22,16 +29,28 @@ function rectanglesEqual(a: Rectangle | undefined, b: Rectangle | undefined): bo
 }
 
 /**
- * Update pane rectangle only if it changed (structural sharing)
- * Returns the same pane reference if rectangle is unchanged
+ * Update pane rectangle only if it changed.
+ *
+ * Returning the original pane object is the first piece of the structural sharing
+ * optimization: unchanged leaves keep their identity, which lets unchanged parent
+ * splits and the workspace root stay referentially stable too.
  */
 function updatePaneRectangle(pane: PaneData, newRect: Rectangle | undefined): PaneData {
   if (rectanglesEqual(pane.rectangle, newRect)) {
-    return pane; // No change - reuse existing object
+    return pane;
   }
   return { ...pane, rectangle: newRect ? { ...newRect } : undefined };
 }
 
+/**
+ * Recalculate rectangles while preserving structural sharing.
+ *
+ * This is a hot path during focus changes, zoom toggles, and resize handling. The
+ * recursive calls update children first, then return the original split node when
+ * both child references and the split rectangle are unchanged. That keeps large
+ * unchanged subtrees referentially stable instead of cloning the whole tree on
+ * every layout pass.
+ */
 function updateLayoutNodeRectangles(
   node: LayoutNode,
   rect: Rectangle | undefined,
@@ -182,12 +201,12 @@ export function calculateMasterStackLayout(
   // even when it's inside a split (layout tree)
   if (zoomed && focusedPaneId) {
     const focusedIsMain = containsPane(mainPane, focusedPaneId);
-    const focusedStackIndex = stackPanes.findIndex(p => containsPane(p, focusedPaneId));
+    const focusedStackIndex = stackPanes.findIndex((p) => containsPane(p, focusedPaneId));
 
     if (focusedIsMain) {
       // Give full viewport to only the focused pane within mainPane tree
       const updatedMain = updateLayoutNodeForZoom(mainPane, focusedPaneId, paddedViewport, gap);
-      const updatedStack = stackPanes.map(p => updateLayoutNodeRectangles(p, undefined, gap));
+      const updatedStack = stackPanes.map((p) => updateLayoutNodeRectangles(p, undefined, gap));
       if (updatedMain === mainPane && updatedStack.every((p, i) => p === stackPanes[i])) {
         return workspace;
       }
@@ -320,9 +339,7 @@ function calculateStackPaneRectangles(
     return stackPanes.map((pane, index) => {
       const isLast = index === stackPanes.length - 1;
       // Last pane gets remaining height to avoid rounding issues
-      const height = isLast
-        ? stackArea.height - (paneHeight + gap) * index
-        : paneHeight;
+      const height = isLast ? stackArea.height - (paneHeight + gap) * index : paneHeight;
 
       const rect: Rectangle = {
         x: stackArea.x,
@@ -342,9 +359,7 @@ function calculateStackPaneRectangles(
   return stackPanes.map((pane, index) => {
     const isLast = index === stackPanes.length - 1;
     // Last pane gets remaining width to avoid rounding issues
-    const width = isLast
-      ? stackArea.width - (paneWidth + gap) * index
-      : paneWidth;
+    const width = isLast ? stackArea.width - (paneWidth + gap) * index : paneWidth;
 
     const rect: Rectangle = {
       x: stackArea.x + (paneWidth + gap) * index,
@@ -380,10 +395,7 @@ export function getWorkspacePaneCount(workspace: Workspace): number {
 /**
  * Find a pane by ID in a workspace
  */
-export function findPaneInWorkspace(
-  workspace: Workspace,
-  paneId: string
-): PaneData | null {
+export function findPaneInWorkspace(workspace: Workspace, paneId: string): PaneData | null {
   if (workspace.mainPane) {
     const mainPane = findPane(workspace.mainPane, paneId);
     if (mainPane) return mainPane;

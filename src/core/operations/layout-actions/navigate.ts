@@ -1,220 +1,288 @@
 /**
- * NAVIGATE action handler
+ * NAVIGATE action handler.
  */
 
-import type { Direction, LayoutNode, Rectangle, Workspace } from '../../types';
+import type { Direction, LayoutNode, PaneData, Rectangle, Workspace } from '../../types';
 import type { LayoutState } from './types';
-import { getActiveWorkspace, getCandidateScore, recalculateLayout, updateWorkspace } from './helpers';
+import {
+  getActiveWorkspace,
+  getCandidateScore,
+  recalculateLayout,
+  updateWorkspace,
+} from './helpers';
 import { getAllWorkspacePanes } from '../master-stack-layout';
-import { collectPanes, containsPane, findPane, findSiblingInDirection, getFirstPane } from '../../layout-tree';
+import {
+  collectPanes,
+  containsPane,
+  findPane,
+  findSiblingInDirection,
+  getFirstPane,
+} from '../../layout-tree';
+
+type PaneWithRectangle = PaneData & { rectangle: Rectangle };
+
+type NavigationContext = {
+  workspace: Workspace;
+  direction: Direction;
+  focusedId: string;
+  currentPane: PaneWithRectangle;
+  allPanes: PaneWithRectangle[];
+  stackIndex: number;
+  focusedRoot: LayoutNode | null;
+};
+
+type NavigationCommit = {
+  workspace: Workspace;
+  recalculate: boolean;
+  incrementLayoutVersion: boolean;
+  incrementGeometryVersion: boolean;
+};
+
+function hasRectangle(pane: PaneData): pane is PaneWithRectangle {
+  return pane.rectangle !== undefined;
+}
 
 function pickBestPaneInNode(
   node: LayoutNode,
   direction: Direction,
   currentRect: Rectangle
-): { id: string } | null {
-  const panes = collectPanes(node).filter(p => p.rectangle);
-  let bestPane: { id: string; rectangle: Rectangle } | null = null;
+): PaneData | null {
+  const panes = collectPanes(node).filter(hasRectangle);
+  let bestPane: PaneWithRectangle | null = null;
   let bestScore = Number.POSITIVE_INFINITY;
 
   for (const pane of panes) {
-    const score = getCandidateScore(currentRect, pane.rectangle!, direction);
-    if (score !== null && score < bestScore) {
-      bestScore = score;
-      bestPane = pane as { id: string; rectangle: Rectangle };
-    }
-  }
-
-  return bestPane ?? getFirstPane(node);
-}
-
-/**
- * Handle NAVIGATE action
- * Moves focus between panes based on geometry
- */
-export function handleNavigate(state: LayoutState, direction: Direction): LayoutState {
-  const workspace = getActiveWorkspace(state);
-  const focusedId = workspace.focusedPaneId;
-  if (!focusedId) return state;
-
-  const allPanes = getAllWorkspacePanes(workspace).filter(p => p.rectangle);
-  if (allPanes.length === 0) return state;
-
-  const currentPane = allPanes.find(p => p.id === focusedId);
-  if (!currentPane?.rectangle) return state;
-
-  const stackIndex = workspace.stackPanes.findIndex(p => containsPane(p, focusedId));
-  const focusedRoot = stackIndex >= 0 ? workspace.stackPanes[stackIndex]! : workspace.mainPane;
-
-  if (focusedRoot) {
-    const siblingNode = findSiblingInDirection(focusedRoot, focusedId, direction);
-    if (siblingNode) {
-      const targetPane = pickBestPaneInNode(siblingNode, direction, currentPane.rectangle);
-      if (targetPane && targetPane.id !== focusedId) {
-        let updated: Workspace = {
-          ...workspace,
-          focusedPaneId: targetPane.id,
-          activeStackIndex: stackIndex >= 0 ? stackIndex : workspace.activeStackIndex,
-        };
-
-        if (workspace.zoomed) {
-          updated = recalculateLayout(updated, state.viewport, state.config);
-          return {
-            ...state,
-            workspaces: updateWorkspace(state, updated),
-            layoutGeometryVersion: state.layoutGeometryVersion + 1,
-          };
-        }
-
-        return { ...state, workspaces: updateWorkspace(state, updated) };
-      }
-    }
-  }
-
-  const isStackedMode = workspace.layoutMode === 'stacked';
-  const stackCount = workspace.stackPanes.length;
-  
-  // Handle stacked mode navigation with main/stack transitions
-  // Uses lastFocusedPaneIds to restore focus when returning to a tab
-  if (isStackedMode && (direction === 'west' || direction === 'east')) {
-    // west (h) from first stack entry -> navigate to main
-    if (direction === 'west' && stackIndex === 0 && workspace.mainPane) {
-      // Save current focus in stack entry 0 before leaving
-      const newLastFocused = [...workspace.lastFocusedPaneIds];
-      newLastFocused[0] = focusedId;
-
-      const mainPane = getFirstPane(workspace.mainPane);
-      if (mainPane && mainPane.id !== focusedId) {
-        let updated: Workspace = {
-          ...workspace,
-          focusedPaneId: mainPane.id,
-          activeStackIndex: 0,
-          lastFocusedPaneIds: newLastFocused,
-        };
-        if (workspace.zoomed) {
-          updated = recalculateLayout(updated, state.viewport, state.config);
-        }
-        return {
-          ...state,
-          workspaces: updateWorkspace(state, updated),
-          layoutVersion: state.layoutVersion + 1,
-          ...(workspace.zoomed && { layoutGeometryVersion: state.layoutGeometryVersion + 1 }),
-        };
-      }
-    }
-
-    // east (l) from main -> navigate to first stack entry
-    if (direction === 'east' && stackIndex < 0 && workspace.mainPane && stackCount > 0) {
-      // Check if focused is in main
-      const mainContainsFocused = workspace.mainPane && containsPane(workspace.mainPane, focusedId);
-      if (mainContainsFocused) {
-        const targetEntry = workspace.stackPanes[0];
-        // Restore last focused pane in stack entry 0, or fall back to first pane
-        const lastFocusedInTarget = workspace.lastFocusedPaneIds[0];
-        const targetPane = lastFocusedInTarget
-          ? (findPane(targetEntry, lastFocusedInTarget) ?? getFirstPane(targetEntry))
-          : getFirstPane(targetEntry);
-
-        if (targetPane && targetPane.id !== focusedId) {
-          let updated: Workspace = {
-            ...workspace,
-            focusedPaneId: targetPane.id,
-            activeStackIndex: 0,
-          };
-          if (workspace.zoomed) {
-            updated = recalculateLayout(updated, state.viewport, state.config);
-          }
-          return {
-            ...state,
-            workspaces: updateWorkspace(state, updated),
-            layoutVersion: state.layoutVersion + 1,
-            ...(workspace.zoomed && { layoutGeometryVersion: state.layoutGeometryVersion + 1 }),
-          };
-        }
-      }
-    }
-
-    // Normal stack tab cycling - save current focus, restore target focus
-    if (stackIndex >= 0 && stackCount > 0) {
-      const delta = direction === 'west' ? -1 : 1;
-      const nextIndex =
-        stackCount > 1
-          ? (workspace.activeStackIndex + delta + stackCount) % stackCount
-          : 0;
-      const targetEntry = workspace.stackPanes[nextIndex];
-
-      // Save current focus before switching
-      const newLastFocused = [...workspace.lastFocusedPaneIds];
-      newLastFocused[stackIndex] = focusedId;
-
-      // Restore last focused pane in target entry, or fall back to first pane
-      const lastFocusedInTarget = newLastFocused[nextIndex];
-      const targetPane = lastFocusedInTarget
-        ? (findPane(targetEntry, lastFocusedInTarget) ?? getFirstPane(targetEntry))
-        : getFirstPane(targetEntry);
-
-      if (!targetPane) return state;
-
-      const stackIndexChanged = nextIndex !== workspace.activeStackIndex;
-      if (!stackIndexChanged && targetPane.id === focusedId) {
-        return state;
-      }
-
-      let updated: Workspace = {
-        ...workspace,
-        focusedPaneId: targetPane.id,
-        activeStackIndex: nextIndex,
-        lastFocusedPaneIds: newLastFocused,
-      };
-
-      if (workspace.zoomed || stackIndexChanged) {
-        updated = recalculateLayout(updated, state.viewport, state.config);
-        return {
-          ...state,
-          workspaces: updateWorkspace(state, updated),
-          layoutVersion: state.layoutVersion + 1,
-          layoutGeometryVersion: state.layoutGeometryVersion + 1,
-        };
-      }
-
-      return { ...state, workspaces: updateWorkspace(state, updated) };
-    }
-  }
-
-  let bestPane = currentPane;
-  let bestScore = Number.POSITIVE_INFINITY;
-
-  for (const pane of allPanes) {
-    if (pane.id === currentPane.id || !pane.rectangle) continue;
-    const score = getCandidateScore(currentPane.rectangle, pane.rectangle, direction);
+    const score = getCandidateScore(currentRect, pane.rectangle, direction);
     if (score !== null && score < bestScore) {
       bestScore = score;
       bestPane = pane;
     }
   }
 
-  if (bestPane.id === currentPane.id) return state;
+  return bestPane ?? getFirstPane(node);
+}
 
-  const targetStackIndex = workspace.stackPanes.findIndex(p => containsPane(p, bestPane.id));
-  const activeStackIndex = targetStackIndex >= 0 ? targetStackIndex : workspace.activeStackIndex;
-  const stackIndexChanged = activeStackIndex !== workspace.activeStackIndex;
+function createNavigationContext(
+  state: LayoutState,
+  direction: Direction
+): NavigationContext | null {
+  const workspace = getActiveWorkspace(state);
+  const focusedId = workspace.focusedPaneId;
+  if (!focusedId) return null;
 
-  let updated: Workspace = {
-    ...workspace,
-    focusedPaneId: bestPane.id,
-    activeStackIndex,
+  const allPanes = getAllWorkspacePanes(workspace).filter(hasRectangle);
+  if (allPanes.length === 0) return null;
+
+  const currentPane = allPanes.find((pane) => pane.id === focusedId);
+  if (!currentPane) return null;
+
+  const stackIndex = workspace.stackPanes.findIndex((pane) => containsPane(pane, focusedId));
+  return {
+    workspace,
+    direction,
+    focusedId,
+    currentPane,
+    allPanes,
+    stackIndex,
+    focusedRoot: stackIndex >= 0 ? workspace.stackPanes[stackIndex]! : workspace.mainPane,
   };
+}
 
-  const needsStackedRecalc = workspace.layoutMode === 'stacked' && stackIndexChanged;
-  if (workspace.zoomed || needsStackedRecalc) {
-    updated = recalculateLayout(updated, state.viewport, state.config);
-    return {
-      ...state,
-      workspaces: updateWorkspace(state, updated),
-      layoutVersion: state.layoutVersion + 1,
-      layoutGeometryVersion: state.layoutGeometryVersion + 1,
-    };
+function applyNavigationCommit(state: LayoutState, commit: NavigationCommit): LayoutState {
+  const workspace = commit.recalculate
+    ? recalculateLayout(commit.workspace, state.viewport, state.config)
+    : commit.workspace;
+
+  return {
+    ...state,
+    workspaces: updateWorkspace(state, workspace),
+    layoutVersion: state.layoutVersion + Number(commit.incrementLayoutVersion),
+    layoutGeometryVersion: state.layoutGeometryVersion + Number(commit.incrementGeometryVersion),
+  };
+}
+
+function getRememberedPane(
+  node: LayoutNode,
+  rememberedPaneId: string | null | undefined
+): PaneData | null {
+  if (!rememberedPaneId) return getFirstPane(node);
+  return findPane(node, rememberedPaneId) ?? getFirstPane(node);
+}
+
+function navigateInTree(context: NavigationContext): NavigationCommit | null {
+  if (!context.focusedRoot) return null;
+
+  const siblingNode = findSiblingInDirection(
+    context.focusedRoot,
+    context.focusedId,
+    context.direction
+  );
+  if (!siblingNode) return null;
+
+  const targetPane = pickBestPaneInNode(
+    siblingNode,
+    context.direction,
+    context.currentPane.rectangle
+  );
+  if (!targetPane || targetPane.id === context.focusedId) return null;
+
+  return {
+    workspace: {
+      ...context.workspace,
+      focusedPaneId: targetPane.id,
+      activeStackIndex:
+        context.stackIndex >= 0 ? context.stackIndex : context.workspace.activeStackIndex,
+    },
+    recalculate: context.workspace.zoomed,
+    incrementLayoutVersion: false,
+    incrementGeometryVersion: context.workspace.zoomed,
+  };
+}
+
+function navigateStackTab(context: NavigationContext): NavigationCommit | null {
+  if (context.workspace.layoutMode !== 'stacked') return null;
+  if (context.direction !== 'west' && context.direction !== 'east') return null;
+
+  return (
+    navigateFromFirstStackToMain(context) ??
+    navigateFromMainToFirstStack(context) ??
+    cycleStackTabs(context)
+  );
+}
+
+function navigateFromFirstStackToMain(context: NavigationContext): NavigationCommit | null {
+  if (context.direction !== 'west') return null;
+  if (context.stackIndex !== 0 || !context.workspace.mainPane) return null;
+
+  const mainPane = getFirstPane(context.workspace.mainPane);
+  if (!mainPane || mainPane.id === context.focusedId) return null;
+
+  const lastFocusedPaneIds = [...context.workspace.lastFocusedPaneIds];
+  lastFocusedPaneIds[0] = context.focusedId;
+
+  return {
+    workspace: {
+      ...context.workspace,
+      focusedPaneId: mainPane.id,
+      activeStackIndex: 0,
+      lastFocusedPaneIds,
+    },
+    recalculate: context.workspace.zoomed,
+    incrementLayoutVersion: true,
+    incrementGeometryVersion: context.workspace.zoomed,
+  };
+}
+
+function navigateFromMainToFirstStack(context: NavigationContext): NavigationCommit | null {
+  if (context.direction !== 'east') return null;
+  if (context.stackIndex >= 0 || !context.workspace.mainPane) return null;
+  if (context.workspace.stackPanes.length === 0) return null;
+  if (!containsPane(context.workspace.mainPane, context.focusedId)) return null;
+
+  const targetEntry = context.workspace.stackPanes[0]!;
+  const targetPane = getRememberedPane(targetEntry, context.workspace.lastFocusedPaneIds[0]);
+  if (!targetPane || targetPane.id === context.focusedId) return null;
+
+  return {
+    workspace: {
+      ...context.workspace,
+      focusedPaneId: targetPane.id,
+      activeStackIndex: 0,
+    },
+    recalculate: context.workspace.zoomed,
+    incrementLayoutVersion: true,
+    incrementGeometryVersion: context.workspace.zoomed,
+  };
+}
+
+function cycleStackTabs(context: NavigationContext): NavigationCommit | null {
+  const stackCount = context.workspace.stackPanes.length;
+  if (context.stackIndex < 0 || stackCount === 0) return null;
+
+  const delta = context.direction === 'west' ? -1 : 1;
+  const nextIndex =
+    stackCount > 1 ? (context.workspace.activeStackIndex + delta + stackCount) % stackCount : 0;
+  const lastFocusedPaneIds = [...context.workspace.lastFocusedPaneIds];
+  lastFocusedPaneIds[context.stackIndex] = context.focusedId;
+
+  const targetPane = getRememberedPane(
+    context.workspace.stackPanes[nextIndex]!,
+    lastFocusedPaneIds[nextIndex]
+  );
+  if (!targetPane) return null;
+
+  const stackIndexChanged = nextIndex !== context.workspace.activeStackIndex;
+  if (!stackIndexChanged && targetPane.id === context.focusedId) return null;
+
+  return {
+    workspace: {
+      ...context.workspace,
+      focusedPaneId: targetPane.id,
+      activeStackIndex: nextIndex,
+      lastFocusedPaneIds,
+    },
+    recalculate: context.workspace.zoomed || stackIndexChanged,
+    incrementLayoutVersion: stackIndexChanged,
+    incrementGeometryVersion: context.workspace.zoomed || stackIndexChanged,
+  };
+}
+
+function navigateByGeometry(context: NavigationContext): NavigationCommit | null {
+  let bestPane = context.currentPane;
+  let bestScore = Number.POSITIVE_INFINITY;
+
+  for (const pane of context.allPanes) {
+    if (pane.id === context.currentPane.id) continue;
+
+    const score = getCandidateScore(
+      context.currentPane.rectangle,
+      pane.rectangle,
+      context.direction
+    );
+    if (score !== null && score < bestScore) {
+      bestScore = score;
+      bestPane = pane;
+    }
   }
 
-  return { ...state, workspaces: updateWorkspace(state, updated) };
+  if (bestPane.id === context.currentPane.id) return null;
+
+  const targetStackIndex = context.workspace.stackPanes.findIndex((pane) =>
+    containsPane(pane, bestPane.id)
+  );
+  const activeStackIndex =
+    targetStackIndex >= 0 ? targetStackIndex : context.workspace.activeStackIndex;
+  const stackIndexChanged = activeStackIndex !== context.workspace.activeStackIndex;
+  const needsStackedRecalc = context.workspace.layoutMode === 'stacked' && stackIndexChanged;
+  const recalculate = context.workspace.zoomed || needsStackedRecalc;
+
+  return {
+    workspace: {
+      ...context.workspace,
+      focusedPaneId: bestPane.id,
+      activeStackIndex,
+    },
+    recalculate,
+    incrementLayoutVersion: recalculate,
+    incrementGeometryVersion: recalculate,
+  };
+}
+
+/**
+ * Handle NAVIGATE action.
+ *
+ * Navigation order matches the Zellij-style interaction model:
+ * 1. Move within the current split tree when a directional sibling exists.
+ * 2. In stacked mode, interpret west/east as tab transitions when tree navigation fails.
+ * 3. Fall back to global geometry-based navigation across visible panes.
+ */
+export function handleNavigate(state: LayoutState, direction: Direction): LayoutState {
+  const context = createNavigationContext(state, direction);
+  if (!context) return state;
+
+  const commit =
+    navigateInTree(context) ?? navigateStackTab(context) ?? navigateByGeometry(context);
+  if (!commit) return state;
+
+  return applyNavigationCommit(state, commit);
 }
