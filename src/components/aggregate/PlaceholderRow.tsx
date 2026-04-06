@@ -7,8 +7,6 @@ import { Show } from 'solid-js';
 import type { AggregateTheme } from '../../core/types';
 
 export interface PlaceholderRowProps {
-  /** Tree prefix glyph (e.g., '├─', '└─') */
-  treePrefix: string;
   /** Indentation string */
   indent: string;
   /** Max width available */
@@ -56,16 +54,6 @@ export function PlaceholderRow(props: PlaceholderRowProps) {
       <text fg={subtleColor()} selectable={false}>
         {props.indent}
       </text>
-      {/* Tree prefix glyph */}
-      <text fg={subtleColor()} selectable={false}>
-        {props.treePrefix}
-      </text>
-      {/* Spacing - only when treePrefix exists */}
-      <Show when={props.treePrefix}>
-        <text fg={subtleColor()} selectable={false}>
-          {' '}
-        </text>
-      </Show>
       {/* Placeholder dots in subtle color */}
       <text fg={subtleColor()} selectable={false}>
         {label()}

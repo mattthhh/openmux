@@ -7,7 +7,7 @@ import { createSignal, createEffect, createMemo, on, Show } from 'solid-js';
 import { useRenderer } from '@opentui/solid';
 import { useTerminal } from '../contexts/TerminalContext';
 import { useSelection } from '../contexts/SelectionContext';
-import { useCopyMode } from '../contexts/CopyModeContext';
+import { useCopyMode } from '../contexts/copy-mode';
 import { useSearch } from '../contexts/SearchContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { getHostBackgroundColor } from '../effect/bridge';
@@ -80,7 +80,11 @@ export function TerminalView(props: TerminalViewProps) {
   // Request render when selection or search version changes.
   createEffect(
     on(
-      [() => selection.selectionVersion, () => search.searchVersion, () => copyMode.copyModeVersion],
+      [
+        () => selection.selectionVersion,
+        () => search.searchVersion,
+        () => copyMode.copyModeVersion,
+      ],
       () => renderer.requestRender()
     )
   );
@@ -99,15 +103,12 @@ export function TerminalView(props: TerminalViewProps) {
   // Defer to macrotask to ensure any pending emulator resize updates arrive before we render,
   // preventing a race where we render with stale dimensions before the reflowed state arrives.
   createEffect(
-    on(
-      [() => props.width, () => props.height],
-      () => {
-        deferMacrotask(() => {
-          setVersion((v) => v + 1);
-          renderer.requestRender();
-        });
-      }
-    )
+    on([() => props.width, () => props.height], () => {
+      deferMacrotask(() => {
+        setVersion((v) => v + 1);
+        renderer.requestRender();
+      });
+    })
   );
 
   return (

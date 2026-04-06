@@ -37,6 +37,7 @@ export function createAggregateKeyboardHandler(deps: AggregateKeyboardDeps) {
     onToggleSessionPicker,
     onToggleCommandPalette,
     onToggleConsole,
+    onPaste,
   } = deps;
 
   const { handleSearchModeKeys } = createAggregateSearchHandler(deps);
@@ -159,6 +160,13 @@ export function createAggregateKeyboardHandler(deps: AggregateKeyboardDeps) {
         setPrefixActive(false);
         clearPrefixTimeout();
         togglePreviewZoom();
+        return true;
+      }
+
+      if (globalPrefixAction === 'clipboard.paste') {
+        setPrefixActive(false);
+        clearPrefixTimeout();
+        onPaste?.();
         return true;
       }
 

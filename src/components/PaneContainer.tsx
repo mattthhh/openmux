@@ -10,7 +10,7 @@ import { useSession } from '../contexts/SessionContext';
 import { useAggregateView } from '../contexts/AggregateViewContext';
 import { useTitle } from '../contexts/TitleContext';
 import { useTheme } from '../contexts/ThemeContext';
-import { useCopyMode } from '../contexts/CopyModeContext';
+import { useCopyMode } from '../contexts/copy-mode';
 import { useKeyboard } from '../contexts/KeyboardContext';
 import { getFocusedPane, isMainPaneFocused } from '../core/workspace-utils';
 import { collectPanes, findPane, getFirstPane } from '../core/layout-tree';

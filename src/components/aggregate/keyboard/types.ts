@@ -65,6 +65,7 @@ export interface AggregateKeyboardDeps {
   onRequestQuit?: () => void;
   onDetach?: () => void;
   onRequestKillPty?: (ptyId: string) => void;
+  onPaste?: () => void;
 
   clearPrefixTimeout: () => void;
   startPrefixTimeout: () => void;

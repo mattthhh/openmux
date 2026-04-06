@@ -8,7 +8,7 @@ import type { MouseEvent as OpenTUIMouseEvent } from '@opentui/core';
 import { useTheme } from '../contexts/ThemeContext';
 import { useTerminal } from '../contexts/TerminalContext';
 import { useSelection } from '../contexts/SelectionContext';
-import { useCopyMode } from '../contexts/CopyModeContext';
+import { useCopyMode } from '../contexts/copy-mode';
 import { useKeyboard } from '../contexts/KeyboardContext';
 import { useTitle } from '../contexts/TitleContext';
 import { TerminalView } from './TerminalView';

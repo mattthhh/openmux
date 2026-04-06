@@ -31,10 +31,6 @@ export interface PtyTreeRowProps {
   isSelected: boolean;
   /** Max width for rendering */
   maxWidth: number;
-  /** Max git metadata width across all PTYs for alignment - DEPRECATED, unused */
-  maxMetaWidth?: number;
-  /** Tree prefix glyph - IGNORED for cleaner look */
-  treePrefix: string;
   /** Indentation string (just spaces, no tree glyphs) */
   indent: string;
   /** Theme colors */

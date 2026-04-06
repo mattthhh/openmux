@@ -13,7 +13,7 @@ import {
   OverlayProvider,
 } from '../../contexts';
 import { SelectionProvider } from '../../contexts/SelectionContext';
-import { CopyModeProvider } from '../../contexts/CopyModeContext';
+import { CopyModeProvider } from '../../contexts/copy-mode';
 import { SearchProvider } from '../../contexts/SearchContext';
 import { AggregateViewProvider } from '../../contexts/AggregateViewContext';
 import { TitleProvider } from '../../contexts/TitleContext';
@@ -46,9 +46,7 @@ function ConfiguredProviders(props: AppProvidersProps) {
                   <SearchProvider>
                     <SessionBridge>
                       <AggregateViewProvider>
-                        <OverlayProvider>
-                          {props.children}
-                        </OverlayProvider>
+                        <OverlayProvider>{props.children}</OverlayProvider>
                       </AggregateViewProvider>
                     </SessionBridge>
                   </SearchProvider>

@@ -5,7 +5,7 @@
 
 import { eventToCombo } from '../../core/keybindings';
 import type { KeyboardEvent } from '../../core/keyboard-event';
-import type { CopyModeContextValue } from '../../contexts/CopyModeContext';
+import type { CopyModeContextValue } from '../../contexts/copy-mode';
 
 type VimSequenceHandler = {
   handleCombo: (combo: string) => { action: string | null; pending: boolean };
@@ -60,11 +60,8 @@ export function createCopyModeKeyHandler(deps: {
 
     const combo = eventToCombo(keyEvent);
     const char = event.sequence && event.sequence.length === 1 ? event.sequence : null;
-    const isBareEscape = event.key === 'escape'
-      && !event.ctrl
-      && !event.alt
-      && !event.meta
-      && !event.shift;
+    const isBareEscape =
+      event.key === 'escape' && !event.ctrl && !event.alt && !event.meta && !event.shift;
 
     const activePtyId = deps.copyMode.getActivePtyId();
     const hasVisual = activePtyId ? deps.copyMode.hasSelection(activePtyId) : false;

@@ -10,10 +10,6 @@ export interface SessionTreeNodeProps {
   sessionName: string;
   /** Number of panes in this session */
   paneCount: number;
-  /** Tree prefix glyph - IGNORED, kept for API compat */
-  treePrefix: string;
-  /** Indentation string - IGNORED, kept for API compat */
-  indent: string;
   /** Whether this session is currently selected */
   isSelected?: boolean;
   /** Whether this session is the currently active session */
@@ -61,10 +57,8 @@ export function SessionTreeNode(props: SessionTreeNodeProps) {
     if (props.isDropTarget) return selectionColors().background;
     return undefined;
   };
-  const mutedColor = () =>
-    props.isSelected ? selectionColors().dim : props.textColors.muted;
-  const subtleColor = () =>
-    props.isSelected ? selectionColors().dim : props.textColors.subtle;
+  const mutedColor = () => (props.isSelected ? selectionColors().dim : props.textColors.muted);
+  const subtleColor = () => (props.isSelected ? selectionColors().dim : props.textColors.subtle);
 
   // Build the display text
   const sessionLabel = () => props.sessionName;
@@ -77,8 +71,7 @@ export function SessionTreeNode(props: SessionTreeNodeProps) {
   const spacing = 1;
 
   // Available width for session name
-  const availableNameWidth = () =>
-    props.maxWidth - expandIconWidth() - paneCountWidth() - spacing;
+  const availableNameWidth = () => props.maxWidth - expandIconWidth() - paneCountWidth() - spacing;
 
   // Truncate session name if needed
   const displayName = () => {
@@ -105,11 +98,18 @@ export function SessionTreeNode(props: SessionTreeNodeProps) {
       onMouseUp={handleMouseUp}
     >
       {/* Expand/collapse indicator - NO tree glyph for sessions */}
-      <text fg={subtleColor()} selectable={false}>{expandIcon()} </text>
+      <text fg={subtleColor()} selectable={false}>
+        {expandIcon()}{' '}
+      </text>
       {/* Session name */}
-      <text fg={fgColor()} selectable={false}>{displayName()}</text>
+      <text fg={fgColor()} selectable={false}>
+        {displayName()}
+      </text>
       {/* Pane count in muted color */}
-      <text fg={mutedColor()} selectable={false}> {paneCountText()}</text>
+      <text fg={mutedColor()} selectable={false}>
+        {' '}
+        {paneCountText()}
+      </text>
     </box>
   );
 }
