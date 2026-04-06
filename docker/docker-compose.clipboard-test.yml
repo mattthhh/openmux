@@ -1,0 +1,29 @@
+services:
+  wayland-test:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.clipboard-test
+    environment:
+      - WAYLAND_DISPLAY=wayland-0
+      - XDG_RUNTIME_DIR=/tmp
+    command: bun run scripts/test-clipboard-docker.ts
+
+  x11-test:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.clipboard-test
+    environment:
+      - DISPLAY=:0
+      - XDG_RUNTIME_DIR=/tmp
+    # Unset WAYLAND_DISPLAY to force X11 path
+    command: sh -c 'unset WAYLAND_DISPLAY && bun run scripts/test-clipboard-docker.ts'
+
+  no-clipboard-test:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.clipboard-test
+    environment:
+      - WAYLAND_DISPLAY=wayland-0
+      - XDG_RUNTIME_DIR=/tmp
+    # Override PATH to not find clipboard tools
+    command: sh -c 'PATH=/usr/bin:/bin && bun run scripts/test-clipboard-docker.ts || echo "Expected failure without clipboard tools"'

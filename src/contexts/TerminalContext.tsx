@@ -461,10 +461,18 @@ export function TerminalProvider(props: TerminalProviderProps) {
   // Paste from clipboard to the focused PTY
   const pasteToFocused = async (): Promise<boolean> => {
     const focusedPtyId = getFocusedPtyId();
-    if (!focusedPtyId) return false;
+    if (!focusedPtyId) {
+      console.warn('[paste] No focused pane to paste into');
+      return false;
+    }
 
     const clipboardText = await readFromClipboard();
-    if (!clipboardText) return false;
+    if (!clipboardText) {
+      console.warn(
+        '[paste] Clipboard is empty or unavailable. On Linux, install wl-clipboard (Wayland) or xclip/xsel (X11).'
+      );
+      return false;
+    }
 
     writeToPty(focusedPtyId, clipboardText);
     return true;

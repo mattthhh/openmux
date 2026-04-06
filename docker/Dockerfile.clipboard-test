@@ -1,0 +1,43 @@
+# Docker test for Wayland clipboard support
+# Tests that openmux correctly detects and uses wl-clipboard on Wayland
+# Supports both amd64 and arm64 architectures
+
+FROM debian:bookworm-slim
+
+# Install dependencies
+# Note: Debian supports both amd64 and arm64
+RUN apt-get update && apt-get install -y \
+    curl \
+    unzip \
+    git \
+    wl-clipboard \
+    xclip \
+    xsel \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Bun (supports arm64 and amd64)
+RUN curl -fsSL https://bun.sh/install | bash && \
+    ln -s /root/.bun/bin/bun /usr/local/bin/bun
+
+# Verify architecture
+RUN echo "Architecture: $(uname -m)"
+
+# Create app directory
+WORKDIR /app
+
+# Copy package files first for better caching
+COPY package.json bun.lock ./
+
+# Install dependencies
+RUN bun install
+
+# Copy source code
+COPY . .
+
+# Set up mock Wayland environment
+ENV WAYLAND_DISPLAY=wayland-0
+ENV XDG_RUNTIME_DIR=/tmp
+RUN mkdir -p /tmp
+
+# Default command runs the clipboard test
+CMD ["bun", "run", "scripts/test-clipboard-docker.ts"]

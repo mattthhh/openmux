@@ -2,155 +2,231 @@
  * Clipboard service for cross-platform clipboard operations.
  * Migrated from Effect to errore - uses plain promises instead of Effect.Effect.
  */
-import * as errore from "errore"
-import { ClipboardError } from "../errors"
+import * as errore from 'errore';
+import { ClipboardError } from '../errors';
 
 export interface Clipboard {
   /** Write text to the system clipboard */
-  write(text: string): Promise<ClipboardError | void>
+  write(text: string): Promise<ClipboardError | void>;
   /** Read text from the system clipboard */
-  read(): Promise<ClipboardError | string>
+  read(): Promise<ClipboardError | string>;
+}
+
+/** Detect if running under Wayland */
+function isWayland(): boolean {
+  return !!process.env.WAYLAND_DISPLAY;
+}
+
+/** Check if a command is available in PATH */
+async function commandExists(cmd: string): Promise<boolean> {
+  try {
+    const result = await Bun.$`which ${cmd}`.quiet();
+    return result.exitCode === 0;
+  } catch {
+    return false;
+  }
 }
 
 /** Production implementation - uses platform-specific clipboard commands */
 export async function createClipboard(): Promise<Clipboard> {
-  const platform = process.platform
+  const platform = process.platform;
+  const wayland = isWayland();
+
+  // Pre-detect available clipboard tools for Linux
+  let hasWlCopy = false;
+  let hasXclip = false;
+  let hasXsel = false;
+
+  if (platform === 'linux') {
+    hasWlCopy = await commandExists('wl-copy');
+    hasXclip = await commandExists('xclip');
+    hasXsel = await commandExists('xsel');
+
+    // Debug logging
+    if (process.env.CLIPBOARD_DEBUG) {
+      console.log('[clipboard] Detection:', {
+        wayland: wayland ? process.env.WAYLAND_DISPLAY : false,
+        hasWlCopy,
+        hasXclip,
+        hasXsel,
+      });
+    }
+  }
 
   const write = async (text: string): Promise<ClipboardError | void> => {
     const result = await errore.tryAsync<void, ClipboardError>({
       try: async () => {
-        if (platform === "darwin") {
-          const proc = Bun.spawn(["pbcopy"], { stdin: "pipe" })
-          proc.stdin.write(text)
-          proc.stdin.end()
-          await proc.exited
-        } else if (platform === "linux") {
-          // Try xclip first, fall back to xsel
-          try {
-            const proc = Bun.spawn(["xclip", "-selection", "clipboard"], {
-              stdin: "pipe",
-            })
-            proc.stdin.write(text)
-            proc.stdin.end()
-            await proc.exited
-          } catch {
-            const proc = Bun.spawn(["xsel", "--clipboard", "--input"], {
-              stdin: "pipe",
-            })
-            proc.stdin.write(text)
-            proc.stdin.end()
-            await proc.exited
+        if (platform === 'darwin') {
+          const proc = Bun.spawn(['pbcopy'], { stdin: 'pipe' });
+          proc.stdin.write(text);
+          proc.stdin.end();
+          await proc.exited;
+        } else if (platform === 'linux') {
+          // Try Wayland first if available, then fall back to X11
+          if (wayland && hasWlCopy) {
+            if (process.env.CLIPBOARD_DEBUG) {
+              console.log('[clipboard] Using wl-copy for write');
+            }
+            const proc = Bun.spawn(['wl-copy'], { stdin: 'pipe' });
+            proc.stdin.write(text);
+            proc.stdin.end();
+            await proc.exited;
+          } else if (hasXclip) {
+            if (process.env.CLIPBOARD_DEBUG) {
+              console.log('[clipboard] Using xclip for write');
+            }
+            const proc = Bun.spawn(['xclip', '-selection', 'clipboard'], {
+              stdin: 'pipe',
+            });
+            proc.stdin.write(text);
+            proc.stdin.end();
+            await proc.exited;
+          } else if (hasXsel) {
+            if (process.env.CLIPBOARD_DEBUG) {
+              console.log('[clipboard] Using xsel for write');
+            }
+            const proc = Bun.spawn(['xsel', '--clipboard', '--input'], {
+              stdin: 'pipe',
+            });
+            proc.stdin.write(text);
+            proc.stdin.end();
+            await proc.exited;
+          } else {
+            throw new Error(
+              'No clipboard tool found. Install wl-clipboard (Wayland) or xclip/xsel (X11).'
+            );
           }
-        } else if (platform === "win32") {
-          const proc = Bun.spawn(["clip"], { stdin: "pipe" })
-          proc.stdin.write(text)
-          proc.stdin.end()
-          await proc.exited
+        } else if (platform === 'win32') {
+          const proc = Bun.spawn(['clip'], { stdin: 'pipe' });
+          proc.stdin.write(text);
+          proc.stdin.end();
+          await proc.exited;
         }
       },
-      catch: (e) => new ClipboardError({ operation: "write", reason: String(e), cause: e }),
-    })
+      catch: (e) => new ClipboardError({ operation: 'write', reason: String(e), cause: e }),
+    });
 
     // Add timeout handling
     const timeoutPromise = new Promise<never>((_, reject) => {
       setTimeout(() => {
-        reject(new ClipboardError({
-          operation: "write",
-          reason: "Clipboard write timed out after 5 seconds",
-        }))
-      }, 5000)
-    })
+        reject(
+          new ClipboardError({
+            operation: 'write',
+            reason: 'Clipboard write timed out after 5 seconds',
+          })
+        );
+      }, 5000);
+    });
 
     try {
-      return await Promise.race([result, timeoutPromise])
+      return await Promise.race([result, timeoutPromise]);
     } catch (error) {
-      if (error instanceof ClipboardError) return error
-      return new ClipboardError({ operation: "write", reason: String(error) })
+      if (error instanceof ClipboardError) return error;
+      return new ClipboardError({ operation: 'write', reason: String(error) });
     }
-  }
+  };
 
   const read = async (): Promise<ClipboardError | string> => {
     const result = await errore.tryAsync<string, ClipboardError>({
       try: async () => {
-        if (platform === "darwin") {
-          const result = await Bun.$`pbpaste`.quiet()
-          return result.text()
-        } else if (platform === "linux") {
-          try {
-            const result = await Bun.$`xclip -selection clipboard -o`.quiet()
-            return result.text()
-          } catch {
-            const result = await Bun.$`xsel --clipboard --output`.quiet()
-            return result.text()
+        if (platform === 'darwin') {
+          const result = await Bun.$`pbpaste`.quiet();
+          return result.text();
+        } else if (platform === 'linux') {
+          // Try Wayland first if available, then fall back to X11
+          if (wayland && hasWlCopy) {
+            if (process.env.CLIPBOARD_DEBUG) {
+              console.log('[clipboard] Using wl-paste for read');
+            }
+            const result = await Bun.$`wl-paste --no-newline`.quiet();
+            return result.text();
+          } else if (hasXclip) {
+            if (process.env.CLIPBOARD_DEBUG) {
+              console.log('[clipboard] Using xclip for read');
+            }
+            const result = await Bun.$`xclip -selection clipboard -o`.quiet();
+            return result.text();
+          } else if (hasXsel) {
+            if (process.env.CLIPBOARD_DEBUG) {
+              console.log('[clipboard] Using xsel for read');
+            }
+            const result = await Bun.$`xsel --clipboard --output`.quiet();
+            return result.text();
+          } else {
+            throw new Error(
+              'No clipboard tool found. Install wl-clipboard (Wayland) or xclip/xsel (X11).'
+            );
           }
-        } else if (platform === "win32") {
-          const result = await Bun.$`powershell -command "Get-Clipboard"`.quiet()
-          return result.text()
+        } else if (platform === 'win32') {
+          const result = await Bun.$`powershell -command "Get-Clipboard"`.quiet();
+          return result.text();
         }
-        return ""
+        return '';
       },
-      catch: (e) => new ClipboardError({ operation: "read", reason: String(e), cause: e }),
-    })
+      catch: (e) => new ClipboardError({ operation: 'read', reason: String(e), cause: e }),
+    });
 
     // Add timeout handling
     const timeoutPromise = new Promise<never>((_, reject) => {
       setTimeout(() => {
-        reject(new ClipboardError({
-          operation: "read",
-          reason: "Clipboard read timed out after 5 seconds",
-        }))
-      }, 5000)
-    })
+        reject(
+          new ClipboardError({
+            operation: 'read',
+            reason: 'Clipboard read timed out after 5 seconds',
+          })
+        );
+      }, 5000);
+    });
 
     try {
-      return await Promise.race([result, timeoutPromise])
+      return await Promise.race([result, timeoutPromise]);
     } catch (error) {
-      if (error instanceof ClipboardError) return error
-      return new ClipboardError({ operation: "read", reason: String(error) })
+      if (error instanceof ClipboardError) return error;
+      return new ClipboardError({ operation: 'read', reason: String(error) });
     }
-  }
+  };
 
   return {
     write,
     read,
-  }
+  };
 }
 
 /** Test implementation - in-memory clipboard for testing */
 export function createTestClipboard(): Clipboard {
-  let buffer = ""
+  let buffer = '';
 
   const write = async (text: string): Promise<ClipboardError | void> => {
     try {
-      buffer = text
-      return undefined
+      buffer = text;
+      return undefined;
     } catch (e: unknown) {
-      return new ClipboardError({ operation: "write", reason: String(e) })
+      return new ClipboardError({ operation: 'write', reason: String(e) });
     }
-  }
+  };
 
   const read = async (): Promise<ClipboardError | string> => {
-    return buffer
-  }
+    return buffer;
+  };
 
   return {
     write,
     read,
-  }
+  };
 }
 
 /** Production Clipboard instance (singleton) */
-let clipboardInstance: Clipboard | null = null
+let clipboardInstance: Clipboard | null = null;
 
 /** Get or create the production Clipboard instance */
 export async function getClipboard(): Promise<Clipboard> {
   if (!clipboardInstance) {
-    clipboardInstance = await createClipboard()
+    clipboardInstance = await createClipboard();
   }
-  return clipboardInstance
+  return clipboardInstance;
 }
 
 /** Reset the singleton instance (for testing) */
 export function resetClipboard(): void {
-  clipboardInstance = null
+  clipboardInstance = null;
 }
