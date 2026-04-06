@@ -102,72 +102,74 @@ Each session runs in a minimal shim process (`openmux --shim <session-id>`):
 5. Live streaming resumes
 ```
 
+For current detach/attach lifecycle, single-client lock semantics, and shim RPC/event details, see also [shim-protocol.md](./shim-protocol.md).
+
 ## Protocol Schema
 
 Communication uses length-prefixed JSON with Effect Schema validation:
 
 ```typescript
-import { Schema } from "effect"
+import { Schema } from 'effect';
 
 // Server (Shim) → Client (TUI)
 const ServerMessage = Schema.Union(
   // Full terminal state on connect/reconnect
   Schema.Struct({
-    _tag: Schema.Literal("snapshot"),
+    _tag: Schema.Literal('snapshot'),
     ptyId: PtyId,
     state: TerminalStateSchema,
     scrollback: Schema.Array(TerminalRowSchema),
   }),
   // Incremental PTY output
   Schema.Struct({
-    _tag: Schema.Literal("output"),
+    _tag: Schema.Literal('output'),
     ptyId: PtyId,
     data: Schema.String,
   }),
   // PTY exited
   Schema.Struct({
-    _tag: Schema.Literal("exit"),
+    _tag: Schema.Literal('exit'),
     ptyId: PtyId,
     exitCode: Schema.Int,
   }),
   // PTY created (for dynamic views)
   Schema.Struct({
-    _tag: Schema.Literal("created"),
+    _tag: Schema.Literal('created'),
     ptyId: PtyId,
     cols: Cols,
     rows: Rows,
     cwd: Schema.String,
-  }),
-)
+  })
+);
 
 // Client (TUI) → Server (Shim)
 const ClientMessage = Schema.Union(
   // User input
   Schema.Struct({
-    _tag: Schema.Literal("input"),
+    _tag: Schema.Literal('input'),
     ptyId: PtyId,
     data: Schema.String,
   }),
   // Terminal resize
   Schema.Struct({
-    _tag: Schema.Literal("resize"),
+    _tag: Schema.Literal('resize'),
     ptyId: PtyId,
     cols: Cols,
     rows: Rows,
   }),
   // Create new PTY in session
   Schema.Struct({
-    _tag: Schema.Literal("create"),
+    _tag: Schema.Literal('create'),
     cols: Cols,
     rows: Rows,
     cwd: Schema.String,
   }),
   // Destroy PTY
   Schema.Struct({
-    _tag: Schema.Literal("destroy"),
+    _tag: Schema.Literal('destroy'),
     ptyId: PtyId,
-  }),
-)
+  })
+);
 ```
 
 ### Wire Format
@@ -181,23 +183,23 @@ const ClientMessage = Schema.Union(
 ### ShimClient Service
 
 ```typescript
-class ShimClient extends Context.Tag("@openmux/ShimClient")<
+class ShimClient extends Context.Tag('@openmux/ShimClient')<
   ShimClient,
   {
     // Spawn a new shim process for a session
-    spawn: (sessionId: SessionId) => Effect<void, ShimSpawnError>
+    spawn: (sessionId: SessionId) => Effect<void, ShimSpawnError>;
 
     // Connect to an existing shim
-    connect: (sessionId: SessionId) => Effect<ShimConnection, ShimNotFoundError>
+    connect: (sessionId: SessionId) => Effect<ShimConnection, ShimNotFoundError>;
 
     // Disconnect (session goes to background)
-    disconnect: (sessionId: SessionId) => Effect<void>
+    disconnect: (sessionId: SessionId) => Effect<void>;
 
     // List running shims (scan socket directory)
-    list: () => Effect<SessionId[]>
+    list: () => Effect<SessionId[]>;
 
     // Kill a shim process
-    kill: (sessionId: SessionId) => Effect<void>
+    kill: (sessionId: SessionId) => Effect<void>;
   }
 >() {}
 ```
@@ -243,15 +245,15 @@ class Pty extends Context.Tag("@openmux/Pty")<Pty, PtyInterface>() {
 // src/index.ts
 if (process.argv.includes('--shim')) {
   // Minimal path - skip UI, only load PTY + socket
-  const { runShim } = await import('./shim/main')
-  const sessionId = process.argv[process.argv.indexOf('--shim') + 1]
-  await runShim(sessionId)
-  process.exit(0)
+  const { runShim } = await import('./shim/main');
+  const sessionId = process.argv[process.argv.indexOf('--shim') + 1];
+  await runShim(sessionId);
+  process.exit(0);
 }
 
 // Full TUI path
-const { runApp } = await import('./app/main')
-await runApp()
+const { runApp } = await import('./app/main');
+await runApp();
 ```
 
 ### Orphan Cleanup
