@@ -122,6 +122,19 @@ export function AggregateStateManager(props: AggregateStateManagerProps) {
     return workspace.focusedPaneId ?? getLastPaneIdForWorkspace(workspace);
   };
 
+  const switchToSessionWithData = async (
+    sessionId: string,
+    preloadedData?: Awaited<ReturnType<typeof loadSessionData>>
+  ): Promise<boolean> => {
+    if (preloadedData instanceof Error) {
+      console.error('Failed to load session:', preloadedData.message);
+      return false;
+    }
+
+    await switchSession(sessionId, preloadedData ? { preloadedData } : undefined);
+    return true;
+  };
+
   // Copy mode tracking effects
   createEffect(() => {
     if (
@@ -209,6 +222,27 @@ export function AggregateStateManager(props: AggregateStateManagerProps) {
     setPendingPaneFocus(null);
   });
 
+  createEffect(() => {
+    if (!props.isActive()) return;
+    if (sessionState.switching) return;
+
+    const selectedSessionId = props.selectedSessionId();
+    if (!selectedSessionId) return;
+    if (selectedSessionId === sessionState.activeSessionId) return;
+
+    let cancelled = false;
+
+    void (async () => {
+      const sessionData = await loadSessionData(selectedSessionId);
+      if (cancelled) return;
+      await switchToSessionWithData(selectedSessionId, sessionData);
+    })();
+
+    onCleanup(() => {
+      cancelled = true;
+    });
+  });
+
   // Cleanup
   onCleanup(() => {
     setPendingPaneFocus(null);
@@ -234,19 +268,30 @@ export function AggregateStateManager(props: AggregateStateManagerProps) {
 
       const sessionLocation = findSessionForPty(selectedPtyId);
       if (sessionLocation && sessionLocation.sessionId !== sessionState.activeSessionId) {
+        const sessionData = await loadSessionData(sessionLocation.sessionId);
+        if (sessionData instanceof Error) {
+          console.error('Failed to load session:', sessionData.message);
+          return false;
+        }
+
+        const nextLocation = findPaneLocation(sessionLocation.paneId, sessionData.workspaces);
+
         props.closeAggregateView();
         props.exitAggregateMode();
-        await switchSession(sessionLocation.sessionId);
-        const nextLocation = findPaneLocation(sessionLocation.paneId, layoutState.workspaces);
+        const switched = await switchToSessionWithData(sessionLocation.sessionId, sessionData);
+        if (!switched) {
+          return false;
+        }
         if (nextLocation) {
           switchWorkspace(nextLocation.workspaceId);
           focusPane(sessionLocation.paneId);
           return true;
         }
         const fallbackPaneId = getPreferredPaneIdForWorkspace(
-          layoutState.workspaces[layoutState.activeWorkspaceId]
+          sessionData.workspaces[sessionData.activeWorkspaceId]
         );
         if (fallbackPaneId) {
+          switchWorkspace(sessionData.activeWorkspaceId);
           focusPane(fallbackPaneId);
         }
         return true;
@@ -279,7 +324,10 @@ export function AggregateStateManager(props: AggregateStateManagerProps) {
 
     props.closeAggregateView();
     props.exitAggregateMode();
-    await switchSession(selectedSessionId);
+    const switched = await switchToSessionWithData(selectedSessionId, sessionData);
+    if (!switched) {
+      return false;
+    }
     switchWorkspace(workspaceId);
     if (paneId) {
       focusPane(paneId);
@@ -375,7 +423,11 @@ export function AggregateStateManager(props: AggregateStateManagerProps) {
         }
       }
 
-      await switchSession(targetSessionId);
+      const switched = await switchToSessionWithData(targetSessionId, sessionData);
+      if (!switched) {
+        props.removePendingPaneCreation(pendingInsertionId);
+        return;
+      }
     }
 
     switchWorkspace(targetWorkspaceId);
