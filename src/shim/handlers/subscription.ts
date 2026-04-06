@@ -48,7 +48,7 @@ async function subscribeToPtyStream(
     context,
     `Failed to subscribe to unified updates for PTY ${ptyId}`,
     (pty) =>
-      pty.subscribeUnified(asPtyId(ptyId), (update: UnifiedTerminalUpdate) => {
+      pty.subscribe(asPtyId(ptyId), (update: UnifiedTerminalUpdate) => {
         callback({ type: 'update', update });
       })
   );

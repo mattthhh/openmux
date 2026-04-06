@@ -78,27 +78,40 @@ async function getPtyMetadata(
   context: ShimHandlerContext,
   ptyId: string
 ): Promise<ShimPtyMetadata> {
-  const [sessionValue, cwd, foregroundProcess, gitInfo, gitDiffStats, title, lastCommand] =
-    await Promise.all([
-      readPtyValue(context, (pty) => pty.getSession(asPtyId(ptyId))),
-      readPtyValue(context, (pty) => pty.getCwd(asPtyId(ptyId))),
-      readPtyValue(context, (pty) => pty.getForegroundProcess(asPtyId(ptyId))),
-      readPtyValue(context, (pty) => pty.getGitInfo(asPtyId(ptyId))),
-      readPtyValue(context, (pty) => pty.getGitDiffStats(asPtyId(ptyId))),
-      readPtyValue(context, (pty) => pty.getTitle(asPtyId(ptyId))),
-      readPtyValue(context, (pty) => pty.getLastCommand(asPtyId(ptyId))),
-    ]);
+  const [sessionValue, cwd, foregroundProcess, gitInfoWithDiff] = await Promise.all([
+    readPtyValue(context, (pty) => pty.getSession(asPtyId(ptyId))),
+    readPtyValue(context, (pty) => pty.getCwd(asPtyId(ptyId))),
+    readPtyValue(context, (pty) => pty.getForegroundProcess(asPtyId(ptyId))),
+    readPtyValue(context, (pty) => pty.getGitInfo(asPtyId(ptyId), { includeDiffStats: true })),
+  ]);
 
+  const runtimeSession =
+    sessionValue && typeof sessionValue === 'object'
+      ? (sessionValue as {
+          title?: string;
+          lastCommand?: string;
+        })
+      : null;
   const session = serializeSession(sessionValue);
+
+  const gitInfo =
+    gitInfoWithDiff && typeof gitInfoWithDiff === 'object'
+      ? (({ diffStats: _diffStats, ...rest }) => rest)(gitInfoWithDiff as Record<string, unknown>)
+      : undefined;
+  const gitDiffStats =
+    gitInfoWithDiff && typeof gitInfoWithDiff === 'object' && 'diffStats' in gitInfoWithDiff
+      ? ((gitInfoWithDiff as { diffStats?: ShimPtyMetadata['gitDiffStats'] }).diffStats ??
+        undefined)
+      : undefined;
 
   return {
     session,
     cwd: cwd ?? session?.cwd ?? null,
     foregroundProcess: foregroundProcess ?? undefined,
-    gitInfo: gitInfo ?? undefined,
-    gitDiffStats: gitDiffStats ?? undefined,
-    title: title ?? '',
-    lastCommand: lastCommand ?? undefined,
+    gitInfo: gitInfo as ShimPtyMetadata['gitInfo'],
+    gitDiffStats,
+    title: runtimeSession?.title ?? '',
+    lastCommand: runtimeSession?.lastCommand ?? undefined,
   };
 }
 

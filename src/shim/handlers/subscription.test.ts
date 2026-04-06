@@ -32,7 +32,7 @@ function createContext() {
     withPty: async (fn) =>
       fn({
         getEmulator: () => emulator,
-        subscribeUnified: (_ptyId: string, callback: (update: UnifiedTerminalUpdate) => void) => {
+        subscribe: (_ptyId: string, callback: (update: UnifiedTerminalUpdate) => void) => {
           unifiedCallback = callback;
           return () => {
             unifiedUnsubscribed = true;

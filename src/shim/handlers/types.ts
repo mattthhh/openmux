@@ -2,13 +2,14 @@
  * Shim Handlers - Shared Types
  */
 import type net from 'net';
+import type { PtyService } from '../../effect/services/Pty';
 import type { TerminalColors } from '../../terminal/terminal-colors';
 import type { ShimServerState } from '../server-state';
 import type { ShimHeader } from '../protocol';
 import type { KittyHandlers } from '../server/kitty';
 
 /** PTY accessor function type */
-export type WithPty = <A>(fn: (pty: any) => Promise<A> | A) => Promise<A>;
+export type WithPty = <A>(fn: (pty: PtyService) => Promise<A> | A) => Promise<A>;
 
 /** Server handler options */
 export type ShimServerOptions = {

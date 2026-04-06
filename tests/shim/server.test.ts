@@ -144,7 +144,7 @@ describe('shim server', () => {
     const fakePty = {
       listAll: () => [],
       subscribeToLifecycle: () => () => {},
-      subscribeToAllTitleChanges: () => () => {},
+      subscribeToTitle: () => () => {},
       subscribeToAllActivity: () => () => {},
     };
 
@@ -208,10 +208,10 @@ describe('shim server', () => {
         await new Promise((resolve) => setTimeout(resolve, 250));
         return {};
       },
-      subscribeUnified: () => () => {},
+      subscribe: () => () => {},
       onExit: () => () => {},
       subscribeToLifecycle: () => () => {},
-      subscribeToAllTitleChanges: () => () => {},
+      subscribeToTitle: () => () => {},
       subscribeToAllActivity: () => () => {},
     };
 
@@ -277,7 +277,7 @@ describe('shim server', () => {
       getEmulator: async () => ({
         getTerminalState: () => terminalState,
       }),
-      subscribeUnified: (_ptyId: string, callback: (update: unknown) => void) => {
+      subscribe: (_ptyId: string, callback: (update: unknown) => void) => {
         callback({
           terminalUpdate: {
             dirtyRows: new Map(),
@@ -299,7 +299,7 @@ describe('shim server', () => {
       },
       onExit: () => () => {},
       subscribeToLifecycle: () => () => {},
-      subscribeToAllTitleChanges: () => () => {},
+      subscribeToTitle: () => () => {},
       subscribeToAllActivity: () => () => {},
     };
 
@@ -340,7 +340,7 @@ describe('shim server', () => {
     const fakePty = {
       listAll: () => [],
       subscribeToLifecycle: () => () => {},
-      subscribeToAllTitleChanges: () => () => {},
+      subscribeToTitle: () => () => {},
       subscribeToAllActivity: () => () => {},
     };
 
@@ -412,10 +412,10 @@ describe('shim server', () => {
     const fakePty = {
       listAll: () => ['pty-1'],
       getEmulator: async () => ({}),
-      subscribeUnified: () => () => {},
+      subscribe: () => () => {},
       onExit: () => () => {},
       subscribeToLifecycle: () => () => {},
-      subscribeToAllTitleChanges: () => () => {},
+      subscribeToTitle: () => () => {},
       subscribeToAllActivity: () => () => {},
     };
 
@@ -469,10 +469,10 @@ describe('shim server', () => {
     const fakePty = {
       listAll: () => ['pty-1'],
       getEmulator: async () => ({}),
-      subscribeUnified: () => () => {},
+      subscribe: () => () => {},
       onExit: () => () => {},
       subscribeToLifecycle: () => () => {},
-      subscribeToAllTitleChanges: () => () => {},
+      subscribeToTitle: () => () => {},
       subscribeToAllActivity: () => () => {},
     };
 

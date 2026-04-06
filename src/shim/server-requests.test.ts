@@ -21,13 +21,26 @@ function createContext(overrides?: { pty?: Record<string, (...args: any[]) => an
       rows: 24,
       cwd: '/session-cwd',
       shell: '/bin/zsh',
+      title: 'editor',
+      lastCommand: 'git status',
     }),
     getCwd: () => '/live-cwd',
     getForegroundProcess: () => 'vim',
-    getGitInfo: () => ({ branch: 'main', repoKey: '/repo' }),
-    getGitDiffStats: () => ({ added: 2, removed: 1, binary: 0 }),
-    getTitle: () => 'editor',
-    getLastCommand: () => 'git status',
+    getGitInfo: (_ptyId: string, options?: { includeDiffStats?: boolean }) => ({
+      branch: 'main',
+      repoKey: '/repo',
+      dirty: true,
+      staged: 1,
+      unstaged: 2,
+      untracked: 0,
+      conflicted: 0,
+      ahead: undefined,
+      behind: undefined,
+      stashCount: undefined,
+      state: undefined,
+      detached: false,
+      ...(options?.includeDiffStats ? { diffStats: { added: 2, removed: 1, binary: 0 } } : {}),
+    }),
     ...overrides?.pty,
   };
 
@@ -86,7 +99,20 @@ describe('shim/server-requests', () => {
         },
         cwd: '/live-cwd',
         foregroundProcess: 'vim',
-        gitInfo: { branch: 'main', repoKey: '/repo' },
+        gitInfo: {
+          branch: 'main',
+          repoKey: '/repo',
+          dirty: true,
+          staged: 1,
+          unstaged: 2,
+          untracked: 0,
+          conflicted: 0,
+          ahead: undefined,
+          behind: undefined,
+          stashCount: undefined,
+          state: undefined,
+          detached: false,
+        },
         gitDiffStats: { added: 2, removed: 1, binary: 0 },
         title: 'editor',
         lastCommand: 'git status',
@@ -94,11 +120,63 @@ describe('shim/server-requests', () => {
     });
   });
 
+  it('uses the consolidated current PtyService metadata surface', async () => {
+    const calls: Array<{ includeDiffStats?: boolean }> = [];
+    const fixture = createContext({
+      pty: {
+        getGitInfo: (_ptyId: string, options?: { includeDiffStats?: boolean }) => {
+          calls.push({ includeDiffStats: options?.includeDiffStats });
+          return {
+            branch: 'main',
+            repoKey: '/repo',
+            dirty: false,
+            staged: 0,
+            unstaged: 0,
+            untracked: 0,
+            conflicted: 0,
+            ahead: undefined,
+            behind: undefined,
+            stashCount: undefined,
+            state: undefined,
+            detached: false,
+            diffStats: { added: 2, removed: 1, binary: 0 },
+          };
+        },
+      },
+    });
+
+    await fixture.handleRequest(
+      fixture.socket,
+      {
+        type: 'request',
+        requestId: 2,
+        method: 'getPtyMetadata',
+        params: { ptyId: 'pty-1' },
+      },
+      []
+    );
+
+    expect(calls).toEqual([{ includeDiffStats: true }]);
+  });
+
   it('keeps legacy getters working via metadata fallbacks', async () => {
     const fixture = createContext({
       pty: {
         getCwd: () => new Error('cwd unavailable'),
-        getGitInfo: () => ({ branch: 'feature/refactor', repoKey: '/repo' }),
+        getGitInfo: () => ({
+          branch: 'feature/refactor',
+          repoKey: '/repo',
+          dirty: false,
+          staged: 0,
+          unstaged: 0,
+          untracked: 0,
+          conflicted: 0,
+          ahead: undefined,
+          behind: undefined,
+          stashCount: undefined,
+          state: undefined,
+          detached: false,
+        }),
       },
     });
 

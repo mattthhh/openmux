@@ -35,7 +35,7 @@ describe('createServerHandlers detach behavior', () => {
         fn({
           listAll: () => [],
           subscribeToLifecycle: () => () => {},
-          subscribeToAllTitleChanges: () => () => {},
+          subscribeToTitle: () => () => {},
           subscribeToAllActivity: () => () => {},
         } as any),
       setHostColors: () => {},

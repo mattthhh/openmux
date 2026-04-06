@@ -56,7 +56,7 @@ export async function handleTitles(
   const result = await errore.tryAsync<() => void, ShimConnectionError>({
     try: () =>
       withPty((pty) =>
-        pty.subscribeToAllTitleChanges((event: { ptyId: string; title: string }) => {
+        pty.subscribeToTitle((event: { ptyId: string; title: string }) => {
           sendEvent({ type: 'ptyTitle', ptyId: String(event.ptyId), title: event.title });
         })
       ),
