@@ -2,7 +2,14 @@
  * Session CRUD operations.
  */
 
-import type { SessionId, SessionMetadata, WorkspaceId } from '../core/types';
+import type {
+  LayoutNode,
+  PaneData,
+  SessionId,
+  SessionMetadata,
+  WorkspaceId,
+  Workspace,
+} from '../core/types';
 import type { Workspaces } from '../core/operations/layout-actions';
 import type { SessionState, SessionAction } from '../core/operations/session-actions';
 import {
@@ -29,6 +36,46 @@ class SwitchingGuard implements AsyncDisposable {
       this.dispatch({ type: 'SET_SWITCHING', switching: false });
     }
   }
+}
+
+function cloneLayoutNode(node: LayoutNode | null): LayoutNode | null {
+  if (!node) return null;
+
+  if ((node as { type?: string }).type === 'split') {
+    const splitNode = node as Extract<LayoutNode, { type: 'split' }>;
+    return {
+      ...splitNode,
+      rectangle: splitNode.rectangle ? { ...splitNode.rectangle } : undefined,
+      first: cloneLayoutNode(splitNode.first) as LayoutNode,
+      second: cloneLayoutNode(splitNode.second) as LayoutNode,
+    };
+  }
+
+  const paneNode = node as PaneData;
+  return {
+    ...paneNode,
+    rectangle: paneNode.rectangle ? { ...paneNode.rectangle } : undefined,
+  };
+}
+
+function cloneWorkspace(workspace: Workspace): Workspace {
+  return {
+    ...workspace,
+    mainPane: cloneLayoutNode(workspace.mainPane),
+    stackPanes: workspace.stackPanes.map((pane) => cloneLayoutNode(pane) as LayoutNode),
+    lastFocusedPaneIds: [...workspace.lastFocusedPaneIds],
+  };
+}
+
+function snapshotWorkspaces(workspaces: Workspaces): Workspaces {
+  const snapshot: Workspaces = {};
+
+  for (const [workspaceId, workspace] of Object.entries(workspaces)) {
+    if (!workspace) continue;
+    snapshot[Number(workspaceId) as WorkspaceId] = cloneWorkspace(workspace);
+  }
+
+  return snapshot;
 }
 
 export interface SessionOperationsParams {
@@ -135,7 +182,7 @@ export function createSessionOperations(params: SessionOperationsParams) {
       const workspaces = getWorkspaces();
       const activeWorkspaceId = getActiveWorkspaceId();
       if (!options.skipSave && shouldPersistSession(workspaces)) {
-        const workspacesSnapshot = structuredClone(workspaces);
+        const workspacesSnapshot = snapshotWorkspaces(workspaces);
         void saveCurrentSession(
           state.activeSession,
           workspacesSnapshot,
