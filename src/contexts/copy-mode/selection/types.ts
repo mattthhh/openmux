@@ -3,7 +3,7 @@
  */
 
 import type { SelectionRange } from '../../../core/coordinates';
-import type { SelectionBounds } from '../../../core/types';
+import type { SelectionBounds, TerminalCell } from '../../../core/types';
 import type { CopyCursor, CopyVisualType } from '../types';
 
 /** Selection state within copy mode */
@@ -25,5 +25,5 @@ export interface WordSelectionContext {
   start: number;
   end: number;
   absY: number;
-  line: import('../../../core/types').TerminalCell[];
+  line: TerminalCell[];
 }

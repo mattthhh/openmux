@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach } from 'bun:test';
 import {
   SessionPtyCache,
-  DEFAULT_CACHE_MAX_AGE_MS,
   aggregateSessionMappings,
   getAggregateSessionForPty,
 } from './session-pty-cache';

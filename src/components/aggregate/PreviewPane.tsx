@@ -5,7 +5,7 @@
  * and proper border styling based on mode.
  */
 
-import { Show, type Component } from 'solid-js';
+import { type Component } from 'solid-js';
 import type { MouseEvent as OpenTUIMouseEvent } from '@opentui/core';
 import type { Theme } from '../../contexts/ThemeContext';
 import type { InteractivePreviewProps } from './InteractivePreview';

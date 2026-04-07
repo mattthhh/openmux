@@ -4,12 +4,7 @@
 import { describe, it, expect, beforeEach } from 'bun:test';
 import type net from 'net';
 import { createShimServerState } from '../server-state';
-import {
-  shouldSuppressBootstrappingEvent,
-  isCurrentAttach,
-  createEventSender,
-  sendDetached,
-} from './events';
+import { shouldSuppressBootstrappingEvent, isCurrentAttach, createEventSender } from './events';
 import type { ShimHeader } from '../protocol';
 
 describe('shim handlers/events (litmus)', () => {

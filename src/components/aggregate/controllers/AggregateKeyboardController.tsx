@@ -4,7 +4,6 @@
  */
 
 import { createEffect, onCleanup } from 'solid-js';
-import type { KeyboardEvent } from '../../../effect/bridge';
 import { useOverlayKeyboardHandler } from '../../../contexts/keyboard/use-overlay-keyboard-handler';
 import { createAggregateKeyboardHandler } from '../keyboard-handlers';
 import type { AggregateKeyboardDeps } from '../keyboard/types';
@@ -18,8 +17,7 @@ export interface AggregateKeyboardControllerProps extends AggregateKeyboardDeps 
  * Sets up keyboard handlers and manages vim mode synchronization.
  */
 export function AggregateKeyboardController(props: AggregateKeyboardControllerProps) {
-  const { isActive, getVimEnabled, getVimMode, setVimMode, getInSearchMode, getPreviewMode } =
-    props;
+  const { isActive, getVimEnabled, setVimMode, getInSearchMode, getPreviewMode } = props;
 
   // Create keyboard handler with all dependencies
   const keyboardHandler = createAggregateKeyboardHandler(props);

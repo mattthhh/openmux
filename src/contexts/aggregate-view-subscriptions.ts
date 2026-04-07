@@ -25,7 +25,6 @@ import {
   type LifecycleEvent,
   type LifecycleHandlerDeps,
   type LifecycleHandlers,
-  type ProcessChangeEvent,
   type PtyOwnership,
   type RefreshFlagKey,
   type RefreshState,

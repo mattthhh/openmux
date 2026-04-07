@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect } from 'bun:test';
-import type { PtyInfo, AggregateViewState } from '../../contexts/aggregate-view-types';
+import type { PtyInfo } from '../../contexts/aggregate-view-types';
 
 // Helper to create a mock PTY info
 function createMockPtyInfo(overrides: Partial<PtyInfo> = {}): PtyInfo {
@@ -93,18 +93,23 @@ describe('AggregateView activity tracking', () => {
       const viewportEnd = 3;
 
       // Old behavior: only tracks visible PTYs
-      const oldTrackedPtys = getViewportFilteredPtys(allPtys, viewportStart, viewportEnd, flattenedTree);
+      const oldTrackedPtys = getViewportFilteredPtys(
+        allPtys,
+        viewportStart,
+        viewportEnd,
+        flattenedTree
+      );
       expect(oldTrackedPtys).toHaveLength(2); // Only visible PTYs
-      expect(oldTrackedPtys.map(p => p.ptyId)).toContain('pty-s1-1');
-      expect(oldTrackedPtys.map(p => p.ptyId)).toContain('pty-s1-2');
-      expect(oldTrackedPtys.map(p => p.ptyId)).not.toContain('pty-s1-3');
+      expect(oldTrackedPtys.map((p) => p.ptyId)).toContain('pty-s1-1');
+      expect(oldTrackedPtys.map((p) => p.ptyId)).toContain('pty-s1-2');
+      expect(oldTrackedPtys.map((p) => p.ptyId)).not.toContain('pty-s1-3');
 
       // New fixed behavior: tracks ALL PTYs in matchedPtys
       const newTrackedPtys = getAllTrackedPtys(allPtys);
       expect(newTrackedPtys).toHaveLength(5); // All PTYs
-      expect(newTrackedPtys.map(p => p.ptyId)).toContain('pty-s1-3');
-      expect(newTrackedPtys.map(p => p.ptyId)).toContain('pty-s2-1');
-      expect(newTrackedPtys.map(p => p.ptyId)).toContain('pty-s2-2');
+      expect(newTrackedPtys.map((p) => p.ptyId)).toContain('pty-s1-3');
+      expect(newTrackedPtys.map((p) => p.ptyId)).toContain('pty-s2-1');
+      expect(newTrackedPtys.map((p) => p.ptyId)).toContain('pty-s2-2');
     });
 
     it('should track PTYs in collapsed sessions (not in viewport)', () => {
@@ -135,8 +140,8 @@ describe('AggregateView activity tracking', () => {
       // New behavior tracks all PTYs including collapsed session ones
       const newTrackedPtys = getAllTrackedPtys(allPtys);
       expect(newTrackedPtys).toHaveLength(3);
-      expect(newTrackedPtys.map(p => p.ptyId)).toContain('pty-collapsed-1');
-      expect(newTrackedPtys.map(p => p.ptyId)).toContain('pty-collapsed-2');
+      expect(newTrackedPtys.map((p) => p.ptyId)).toContain('pty-collapsed-1');
+      expect(newTrackedPtys.map((p) => p.ptyId)).toContain('pty-collapsed-2');
     });
 
     it('should track PTYs scrolled out of view', () => {
@@ -145,7 +150,7 @@ describe('AggregateView activity tracking', () => {
       );
 
       // Flattened tree with all 20 PTYs visible in expanded session
-      const flattenedTree = manyPtys.map(pty => ({
+      const flattenedTree = manyPtys.map((pty) => ({
         node: { type: 'pty' as const, ptyInfo: pty },
       }));
 
@@ -154,21 +159,26 @@ describe('AggregateView activity tracking', () => {
       const viewportEnd = 10;
 
       // Old behavior only tracks visible range
-      const oldTrackedPtys = getViewportFilteredPtys(manyPtys, viewportStart, viewportEnd, flattenedTree);
+      const oldTrackedPtys = getViewportFilteredPtys(
+        manyPtys,
+        viewportStart,
+        viewportEnd,
+        flattenedTree
+      );
       expect(oldTrackedPtys).toHaveLength(5); // Only viewport items
 
       // New behavior tracks all PTYs
       const newTrackedPtys = getAllTrackedPtys(manyPtys);
       expect(newTrackedPtys).toHaveLength(20);
-      
+
       // All PTYs are tracked, including those scrolled out of view
-      expect(newTrackedPtys.map(p => p.ptyId)).toContain('pty-1');
-      expect(newTrackedPtys.map(p => p.ptyId)).toContain('pty-20');
+      expect(newTrackedPtys.map((p) => p.ptyId)).toContain('pty-1');
+      expect(newTrackedPtys.map((p) => p.ptyId)).toContain('pty-20');
     });
 
     it('should handle empty PTY list', () => {
       const emptyPtys: PtyInfo[] = [];
-      
+
       const newTrackedPtys = getAllTrackedPtys(emptyPtys);
       expect(newTrackedPtys).toHaveLength(0);
     });
@@ -181,8 +191,8 @@ describe('AggregateView activity tracking', () => {
       ];
 
       // Simulating showInactive=false filter
-      const matchedPtys = allPtys.filter(p => p.foregroundProcess !== 'bash');
-      
+      const matchedPtys = allPtys.filter((p) => p.foregroundProcess !== 'bash');
+
       const trackedPtys = getAllTrackedPtys(matchedPtys);
       expect(trackedPtys).toHaveLength(1);
       expect(trackedPtys[0].ptyId).toBe('active-pty');
@@ -194,31 +204,31 @@ describe('AggregateView activity tracking', () => {
       // This test documents the expected behavior:
       // When a PTY generates output while scrolled out of view,
       // it should have activity recorded so shimmer appears when scrolled into view
-      
+
       const ptyId = 'scrolled-out-pty';
       const pty = createMockPtyInfo({ ptyId });
-      
+
       // With the new behavior, this PTY would be in trackedActivityPtys
       // even if scrolled out of view, so activity would be recorded
-      
+
       // The key assertion is: all PTYs in matchedPtys should be tracked
       const matchedPtys = [pty];
       const trackedPtys = getAllTrackedPtys(matchedPtys);
-      
-      expect(trackedPtys.some(p => p.ptyId === ptyId)).toBe(true);
+
+      expect(trackedPtys.some((p) => p.ptyId === ptyId)).toBe(true);
     });
 
     it('PTY in collapsed session should still have activity recorded', () => {
       const ptyId = 'collapsed-session-pty';
       const pty = createMockPtyInfo({ ptyId, sessionId: 'collapsed-session' });
-      
+
       // With the new behavior, this PTY should be tracked even though
       // its parent session is collapsed (not in flattened tree viewport)
-      
+
       const matchedPtys = [pty];
       const trackedPtys = getAllTrackedPtys(matchedPtys);
-      
-      expect(trackedPtys.some(p => p.ptyId === ptyId)).toBe(true);
+
+      expect(trackedPtys.some((p) => p.ptyId === ptyId)).toBe(true);
     });
   });
 });

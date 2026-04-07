@@ -608,7 +608,7 @@ describe('PTY destruction race condition', () => {
   });
 
   it('should not leave shell-titled orphaned PTYs when creation fails', async () => {
-    const { state, setState, lifecycleHandlers } = createTestHarness();
+    const { state, lifecycleHandlers } = createTestHarness();
 
     // Setup: Simulate a PTY that was partially created with shell title
     // This can happen if metadata fetch fails halfway

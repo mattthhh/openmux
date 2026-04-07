@@ -2,10 +2,11 @@
  * Selection operations for aggregate view.
  */
 
-import { produce, type SetStoreFunction } from 'solid-js/store';
+import { produce } from 'solid-js/store';
+import type { SetStoreFunction } from 'solid-js/store';
 
 import type { AggregateViewState, FlattenedTreeItem, PtyInfo } from './types';
-import { SelectionOperationError } from './errors';
+import type { SelectionOperationError } from './errors';
 import { findNearestSelectableIndex, getSessionIdForItem } from './tree';
 
 export function applySelection(state: AggregateViewState, index: number): void {

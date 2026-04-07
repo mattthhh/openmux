@@ -70,14 +70,6 @@ function renderTextLineTrimmed(cells: TerminalCell[]): string {
   return raw.replace(/[\s\u00a0]+$/u, '');
 }
 
-/**
- * Render cells as plain text while preserving the old trim flag signature.
- * Prefer renderTextLine() or renderTextLineTrimmed() at new call sites.
- */
-function renderTextLineWithTrim(cells: TerminalCell[], trimTrailing: boolean): string {
-  return trimTrailing ? renderTextLineTrimmed(cells) : renderTextLine(cells);
-}
-
 function buildAnsiCodes(next: StyleState, prev: StyleState | null): string {
   const codes: Array<string> = [];
 
@@ -170,14 +162,6 @@ function renderAnsiLineInternal(cells: TerminalCell[], lastContentIndex: number)
   }
 
   return output;
-}
-
-/**
- * Render cells as ANSI text while preserving the old trim flag signature.
- * Prefer renderAnsiLine() or renderAnsiLineTrimmed() at new call sites.
- */
-function renderAnsiLineWithTrim(cells: TerminalCell[], trimTrailing: boolean): string {
-  return trimTrailing ? renderAnsiLineTrimmed(cells) : renderAnsiLine(cells);
 }
 
 export function captureEmulator(emulator: ITerminalEmulator, options: CaptureOptions): string {

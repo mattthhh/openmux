@@ -16,8 +16,6 @@ export interface AggregateMouseControllerProps extends MouseHandlerDeps {
  * Sets up mouse handlers for preview pane, selection, and scrollbar dragging.
  */
 export function AggregateMouseController(props: AggregateMouseControllerProps) {
-  const { isActive } = props;
-
   // Create mouse handlers with all dependencies
   const mouseHandlers = createAggregateMouseHandlers(props);
 

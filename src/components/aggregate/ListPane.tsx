@@ -10,12 +10,8 @@
 
 import { Show, For, createMemo, type Component } from 'solid-js';
 import type { MouseEvent as OpenTUIMouseEvent } from '@opentui/core';
-import type { FlattenedTreeItem, TreeNode } from '../../contexts/aggregate-view-types';
-import {
-  useListPane,
-  useListPaneColors,
-  type ListPaneContextValue,
-} from '../../contexts/ListPaneContext';
+import type { TreeNode } from '../../contexts/aggregate-view-types';
+import { useListPane, useListPaneColors } from '../../contexts/ListPaneContext';
 import type { SessionTreeNodeProps } from './SessionTreeNode';
 import type { PtyTreeRowProps } from './PtyTreeRow';
 import type { PlaceholderRowProps } from './PlaceholderRow';

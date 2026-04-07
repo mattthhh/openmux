@@ -14,7 +14,6 @@ import { SCROLLBACK_ARCHIVE_MAX_BYTES_GLOBAL } from '../../../terminal/scrollbac
 import { getConfigDir } from '../../../core/user-config';
 import { PtySpawnError, PtyNotFoundError } from '../../errors';
 import type { PtyId, Cols, Rows } from '../../types';
-import type { InternalPtySession } from './types';
 import { disposeGitHelpers } from './helpers';
 import { createSubscriptionRegistry } from './subscription-manager';
 import { createSession } from './session-factory';

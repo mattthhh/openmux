@@ -3,7 +3,6 @@
  * Single line indicating more content available on demand
  */
 
-import { Show } from 'solid-js';
 import type { AggregateTheme } from '../../core/types';
 
 export interface PlaceholderRowProps {

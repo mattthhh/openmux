@@ -12,7 +12,7 @@
  * - No global polling loop
  */
 
-import { createEffect, createMemo, createSignal, onCleanup, type Accessor } from 'solid-js';
+import { createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
 import type { PtyInfo } from '../../contexts/aggregate-view-types';
 import type { AggregateTheme } from '../../core/types';
 import {

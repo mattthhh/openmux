@@ -3,14 +3,12 @@
  * Handles chunk creation, finding, and reading operations.
  */
 
-import fs from "node:fs"
-import path from "node:path"
-import * as errore from "errore"
-import { CELL_SIZE, packRow, unpackRow } from "../cell-serialization"
-import { ScrollbackArchiveError } from "../../effect/errors"
-import type { TerminalCell } from "../../core/types"
-import { ScrollbackCache } from "../emulator-utils/scrollback-cache"
-import type { ArchiveChunk, ChunkLocation } from "./types"
+import fs from 'node:fs';
+import path from 'node:path';
+import { unpackRow, CELL_SIZE } from '../cell-serialization';
+import type { TerminalCell } from '../../core/types';
+import type { ScrollbackCache } from '../emulator-utils/scrollback-cache';
+import type { ArchiveChunk, ChunkLocation } from './types';
 
 /**
  * Creates a new chunk with the given dimensions.
@@ -28,8 +26,8 @@ export function createChunk(
   cols: number,
   rowBytes: number
 ): ArchiveChunk {
-  const id = nextChunkId
-  const filename = `chunk-${id}.bin`
+  const id = nextChunkId;
+  const filename = `chunk-${id}.bin`;
   return {
     id,
     filename,
@@ -40,7 +38,7 @@ export function createChunk(
     bytes: 0,
     createdAt: Date.now(),
     startOffsetAtWrite: totalLines,
-  }
+  };
 }
 
 /**
@@ -49,20 +47,17 @@ export function createChunk(
  * @param offset - Line offset to find (0 = oldest line)
  * @returns ChunkLocation if found, null otherwise
  */
-export function findChunk(
-  chunks: readonly ArchiveChunk[],
-  offset: number
-): ChunkLocation | null {
-  if (offset < 0) return null
-  let start = 0
+export function findChunk(chunks: readonly ArchiveChunk[], offset: number): ChunkLocation | null {
+  if (offset < 0) return null;
+  let start = 0;
   for (const chunk of chunks) {
-    const end = start + chunk.lineCount
+    const end = start + chunk.lineCount;
     if (offset < end) {
-      return { chunk, chunkStart: start, index: offset - start }
+      return { chunk, chunkStart: start, index: offset - start };
     }
-    start = end
+    start = end;
   }
-  return null
+  return null;
 }
 
 /**
@@ -79,8 +74,8 @@ export function readRow(
   index: number,
   cache?: ScrollbackCache
 ): TerminalCell[] | null {
-  const rows = readChunkRange(chunk, chunkStart, index, 1, cache)
-  return rows.length > 0 ? rows[0] : null
+  const rows = readChunkRange(chunk, chunkStart, index, 1, cache);
+  return rows.length > 0 ? rows[0] : null;
 }
 
 /**
@@ -100,47 +95,47 @@ export function readChunkRange(
   count: number,
   cache?: ScrollbackCache
 ): TerminalCell[][] {
-  const maxCount = Math.min(count, chunk.lineCount - index)
-  if (maxCount <= 0) return []
+  const maxCount = Math.min(count, chunk.lineCount - index);
+  if (maxCount <= 0) return [];
 
-  const rowBytes = chunk.rowBytes
-  const totalBytes = rowBytes * maxCount
-  const buffer = Buffer.alloc(totalBytes)
-  const offsetBytes = rowBytes * index
+  const rowBytes = chunk.rowBytes;
+  const totalBytes = rowBytes * maxCount;
+  const buffer = Buffer.alloc(totalBytes);
+  const offsetBytes = rowBytes * index;
 
-  let bytesRead = 0
-  let fd: number | null = null
+  let bytesRead = 0;
+  let fd: number | null = null;
 
   try {
-    fd = fs.openSync(chunk.path, "r")
-    bytesRead = fs.readSync(fd, buffer, 0, totalBytes, offsetBytes)
+    fd = fs.openSync(chunk.path, 'r');
+    bytesRead = fs.readSync(fd, buffer, 0, totalBytes, offsetBytes);
   } catch {
-    return []
+    return [];
   } finally {
     if (fd !== null) {
       try {
-        fs.closeSync(fd)
+        fs.closeSync(fd);
       } catch {
         // Ignore close errors
       }
     }
   }
 
-  if (bytesRead < rowBytes) return []
+  if (bytesRead < rowBytes) return [];
 
-  const rows: TerminalCell[][] = []
-  const totalRows = Math.floor(bytesRead / rowBytes)
+  const rows: TerminalCell[][] = [];
+  const totalRows = Math.floor(bytesRead / rowBytes);
   for (let i = 0; i < totalRows; i++) {
-    const slice = buffer.subarray(i * rowBytes, (i + 1) * rowBytes)
-    const row = unpackRow(toArrayBuffer(slice))
-    rows.push(row)
+    const slice = buffer.subarray(i * rowBytes, (i + 1) * rowBytes);
+    const row = unpackRow(toArrayBuffer(slice));
+    rows.push(row);
     if (cache) {
-      const absoluteOffset = chunkStart + index + i
-      cache.set(absoluteOffset, row)
+      const absoluteOffset = chunkStart + index + i;
+      cache.set(absoluteOffset, row);
     }
   }
 
-  return rows
+  return rows;
 }
 
 /**
@@ -149,7 +144,7 @@ export function readChunkRange(
  * @returns Bytes per row (4 bytes count + cells)
  */
 export function calculateRowBytes(cols: number): number {
-  return 4 + cols * CELL_SIZE
+  return 4 + cols * CELL_SIZE;
 }
 
 /**
@@ -164,10 +159,10 @@ export function shouldCreateNewChunk(
   cols: number,
   chunkMaxLines: number
 ): boolean {
-  if (!currentChunk) return true
-  if (currentChunk.cols !== cols) return true
-  if (currentChunk.lineCount >= chunkMaxLines) return true
-  return false
+  if (!currentChunk) return true;
+  if (currentChunk.cols !== cols) return true;
+  if (currentChunk.lineCount >= chunkMaxLines) return true;
+  return false;
 }
 
 /**
@@ -179,5 +174,5 @@ function toArrayBuffer(buffer: Buffer): ArrayBuffer {
   return buffer.buffer.slice(
     buffer.byteOffset,
     buffer.byteOffset + buffer.byteLength
-  ) as ArrayBuffer
+  ) as ArrayBuffer;
 }

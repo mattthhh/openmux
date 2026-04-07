@@ -3,20 +3,20 @@
  * Provides coordination for memory management across all PTY sessions.
  */
 
-import { SCROLLBACK_ARCHIVE_MAX_BYTES_GLOBAL } from "../scrollback-config"
-import type { ArchiveChunk } from "./types"
-import { ScrollbackArchive } from "./archive"
+import { SCROLLBACK_ARCHIVE_MAX_BYTES_GLOBAL } from '../scrollback-config';
+import type { ArchiveChunk } from './types';
+import type { ScrollbackArchive } from './archive';
 
 /**
  * Manages multiple scrollback archives with a global byte limit.
  * Ensures total memory usage stays within configured bounds.
  */
 export class ScrollbackArchiveManager {
-  private archives = new Set<ScrollbackArchive>()
-  private readonly maxBytes: number
+  private archives = new Set<ScrollbackArchive>();
+  private readonly maxBytes: number;
 
   constructor(maxBytes?: number) {
-    this.maxBytes = maxBytes ?? SCROLLBACK_ARCHIVE_MAX_BYTES_GLOBAL
+    this.maxBytes = maxBytes ?? SCROLLBACK_ARCHIVE_MAX_BYTES_GLOBAL;
   }
 
   /**
@@ -25,7 +25,7 @@ export class ScrollbackArchiveManager {
    * @param archive - Archive to register
    */
   register(archive: ScrollbackArchive): void {
-    this.archives.add(archive)
+    this.archives.add(archive);
   }
 
   /**
@@ -34,7 +34,7 @@ export class ScrollbackArchiveManager {
    * @param archive - Archive to unregister
    */
   unregister(archive: ScrollbackArchive): void {
-    this.archives.delete(archive)
+    this.archives.delete(archive);
   }
 
   /**
@@ -42,30 +42,30 @@ export class ScrollbackArchiveManager {
    * Drops oldest chunks from oldest archives until the limit is satisfied.
    */
   enforceGlobalLimit(): void {
-    let totalBytes = 0
+    let totalBytes = 0;
     for (const archive of this.archives) {
-      totalBytes += archive.bytes
+      totalBytes += archive.bytes;
     }
 
     while (totalBytes > this.maxBytes) {
-      let targetArchive: ScrollbackArchive | null = null
-      let targetChunk: ArchiveChunk | null = null
+      let targetArchive: ScrollbackArchive | null = null;
+      let targetChunk: ArchiveChunk | null = null;
 
       // Find the oldest chunk across all archives
       for (const archive of this.archives) {
-        const chunk = archive.getOldestChunk()
-        if (!chunk) continue
+        const chunk = archive.getOldestChunk();
+        if (!chunk) continue;
         if (!targetChunk || chunk.createdAt < targetChunk.createdAt) {
-          targetChunk = chunk
-          targetArchive = archive
+          targetChunk = chunk;
+          targetArchive = archive;
         }
       }
 
-      if (!targetArchive || !targetChunk) break
+      if (!targetArchive || !targetChunk) break;
 
-      const removed = targetArchive.dropOldestChunk()
-      if (!removed) break
-      totalBytes -= removed.bytesRemoved
+      const removed = targetArchive.dropOldestChunk();
+      if (!removed) break;
+      totalBytes -= removed.bytesRemoved;
     }
   }
 
@@ -74,11 +74,11 @@ export class ScrollbackArchiveManager {
    * @returns Total bytes
    */
   getTotalBytes(): number {
-    let total = 0
+    let total = 0;
     for (const archive of this.archives) {
-      total += archive.bytes
+      total += archive.bytes;
     }
-    return total
+    return total;
   }
 
   /**
@@ -86,6 +86,6 @@ export class ScrollbackArchiveManager {
    * @returns Archive count
    */
   getArchiveCount(): number {
-    return this.archives.size
+    return this.archives.size;
   }
 }

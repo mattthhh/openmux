@@ -5,12 +5,10 @@
 
 import type { PtyService } from '../../../services/Pty';
 import type { SessionManager } from '../../../services/SessionManager';
-import type { PtyId, SessionId } from '../../../types';
 import type { SessionWithPtys, ListSessionsWithPtysOptions, PtyMetadata } from '../types';
 import { sessionPtyCache, asPtyId } from '../cache/session-pty-cache';
 import { batchFetchPtyMetadata } from '../metadata/fetch';
 import { getPtyService, getSessionManager, hasServices } from '../../services-instance';
-import { ServicesNotInitializedError } from '../../../errors';
 import type { SessionMetadata } from '../../../models';
 
 /**

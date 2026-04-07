@@ -4,7 +4,6 @@
 
 import { isCellInRange } from '../../../core/coordinates';
 import type { CopyModeState } from '../types';
-import type { SelectionState } from './types';
 
 /** Check if copy mode has an active selection for a PTY */
 export const hasSelection = (state: CopyModeState | null, ptyId: string): boolean => {
@@ -40,10 +39,7 @@ export const isCellSelected = (
 };
 
 /** Check if copy mode is active (optionally for specific PTY) */
-export const isCopyModeActive = (
-  state: CopyModeState | null,
-  ptyId?: string
-): boolean => {
+export const isCopyModeActive = (state: CopyModeState | null, ptyId?: string): boolean => {
   if (!state) return false;
   if (!ptyId) return true;
   return state.ptyId === ptyId;

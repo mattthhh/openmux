@@ -5,7 +5,7 @@
  * view list. Handles drag start, target tracking, and commit/cancel operations.
  */
 
-import { createSignal, type Accessor, type Setter } from 'solid-js';
+import { createSignal, type Accessor } from 'solid-js';
 import type { MouseEvent as OpenTUIMouseEvent } from '@opentui/core';
 import type { FlattenedTreeItem } from '../../../contexts/aggregate-view-types';
 
@@ -36,7 +36,10 @@ interface UseSessionDragResult {
   /** Start dragging a session */
   beginDrag: (sessionId: string) => void;
   /** Update drag target based on mouse position */
-  updateTarget: (event: OpenTUIMouseEvent, getItemAtMouse: (e: OpenTUIMouseEvent) => FlattenedTreeItem | undefined) => void;
+  updateTarget: (
+    event: OpenTUIMouseEvent,
+    getItemAtMouse: (e: OpenTUIMouseEvent) => FlattenedTreeItem | undefined
+  ) => void;
   /** Commit the drag (perform reorder if needed) */
   commitDrag: (onReorder?: (sourceId: string, targetId: string) => Promise<void>) => Promise<void>;
   /** Cancel the current drag without committing */
@@ -137,8 +140,7 @@ export function useSessionDrag(): UseSessionDragResult {
     const finalTargetId = targetId();
     const hasDragged = didDrag();
 
-    const shouldReorder =
-      hasDragged && sourceId && finalTargetId && sourceId !== finalTargetId;
+    const shouldReorder = hasDragged && sourceId && finalTargetId && sourceId !== finalTargetId;
 
     // Clear drag state first
     setDraggingId(null);

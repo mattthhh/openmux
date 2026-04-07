@@ -11,7 +11,9 @@ import { clampScrollOffset } from '../../core/scroll-utils';
 import { copyToClipboard, getScrollbackLines } from '../../effect/bridge';
 import { useTerminal } from '../TerminalContext';
 import { useSelection } from '../SelectionContext';
-import type { CopyModeContextValue, CopyModeState } from './types';
+import type { CopyModeContextValue, CopyModeState, CopyCursor, CopyVisualType } from './types';
+import type { LineAccessor } from './text-utils';
+import type { WordNavResult } from './navigation';
 import {
   type ScrollMeta,
   clampCursor,
@@ -91,7 +93,7 @@ export function CopyModeProvider(props: CopyModeProviderProps) {
     getScrollMeta(ptyId, getActiveGetTerminalState());
 
   /** Ensure cursor is visible by scrolling if needed */
-  const ensureCursorVisible = (ptyId: string, cursor: import('./types').CopyCursor) => {
+  const ensureCursorVisible = (ptyId: string, cursor: CopyCursor) => {
     const meta = getActiveScrollMeta(ptyId);
     const scrollOffset = calculateScrollForVisibility(cursor, meta);
     if (scrollOffset !== null) {
@@ -100,7 +102,7 @@ export function CopyModeProvider(props: CopyModeProviderProps) {
   };
 
   /** Move cursor to position with clamping and visibility */
-  const moveCursorTo = (cursor: import('./types').CopyCursor) => {
+  const moveCursorTo = (cursor: CopyCursor) => {
     const current = state();
     if (!current) return;
     const clamped = clampCursor(cursor, getActiveScrollMeta(current.ptyId));
@@ -213,12 +215,7 @@ export function CopyModeProvider(props: CopyModeProviderProps) {
   };
 
   // Word navigation - delegates to navigation module
-  const execWordNav = (
-    fn: (
-      access: import('./text-utils').LineAccessor,
-      cursor: import('./types').CopyCursor
-    ) => import('./navigation').WordNavResult | null
-  ) => {
+  const execWordNav = (fn: (access: LineAccessor, cursor: CopyCursor) => WordNavResult | null) => {
     const current = state();
     if (!current) return;
     const access = getActiveLineAccessor();
@@ -238,12 +235,12 @@ export function CopyModeProvider(props: CopyModeProviderProps) {
 
   // Selection - delegates to selection module
   const selApi = {
-    toggle: (type: import('./types').CopyVisualType) => {
+    toggle: (type: CopyVisualType) => {
       const current = state();
       if (!current) return;
       updateState(selToggleVisual(current, type, getActiveScrollMeta(current.ptyId)));
     },
-    start: (type: import('./types').CopyVisualType) => {
+    start: (type: CopyVisualType) => {
       const current = state();
       if (!current) return;
       updateState(startSelection(current, type, getActiveScrollMeta(current.ptyId)));

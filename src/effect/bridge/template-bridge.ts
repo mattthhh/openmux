@@ -1,9 +1,9 @@
 /**
  * Template bridge functions (errore version)
- * Wraps TemplateStorage service for async/await usage
+ *
+ * Wraps TemplateStorage service for async/await usage.
  */
 
-import type { TemplateStorage } from '../services/TemplateStorage';
 import type {
   TemplateSession,
   TemplateWorkspace,

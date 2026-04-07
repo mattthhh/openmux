@@ -3,6 +3,7 @@
  */
 
 import type { CopyCursor } from '../types';
+import type { TerminalCell } from '../../../core/types';
 import type { LineAccessor } from '../text-utils';
 import {
   getRunAt,
@@ -11,8 +12,6 @@ import {
   findSpanAtOrAfter,
   findSpanAtOrBefore,
   isWideWordChar,
-  isWhitespaceChar,
-  isWordChar,
 } from '../text-utils';
 
 /** Result of word navigation */
@@ -22,10 +21,7 @@ export interface WordNavResult {
 }
 
 /** Move to next word start (w motion) */
-export const moveWordForward = (
-  access: LineAccessor,
-  cursor: CopyCursor
-): WordNavResult | null => {
+export const moveWordForward = (access: LineAccessor, cursor: CopyCursor): WordNavResult | null => {
   const run = getRunAt(access, cursor.absY, cursor.x);
   const searchAbsY = run ? run.absY : cursor.absY;
   const searchX = run ? run.end + 1 : cursor.x;
@@ -49,10 +45,7 @@ export const moveWordBackward = (
 };
 
 /** Move to next word end (e motion) */
-export const moveWordEnd = (
-  access: LineAccessor,
-  cursor: CopyCursor
-): WordNavResult | null => {
+export const moveWordEnd = (access: LineAccessor, cursor: CopyCursor): WordNavResult | null => {
   const run = getRunAt(access, cursor.absY, cursor.x);
   if (run && cursor.x < run.end) {
     return { x: run.end, absY: run.absY };
@@ -73,11 +66,7 @@ export const moveWideWordForward = (
   const word = findSpanAtOrAfter(access, cursor.absY, cursor.x, isWideWordChar);
   if (!word) return null;
 
-  if (
-    isWideWordChar(currentChar) &&
-    word.absY === cursor.absY &&
-    cursor.x <= word.end
-  ) {
+  if (isWideWordChar(currentChar) && word.absY === cursor.absY && cursor.x <= word.end) {
     const next = findSpanAtOrAfter(access, word.absY, word.end + 1, isWideWordChar);
     return next ? { x: next.start, absY: next.absY } : null;
   }
@@ -95,11 +84,7 @@ export const moveWideWordBackward = (
   const word = findSpanAtOrBefore(access, cursor.absY, cursor.x, isWideWordChar);
   if (!word) return null;
 
-  if (
-    isWideWordChar(currentChar) &&
-    word.absY === cursor.absY &&
-    cursor.x === word.start
-  ) {
+  if (isWideWordChar(currentChar) && word.absY === cursor.absY && cursor.x === word.start) {
     const prev = findSpanAtOrBefore(access, word.absY, word.start - 1, isWideWordChar);
     return prev ? { x: prev.start, absY: prev.absY } : null;
   }
@@ -108,20 +93,13 @@ export const moveWideWordBackward = (
 };
 
 /** Move to next WORD end (E motion) */
-export const moveWideWordEnd = (
-  access: LineAccessor,
-  cursor: CopyCursor
-): WordNavResult | null => {
+export const moveWideWordEnd = (access: LineAccessor, cursor: CopyCursor): WordNavResult | null => {
   const line = access.getLine(cursor.absY);
   const currentChar = line?.[cursor.x]?.char ?? ' ';
   const word = findSpanAtOrAfter(access, cursor.absY, cursor.x, isWideWordChar);
   if (!word) return null;
 
-  if (
-    isWideWordChar(currentChar) &&
-    word.absY === cursor.absY &&
-    cursor.x <= word.end
-  ) {
+  if (isWideWordChar(currentChar) && word.absY === cursor.absY && cursor.x <= word.end) {
     if (cursor.x < word.end) {
       return { x: word.end, absY: word.absY };
     }
@@ -133,10 +111,7 @@ export const moveWideWordEnd = (
 };
 
 /** Get line start X (first non-blank for ^ motion, 0 for 0 motion) */
-export const getLineStartX = (
-  line: import('../../../core/types').TerminalCell[] | null,
-  firstNonBlank: boolean
-): number => {
+export const getLineStartX = (line: TerminalCell[] | null, firstNonBlank: boolean): number => {
   if (!line || line.length === 0) return 0;
 
   if (!firstNonBlank) return 0;
@@ -152,9 +127,7 @@ export const getLineStartX = (
 };
 
 /** Get line end X ($ motion) */
-export const getLineEndX = (
-  line: import('../../../core/types').TerminalCell[] | null
-): number => {
+export const getLineEndX = (line: TerminalCell[] | null): number => {
   if (!line || line.length === 0) return 0;
   for (let x = line.length - 1; x >= 0; x -= 1) {
     const cell = line[x];

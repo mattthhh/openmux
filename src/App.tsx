@@ -41,11 +41,7 @@ import {
   createKittyGraphicsBridge,
   type RendererWithNative,
 } from './components/app/kitty-graphics-bridge';
-import {
-  createCellMetricsGetter,
-  createPixelResizeTracker,
-  type CellMetrics,
-} from './components/app/pixel-metrics';
+import { createCellMetricsGetter, createPixelResizeTracker } from './components/app/pixel-metrics';
 import { createSearchVimState } from './components/app/search-vim';
 import { createCopyModeVimState } from './components/app/copy-mode-vim';
 import { createCopyModeKeyHandler } from './components/app/copy-mode-keyboard';

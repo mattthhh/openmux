@@ -2,40 +2,21 @@
  * Full coverage tests for aggregate view operations.
  */
 
-import { describe, it, expect, vi } from 'bun:test';
-import { produce } from 'solid-js/store';
+import { describe, it, expect } from 'bun:test';
 import {
   // Filter
   normalizeProcessName,
-  isActivePty,
-  filterActivePtys,
-  filterPtysByActivity,
   filterPtys,
-  buildPtyIndex,
   groupPtysBySession,
   sortPtysForSession,
-  extractSessionIds,
   // Tree
-  getDefaultLoadState,
-  createLoadingPlaceholder,
-  createErrorPlaceholder,
-  createUnloadedPlaceholder,
   buildTreeRoot,
   flattenTree,
-  buildFlattenedTreeIndex,
   // Selection
-  applySelection,
-  clearPreviewState,
-  getSelectedPty,
-  getSelectedItem,
-  getSelectedSessionId,
   selectAfterPtyRemoval,
   // Session
   toggleSessionExpanded,
   getSortedSessions,
-  recomputeMatches,
-  recomputeTree,
-  createSessionActions,
 } from '../';
 import type { PtyInfo, SessionMetadata, AggregateViewState } from '../types';
 import { FilterOperationError, SelectionOperationError } from '../errors';

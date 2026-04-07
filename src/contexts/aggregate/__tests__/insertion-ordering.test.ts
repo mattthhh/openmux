@@ -13,7 +13,7 @@ import {
   createLifecycleHandlers,
 } from '../../aggregate-view-subscriptions';
 import { getSessionPaneOrder, recomputeMatches, recomputeTree } from '../../aggregate';
-import { initialState, type AggregateViewState, type PtyInfo } from '../../aggregate-view-types';
+import { initialState, type AggregateViewState } from '../../aggregate-view-types';
 
 vi.mock('../../../effect/bridge/aggregate-bridge', () => ({
   listAllPtyIds: vi.fn(),
@@ -1013,7 +1013,7 @@ describe('aggregate insertion ordering', () => {
   });
 
   it('does not re-add tombstoned PTYs during initial load', async () => {
-    const { state, setState, refreshers } = createHarness();
+    const { state, setState } = createHarness();
 
     setState(
       produce((s) => {

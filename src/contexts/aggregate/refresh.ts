@@ -120,56 +120,6 @@ function buildSessionPaneOrder(session: SerializedSession): Map<string, number> 
   return new Map(paneIds.map((paneId, index) => [paneId, index] as const));
 }
 
-function findWorkspaceIdForPane(session: SerializedSession, paneId: string): number | undefined {
-  const containsPane = (node: SerializedLayoutNode | null | undefined): boolean => {
-    if (!node) return false;
-    if ('type' in node && node.type === 'split') {
-      return containsPane(node.first) || containsPane(node.second);
-    }
-    return node.id === paneId;
-  };
-
-  for (const workspace of session.workspaces) {
-    if (containsPane(workspace.mainPane)) {
-      return workspace.id;
-    }
-    for (const pane of workspace.stackPanes) {
-      if (containsPane(pane)) {
-        return workspace.id;
-      }
-    }
-  }
-
-  return undefined;
-}
-
-function countSerializedPanes(node: SerializedLayoutNode | null | undefined): number {
-  if (!node) return 0;
-  if ('type' in node && node.type === 'split') {
-    return countSerializedPanes(node.first) + countSerializedPanes(node.second);
-  }
-  return 1;
-}
-
-function getSessionSummaryFromDetails(session: SerializedSession): SessionSummary {
-  let workspaceCount = 0;
-  let paneCount = 0;
-
-  for (const workspace of session.workspaces) {
-    if (!workspace.mainPane && workspace.stackPanes.length === 0) {
-      continue;
-    }
-
-    workspaceCount += 1;
-    paneCount += countSerializedPanes(workspace.mainPane);
-    for (const pane of workspace.stackPanes) {
-      paneCount += countSerializedPanes(pane);
-    }
-  }
-
-  return { workspaceCount, paneCount };
-}
-
 function collectSessionPaneRecords(session: SerializedSession): Array<{
   paneId: string;
   cwd: string;

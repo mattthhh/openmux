@@ -52,7 +52,6 @@ async function initializeAndRender(): Promise<StartupError | void> {
   const { detectHostCapabilities } = await import('./terminal');
   const { onMount, onCleanup } = await import('solid-js');
   const { createPasteInterceptingStdin } = await import('./terminal/paste-intercepting-stdin');
-  type TtyReadStream = import('./terminal/paste-intercepting-stdin').TtyReadStream;
   const { triggerClipboardPaste } = await import('./terminal/focused-pty-registry');
   const { setHostSequenceWriter, writeHostSequence } = await import('./terminal/host-output');
   const { copyToClipboard } = await import('./effect/bridge');

@@ -6,21 +6,18 @@ import { describe, it, expect } from 'bun:test';
 import {
   clampCursor,
   calculateInitialCursor,
-  moveCursorBy,
   calculateScrollForVisibility,
   getLineCellsAt,
   getLineStartX,
   getLineEndX,
 } from '../navigation';
-import type { CopyCursor } from '../types';
 import type { ScrollMeta } from '../navigation/types';
 
 const createMockMeta = (overrides: Partial<ScrollMeta> = {}): ScrollMeta => ({
   terminalState: { rows: 24, cols: 80, cells: [] } as any,
   emulator: {
     getScrollbackLength: () => 100,
-    getScrollbackLine: (y: number) =>
-      y === 50 ? [{ char: 's', width: 1 }] : null,
+    getScrollbackLine: (y: number) => (y === 50 ? [{ char: 's', width: 1 }] : null),
   },
   scrollbackLength: 100,
   rows: 24,

@@ -1,11 +1,9 @@
 /**
  * PTY bridge functions (errore version)
- * Wraps PtyService for async/await usage
  *
- * Directly uses PtyService interface without Effect runtime.
+ * Directly uses PTY service interface without Effect runtime.
  */
 
-import type { PtyService } from '../services/Pty';
 import type { PtyId, Cols, Rows } from '../types';
 import type {
   TerminalCell,
@@ -205,7 +203,6 @@ export async function getScrollbackLines(
   startOffset: number,
   count: number
 ): Promise<Map<number, TerminalCell[]>> {
-  const pty = getPtyService();
   const safeStart = Math.max(0, Math.floor(startOffset));
   const safeCount = Math.max(0, Math.floor(count));
   if (safeCount === 0) return new Map();

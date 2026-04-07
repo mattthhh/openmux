@@ -7,6 +7,7 @@
  */
 
 import { Show, createEffect, createMemo, createSignal } from 'solid-js';
+import type { MouseEvent as OpentuiMouseEvent } from '@opentui/core';
 import { useAggregateView } from '../contexts/AggregateViewContext';
 import { useLayout } from '../contexts/LayoutContext';
 import { useSession } from '../contexts/SessionContext';
@@ -387,10 +388,7 @@ export function AggregateView(props: AggregateViewProps) {
                   if (!sessionDrag.suppressToggle()) aggregate.toggleSessionExpanded(sessionId);
                 },
                 onUpdateDragTarget: (e) =>
-                  sessionDrag.updateTarget(
-                    e as unknown as import('@opentui/core').MouseEvent,
-                    getItemAtListMouse
-                  ),
+                  sessionDrag.updateTarget(e as unknown as OpentuiMouseEvent, getItemAtListMouse),
                 onCommitDrag: () =>
                   sessionDrag.commitDrag((src, tgt) => aggregate.reorderSessions(src, tgt)),
                 getItemAtMouse: getItemAtListMouse,

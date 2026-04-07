@@ -16,7 +16,7 @@ import type { SelectionRange } from '../../../core/coordinates';
 
 describe('createLineAccessor', () => {
   it('creates accessor with correct maxAbsY', () => {
-    const getLine = (absY: number) => [{ char: 'a', width: 1 }] as any;
+    const getLine = (_absY: number) => [{ char: 'a', width: 1 }] as any;
     const accessor = createLineAccessor('test-pty', getLine, 100);
     expect(accessor.maxAbsY).toBe(100);
   });
@@ -71,12 +71,13 @@ describe('extractBlockText', () => {
   it('skips placeholder cells for wide chars', () => {
     const anchor: CopyCursor = { x: 0, absY: 50 };
     const cursor: CopyCursor = { x: 3, absY: 50 };
-    const getLine = () => [
-      { char: '宽', width: 2 },
-      { char: '', width: 0 }, // placeholder
-      { char: 'a', width: 1 },
-      { char: 'b', width: 1 },
-    ] as any;
+    const getLine = () =>
+      [
+        { char: '宽', width: 2 },
+        { char: '', width: 0 }, // placeholder
+        { char: 'a', width: 1 },
+        { char: 'b', width: 1 },
+      ] as any;
 
     const result = extractBlockText(anchor, cursor, getLine);
     expect(result).toBe('宽ab');
@@ -107,7 +108,7 @@ describe('extractRangeText', () => {
     const range: SelectionRange = {
       startX: 6,
       startY: 50,
-      endX: 4,  // endX is exclusive
+      endX: 4, // endX is exclusive
       endY: 52,
       focusAtEnd: true,
     };

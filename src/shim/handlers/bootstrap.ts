@@ -10,6 +10,7 @@ import { setKittyTransmitForwarder, setKittyUpdateForwarder } from '../kitty-for
 import { setNotificationForwarder } from '../notification-forwarder';
 import { rememberRevokedClientId } from '../server-state';
 import type { AttachContext, ShimHandlerContext, WithPty } from './types';
+import type { TerminalColors } from '../../terminal/terminal-colors';
 import { isCurrentAttach, sendDetached } from './events';
 import { cleanupCurrentClientBindings, subscribeAllPtys } from './subscription';
 import { handleActivity, handleLifecycle, handleTitles } from './lifecycle';
@@ -146,8 +147,8 @@ export async function detachClient(context: ShimHandlerContext, socket: net.Sock
  */
 export async function applyHostColors(
   withPty: WithPty,
-  setHostColors: (colors: import('../../terminal/terminal-colors').TerminalColors) => void,
-  colors: import('../../terminal/terminal-colors').TerminalColors
+  setHostColors: (colors: TerminalColors) => void,
+  colors: TerminalColors
 ): Promise<void> {
   setHostColors(colors);
   const result = await errore.tryAsync<void | Error, ShimConnectionError>({

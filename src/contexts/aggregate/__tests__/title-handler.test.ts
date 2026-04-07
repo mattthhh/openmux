@@ -5,11 +5,12 @@
 import { describe, it, expect } from 'bun:test';
 import { createTitleChangeHandler } from '../subscriptions';
 import type { AggregateViewState } from '../../aggregate-view-types';
-import { createStore, produce } from 'solid-js/store';
+import { createStore } from 'solid-js/store';
 
 describe('title handler (litmus)', () => {
   it('creates a function', () => {
-    const [state, setState] = createStore<AggregateViewState>({
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const [_state, setState] = createStore<AggregateViewState>({
       showAggregateView: false,
       filterQuery: '',
       showInactive: true,

@@ -7,7 +7,7 @@ import type { TerminalState, UnifiedTerminalUpdate } from '../../../core/types';
 import type { ITerminalEmulator } from '../../../terminal/emulator-interface';
 import type { TerminalColors } from '../../../terminal/terminal-colors';
 import { PtyCwdError, PtyNotFoundError } from '../../errors';
-import type { PtyId } from '../../types';
+import type { PtyId, Cols, Rows } from '../../types';
 import type { PtySession } from '../../models';
 import type { GitInfo } from './helpers';
 import type { GetPtyGitInfoOptions, PtyService, PtyTitleChangeEvent } from './interface';
@@ -234,8 +234,8 @@ export function createShimPtyService(): PtyService {
       return {
         id: runtimeSession.id as PtyId,
         pid: runtimeSession.pid,
-        cols: runtimeSession.cols as import('../../types').Cols,
-        rows: runtimeSession.rows as import('../../types').Rows,
+        cols: runtimeSession.cols as Cols,
+        rows: runtimeSession.rows as Rows,
         cwd: runtimeSession.cwd,
         shell: runtimeSession.shell,
         title: runtimeSession.title,

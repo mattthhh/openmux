@@ -5,7 +5,8 @@
 import type { CopyCursor, CopyVisualType } from '../types';
 import type { CopyModeState } from '../types';
 import type { ScrollMeta } from '../navigation/types';
-import type { SelectionState, SelectionResult } from './types';
+import type { SelectionResult } from './types';
+import type { SpanResult } from '../text-utils';
 import {
   buildCharSelectionRange,
   buildLineSelectionRange,
@@ -31,21 +32,13 @@ export const buildSelection = (
 };
 
 /** Recompute selection range from current state */
-export const recomputeSelection = (
-  state: CopyModeState,
-  meta: ScrollMeta
-): CopyModeState => {
+export const recomputeSelection = (state: CopyModeState, meta: ScrollMeta): CopyModeState => {
   if (!state.visualType || !state.anchor) {
     return { ...state, selectionRange: null, bounds: null };
   }
 
   const cols = meta.cols || 1;
-  const { range, bounds } = buildSelection(
-    state.anchor,
-    state.cursor,
-    state.visualType,
-    cols
-  );
+  const { range, bounds } = buildSelection(state.anchor, state.cursor, state.visualType, cols);
 
   return {
     ...state,
@@ -97,7 +90,7 @@ export const selectLine = (state: CopyModeState, meta: ScrollMeta): CopyModeStat
 
 /** Build word selection context for inner/around modes */
 export const buildWordSelection = (
-  word: import('../text-utils').SpanResult,
+  word: SpanResult,
   mode: 'inner' | 'around',
   isWhitespace: (char: string) => boolean
 ): { anchor: CopyCursor; cursor: CopyCursor } | null => {

@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, it, mock } from 'bun:test';
 import { createSignal } from 'solid-js';
+import type { createListPaneContextValue as CreateListPaneContextValueType } from './ListPaneContext';
 
 import type { FlattenedTreeItem } from './aggregate-view-types';
 import type { SessionMetadata } from '../effect/models';
@@ -37,7 +38,7 @@ mock.module('../components/overlay-colors', () => ({
   }),
 }));
 
-let createListPaneContextValue: typeof import('./ListPaneContext').createListPaneContextValue;
+let createListPaneContextValue: typeof CreateListPaneContextValueType;
 
 function createSession(sessionId: string, name = sessionId): SessionMetadata {
   return {

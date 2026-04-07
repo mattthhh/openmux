@@ -34,7 +34,6 @@ export function createAggregateKeyboardHandler(deps: AggregateKeyboardDeps) {
     handleEnterSearch,
     handleEnterCopyMode,
     handleCopyModeKeys,
-    onToggleSessionPicker,
     onToggleCommandPalette,
     onToggleConsole,
     onPaste,

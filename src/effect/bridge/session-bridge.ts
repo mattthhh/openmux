@@ -3,14 +3,8 @@
  * Wraps SessionManager service for async/await usage
  */
 
-import type { SessionManager } from '../services/SessionManager';
 import type { SessionId } from '../types';
-import type {
-  SerializedLayoutNode,
-  SerializedSession,
-  SerializedWorkspace,
-  SessionMetadata,
-} from '../models';
+import type { SerializedSession, SerializedWorkspace, SessionMetadata } from '../models';
 import type {
   SessionMetadata as LegacySessionMetadata,
   Workspace,

@@ -3,6 +3,7 @@
  */
 
 import type { CopyCursor } from '../types';
+import type { TerminalCell } from '../../../core/types';
 import type { ScrollMeta } from './types';
 
 /** Calculate scroll offset needed to make cursor visible */
@@ -25,10 +26,7 @@ export const calculateScrollForVisibility = (
 };
 
 /** Get line cells at absolute Y position (handles scrollback vs live) */
-export const getLineCellsAt = (
-  absY: number,
-  meta: ScrollMeta
-): import('../../../core/types').TerminalCell[] | null => {
+export const getLineCellsAt = (absY: number, meta: ScrollMeta): TerminalCell[] | null => {
   if (!meta.terminalState) return null;
 
   if (absY < meta.scrollbackLength) {

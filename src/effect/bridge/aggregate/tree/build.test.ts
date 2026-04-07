@@ -2,10 +2,11 @@ import { describe, it, expect } from 'bun:test';
 import { buildSessionTreeNodes } from './build';
 import type { SessionWithPtys, PtyMetadata } from '../types';
 import type { SessionMetadata } from '../../../models';
+import type { SessionId } from '../../../types';
 
 describe('buildSessionTreeNodes (litmus)', () => {
-  const createSession = (id: string, isActive = false): SessionMetadata => ({
-    id: id as unknown as import('../../../types').SessionId,
+  const createSession = (id: string, _isActive = false): SessionMetadata => ({
+    id: id as unknown as SessionId,
     name: `Session ${id}`,
     createdAt: Date.now(),
     lastSwitchedAt: Date.now(),
