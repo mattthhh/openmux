@@ -234,6 +234,7 @@ export async function loadSessionPtysOnDemandWithService(
         cwd,
       });
       if (created instanceof Error) {
+        console.warn(`Failed to create PTY for pane ${paneId}:`, created.message);
         continue;
       }
 
