@@ -15,10 +15,15 @@ import { getDefaultColors } from '../terminal/terminal-colors';
 import type { TerminalCell, TerminalScrollState } from '../core/types';
 import { drainScrollbackOverflow } from '../effect/services/pty/scrollback-archiver';
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const DEFAULT_COLS = 136;
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const DEFAULT_ROWS = 36;
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const DEFAULT_REPAINTS = 8;
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const DEFAULT_ITERATIONS = 3;
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const DEFAULT_WARMUP_ITERATIONS = 1;
 const DEFAULT_SYNTHETIC_ENTRIES = 96;
 const DEFAULT_ARCHIVE_WORKLOAD_ROW_LIMIT = 320;
@@ -70,6 +75,7 @@ export interface BenchmarkScenarioMetrics {
   dirtyRowsConsumed: number;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 interface PiRedrawBenchmarkResult {
   cols: number;
   rows: number;
@@ -89,6 +95,7 @@ interface PiRedrawBenchmarkResult {
   repaintOverAppend: number;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 interface RunPiRedrawBenchmarkOptions {
   cols?: number;
   rows?: number;
@@ -197,6 +204,7 @@ export function analyzeArchive(options: {
   };
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function resolveWorkload(options: {
   archiveMetaPath?: string;
   archiveWorkloadRowLimit: number;
@@ -396,6 +404,7 @@ function collectArchiveRows(options: {
   };
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function runSingleScenarioPair(options: {
   cols: number;
   rows: number;
@@ -659,6 +668,7 @@ function makeScrollState(
   };
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function aggregateScenarioMetrics(samples: BenchmarkScenarioMetrics[]): BenchmarkScenarioMetrics {
   return {
     totalMs: median(samples.map((sample) => sample.totalMs)),
@@ -680,6 +690,7 @@ function rowToText(row: TerminalCell[]): string {
   return raw.trimEnd();
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function countLines(text: string): number {
   if (text.length === 0) return 0;
   return text.endsWith('\n') ? text.split('\n').length - 1 : text.split('\n').length;

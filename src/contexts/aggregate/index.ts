@@ -2,12 +2,7 @@
  * Aggregate View modular architecture.
  */
 
-export {
-  TreeOperationError,
-  FilterOperationError,
-  SelectionOperationError,
-  SessionOperationError,
-} from './errors';
+export { FilterOperationError } from './errors';
 
 export {
   normalizeProcessName,
@@ -45,7 +40,6 @@ export {
 export {
   applySelection,
   clearPreviewState,
-  getSelectedItem,
   findNearestSelectable,
   findNearestPtyInSessionAbove,
   findSessionHeader,

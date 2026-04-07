@@ -2,10 +2,7 @@
  * Selection operations for aggregate view.
  */
 
-import { produce } from 'solid-js/store';
-import type { SetStoreFunction } from 'solid-js/store';
-
-import type { AggregateViewState, FlattenedTreeItem, PtyInfo } from './types';
+import type { AggregateViewState, FlattenedTreeItem } from './types';
 import type { SelectionOperationError } from './errors';
 import { findNearestSelectableIndex, getSessionIdForItem } from './tree';
 
@@ -35,40 +32,6 @@ export function clearPreviewState(
 ): void {
   state.previewMode = false;
   state.previewZoomed = false;
-}
-
-function getSelectedPty(flattenedTree: FlattenedTreeItem[], selectedIndex: number): PtyInfo | null {
-  const item = flattenedTree[selectedIndex];
-  if (item?.node.type === 'pty') {
-    return item.node.ptyInfo;
-  }
-  return null;
-}
-
-export function getSelectedItem(
-  flattenedTree: FlattenedTreeItem[],
-  selectedIndex: number
-): FlattenedTreeItem | undefined {
-  return flattenedTree[selectedIndex];
-}
-
-function getSelectedSessionId(
-  flattenedTree: FlattenedTreeItem[],
-  selectedIndex: number
-): string | null {
-  const item = getSelectedItem(flattenedTree, selectedIndex);
-  if (!item) return null;
-
-  if (item.node.type === 'pty') {
-    return item.node.ptyInfo.sessionId;
-  }
-  if (item.node.type === 'session') {
-    return item.node.session.id;
-  }
-  if (item.node.type === 'placeholder') {
-    return item.node.parentSessionId;
-  }
-  return null;
 }
 
 export function findNearestSelectable(
@@ -156,57 +119,4 @@ export function selectAfterPtyRemoval(
   state.selectedSessionId = null;
   clearPreviewState(state);
   return null;
-}
-
-function createSelectionActions(
-  state: AggregateViewState,
-  setState: SetStoreFunction<AggregateViewState>
-) {
-  const setSelectedIndex = (index: number) => {
-    setState(
-      produce((s) => {
-        applySelection(s, index);
-      })
-    );
-  };
-
-  const selectPty = (ptyId: string) => {
-    const index = state.flattenedTreeIndex.get(ptyId);
-    if (index !== undefined) {
-      setState(
-        produce((s) => {
-          applySelection(s, index);
-        })
-      );
-    }
-  };
-
-  const enterPreviewMode = () => {
-    setState('previewMode', true);
-  };
-
-  const exitPreviewMode = () => {
-    setState(
-      produce((s) => {
-        clearPreviewState(s);
-      })
-    );
-  };
-
-  const togglePreviewZoom = () => {
-    setState(
-      produce((s) => {
-        if (!s.previewMode || !s.selectedPtyId) return;
-        s.previewZoomed = !s.previewZoomed;
-      })
-    );
-  };
-
-  return {
-    setSelectedIndex,
-    selectPty,
-    enterPreviewMode,
-    exitPreviewMode,
-    togglePreviewZoom,
-  };
 }

@@ -1,8 +1,7 @@
 /**
  * Search helper functions - pure utilities for terminal search
  */
-import type { TerminalCell, TerminalState } from '../../core/types';
-import type { ITerminalEmulator } from '../../terminal/emulator-interface';
+import type { TerminalCell } from '../../core/types';
 import type { SearchMatch } from './types';
 
 /**

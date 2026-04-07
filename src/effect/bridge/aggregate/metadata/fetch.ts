@@ -6,7 +6,6 @@
 import type { PtyService } from '../../../services/Pty';
 import type { PtyId } from '../../../types';
 import type { PtyMetadata, FetchPtyMetadataOptions } from '../types';
-import { PtyMetadataError } from '../../../errors';
 
 function getEmptyGitMetadata() {
   return {

@@ -2,11 +2,8 @@
  * Session management operations for aggregate view.
  */
 
-import { produce, type SetStoreFunction } from 'solid-js/store';
-
 import type { SessionMetadata } from '../../effect/models';
 import type { AggregateViewState, SessionTreeNode } from './types';
-import { SessionOperationError } from './errors';
 import { buildPtyIndex, filterPtys, filterPtysByActivity, groupPtysBySession } from './filter';
 import { clearPreviewState } from './selection';
 import { buildFlattenedTreeIndex, buildTreeRoot, flattenTree } from './tree';
@@ -231,119 +228,4 @@ export function recomputeTree(state: AggregateViewState): void {
   if (lostSelectedPty && !preservedPreviewByPaneReplacement && selectedItem?.node.type !== 'pty') {
     clearPreviewState(state);
   }
-}
-
-function createSessionActions(
-  state: AggregateViewState,
-  setState: SetStoreFunction<AggregateViewState>,
-  options: {
-    persistSessionOrder?: (order: string[]) => Promise<void>;
-  } = {}
-) {
-  const { persistSessionOrder } = options;
-
-  const expandAllSessions = () => {
-    setState(
-      produce((s) => {
-        for (const node of s.treeRoot) {
-          if (node.type === 'session' && node.loadState.status === 'loaded') {
-            s.expandedSessionIds.add(node.session.id);
-          }
-        }
-        recomputeTree(s);
-      })
-    );
-  };
-
-  const collapseAllSessions = () => {
-    setState(
-      produce((s) => {
-        s.expandedSessionIds.clear();
-        recomputeTree(s);
-      })
-    );
-  };
-
-  const toggleSession = (sessionId: string) => {
-    setState(
-      produce((s) => {
-        if (s.expandedSessionIds.has(sessionId)) {
-          s.expandedSessionIds.delete(sessionId);
-        } else {
-          s.expandedSessionIds.add(sessionId);
-        }
-        recomputeTree(s);
-      })
-    );
-  };
-
-  const reorderSessions = async (
-    sourceSessionId: string,
-    targetSessionId: string
-  ): Promise<SessionOperationError | void> => {
-    if (sourceSessionId === targetSessionId) return;
-
-    const currentOrder = state.treeRoot
-      .filter((node): node is SessionTreeNode => node.type === 'session')
-      .map((node) => String(node.session.id));
-
-    const sourceIndex = currentOrder.indexOf(sourceSessionId);
-    const targetIndex = currentOrder.indexOf(targetSessionId);
-    if (sourceIndex === -1 || targetIndex === -1) return;
-
-    const nextOrder = [...currentOrder];
-    const movingDown = sourceIndex < targetIndex;
-    const [movedSessionId] = nextOrder.splice(sourceIndex, 1);
-    const targetIndexAfterRemoval = nextOrder.indexOf(targetSessionId);
-    if (!movedSessionId || targetIndexAfterRemoval === -1) return;
-
-    const insertIndex = movingDown ? targetIndexAfterRemoval + 1 : targetIndexAfterRemoval;
-    nextOrder.splice(insertIndex, 0, movedSessionId);
-
-    setState(
-      produce((s) => {
-        s.manualSessionOrder = nextOrder;
-        recomputeTree(s);
-      })
-    );
-
-    if (persistSessionOrder) {
-      const result = await persistSessionOrder(nextOrder).catch((cause) => {
-        return new SessionOperationError({
-          operation: 'persistSessionOrder',
-          reason: String(cause),
-          cause,
-        });
-      });
-      if (result instanceof SessionOperationError) {
-        console.warn('Failed to persist session order:', result.message);
-      }
-    }
-  };
-
-  const scrollListUp = (amount: number = 3) => {
-    setState('listScrollOffset', (current) => Math.max(0, current - amount));
-  };
-
-  const scrollListDown = (amount: number = 3) => {
-    setState('listScrollOffset', (current) => {
-      const maxOffset = Math.max(0, state.flattenedTree.length - 1);
-      return Math.min(maxOffset, current + amount);
-    });
-  };
-
-  const setListScrollOffset = (offset: number) => {
-    const maxOffset = Math.max(0, state.flattenedTree.length - 1);
-    setState('listScrollOffset', Math.max(0, Math.min(maxOffset, offset)));
-  };
-
-  return {
-    expandAllSessions,
-    collapseAllSessions,
-    toggleSessionExpanded: toggleSession,
-    reorderSessions,
-    scrollListUp,
-    scrollListDown,
-    setListScrollOffset,
-  };
 }

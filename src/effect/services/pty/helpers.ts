@@ -372,14 +372,6 @@ export function subscribeToGitRepoChanges(
 }
 
 /**
- * Get git branch for a directory (compat helper).
- */
-async function getGitBranch(cwd: string): Promise<string | undefined> {
-  const info = await getGitInfo(cwd);
-  return info?.branch;
-}
-
-/**
  * Get the git diff statistics for a directory.
  * Includes untracked changes and binary file count.
  */

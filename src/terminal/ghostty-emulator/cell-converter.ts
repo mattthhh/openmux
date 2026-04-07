@@ -43,62 +43,6 @@ export function safeRgb(r: number, g: number, b: number): RGB {
 }
 
 /**
- * Create an empty terminal cell with the given colors.
- *
- * @param colors - Terminal color scheme
- * @returns Empty cell with default colors
- */
-function createEmptyCell(colors: TerminalColors): TerminalCell {
-  const fg = extractRgb(colors.foreground);
-  const bg = extractRgb(colors.background);
-
-  return {
-    char: ' ',
-    fg,
-    bg,
-    bold: false,
-    italic: false,
-    underline: false,
-    strikethrough: false,
-    inverse: false,
-    blink: false,
-    dim: false,
-    width: 1,
-  };
-}
-
-/**
- * Create a fill cell for EOL padding.
- * Uses the last cell's background color or defaults.
- *
- * @param lastCell - The last cell in the line (or null)
- * @param colors - Terminal color scheme for defaults
- * @returns Fill cell for EOL padding
- */
-function createFillCell(lastCell: GhosttyCell | null, colors: TerminalColors): TerminalCell {
-  const fillBg = lastCell
-    ? safeRgb(lastCell.bg_r, lastCell.bg_g, lastCell.bg_b)
-    : extractRgb(colors.background);
-  const fillFg = lastCell
-    ? safeRgb(lastCell.fg_r, lastCell.fg_g, lastCell.fg_b)
-    : extractRgb(colors.foreground);
-
-  return {
-    char: ' ',
-    fg: fillFg,
-    bg: fillBg,
-    bold: false,
-    italic: false,
-    underline: false,
-    strikethrough: false,
-    inverse: false,
-    blink: false,
-    dim: false,
-    width: 1,
-  };
-}
-
-/**
  * Convert a single GhosttyCell to TerminalCell.
  * Handles special cases like zero-width chars, space-like chars, CJK validation, etc.
  *

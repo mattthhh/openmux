@@ -7,43 +7,6 @@
 import { ValidationError } from '../../effect/errors';
 
 /**
- * Check if a codepoint is valid and renderable.
- * Filters out null, replacement chars, surrogates, control chars, and invalid Unicode.
- *
- * @param codepoint - The Unicode codepoint to validate
- * @returns true if the codepoint can be rendered as a visible character
- */
-function isValidCodepoint(codepoint: number): boolean {
-  // Type safety: must be a finite positive integer
-  if (
-    typeof codepoint !== 'number' ||
-    !Number.isFinite(codepoint) ||
-    codepoint !== (codepoint | 0) || // Must be integer (32-bit)
-    codepoint <= 0
-  ) {
-    return false;
-  }
-  // C0 control characters (0x01-0x1F) except space (0x20)
-  // These are non-printable and shouldn't be rendered as glyphs
-  if (codepoint < 0x20) return false;
-  // DEL character (0x7F)
-  if (codepoint === 0x7f) return false;
-  // C1 control characters (0x80-0x9F)
-  if (codepoint >= 0x80 && codepoint <= 0x9f) return false;
-  // Replacement character (U+FFFD) - renders as diamond question mark
-  if (codepoint === 0xfffd) return false;
-  // Unicode surrogates (U+D800-U+DFFF) - invalid on their own
-  if (codepoint >= 0xd800 && codepoint <= 0xdfff) return false;
-  // Non-characters (U+FFFE, U+FFFF, and U+nFFFE/U+nFFFF in each plane)
-  if ((codepoint & 0xfffe) === 0xfffe) return false;
-  // Out of Unicode range
-  if (codepoint > 0x10ffff) return false;
-  // Note: Zero-width characters (U+200B-U+200F, U+2060, U+FEFF, U+FE00-U+FE0F)
-  // are handled separately in isZeroWidthChar() with different treatment
-  return true;
-}
-
-/**
  * Check if a codepoint is a CJK ideograph or Korean Hangul that requires width=2.
  * These should only be rendered if the cell has proper double-width (width=2).
  * If they appear with width=1, it's likely corrupted cell data.

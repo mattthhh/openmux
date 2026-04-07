@@ -35,7 +35,6 @@ export {
 export {
   clearPreviewState,
   applySelection,
-  getSelectedItem,
   findNearestSelectable,
   findNearestPtyInSessionAbove,
   findSessionHeader,

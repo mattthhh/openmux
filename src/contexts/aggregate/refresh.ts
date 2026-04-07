@@ -42,31 +42,6 @@ import { dedupeAggregatePtysByPane, getAggregatePaneKey, getSavedAggregatePtyId 
 
 export { ptyMetadataToInfo } from './pty-info';
 
-interface AggregatePtyMetadata {
-  ptyId: string;
-  cwd: string;
-  gitBranch: string | undefined;
-  gitDiffStats: PtyInfo['gitDiffStats'];
-  gitDirty: boolean;
-  gitStaged: number;
-  gitUnstaged: number;
-  gitUntracked: number;
-  gitConflicted: number;
-  gitAhead: number | undefined;
-  gitBehind: number | undefined;
-  gitStashCount: number | undefined;
-  gitState: PtyInfo['gitState'];
-  gitDetached: boolean;
-  gitRepoKey: string | undefined;
-  foregroundProcess: string | undefined;
-  shell: string | undefined;
-  title: string | undefined;
-  workspaceId: number | undefined;
-  paneId: string | undefined;
-  sessionId?: string;
-  sessionMetadata?: SessionMetadata;
-}
-
 export interface RefreshersResult {
   refreshPtys: () => Promise<void>;
   refreshPtysSubset: (ptyIds: string[]) => Promise<void>;

@@ -8,7 +8,6 @@ import type { SessionManager } from '../../../services/SessionManager';
 import type { SessionWithPtys, ListSessionsWithPtysOptions, PtyMetadata } from '../types';
 import { sessionPtyCache, asPtyId } from '../cache/session-pty-cache';
 import { batchFetchPtyMetadata } from '../metadata/fetch';
-import { getPtyService, getSessionManager, hasServices } from '../../services-instance';
 import type { SessionMetadata } from '../../../models';
 
 /**
@@ -33,15 +32,6 @@ interface PtyMetadataWithSession extends PtyMetadata {
  * @param options.batchSize - Max concurrent PTY fetches (default: 8)
  * @returns Array of sessions with their PTY info
  */
-async function listSessionsWithPtys(
-  options: ListSessionsWithPtysOptions = {}
-): Promise<SessionWithPtys[]> {
-  if (!hasServices()) {
-    console.warn('Services not initialized, cannot list sessions with PTYs');
-    return [];
-  }
-  return listSessionsWithPtysWithService(getPtyService(), getSessionManager(), options);
-}
 
 /**
  * List all sessions with their PTYs using explicit services.

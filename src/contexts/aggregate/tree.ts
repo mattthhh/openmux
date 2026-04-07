@@ -4,7 +4,6 @@
 
 import type { SessionMetadata } from '../../effect/models';
 
-import { TreeOperationError } from './errors';
 import { isActivePty, sortPtysForSession } from './filter';
 import {
   getSessionPaneOrder,

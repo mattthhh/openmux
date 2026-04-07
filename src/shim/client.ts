@@ -11,12 +11,9 @@ import {
   getCachedPtyMetadata,
   getEmulator,
   getKittyState,
-  getPtyMetadataRequest,
   getPtyState,
   handlePtyTitle,
   registerEmulatorFactory,
-  setCachedPtyMetadata,
-  setPtyMetadataRequest,
   setPtyState,
   subscribeKittyTransmit,
   subscribeKittyUpdate,
@@ -29,8 +26,6 @@ import {
   subscribeToTitle,
   subscribeUnified,
 } from './client/state';
-
-const PTY_METADATA_CACHE_TTL_MS = 100;
 
 /**
  * Builds fallback PTY metadata from cached values.
@@ -49,30 +44,6 @@ function buildFallbackPtyMetadata(ptyId: string): ShimPtyMetadata {
     session: null,
     cwd: null,
     title: getPtyState(ptyId)?.title ?? '',
-  };
-}
-
-/**
- * Normalizes PTY metadata with fallback values from cache.
- * Merges fetched metadata with cached values for complete information.
- */
-function normalizePtyMetadata(
-  ptyId: string,
-  metadata: ShimPtyMetadata | null | undefined
-): ShimPtyMetadata {
-  const fallback = buildFallbackPtyMetadata(ptyId);
-  if (!metadata) {
-    return fallback;
-  }
-
-  return {
-    session: metadata.session ?? fallback.session,
-    cwd: metadata.cwd ?? metadata.session?.cwd ?? fallback.cwd,
-    foregroundProcess: metadata.foregroundProcess ?? fallback.foregroundProcess,
-    gitInfo: metadata.gitInfo ?? fallback.gitInfo,
-    gitDiffStats: metadata.gitDiffStats ?? fallback.gitDiffStats,
-    title: metadata.title ?? fallback.title,
-    lastCommand: metadata.lastCommand ?? fallback.lastCommand,
   };
 }
 

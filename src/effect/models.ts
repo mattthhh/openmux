@@ -4,7 +4,6 @@
  */
 import { z } from 'zod';
 import {
-  PaneIdSchema,
   PtyIdSchema,
   WorkspaceIdSchema,
   SessionIdSchema,

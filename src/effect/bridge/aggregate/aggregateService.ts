@@ -10,7 +10,7 @@ import type { SessionManager } from '../../services/SessionManager';
 import type { PtyService } from '../../services/Pty';
 import type { SessionError } from '../../errors';
 import { AggregateBridgeError, ServicesNotInitializedError } from '../../errors';
-import { getPtyService, getSessionManager, hasServices } from '../services-instance';
+import { getPtyService, hasServices } from '../services-instance';
 
 import type {
   ListAllPtysOptions,
@@ -194,17 +194,6 @@ export async function listAllPtysWithMetadata(
   }
 
   return listAllPtysWithMetadataWithService(getPtyService(), options);
-}
-
-async function listSessionsWithPtys(
-  options: ListSessionsWithPtysOptions = {}
-): Promise<SessionWithPtys[]> {
-  if (!hasServices()) {
-    console.warn('Services not initialized, cannot list sessions with PTYs');
-    return [];
-  }
-
-  return listSessionsWithPtysWithService(getPtyService(), getSessionManager(), options);
 }
 
 export function createAggregateService({

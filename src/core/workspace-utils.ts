@@ -3,8 +3,8 @@
  * Centralizes common operations on workspaces to avoid duplication
  */
 
-import type { Workspace, PaneData, NodeId } from './types';
-import { collectPanes, containsPane, findPane } from './layout-tree';
+import type { Workspace, PaneData } from './types';
+import { containsPane, findPane } from './layout-tree';
 
 /**
  * Get the focused pane from a workspace

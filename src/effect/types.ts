@@ -12,7 +12,6 @@ type Brand<T, B> = T & { readonly [__brand]: B };
 
 /** Unique identifier for a pane */
 export type PaneId = Brand<string, 'PaneId'>;
-export const PaneIdSchema = z.string().transform((s) => s as PaneId);
 
 /** Unique identifier for a PTY session */
 export type PtyId = Brand<string, 'PtyId'>;
@@ -49,9 +48,6 @@ export const RowsSchema = z
 
 /** Layout mode for workspace pane arrangement */
 export const LayoutModeSchema = z.enum(['vertical', 'horizontal', 'stacked']);
-
-/** Generate a new PaneId */
-const makePaneId = (counter: number): PaneId => `pane-${counter}` as PaneId;
 
 /** Generate a new PtyId */
 export const makePtyId = (): PtyId =>
