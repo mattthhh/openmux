@@ -1,4 +1,3 @@
-import * as errore from 'errore';
 import { UpdateError } from '../effect/errors';
 
 import fs from 'node:fs/promises';
@@ -58,15 +57,15 @@ type ManagedInstall = {
 };
 
 type FetchFn = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
-type ReadFileFn = (filePath: string) => Promise<string>;
-type WriteFileFn = (filePath: string, data: string | Uint8Array) => Promise<void>;
-type CopyFileFn = (source: string, destination: string) => Promise<void>;
-type ChmodFn = (targetPath: string, mode: number) => Promise<void>;
-type RenameFn = (source: string, destination: string) => Promise<void>;
-type MkdirFn = (dirPath: string) => Promise<void>;
-type MkdtempFn = (prefix: string) => Promise<string>;
-type RmFn = (targetPath: string) => Promise<void>;
-type AccessFn = (targetPath: string) => Promise<void>;
+type ReadFileFn = (filePath: string) => Promise<string | UpdateError>;
+type WriteFileFn = (filePath: string, data: string | Uint8Array) => Promise<void | UpdateError>;
+type CopyFileFn = (source: string, destination: string) => Promise<void | UpdateError>;
+type ChmodFn = (targetPath: string, mode: number) => Promise<void | UpdateError>;
+type RenameFn = (source: string, destination: string) => Promise<void | UpdateError>;
+type MkdirFn = (dirPath: string) => Promise<void | UpdateError>;
+type MkdtempFn = (prefix: string) => Promise<string | UpdateError>;
+type RmFn = (targetPath: string) => Promise<void | UpdateError>;
+type AccessFn = (targetPath: string) => Promise<void | UpdateError>;
 type PromptFn = (message: string) => Promise<string | null>;
 type TarExtractFn = (archivePath: string, destination: string) => Promise<void>;
 
@@ -142,58 +141,40 @@ function createDefaultUpdateIO(): UpdateIO | UpdateError {
     readFile: (filePath) =>
       fs
         .readFile(filePath, 'utf8')
-        .catch((e) =>
-          Promise.reject(new UpdateError({ operation: 'readFile', reason: String(e), cause: e }))
-        ),
+        .catch((e) => new UpdateError({ operation: 'readFile', reason: String(e), cause: e })),
     writeFile: (filePath, data) =>
       fs
         .writeFile(filePath, data)
-        .catch((e) =>
-          Promise.reject(new UpdateError({ operation: 'writeFile', reason: String(e), cause: e }))
-        ),
+        .catch((e) => new UpdateError({ operation: 'writeFile', reason: String(e), cause: e })),
     copyFile: (source, destination) =>
       fs
         .copyFile(source, destination)
-        .catch((e) =>
-          Promise.reject(new UpdateError({ operation: 'copyFile', reason: String(e), cause: e }))
-        ),
+        .catch((e) => new UpdateError({ operation: 'copyFile', reason: String(e), cause: e })),
     chmod: (targetPath, mode) =>
       fs
         .chmod(targetPath, mode)
-        .catch((e) =>
-          Promise.reject(new UpdateError({ operation: 'chmod', reason: String(e), cause: e }))
-        ),
+        .catch((e) => new UpdateError({ operation: 'chmod', reason: String(e), cause: e })),
     rename: (source, destination) =>
       fs
         .rename(source, destination)
-        .catch((e) =>
-          Promise.reject(new UpdateError({ operation: 'rename', reason: String(e), cause: e }))
-        ),
+        .catch((e) => new UpdateError({ operation: 'rename', reason: String(e), cause: e })),
     mkdir: (dirPath) =>
       fs
         .mkdir(dirPath, { recursive: true })
         .then(() => undefined)
-        .catch((e) =>
-          Promise.reject(new UpdateError({ operation: 'mkdir', reason: String(e), cause: e }))
-        ),
+        .catch((e) => new UpdateError({ operation: 'mkdir', reason: String(e), cause: e })),
     mkdtemp: (prefix) =>
       fs
         .mkdtemp(prefix)
-        .catch((e) =>
-          Promise.reject(new UpdateError({ operation: 'mkdtemp', reason: String(e), cause: e }))
-        ),
+        .catch((e) => new UpdateError({ operation: 'mkdtemp', reason: String(e), cause: e })),
     rm: (targetPath) =>
       fs
         .rm(targetPath, { recursive: true, force: true })
-        .catch((e) =>
-          Promise.reject(new UpdateError({ operation: 'rm', reason: String(e), cause: e }))
-        ),
+        .catch((e) => new UpdateError({ operation: 'rm', reason: String(e), cause: e })),
     access: (targetPath) =>
       fs
         .access(targetPath)
-        .catch((e) =>
-          Promise.reject(new UpdateError({ operation: 'access', reason: String(e), cause: e }))
-        ),
+        .catch((e) => new UpdateError({ operation: 'access', reason: String(e), cause: e })),
     tmpdir: () => os.tmpdir(),
     prompt: defaultPrompt,
     extractTarGz: defaultExtractTarGz,
@@ -392,14 +373,14 @@ export async function detectManagedInstall(
 
   const versionPath = path.join(managedDir, '.version');
   let currentVersion: string;
-  try {
-    currentVersion = normalizeVersion(await io.readFile(versionPath));
-  } catch {
+  const readResult = await io.readFile(versionPath);
+  if (readResult instanceof UpdateError) {
     return {
       ok: false,
       error: `Missing version metadata at ${versionPath}. Reinstall openmux with the official installer.`,
     };
   }
+  currentVersion = normalizeVersion(readResult);
 
   if (!currentVersion) {
     return {
@@ -567,28 +548,24 @@ async function downloadReleaseAsset(
     });
   }
 
-  const payload = await response
-    .arrayBuffer()
-    .catch(
-      (e) =>
-        new UpdateError({
-          operation: 'download',
-          reason: `Failed to read response: ${String(e)}`,
-          cause: e,
-        })
-    );
+  const payload = await response.arrayBuffer().catch(
+    (e) =>
+      new UpdateError({
+        operation: 'download',
+        reason: `Failed to read response: ${String(e)}`,
+        cause: e,
+      })
+  );
   if (payload instanceof UpdateError) return payload;
 
-  const writeResult = await io
-    .writeFile(destination, new Uint8Array(payload))
-    .catch(
-      (e) =>
-        new UpdateError({
-          operation: 'download',
-          reason: `Failed to write file: ${String(e)}`,
-          cause: e,
-        })
-    );
+  const writeResult = await io.writeFile(destination, new Uint8Array(payload)).catch(
+    (e) =>
+      new UpdateError({
+        operation: 'download',
+        reason: `Failed to write file: ${String(e)}`,
+        cause: e,
+      })
+  );
   if (writeResult instanceof UpdateError) return writeResult;
 }
 
@@ -597,16 +574,14 @@ export async function computeFileSha256(
   filePath: string
 ): Promise<string | UpdateError> {
   // Read file as binary buffer, not UTF-8 text
-  const data = await fs
-    .readFile(filePath)
-    .catch(
-      (e) =>
-        new UpdateError({
-          operation: 'checksum',
-          reason: `Failed to read file: ${String(e)}`,
-          cause: e,
-        })
-    );
+  const data = await fs.readFile(filePath).catch(
+    (e) =>
+      new UpdateError({
+        operation: 'checksum',
+        reason: `Failed to read file: ${String(e)}`,
+        cause: e,
+      })
+  );
   if (data instanceof UpdateError) return data;
 
   const hash = crypto.createHash('sha256').update(data).digest('hex');
@@ -682,16 +657,14 @@ export async function verifyReleaseChecksum(
       });
     }
 
-    const checksumContent = await checksumResponse
-      .text()
-      .catch(
-        (e) =>
-          new UpdateError({
-            operation: 'verify',
-            reason: `Failed to read checksum: ${String(e)}`,
-            cause: e,
-          })
-      );
+    const checksumContent = await checksumResponse.text().catch(
+      (e) =>
+        new UpdateError({
+          operation: 'verify',
+          reason: `Failed to read checksum: ${String(e)}`,
+          cause: e,
+        })
+    );
     if (checksumContent instanceof UpdateError) return checksumContent;
 
     expectedHash = parseChecksumFile(checksumContent, assetName);
@@ -716,15 +689,13 @@ export async function verifyReleaseChecksum(
 }
 
 async function ensureFileExists(io: UpdateIO, filePath: string): Promise<void | UpdateError> {
-  const result = await io
-    .access(filePath)
-    .catch(
-      () =>
-        new UpdateError({
-          operation: 'verify',
-          reason: `Update archive is missing required file: ${path.basename(filePath)}`,
-        })
-    );
+  const result = await io.access(filePath).catch(
+    () =>
+      new UpdateError({
+        operation: 'verify',
+        reason: `Update archive is missing required file: ${path.basename(filePath)}`,
+      })
+  );
   if (result instanceof UpdateError) return result;
 }
 
@@ -735,50 +706,50 @@ async function replaceFileAtomically(
   options?: { executable?: boolean }
 ): Promise<void | UpdateError> {
   const tempDestination = `${destination}.new-${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`;
-  const copyResult = await io
-    .copyFile(source, tempDestination)
-    .catch(
-      (e) =>
-        new UpdateError({
-          operation: 'install',
-          reason: `Failed to copy file: ${String(e)}`,
-          cause: e,
-        })
-    );
+  const copyResult = await io.copyFile(source, tempDestination).catch(
+    (e) =>
+      new UpdateError({
+        operation: 'install',
+        reason: `Failed to copy file: ${String(e)}`,
+        cause: e,
+      })
+  );
   if (copyResult instanceof UpdateError) {
-    await io.rm(tempDestination).catch(() => {});
+    await io.rm(tempDestination).catch((e) => {
+      console.warn('[update] Failed to clean up temp file after copy failure:', e);
+    });
     return copyResult;
   }
 
   if (options?.executable) {
-    const chmodResult = await io
-      .chmod(tempDestination, 0o755)
-      .catch(
-        (e) =>
-          new UpdateError({
-            operation: 'install',
-            reason: `Failed to set permissions: ${String(e)}`,
-            cause: e,
-          })
-      );
+    const chmodResult = await io.chmod(tempDestination, 0o755).catch(
+      (e) =>
+        new UpdateError({
+          operation: 'install',
+          reason: `Failed to set permissions: ${String(e)}`,
+          cause: e,
+        })
+    );
     if (chmodResult instanceof UpdateError) {
-      await io.rm(tempDestination).catch(() => {});
+      await io.rm(tempDestination).catch((e) => {
+        console.warn('[update] Failed to clean up temp file after chmod failure:', e);
+      });
       return chmodResult;
     }
   }
 
-  const renameResult = await io
-    .rename(tempDestination, destination)
-    .catch(
-      (e) =>
-        new UpdateError({
-          operation: 'install',
-          reason: `Failed to move file: ${String(e)}`,
-          cause: e,
-        })
-    );
+  const renameResult = await io.rename(tempDestination, destination).catch(
+    (e) =>
+      new UpdateError({
+        operation: 'install',
+        reason: `Failed to move file: ${String(e)}`,
+        cause: e,
+      })
+  );
   if (renameResult instanceof UpdateError) {
-    await io.rm(tempDestination).catch(() => {});
+    await io.rm(tempDestination).catch((e) => {
+      console.warn('[update] Failed to clean up temp file after rename failure:', e);
+    });
     return renameResult;
   }
 }
@@ -810,32 +781,28 @@ async function installRelease(
     });
   }
 
-  const tempRoot = await io
-    .mkdtemp(path.join(io.tmpdir(), 'openmux-update-'))
-    .catch(
-      (e) =>
-        new UpdateError({
-          operation: 'install',
-          reason: `Failed to create temp directory: ${String(e)}`,
-          cause: e,
-        })
-    );
+  const tempRoot = await io.mkdtemp(path.join(io.tmpdir(), 'openmux-update-')).catch(
+    (e) =>
+      new UpdateError({
+        operation: 'install',
+        reason: `Failed to create temp directory: ${String(e)}`,
+        cause: e,
+      })
+  );
   if (tempRoot instanceof UpdateError) return tempRoot;
 
   try {
     const archivePath = path.join(tempRoot, 'openmux.tar.gz');
     const extractedPath = path.join(tempRoot, 'extracted');
 
-    const mkdirResult = await io
-      .mkdir(extractedPath)
-      .catch(
-        (e) =>
-          new UpdateError({
-            operation: 'install',
-            reason: `Failed to create extract directory: ${String(e)}`,
-            cause: e,
-          })
-      );
+    const mkdirResult = await io.mkdir(extractedPath).catch(
+      (e) =>
+        new UpdateError({
+          operation: 'install',
+          reason: `Failed to create extract directory: ${String(e)}`,
+          cause: e,
+        })
+    );
     if (mkdirResult instanceof UpdateError) return mkdirResult;
 
     const downloadResult = await downloadReleaseAsset(io, asset.url, archivePath);
@@ -844,16 +811,14 @@ async function installRelease(
     const verifyResult = await verifyReleaseChecksum(io, release, archivePath, asset.name);
     if (verifyResult instanceof UpdateError) return verifyResult;
 
-    const extractResult = await io
-      .extractTarGz(archivePath, extractedPath)
-      .catch(
-        (e) =>
-          new UpdateError({
-            operation: 'install',
-            reason: `Failed to extract archive: ${String(e)}`,
-            cause: e,
-          })
-      );
+    const extractResult = await io.extractTarGz(archivePath, extractedPath).catch(
+      (e) =>
+        new UpdateError({
+          operation: 'install',
+          reason: `Failed to extract archive: ${String(e)}`,
+          cause: e,
+        })
+    );
     if (extractResult instanceof UpdateError) return extractResult;
 
     const requiredFiles = [
@@ -868,16 +833,14 @@ async function installRelease(
       if (existsResult instanceof UpdateError) return existsResult;
     }
 
-    const installDirResult = await io
-      .mkdir(installDir)
-      .catch(
-        (e) =>
-          new UpdateError({
-            operation: 'install',
-            reason: `Failed to create install directory: ${String(e)}`,
-            cause: e,
-          })
-      );
+    const installDirResult = await io.mkdir(installDir).catch(
+      (e) =>
+        new UpdateError({
+          operation: 'install',
+          reason: `Failed to create install directory: ${String(e)}`,
+          cause: e,
+        })
+    );
     if (installDirResult instanceof UpdateError) return installDirResult;
 
     const binResult = await replaceFileAtomically(
@@ -910,7 +873,10 @@ async function installRelease(
     if (vtResult instanceof UpdateError) return vtResult;
 
     const bunfigPath = path.join(extractedPath, 'bunfig.toml');
-    const bunfigResult = await io.access(bunfigPath).catch(() => null);
+    const bunfigResult = await io.access(bunfigPath).catch((e) => {
+      console.debug('[update] bunfig.toml not found or not accessible:', e);
+      return null;
+    });
     if (bunfigResult === null) {
       // Optional: older artifacts may not include bunfig.toml.
     } else {
@@ -922,16 +888,14 @@ async function installRelease(
       if (replaceResult instanceof UpdateError) return replaceResult;
     }
 
-    const versionWriteResult = await io
-      .writeFile(path.join(installDir, '.version'), version)
-      .catch(
-        (e) =>
-          new UpdateError({
-            operation: 'install',
-            reason: `Failed to write version file: ${String(e)}`,
-            cause: e,
-          })
-      );
+    const versionWriteResult = await io.writeFile(path.join(installDir, '.version'), version).catch(
+      (e) =>
+        new UpdateError({
+          operation: 'install',
+          reason: `Failed to write version file: ${String(e)}`,
+          cause: e,
+        })
+    );
     if (versionWriteResult instanceof UpdateError) return versionWriteResult;
 
     return version;
@@ -963,50 +927,50 @@ async function replaceTextFileAtomically(
 ): Promise<void | UpdateError> {
   const tempDestination = `${destination}.new-${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`;
 
-  const writeResult = await io
-    .writeFile(tempDestination, content)
-    .catch(
-      (e) =>
-        new UpdateError({
-          operation: 'install',
-          reason: `Failed to write wrapper: ${String(e)}`,
-          cause: e,
-        })
-    );
+  const writeResult = await io.writeFile(tempDestination, content).catch(
+    (e) =>
+      new UpdateError({
+        operation: 'install',
+        reason: `Failed to write wrapper: ${String(e)}`,
+        cause: e,
+      })
+  );
   if (writeResult instanceof UpdateError) {
-    await io.rm(tempDestination).catch(() => {});
+    await io.rm(tempDestination).catch((e) => {
+      console.warn('[update] Failed to clean up temp file after write failure:', e);
+    });
     return writeResult;
   }
 
   if (options?.executable) {
-    const chmodResult = await io
-      .chmod(tempDestination, 0o755)
-      .catch(
-        (e) =>
-          new UpdateError({
-            operation: 'install',
-            reason: `Failed to set wrapper permissions: ${String(e)}`,
-            cause: e,
-          })
-      );
+    const chmodResult = await io.chmod(tempDestination, 0o755).catch(
+      (e) =>
+        new UpdateError({
+          operation: 'install',
+          reason: `Failed to set wrapper permissions: ${String(e)}`,
+          cause: e,
+        })
+    );
     if (chmodResult instanceof UpdateError) {
-      await io.rm(tempDestination).catch(() => {});
+      await io.rm(tempDestination).catch((e) => {
+        console.warn('[update] Failed to clean up temp file after chmod failure:', e);
+      });
       return chmodResult;
     }
   }
 
-  const renameResult = await io
-    .rename(tempDestination, destination)
-    .catch(
-      (e) =>
-        new UpdateError({
-          operation: 'install',
-          reason: `Failed to move wrapper: ${String(e)}`,
-          cause: e,
-        })
-    );
+  const renameResult = await io.rename(tempDestination, destination).catch(
+    (e) =>
+      new UpdateError({
+        operation: 'install',
+        reason: `Failed to move wrapper: ${String(e)}`,
+        cause: e,
+      })
+  );
   if (renameResult instanceof UpdateError) {
-    await io.rm(tempDestination).catch(() => {});
+    await io.rm(tempDestination).catch((e) => {
+      console.warn('[update] Failed to clean up temp file after rename failure:', e);
+    });
     return renameResult;
   }
 }
@@ -1018,16 +982,14 @@ async function updateManagedWrapper(
   platformInfo: PlatformInfo,
   version: string
 ): Promise<void | UpdateError> {
-  const mkdirResult = await io
-    .mkdir(path.dirname(wrapperPath))
-    .catch(
-      (e) =>
-        new UpdateError({
-          operation: 'install',
-          reason: `Failed to create bin directory: ${String(e)}`,
-          cause: e,
-        })
-    );
+  const mkdirResult = await io.mkdir(path.dirname(wrapperPath)).catch(
+    (e) =>
+      new UpdateError({
+        operation: 'install',
+        reason: `Failed to create bin directory: ${String(e)}`,
+        cause: e,
+      })
+  );
   if (mkdirResult instanceof UpdateError) return mkdirResult;
 
   const content = renderManagedWrapper(installDir, platformInfo.libExt, version);

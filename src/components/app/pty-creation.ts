@@ -42,7 +42,10 @@ export async function resolvePaneCwd(params: {
   let pendingCwd = isFocused ? params.pendingCwdRef : null;
 
   if (!params.sessionCwd && isFocused && !pendingCwd && params.pendingCwdPromise) {
-    const resolved = await params.pendingCwdPromise.catch(() => null);
+    const resolved = await params.pendingCwdPromise.catch((e) => {
+      console.warn('[pty-creation] Failed to resolve pending CWD promise:', e);
+      return null;
+    });
     if (resolved) {
       pendingCwd = resolved;
     }

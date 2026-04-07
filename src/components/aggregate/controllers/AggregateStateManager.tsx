@@ -408,7 +408,13 @@ export function AggregateStateManager(props: AggregateStateManagerProps) {
 
     // Get CWD from selected PTY if available
     if (selectedPtyId) {
-      targetCwd = await getSessionCwd(selectedPtyId).catch(() => undefined);
+      targetCwd = await getSessionCwd(selectedPtyId).catch((e) => {
+        console.warn(
+          `[AggregateStateManager] Failed to get CWD for selected PTY ${selectedPtyId}:`,
+          e
+        );
+        return undefined;
+      });
     }
 
     if (targetSessionId === sessionState.activeSessionId) {
@@ -428,7 +434,13 @@ export function AggregateStateManager(props: AggregateStateManagerProps) {
             [...livePanes].reverse().find((p) => !!p.ptyId) ??
             null;
           if (candidatePane?.ptyId) {
-            targetCwd = await getSessionCwd(candidatePane.ptyId).catch(() => undefined);
+            targetCwd = await getSessionCwd(candidatePane.ptyId).catch((e) => {
+              console.warn(
+                `[AggregateStateManager] Failed to get CWD for candidate PTY ${candidatePane.ptyId}:`,
+                e
+              );
+              return undefined;
+            });
           }
         }
       }

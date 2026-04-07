@@ -32,7 +32,7 @@ export function createTestPtyService(): PtyService {
       return null;
     }
 
-    return Promise.reject(new Error('No emulator in test layer'));
+    return Promise.resolve(new PtyNotFoundError({ ptyId: 'test' }));
   }
 
   function subscribeToTitle(

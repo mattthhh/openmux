@@ -14,6 +14,7 @@ import { onHostColorScheme, type HostColorScheme } from '../../terminal/host-col
 import { applyHostColors } from '../../effect/bridge';
 import { watchSystemAppearance } from '../../../native/zig-pty/ts/index';
 import * as errore from 'errore';
+import { TerminalColorError } from '../../effect/errors';
 
 export interface HostColorSyncDeps {
   renderer: { requestRender: () => void };
@@ -77,9 +78,14 @@ export function createHostColorSync(deps: HostColorSyncDeps): HostColorSync {
       }
       deps.renderer.requestRender();
 
-      const applyResult = await errore.tryAsync<void, Error>({
+      const applyResult = await errore.tryAsync<void, TerminalColorError>({
         try: () => applyHostColors(next),
-        catch: (error) => new Error(String(error), { cause: error }),
+        catch: (error) =>
+          new TerminalColorError({
+            operation: 'apply',
+            reason: `Failed to apply host colors: ${String(error)}`,
+            cause: error,
+          }),
       });
       if (applyResult instanceof Error) {
         console.warn('[openmux] Failed to apply host colors:', applyResult);

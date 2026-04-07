@@ -201,7 +201,10 @@ export async function setHostColors(colors: TerminalColors): Promise<void> {
  * @returns Current working directory path
  */
 export async function getPtyCwd(ptyId: string): Promise<string> {
-  const response = await sendRequest('getCwd', { ptyId }).catch(() => null);
+  const response = await sendRequest('getCwd', { ptyId }).catch((e) => {
+    console.warn(`[shim/client] Failed to get CWD for PTY ${ptyId}:`, e);
+    return null;
+  });
   const fallback = buildFallbackPtyMetadata(ptyId);
   if (!response) {
     return fallback.cwd ?? fallback.session?.cwd ?? '';
@@ -405,7 +408,10 @@ export async function getSessionInfo(ptyId: string): Promise<{
   cwd: string;
   shell: string;
 } | null> {
-  const response = await sendRequest('getSession', { ptyId }).catch(() => null);
+  const response = await sendRequest('getSession', { ptyId }).catch((e) => {
+    console.warn(`[shim/client] Failed to get session for PTY ${ptyId}:`, e);
+    return null;
+  });
   if (!response) {
     return buildFallbackPtyMetadata(ptyId).session;
   }
@@ -431,7 +437,10 @@ export async function getSessionInfo(ptyId: string): Promise<{
  * @returns Process name or undefined
  */
 export async function getForegroundProcess(ptyId: string): Promise<string | undefined> {
-  const response = await sendRequest('getForegroundProcess', { ptyId }).catch(() => null);
+  const response = await sendRequest('getForegroundProcess', { ptyId }).catch((e) => {
+    console.warn(`[shim/client] Failed to get foreground process for PTY ${ptyId}:`, e);
+    return null;
+  });
   if (!response) {
     return buildFallbackPtyMetadata(ptyId).foregroundProcess;
   }
@@ -446,7 +455,10 @@ export async function getForegroundProcess(ptyId: string): Promise<string | unde
  * @returns Branch name or undefined
  */
 export async function getGitBranch(ptyId: string): Promise<string | undefined> {
-  const response = await sendRequest('getGitBranch', { ptyId }).catch(() => null);
+  const response = await sendRequest('getGitBranch', { ptyId }).catch((e) => {
+    console.warn(`[shim/client] Failed to get Git branch for PTY ${ptyId}:`, e);
+    return null;
+  });
   if (!response) {
     return buildFallbackPtyMetadata(ptyId).gitInfo?.branch;
   }
@@ -461,7 +473,10 @@ export async function getGitBranch(ptyId: string): Promise<string | undefined> {
  * @returns Git info or undefined
  */
 export async function getGitInfo(ptyId: string): Promise<GitInfo | undefined> {
-  const response = await sendRequest('getGitInfo', { ptyId }).catch(() => null);
+  const response = await sendRequest('getGitInfo', { ptyId }).catch((e) => {
+    console.warn(`[shim/client] Failed to get Git info for PTY ${ptyId}:`, e);
+    return null;
+  });
   const info = response
     ? ((response.header.result as { info?: GitInfo } | undefined)?.info ?? undefined)
     : buildFallbackPtyMetadata(ptyId).gitInfo;
@@ -491,7 +506,10 @@ export async function getGitInfo(ptyId: string): Promise<GitInfo | undefined> {
 export async function getGitDiffStats(
   ptyId: string
 ): Promise<{ added: number; removed: number; binary: number } | undefined> {
-  const response = await sendRequest('getGitDiffStats', { ptyId }).catch(() => null);
+  const response = await sendRequest('getGitDiffStats', { ptyId }).catch((e) => {
+    console.warn(`[shim/client] Failed to get Git diff stats for PTY ${ptyId}:`, e);
+    return null;
+  });
   const diff = response
     ? ((
         response.header.result as
@@ -531,7 +549,10 @@ export async function getTitle(ptyId: string): Promise<string> {
  * @returns Last command or undefined
  */
 export async function getLastCommand(ptyId: string): Promise<string | undefined> {
-  const response = await sendRequest('getLastCommand', { ptyId }).catch(() => null);
+  const response = await sendRequest('getLastCommand', { ptyId }).catch((e) => {
+    console.warn(`[shim/client] Failed to get last command for PTY ${ptyId}:`, e);
+    return null;
+  });
   if (!response) {
     return buildFallbackPtyMetadata(ptyId).lastCommand;
   }

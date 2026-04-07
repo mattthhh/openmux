@@ -104,8 +104,10 @@ describe('createTestPtyService (litmus)', () => {
     expect(await service.getForegroundProcess('pty' as any)).toBeUndefined();
   });
 
-  it('should throw for async getEmulator and return null for sync getEmulator', async () => {
-    await expect(service.getEmulator('pty' as any)).rejects.toThrow('No emulator in test layer');
+  it('should return PtyNotFoundError for async getEmulator and return null for sync getEmulator', async () => {
+    const result = await service.getEmulator('pty' as any);
+    expect(result).toBeInstanceOf(Error);
+    expect((result as Error).message).toContain('PTY session');
     expect(service.getEmulator('pty' as any, { sync: true })).toBeNull();
   });
 
