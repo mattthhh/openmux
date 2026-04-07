@@ -11,7 +11,7 @@ import { useTerminal } from '../../../contexts/TerminalContext';
 import { useKeyboard } from '../../../contexts/KeyboardContext';
 import { useCopyMode } from '../../../contexts/copy-mode';
 import { collectPanes } from '../../../core/layout-tree';
-import type { Workspace } from '../../../core/types';
+import type { Workspace, WorkspaceId } from '../../../core/types';
 import type {
   PendingPaneCreation,
   FlattenedTreeItem,
@@ -123,16 +123,57 @@ export function AggregateStateManager(props: AggregateStateManagerProps) {
     return workspace.focusedPaneId ?? getLastPaneIdForWorkspace(workspace);
   };
 
+  const toWorkspaceId = (workspaceId: number | undefined): WorkspaceId | undefined => {
+    if (
+      workspaceId === 1 ||
+      workspaceId === 2 ||
+      workspaceId === 3 ||
+      workspaceId === 4 ||
+      workspaceId === 5 ||
+      workspaceId === 6 ||
+      workspaceId === 7 ||
+      workspaceId === 8 ||
+      workspaceId === 9
+    ) {
+      return workspaceId;
+    }
+    return undefined;
+  };
+
   const switchToSessionWithData = async (
     sessionId: string,
-    preloadedData?: Awaited<ReturnType<typeof loadSessionData>>
+    preloadedData?: Awaited<ReturnType<typeof loadSessionData>>,
+    target?: { workspaceId?: WorkspaceId; paneId?: string }
   ): Promise<boolean> => {
     if (preloadedData instanceof Error) {
       console.error('Failed to load session:', preloadedData.message);
       return false;
     }
 
-    await switchSession(sessionId, preloadedData ? { preloadedData } : undefined);
+    const adjustedPreloadedData =
+      preloadedData && !(preloadedData instanceof Error) && target?.workspaceId
+        ? (() => {
+            const workspace = preloadedData.workspaces[target.workspaceId];
+            return {
+              ...preloadedData,
+              activeWorkspaceId: target.workspaceId,
+              workspaces: {
+                ...preloadedData.workspaces,
+                [target.workspaceId]: workspace
+                  ? {
+                      ...workspace,
+                      focusedPaneId: target.paneId ?? workspace.focusedPaneId,
+                    }
+                  : workspace,
+              },
+            };
+          })()
+        : preloadedData;
+
+    await switchSession(
+      sessionId,
+      adjustedPreloadedData ? { preloadedData: adjustedPreloadedData } : undefined
+    );
     return true;
   };
 
@@ -219,12 +260,18 @@ export function AggregateStateManager(props: AggregateStateManagerProps) {
     if (!selectedSessionId) return;
     if (selectedSessionId === sessionState.activeSessionId) return;
 
+    const targetWorkspaceId = toWorkspaceId(selectedItem.node.ptyInfo.workspaceId);
+    const targetPaneId = selectedItem.node.ptyInfo.paneId;
+
     let cancelled = false;
     const timeout = setTimeout(() => {
       void (async () => {
         const sessionData = await loadSessionData(selectedSessionId);
         if (cancelled) return;
-        await switchToSessionWithData(selectedSessionId, sessionData);
+        await switchToSessionWithData(selectedSessionId, sessionData, {
+          workspaceId: targetWorkspaceId,
+          paneId: targetPaneId ?? undefined,
+        });
       })();
     }, AUTO_SWITCH_DEBOUNCE_MS);
 

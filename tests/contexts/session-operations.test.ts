@@ -281,6 +281,51 @@ describe('createSessionOperations', () => {
     expect(dispatch).toHaveBeenCalledWith({ type: 'SET_SWITCHING', switching: false });
   });
 
+  it('does not block session switching on session save', async () => {
+    const sessionA = createMetadata('session-a');
+    const sessionB = createMetadata('session-b');
+    const state = createState({
+      sessions: [sessionA, sessionB],
+      activeSessionId: sessionA.id,
+      activeSession: sessionA,
+    });
+
+    const ops = createSessionOperations({
+      getState: () => state,
+      dispatch: vi.fn(),
+      getCwd: vi.fn().mockResolvedValue('/tmp'),
+      getWorkspaces: () => ({}) as Workspaces,
+      getActiveWorkspaceId: () => 1 as WorkspaceId,
+      shouldPersistSession: () => true,
+      onSessionLoad: vi.fn().mockResolvedValue(undefined),
+      onBeforeSwitch: vi.fn().mockResolvedValue(undefined),
+      onDeleteSession: vi.fn(),
+      refreshSessions: vi.fn().mockResolvedValue(undefined),
+    });
+
+    (saveCurrentSession as any).mockImplementation(
+      () =>
+        new Promise<void>(() => {
+          // Intentionally never resolves. Switching should still finish.
+        })
+    );
+    (switchToSession as any).mockResolvedValue(undefined);
+    (loadSessionData as any).mockResolvedValue({
+      metadata: sessionB,
+      workspaces: {} as Workspaces,
+      activeWorkspaceId: 1 as WorkspaceId,
+      cwdMap: new Map<string, string>(),
+    });
+
+    const outcome = await Promise.race([
+      ops.switchSession(sessionB.id).then(() => 'resolved' as const),
+      new Promise<'timed-out'>((resolve) => setTimeout(() => resolve('timed-out'), 25)),
+    ]);
+
+    expect(outcome).toBe('resolved');
+    expect(saveCurrentSession).toHaveBeenCalledTimes(1);
+  });
+
   it('still updates the active session on disk when preloaded data is supplied', async () => {
     const sessionA = createMetadata('session-a');
     const sessionB = createMetadata('session-b');
@@ -326,6 +371,64 @@ describe('createSessionOperations', () => {
       sessionB.id,
       { allowPrune: true }
     );
+  });
+
+  it('drops stale earlier switch requests when a newer target arrives', async () => {
+    const sessionA = createMetadata('session-a');
+    const sessionB = createMetadata('session-b');
+    const sessionC = createMetadata('session-c');
+    const state = createState({
+      sessions: [sessionA, sessionB, sessionC],
+      activeSessionId: sessionA.id,
+      activeSession: sessionA,
+    });
+
+    let releaseFirstSuspend!: () => void;
+    const firstSuspend = new Promise<void>((resolve) => {
+      releaseFirstSuspend = resolve;
+    });
+    const onBeforeSwitch = vi
+      .fn()
+      .mockImplementationOnce(() => firstSuspend)
+      .mockResolvedValue(undefined);
+
+    const ops = createSessionOperations({
+      getState: () => state,
+      dispatch: vi.fn(),
+      getCwd: vi.fn().mockResolvedValue('/tmp'),
+      getWorkspaces: () => ({}) as Workspaces,
+      getActiveWorkspaceId: () => 1 as WorkspaceId,
+      shouldPersistSession: () => false,
+      onSessionLoad: vi.fn().mockResolvedValue(undefined),
+      onBeforeSwitch,
+      onDeleteSession: vi.fn(),
+      refreshSessions: vi.fn().mockResolvedValue(undefined),
+    });
+
+    (switchToSession as any).mockResolvedValue(undefined);
+    (loadSessionData as any)
+      .mockResolvedValueOnce({
+        metadata: sessionB,
+        workspaces: {} as Workspaces,
+        activeWorkspaceId: 1 as WorkspaceId,
+        cwdMap: new Map<string, string>(),
+      })
+      .mockResolvedValueOnce({
+        metadata: sessionC,
+        workspaces: {} as Workspaces,
+        activeWorkspaceId: 1 as WorkspaceId,
+        cwdMap: new Map<string, string>(),
+      });
+
+    const firstSwitch = ops.switchSession(sessionB.id);
+    await Promise.resolve();
+    const secondSwitch = ops.switchSession(sessionC.id);
+    releaseFirstSuspend();
+
+    await Promise.all([firstSwitch, secondSwitch]);
+
+    expect(switchToSession).not.toHaveBeenCalledWith(sessionB.id);
+    expect(switchToSession).toHaveBeenCalledWith(sessionC.id);
   });
 
   it('waits to publish the active session until after session load completes', async () => {

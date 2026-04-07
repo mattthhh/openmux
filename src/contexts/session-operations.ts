@@ -65,6 +65,9 @@ export function createSessionOperations(params: SessionOperationsParams) {
     refreshSessions,
   } = params;
 
+  let latestSwitchToken = 0;
+  let switchQueue = Promise.resolve();
+
   const refreshSessionsInBackground = () => {
     void refreshSessions().catch((error) => {
       console.warn('[SessionOperations] Failed to refresh sessions:', error);
@@ -114,29 +117,46 @@ export function createSessionOperations(params: SessionOperationsParams) {
       skipSave?: boolean;
       skipBeforeSwitch?: boolean;
       preloadedData?: Awaited<ReturnType<typeof loadSessionData>>;
-    } = {}
+    } = {},
+    switchToken?: number
   ): Promise<void> => {
     const state = getState();
     if (id === state.activeSessionId) return;
+
+    const isStale = () => switchToken !== undefined && switchToken !== latestSwitchToken;
 
     const dataPromise = options.preloadedData
       ? Promise.resolve(options.preloadedData)
       : loadSessionData(id);
 
-    // Save current session and suspend it in parallel.
+    // Suspend immediately so PTY ownership is stable, but persist the session snapshot
+    // in the background so switching is not blocked on disk/CWD collection.
     if (state.activeSession && state.activeSessionId) {
       const workspaces = getWorkspaces();
       const activeWorkspaceId = getActiveWorkspaceId();
-      const savePromise =
-        !options.skipSave && shouldPersistSession(workspaces)
-          ? saveCurrentSession(state.activeSession, workspaces, activeWorkspaceId, getCwd)
-          : Promise.resolve();
-      const beforeSwitchPromise = options.skipBeforeSwitch
-        ? Promise.resolve()
-        : onBeforeSwitch(state.activeSessionId);
+      if (!options.skipSave && shouldPersistSession(workspaces)) {
+        const workspacesSnapshot = structuredClone(workspaces);
+        void saveCurrentSession(
+          state.activeSession,
+          workspacesSnapshot,
+          activeWorkspaceId,
+          getCwd
+        ).then((result) => {
+          if (result instanceof Error) {
+            console.warn(
+              '[SessionOperations] Failed to save session during switch:',
+              result.message
+            );
+          }
+        });
+      }
 
-      await Promise.all([savePromise, beforeSwitchPromise]);
+      if (!options.skipBeforeSwitch) {
+        await onBeforeSwitch(state.activeSessionId);
+      }
     }
+
+    if (isStale()) return;
 
     // Mark switching in progress to prevent "No panes" flash
     dispatch({ type: 'SET_SWITCHING', switching: true });
@@ -159,12 +179,16 @@ export function createSessionOperations(params: SessionOperationsParams) {
       return;
     }
 
+    if (isStale()) return;
+
     // Use preloaded data if available, otherwise consume the in-flight load.
     const data = await dataPromise;
 
     if (data === null) {
       return;
     }
+
+    if (isStale()) return;
 
     if (data instanceof SessionNotFoundError || data instanceof SessionCorruptedError) {
       console.error('Failed to load session data:', data.message);
@@ -197,7 +221,27 @@ export function createSessionOperations(params: SessionOperationsParams) {
   const switchSession = async (
     id: SessionId,
     options?: { preloadedData?: Awaited<ReturnType<typeof loadSessionData>> }
-  ): Promise<void> => switchSessionInternal(id, options);
+  ): Promise<void> => {
+    const switchToken = ++latestSwitchToken;
+    const previousSwitch = switchQueue;
+
+    let releaseQueue!: () => void;
+    switchQueue = new Promise<void>((resolve) => {
+      releaseQueue = resolve;
+    });
+
+    await previousSwitch;
+
+    try {
+      if (switchToken !== latestSwitchToken) {
+        return;
+      }
+
+      await switchSessionInternal(id, options, switchToken);
+    } finally {
+      releaseQueue();
+    }
+  };
 
   const renameSession = async (id: SessionId, name: string): Promise<void> => {
     const result = await renameSessionOnDisk(id, name);
