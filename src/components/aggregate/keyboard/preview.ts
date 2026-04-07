@@ -2,12 +2,13 @@ import { writeToPty } from '../../../effect/bridge';
 import type { KeyboardEvent } from '../../../effect/bridge';
 import { encodeKeyForEmulator } from '../../../terminal/key-encoder';
 import { matchKeybinding } from '../../../core/keybindings';
+import { isSavedAggregatePtyId } from '../../../contexts/aggregate/rows';
 import type { AggregateKeyboardDeps } from './types';
 
 export function createAggregatePreviewHandler(deps: AggregateKeyboardDeps) {
   const forwardToPreviewPty = (event: KeyboardEvent): boolean => {
     const selectedPtyId = deps.getSelectedPtyId();
-    if (selectedPtyId) {
+    if (selectedPtyId && !isSavedAggregatePtyId(selectedPtyId)) {
       const emulator = deps.getEmulatorSync(selectedPtyId);
       const inputStr = encodeKeyForEmulator(
         {

@@ -16,6 +16,7 @@ import type { SerializedLayoutNode, SerializedSession, SessionMetadata } from '.
 import { getPtyMetadata } from '../../effect/bridge/aggregate';
 import { listSessionsResult, loadSession } from '../../effect/bridge/session-bridge';
 import { AggregateBridgeError } from '../../effect/errors';
+import { clonePtyStdoutActivity } from '../../core/shimmer';
 import { getGlobalGitMetadataCache } from '../git-metadata-cache';
 import { getGitDiffStats, getGitInfo } from '../../effect/services/pty/helpers';
 
@@ -37,6 +38,7 @@ import {
 } from './subscriptions';
 import { recomputeMatches, recomputeTree } from './session';
 import type { AggregateViewState, PtyInfo, SessionLoadState } from './types';
+import { dedupeAggregatePtysByPane, getAggregatePaneKey, getSavedAggregatePtyId } from './rows';
 
 export { ptyMetadataToInfo } from './pty-info';
 
@@ -252,20 +254,21 @@ function buildSavedPaneInfo(params: {
   workspaceId: number;
   cwd: string;
   title: string | undefined;
+  existing?: PtyInfo;
 }): PtyInfo {
-  const { sessionId, sessionMetadata, paneId, workspaceId, cwd, title } = params;
+  const { sessionId, sessionMetadata, paneId, workspaceId, cwd, title, existing } = params;
 
   return {
-    ptyId: `saved:${sessionId}:${paneId}`,
+    ptyId: getSavedAggregatePtyId(sessionId, paneId),
     cwd,
-    foregroundProcess: undefined,
-    shell: undefined,
+    foregroundProcess: existing?.foregroundProcess,
+    shell: existing?.shell,
     workspaceId,
     paneId,
     sessionId,
     sessionMetadata,
-    title,
-    sortOrderHint: undefined,
+    title: existing?.title ?? title,
+    sortOrderHint: existing?.sortOrderHint,
     ...getEmptyGitMetadata(),
   };
 }
@@ -340,6 +343,14 @@ export function createAggregateViewRefreshers(
       const sessionLoadStates = new Map<string, SessionLoadState>();
       const sessionPaneOrders = new Map<string, Map<string, number>>();
       const provisionalPtys: PtyInfo[] = [];
+      const previousPanePtyByKey = new Map<string, PtyInfo>();
+      for (const pty of dedupeAggregatePtysByPane(state.allPtys)) {
+        const paneKey = getAggregatePaneKey(pty.sessionId, pty.paneId);
+        if (!paneKey) {
+          continue;
+        }
+        previousPanePtyByKey.set(paneKey, pty);
+      }
 
       const currentLiveMetadataEntries = await Promise.all(
         currentSessionPtys.map(
@@ -436,6 +447,14 @@ export function createAggregateViewRefreshers(
 
         const paneRecords = collectSessionPaneRecords(loadedSession);
         for (const paneRecord of paneRecords) {
+          const savedPtyId = getSavedAggregatePtyId(sessionId, paneRecord.paneId);
+          const previousPanePty = previousPanePtyByKey.get(
+            getAggregatePaneKey(sessionId, paneRecord.paneId) ?? ''
+          );
+          if (previousPanePty && previousPanePty.ptyId !== savedPtyId) {
+            clonePtyStdoutActivity(previousPanePty.ptyId, savedPtyId);
+          }
+
           provisionalPtys.push(
             buildSavedPaneInfo({
               sessionId,
@@ -444,6 +463,7 @@ export function createAggregateViewRefreshers(
               workspaceId: paneRecord.workspaceId,
               cwd: paneRecord.cwd,
               title: paneRecord.title,
+              existing: previousPanePty,
             })
           );
         }
@@ -567,7 +587,7 @@ export function createAggregateViewRefreshers(
           s.sessionPaneOrders.set(pty.sessionId, sessionPaneOrder);
         }
 
-        s.allPtys = [...mergedSnapshotPtys, ...carriedOptimisticPtys];
+        s.allPtys = dedupeAggregatePtysByPane([...mergedSnapshotPtys, ...carriedOptimisticPtys]);
         s.allPtysIndex = buildPtyIndex(s.allPtys);
 
         if (s.expandedSessionIds.size === 0) {

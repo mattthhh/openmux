@@ -8,7 +8,11 @@ import {
   recordPtyStdoutActivity,
   hasRecentPtyStdoutActivity,
   clearPtyStdoutActivity,
+  clonePtyStdoutActivity,
+  hasActiveShimmer,
   hasMeaningfulActivity,
+  suppressPtyShimmer,
+  unsuppressPtyShimmer,
 } from '../shimmer';
 import type { PtyInfo } from '../../contexts/aggregate-view-types';
 
@@ -47,6 +51,11 @@ describe('shimmer activity tracking', () => {
     clearPtyStdoutActivity('pty-1');
     clearPtyStdoutActivity('pty-2');
     clearPtyStdoutActivity('pty-3');
+    clearPtyStdoutActivity('saved:session-1:pane-1');
+    unsuppressPtyShimmer('pty-1');
+    unsuppressPtyShimmer('pty-2');
+    unsuppressPtyShimmer('pty-3');
+    unsuppressPtyShimmer('saved:session-1:pane-1');
   });
 
   describe('recordPtyStdoutActivity', () => {
@@ -92,6 +101,33 @@ describe('shimmer activity tracking', () => {
 
       expect(hasRecentPtyStdoutActivity('pty-1', now + 100)).toBe(true);
       expect(hasRecentPtyStdoutActivity('pty-2', now + 100)).toBe(true);
+    });
+
+    it('retains recent activity while shimmer is suppressed and restores it on unsuppress', () => {
+      const now = Date.now();
+
+      suppressPtyShimmer('pty-1');
+      recordPtyStdoutActivity('pty-1', now);
+      recordPtyStdoutActivity('pty-1', now + 100);
+
+      expect(hasRecentPtyStdoutActivity('pty-1', now + 100)).toBe(true);
+      expect(hasActiveShimmer('pty-1', now + 100)).toBe(false);
+
+      unsuppressPtyShimmer('pty-1');
+
+      expect(hasActiveShimmer('pty-1')).toBe(true);
+    });
+
+    it('clones recent activity to a saved aggregate row id', () => {
+      const now = 2000;
+      const savedPtyId = 'saved:session-1:pane-1';
+
+      recordPtyStdoutActivity('pty-1', now);
+      recordPtyStdoutActivity('pty-1', now + 100);
+      clonePtyStdoutActivity('pty-1', savedPtyId, now + 100);
+
+      expect(hasRecentPtyStdoutActivity(savedPtyId, now + 100)).toBe(true);
+      expect(hasActiveShimmer(savedPtyId, now + 100)).toBe(true);
     });
   });
 

@@ -201,6 +201,13 @@ describe('Selection Persistence - current tree behavior', () => {
       selectedPtyId: savedPty.ptyId,
     });
 
+    setState(
+      produce((s) => {
+        s.previewMode = true;
+        s.previewZoomed = true;
+      })
+    );
+
     const livePty = createMockPty({
       ptyId: 'pty-live',
       sessionId: 'session-a',
@@ -223,6 +230,8 @@ describe('Selection Persistence - current tree behavior', () => {
     expect(state.selectedPtyId).toBe('pty-live');
     expect(state.selectedSessionId).toBe('session-a');
     expect(state.flattenedTree[state.selectedIndex]?.node.type).toBe('pty');
+    expect(state.previewMode).toBe(true);
+    expect(state.previewZoomed).toBe(true);
   });
 
   it('keeps the cursor in place by selecting the next PTY after removal', () => {

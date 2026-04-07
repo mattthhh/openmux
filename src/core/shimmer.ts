@@ -59,6 +59,26 @@ export function suppressPtyShimmer(ptyId: string): void {
  */
 export function unsuppressPtyShimmer(ptyId: string): void {
   suppressedPtyIds.delete(ptyId);
+
+  if (shimmerStates.has(ptyId)) {
+    return;
+  }
+
+  const recent = prunePtyStdoutActivity(ptyId);
+  if (recent.length < MIN_OUTPUT_EVENTS_FOR_SHIMMER) {
+    return;
+  }
+
+  const latestActivity = recent[recent.length - 1] ?? Date.now();
+  shimmerStates.set(ptyId, {
+    startTime: latestActivity,
+    duration: DEFAULT_CONFIG.sweepDuration,
+    sweepDuration: DEFAULT_CONFIG.sweepDuration,
+    sweepCount: 0,
+    hasQueuedActivity: false,
+    totalStartTime: recent[0] ?? latestActivity,
+  });
+  notifyShimmerStateListeners();
 }
 
 /**
@@ -160,13 +180,13 @@ function prunePtyStdoutActivity(ptyId: string, now = Date.now()): number[] {
  * to ensure the user sees a complete animation for all activity.
  */
 export function recordPtyStdoutActivity(ptyId: string, time = Date.now()): void {
-  // Don't record activity for suppressed PTYs
-  if (suppressedPtyIds.has(ptyId)) {
-    return;
-  }
   const recent = prunePtyStdoutActivity(ptyId, time);
   recent.push(time);
   ptyStdoutActivity.set(ptyId, recent);
+
+  if (suppressedPtyIds.has(ptyId)) {
+    return;
+  }
 
   const existingState = shimmerStates.get(ptyId);
 
@@ -191,6 +211,56 @@ export function recordPtyStdoutActivity(ptyId: string, time = Date.now()): void 
 /**
  * Clear cached stdout activity for a PTY.
  */
+export function clonePtyStdoutActivity(
+  sourcePtyId: string,
+  targetPtyId: string,
+  now = Date.now()
+): void {
+  if (sourcePtyId === targetPtyId) {
+    return;
+  }
+
+  const recent = prunePtyStdoutActivity(sourcePtyId, now);
+  if (recent.length === 0) {
+    clearPtyStdoutActivity(targetPtyId);
+    return;
+  }
+
+  ptyStdoutActivity.set(targetPtyId, [...recent]);
+
+  if (suppressedPtyIds.has(targetPtyId)) {
+    if (shimmerStates.delete(targetPtyId)) {
+      notifyShimmerStateListeners();
+    }
+    return;
+  }
+
+  const sourceState = shimmerStates.get(sourcePtyId);
+  if (sourceState) {
+    shimmerStates.set(targetPtyId, { ...sourceState });
+    notifyShimmerStateListeners();
+    return;
+  }
+
+  if (recent.length < MIN_OUTPUT_EVENTS_FOR_SHIMMER) {
+    if (shimmerStates.delete(targetPtyId)) {
+      notifyShimmerStateListeners();
+    }
+    return;
+  }
+
+  const latestActivity = recent[recent.length - 1] ?? now;
+  shimmerStates.set(targetPtyId, {
+    startTime: latestActivity,
+    duration: DEFAULT_CONFIG.sweepDuration,
+    sweepDuration: DEFAULT_CONFIG.sweepDuration,
+    sweepCount: 0,
+    hasQueuedActivity: false,
+    totalStartTime: recent[0] ?? latestActivity,
+  });
+  notifyShimmerStateListeners();
+}
+
 export function clearPtyStdoutActivity(ptyId: string): void {
   ptyStdoutActivity.delete(ptyId);
   if (shimmerStates.delete(ptyId)) {

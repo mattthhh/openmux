@@ -20,6 +20,7 @@ import {
   subscribeToGitRepoChanges,
 } from '../../effect/services/pty/helpers';
 import { PtyMetadataError } from '../../effect/errors';
+import { clonePtyStdoutActivity } from '../../core/shimmer';
 
 import type { AggregateViewState, PendingPaneCreation, PtyInfo } from './types';
 import { buildPtyIndex } from './filter';
@@ -33,6 +34,7 @@ import {
 import { ptyMetadataToInfo } from './pty-info';
 import { clearPreviewState } from './selection';
 import { buildSessionPaneOrderFromAggregateState, setSessionPaneOrder } from './pane-order';
+import { dedupeAggregatePtysByPane, getSavedAggregatePtyId } from './rows';
 import { recomputeMatches, recomputeTree } from './session';
 
 export interface SubscriptionManager {
@@ -413,6 +415,13 @@ export function createLifecycleHandlers(
           s.allPtysIndex.set(ptyId, newIndex);
         }
 
+        if (nextPty.paneId) {
+          clonePtyStdoutActivity(
+            getSavedAggregatePtyId(ownership.sessionId, nextPty.paneId),
+            ptyId
+          );
+        }
+
         const pendingInsertion = findMatchingPendingInsertion(s, {
           ptyId,
           sessionId: ownership.sessionId,
@@ -453,6 +462,9 @@ export function createLifecycleHandlers(
             paneCount: (loadState.paneCount ?? 0) + 1,
           });
         }
+
+        s.allPtys = dedupeAggregatePtysByPane(s.allPtys);
+        s.allPtysIndex = buildPtyIndex(s.allPtys);
 
         const sessionPtyCount = s.allPtys.filter(
           (pty) => pty.sessionId === ownership.sessionId

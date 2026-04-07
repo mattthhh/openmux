@@ -6,6 +6,7 @@
 import { Show, createEffect, on } from 'solid-js';
 import { useRenderer, useTerminalDimensions } from '@opentui/solid';
 import { resizePty } from '../../effect/bridge';
+import { isSavedAggregatePtyId } from '../../contexts/aggregate/rows';
 import { useOverlayColors } from '../overlay-colors';
 import { TerminalView } from '../TerminalView';
 
@@ -21,6 +22,12 @@ export interface InteractivePreviewProps {
 export function InteractivePreview(props: InteractivePreviewProps) {
   const { subtle: overlaySubtle } = useOverlayColors();
   const renderer = useRenderer();
+  const previewablePtyId = () => {
+    if (!props.ptyId || isSavedAggregatePtyId(props.ptyId)) {
+      return null;
+    }
+    return props.ptyId;
+  };
   const dimensions = useTerminalDimensions();
   // Track last resize to avoid redundant calls
   let lastResize: {
@@ -34,8 +41,10 @@ export function InteractivePreview(props: InteractivePreviewProps) {
   const getCellMetrics = () => {
     const rendererAny = renderer as any;
     const resolution = rendererAny?.resolution ?? null;
-    const terminalWidth = dimensions().width || rendererAny?.terminalWidth || rendererAny?.width || 0;
-    const terminalHeight = dimensions().height || rendererAny?.terminalHeight || rendererAny?.height || 0;
+    const terminalWidth =
+      dimensions().width || rendererAny?.terminalWidth || rendererAny?.width || 0;
+    const terminalHeight =
+      dimensions().height || rendererAny?.terminalHeight || rendererAny?.height || 0;
     if (!resolution || terminalWidth <= 0 || terminalHeight <= 0) return null;
     return {
       cellWidth: Math.max(1, Math.floor(resolution.width / terminalWidth)),
@@ -47,7 +56,7 @@ export function InteractivePreview(props: InteractivePreviewProps) {
   // When aggregate view closes, App.tsx will restore the original pane dimensions
   createEffect(
     on(
-      [() => props.ptyId, () => props.width, () => props.height],
+      [previewablePtyId, () => props.width, () => props.height],
       ([ptyId, width, height]) => {
         if (!ptyId) return;
 
@@ -56,12 +65,14 @@ export function InteractivePreview(props: InteractivePreviewProps) {
         const pixelHeight = metrics ? height * metrics.cellHeight : null;
 
         // Only resize if dimensions actually changed
-        if (lastResize &&
+        if (
+          lastResize &&
           lastResize.ptyId === ptyId &&
           lastResize.width === width &&
           lastResize.height === height &&
           lastResize.pixelWidth === pixelWidth &&
-          lastResize.pixelHeight === pixelHeight) {
+          lastResize.pixelHeight === pixelHeight
+        ) {
           return;
         }
 
@@ -74,15 +85,22 @@ export function InteractivePreview(props: InteractivePreviewProps) {
 
   return (
     <Show
-      when={props.ptyId}
+      when={previewablePtyId()}
       fallback={
-        <box style={{ width: props.width, height: props.height, alignItems: 'center', justifyContent: 'center' }}>
+        <box
+          style={{
+            width: props.width,
+            height: props.height,
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
           <text fg={overlaySubtle()}>No terminal selected</text>
         </box>
       }
     >
       <TerminalView
-        ptyId={props.ptyId!}
+        ptyId={previewablePtyId()!}
         width={props.width}
         height={props.height}
         isFocused={props.isInteractive}

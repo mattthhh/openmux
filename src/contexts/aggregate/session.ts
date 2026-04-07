@@ -58,11 +58,6 @@ export function recomputeMatches(state: AggregateViewState): void {
   }
 
   state.matchedPtysIndex = buildPtyIndex(state.matchedPtys);
-
-  if (state.selectedPtyId && !state.matchedPtys.some((pty) => pty.ptyId === state.selectedPtyId)) {
-    state.selectedPtyId = null;
-    clearPreviewState(state);
-  }
 }
 
 function getSessionIdForItem(
@@ -128,6 +123,9 @@ export function recomputeTree(state: AggregateViewState): void {
     return;
   }
 
+  let lostSelectedPty = false;
+  let preservedPreviewByPaneReplacement = false;
+
   if (state.selectedPtyId) {
     const ptyIndex = state.flattenedTreeIndex.get(state.selectedPtyId);
     if (ptyIndex !== undefined) {
@@ -136,7 +134,7 @@ export function recomputeTree(state: AggregateViewState): void {
       return;
     }
     state.selectedPtyId = null;
-    clearPreviewState(state);
+    lostSelectedPty = true;
   }
 
   if (previousSelectedSessionId) {
@@ -154,6 +152,7 @@ export function recomputeTree(state: AggregateViewState): void {
           state.selectedIndex = matchingPaneIndex;
           state.selectedSessionId = previousSelectedSessionId;
           state.selectedPtyId = matchingPaneItem.node.ptyInfo.ptyId;
+          preservedPreviewByPaneReplacement = true;
           return;
         }
       }
@@ -190,6 +189,9 @@ export function recomputeTree(state: AggregateViewState): void {
         state.flattenedTree[preferredIndex]?.node.type === 'pty'
           ? state.flattenedTree[preferredIndex].node.ptyInfo.ptyId
           : null;
+      if (lostSelectedPty && !preservedPreviewByPaneReplacement) {
+        clearPreviewState(state);
+      }
       return;
     }
 
@@ -200,6 +202,9 @@ export function recomputeTree(state: AggregateViewState): void {
       state.selectedIndex = sameSessionHeaderIndex;
       state.selectedSessionId = previousSelectedSessionId;
       state.selectedPtyId = null;
+      if (lostSelectedPty && !preservedPreviewByPaneReplacement) {
+        clearPreviewState(state);
+      }
       return;
     }
   }
@@ -218,6 +223,9 @@ export function recomputeTree(state: AggregateViewState): void {
   const selectedItem = state.flattenedTree[state.selectedIndex];
   state.selectedSessionId = getSessionIdForItem(selectedItem);
   state.selectedPtyId = selectedItem?.node.type === 'pty' ? selectedItem.node.ptyInfo.ptyId : null;
+  if (lostSelectedPty && !preservedPreviewByPaneReplacement && selectedItem?.node.type !== 'pty') {
+    clearPreviewState(state);
+  }
 }
 
 export function createSessionActions(

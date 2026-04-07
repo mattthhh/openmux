@@ -12,7 +12,7 @@ import {
   createAggregateViewRefreshers,
   createLifecycleHandlers,
 } from '../../aggregate-view-subscriptions';
-import { getSessionPaneOrder } from '../../aggregate';
+import { getSessionPaneOrder, recomputeMatches, recomputeTree } from '../../aggregate';
 import { initialState, type AggregateViewState, type PtyInfo } from '../../aggregate-view-types';
 
 vi.mock('../../../effect/bridge/aggregate-bridge', () => ({
@@ -488,6 +488,65 @@ describe('aggregate insertion ordering', () => {
     });
 
     await createPromise;
+  });
+
+  it('replaces a saved row with the live PTY for the same pane instead of duplicating it', async () => {
+    const { state, setState, refreshers, lifecycleHandlers } = createHarness();
+
+    await refreshers.initialLoad();
+
+    setState(
+      produce((s) => {
+        s.allPtys.push({
+          ptyId: 'saved:session-1:pane-3',
+          cwd: '/tmp',
+          foregroundProcess: 'htop',
+          shell: '/bin/bash',
+          workspaceId: 1,
+          paneId: 'pane-3',
+          sessionId: 'session-1',
+          sessionMetadata: session,
+          title: 'saved-shell',
+          sortOrderHint: 0.5,
+          gitBranch: undefined,
+          gitDiffStats: undefined,
+          gitDirty: false,
+          gitStaged: 0,
+          gitUnstaged: 0,
+          gitUntracked: 0,
+          gitConflicted: 0,
+          gitAhead: undefined,
+          gitBehind: undefined,
+          gitStashCount: undefined,
+          gitState: undefined,
+          gitDetached: false,
+          gitRepoKey: undefined,
+        });
+        s.allPtysIndex = new Map(s.allPtys.map((pty, index) => [pty.ptyId, index] as const));
+        s.matchedPtys = s.allPtys;
+        s.matchedPtysIndex = new Map(
+          s.matchedPtys.map((pty, index) => [pty.ptyId, index] as const)
+        );
+        s.pendingPaneCreations = [
+          {
+            id: 'pending-1',
+            sessionId: 'session-1',
+            insertAfterPtyId: 'pty-1',
+            insertAfterPaneId: 'pane-1',
+            pendingPtyId: 'pty-new',
+            pendingPaneId: 'pane-3',
+            sortOrderHint: 0.5,
+          },
+        ];
+        recomputeMatches(s);
+        recomputeTree(s);
+      })
+    );
+
+    await lifecycleHandlers.handlePtyCreated('pty-new');
+
+    expect(state.allPtys.filter((pty) => pty.paneId === 'pane-3')).toHaveLength(1);
+    expect(state.allPtys.find((pty) => pty.paneId === 'pane-3')?.ptyId).toBe('pty-new');
   });
 
   it('keeps the first created PTY adjacent after the selected PTY across refreshes', async () => {

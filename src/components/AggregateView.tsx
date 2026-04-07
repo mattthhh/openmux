@@ -58,6 +58,7 @@ import {
   AggregateMouseController,
   AggregateStateManager,
 } from './aggregate/controllers';
+import { isSavedAggregatePtyId } from '../contexts/aggregate/rows';
 
 interface AggregateViewProps {
   width: number;
@@ -84,11 +85,19 @@ export function AggregateView(props: AggregateViewProps) {
   const search = useSearch();
   const colors = useOverlayColors();
 
+  const getPreviewableSelectedPtyId = () => {
+    const selectedPtyId = aggregate.state.selectedPtyId;
+    if (!selectedPtyId || isSavedAggregatePtyId(selectedPtyId)) {
+      return null;
+    }
+    return selectedPtyId;
+  };
+
   // Hooks
   const vim = useVimMode({ isAggregateVisible: () => aggregate.state.showAggregateView });
   const emulatorCache = useEmulatorCache({
     isActive: () => aggregate.state.showAggregateView,
-    getSelectedPtyId: () => aggregate.state.selectedPtyId,
+    getSelectedPtyId: getPreviewableSelectedPtyId,
   });
   const sessionDrag = useSessionDrag();
 
@@ -104,7 +113,7 @@ export function AggregateView(props: AggregateViewProps) {
   });
 
   const handleEnterSearch = async () => {
-    const ptyId = aggregate.state.selectedPtyId;
+    const ptyId = getPreviewableSelectedPtyId();
     if (!ptyId) return;
     selection.clearAllSelections();
     await search.enterSearchMode(ptyId);
@@ -113,7 +122,7 @@ export function AggregateView(props: AggregateViewProps) {
   };
 
   const handleEnterCopyMode = () => {
-    const ptyId = aggregate.state.selectedPtyId;
+    const ptyId = getPreviewableSelectedPtyId();
     if (!aggregate.state.previewMode || !ptyId) return;
     selection.clearAllSelections();
     keyboard.enterCopyMode();
@@ -197,13 +206,29 @@ export function AggregateView(props: AggregateViewProps) {
   });
 
   // Emulator helpers
-  const getAggregateEmulatorSync = (ptyId: string) =>
-    emulatorCache.get(ptyId) ?? terminal.getEmulatorSync(ptyId);
-  const getAggregateTerminalStateSync = (ptyId: string) =>
-    getAggregateEmulatorSync(ptyId)?.getTerminalState() ?? terminal.getTerminalStateSync(ptyId);
-  const isAggregateMouseTrackingEnabled = (ptyId: string) =>
-    getAggregateEmulatorSync(ptyId)?.isMouseTrackingEnabled() ??
-    terminal.isMouseTrackingEnabled(ptyId);
+  const getAggregateEmulatorSync = (ptyId: string) => {
+    if (isSavedAggregatePtyId(ptyId)) {
+      return null;
+    }
+    return emulatorCache.get(ptyId) ?? terminal.getEmulatorSync(ptyId);
+  };
+  const getAggregateTerminalStateSync = (ptyId: string) => {
+    if (isSavedAggregatePtyId(ptyId)) {
+      return null;
+    }
+    return (
+      getAggregateEmulatorSync(ptyId)?.getTerminalState() ?? terminal.getTerminalStateSync(ptyId)
+    );
+  };
+  const isAggregateMouseTrackingEnabled = (ptyId: string) => {
+    if (isSavedAggregatePtyId(ptyId)) {
+      return false;
+    }
+    return (
+      getAggregateEmulatorSync(ptyId)?.isMouseTrackingEnabled() ??
+      terminal.isMouseTrackingEnabled(ptyId)
+    );
+  };
 
   // Controllers
   const stateManager = AggregateStateManager({
@@ -239,7 +264,7 @@ export function AggregateView(props: AggregateViewProps) {
   const mouseHandlers = AggregateMouseController({
     isActive: () => aggregate.state.showAggregateView,
     getPreviewMode: () => aggregate.state.previewMode,
-    getSelectedPtyId: () => aggregate.state.selectedPtyId,
+    getSelectedPtyId: getPreviewableSelectedPtyId,
     getListPaneWidth: () => layoutDims().listPaneWidth,
     getPreviewInnerWidth: () => layoutDims().previewInnerWidth,
     getPreviewInnerHeight: () => layoutDims().previewInnerHeight,
@@ -429,7 +454,7 @@ export function AggregateView(props: AggregateViewProps) {
               !!aggregate.state.selectedPtyId &&
               copyMode.isActive(aggregate.state.selectedPtyId)
             }
-            selectedPtyId={aggregate.state.selectedPtyId}
+            selectedPtyId={getPreviewableSelectedPtyId()}
             offsetX={layoutDims().listPaneWidth + 1}
             offsetY={1}
             mouseHandlers={mouseHandlers}

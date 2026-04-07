@@ -77,6 +77,8 @@ export interface AggregateStateManagerProps {
  * Handles session auto-loading, pending pane focus resolution, and pane creation.
  * Returns an object with methods that can be passed to keyboard controller.
  */
+const AUTO_SWITCH_DEBOUNCE_MS = 90;
+
 export function AggregateStateManager(props: AggregateStateManagerProps) {
   const layout = useLayout();
   const session = useSession();
@@ -216,15 +218,17 @@ export function AggregateStateManager(props: AggregateStateManagerProps) {
     if (selectedSessionId === sessionState.activeSessionId) return;
 
     let cancelled = false;
-
-    void (async () => {
-      const sessionData = await loadSessionData(selectedSessionId);
-      if (cancelled) return;
-      await switchToSessionWithData(selectedSessionId, sessionData);
-    })();
+    const timeout = setTimeout(() => {
+      void (async () => {
+        const sessionData = await loadSessionData(selectedSessionId);
+        if (cancelled) return;
+        await switchToSessionWithData(selectedSessionId, sessionData);
+      })();
+    }, AUTO_SWITCH_DEBOUNCE_MS);
 
     onCleanup(() => {
       cancelled = true;
+      clearTimeout(timeout);
     });
   });
 
