@@ -71,6 +71,10 @@ jobs:
           fi
           sudo apt-get update && sudo apt-get install -y cmake
 
+      - name: Setup zsh (Ubuntu)
+        if: runner.os == 'Linux'
+        run: sudo apt-get install -y zsh
+
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
