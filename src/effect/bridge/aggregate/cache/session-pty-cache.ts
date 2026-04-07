@@ -82,18 +82,6 @@ export const sessionPtyCache = new SessionPtyCache();
 /** Aggregate-local session pane↔PTY mappings for background-loaded sessions */
 export const aggregateSessionMappings = new Map<string, Map<string, string>>();
 
-/** Clear both the main cache and aggregate mappings */
-export function clearAllCaches(): void {
-  sessionPtyCache.clear();
-  aggregateSessionMappings.clear();
-}
-
-/** Invalidate cache for a specific session */
-export function invalidateSessionCache(sessionId: string): void {
-  sessionPtyCache.delete(sessionId as SessionId);
-  aggregateSessionMappings.delete(sessionId);
-}
-
 export function getAggregateSessionForPty(
   ptyId: string
 ): { sessionId: string; paneId: string } | null {

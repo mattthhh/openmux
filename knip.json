@@ -13,6 +13,7 @@
     "coverage/**",
     "autoresearch/**",
     ".pi/**",
-    ".agents/**"
+    ".agents/**",
+    "src/contexts/aggregate/__tests__/helpers.ts"
   ]
 }

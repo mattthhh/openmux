@@ -205,7 +205,6 @@ export function unpackRow(buffer: ArrayBuffer): TerminalCell[] {
   return cells;
 }
 
-
 /**
  * Header format for full state (28 bytes):
  * - bytes 0-3:   cols (u32)
@@ -316,7 +315,6 @@ export function unpackTerminalState(buffer: ArrayBuffer): TerminalState {
     kittyKeyboardFlags,
   };
 }
-
 
 /**
  * Pack a DirtyTerminalUpdate into a SerializedDirtyUpdate for transport
@@ -430,21 +428,4 @@ export function unpackDirtyUpdate(
     kittyKeyboardFlags: packed.kittyKeyboardFlags ?? 0,
     inBandResize: packed.inBandResize,
   };
-}
-
-/**
- * Get the list of transferable buffers from a SerializedDirtyUpdate
- * for use with postMessage transfer list
- */
-export function getTransferables(packed: SerializedDirtyUpdate): ArrayBuffer[] {
-  const transferables: ArrayBuffer[] = [
-    packed.dirtyRowIndices.buffer as ArrayBuffer,
-    packed.dirtyRowData,
-  ];
-
-  if (packed.fullStateData) {
-    transferables.push(packed.fullStateData);
-  }
-
-  return transferables;
 }

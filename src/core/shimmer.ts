@@ -81,14 +81,6 @@ export function unsuppressPtyShimmer(ptyId: string): void {
   notifyShimmerStateListeners();
 }
 
-/**
- * Check if a PTY ID is currently suppressed from shimmering.
- */
-export function isPtyShimmerSuppressed(ptyId: string): boolean {
-  return suppressedPtyIds.has(ptyId);
-}
-
-/** Shimmer configuration */
 interface ShimmerConfig {
   /** Sweep duration in milliseconds */
   sweepDuration: number;
@@ -467,68 +459,6 @@ export function hasActiveShimmer(ptyId: string, now = Date.now()): boolean {
   return true;
 }
 
-/**
- * Get the time remaining for a PTY's shimmer animation.
- * Returns 0 if no active animation.
- *
- * QUEUE BEHAVIOR: If there's queued activity, returns the sweep duration
- * since a new sweep will start (max 15 seconds total).
- */
-export function getShimmerTimeRemaining(ptyId: string, now = Date.now()): number {
-  const state = shimmerStates.get(ptyId);
-  if (!state) return 0;
-
-  // Check max total duration cap
-  const totalElapsed = now - state.totalStartTime;
-  if (totalElapsed > MAX_TOTAL_SHIMMER_MS) {
-    shimmerStates.delete(ptyId);
-    notifyShimmerStateListeners();
-    return 0;
-  }
-
-  // If queued activity, animation will continue with new sweep
-  if (state.hasQueuedActivity) {
-    return state.sweepDuration;
-  }
-
-  const elapsed = now - state.startTime;
-  const remaining = state.duration - elapsed;
-
-  if (remaining <= 0) {
-    shimmerStates.delete(ptyId);
-    notifyShimmerStateListeners();
-    return 0;
-  }
-
-  return remaining;
-}
-
-/**
- * Process names that indicate coding agent activity
- */
-const CODING_AGENT_PATTERNS = [
-  /codex/i,
-  /claude/i,
-  /copilot/i,
-  /cursor/i,
-  /aider/i,
-  /devin/i,
-  /pi.?coder/i,
-  /open.?coder/i,
-];
-
-/**
- * Check if PTY appears to be running a coding agent
- */
-export function isCodingAgentPty(pty: PtyInfo): boolean {
-  const checkString = `${pty.foregroundProcess ?? ''} ${pty.title ?? ''}`.toLowerCase();
-  return CODING_AGENT_PATTERNS.some((pattern) => pattern.test(checkString));
-}
-
-/**
- * Subscribe to shimmer state changes (start/stop).
- * Fires only when a PTY starts or stops shimmering, not on animation frames.
- */
 export function subscribeToShimmerStateChange(callback: () => void): () => void {
   shimmerStateListeners.add(callback);
   return () => {

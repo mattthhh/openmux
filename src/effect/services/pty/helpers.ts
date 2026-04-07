@@ -362,14 +362,6 @@ export async function getGitInfo(
   };
 }
 
-/**
- * Get git branch for a directory (compat helper).
- */
-export async function getGitBranch(cwd: string): Promise<string | undefined> {
-  const info = await getGitInfo(cwd);
-  return info?.branch;
-}
-
 export function subscribeToGitRepoChanges(
   callback: (event: GitRepoChangeEvent) => void
 ): () => void {
@@ -377,6 +369,14 @@ export function subscribeToGitRepoChanges(
   return () => {
     gitRepoChangeSubscribers.delete(callback);
   };
+}
+
+/**
+ * Get git branch for a directory (compat helper).
+ */
+export async function getGitBranch(cwd: string): Promise<string | undefined> {
+  const info = await getGitInfo(cwd);
+  return info?.branch;
 }
 
 /**

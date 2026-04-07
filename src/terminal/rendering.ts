@@ -5,7 +5,6 @@
 
 import { RGBA } from '@opentui/core';
 
-
 /** White color constant */
 export const WHITE = RGBA.fromInts(255, 255, 255);
 
@@ -20,7 +19,7 @@ const RGBA_CACHE = new Map<number, RGBA>();
 
 // Pre-populate common colors
 RGBA_CACHE.set(0x000000, BLACK);
-RGBA_CACHE.set(0xFFFFFF, WHITE);
+RGBA_CACHE.set(0xffffff, WHITE);
 
 /**
  * Get a cached RGBA instance for given RGB values.
@@ -40,7 +39,6 @@ export function getCachedRGBA(r: number, g: number, b: number): RGBA {
   return cached;
 }
 
-
 /** Bold text attribute flag */
 export const ATTR_BOLD = 1;
 
@@ -53,13 +51,6 @@ export const ATTR_UNDERLINE = 8;
 /** Strikethrough text attribute flag */
 export const ATTR_STRIKETHROUGH = 128;
 
-/** Scrollbar track color (semi-transparent for content visibility) */
-export const SCROLLBAR_TRACK = RGBA.fromInts(40, 40, 40, 160);
-
-/** Scrollbar thumb color (semi-transparent for content visibility) */
-export const SCROLLBAR_THUMB = RGBA.fromInts(100, 100, 100, 200);
-
-/** Selection background color */
 export const SELECTION_BG = RGBA.fromInts(80, 120, 200);
 
 /** Selection foreground color */

@@ -60,4 +60,4 @@ class InputHandlerImpl {
 }
 
 export const inputHandler = new InputHandlerImpl();
-export type { KeySequence, MouseEvent as MouseInputEvent };
+export type { KeySequence };

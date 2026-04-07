@@ -121,6 +121,3 @@ export const DEFAULT_THEME: Theme = {
   },
   searchAccentColor: '#FFAA00',
 };
-
-/** Prefix key (used with Ctrl) */
-export const PREFIX_KEY = 'b';

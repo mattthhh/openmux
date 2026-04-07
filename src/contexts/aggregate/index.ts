@@ -45,14 +45,11 @@ export {
 export {
   applySelection,
   clearPreviewState,
-  getSelectedPty,
   getSelectedItem,
-  getSelectedSessionId,
   findNearestSelectable,
   findNearestPtyInSessionAbove,
   findSessionHeader,
   selectAfterPtyRemoval,
-  createSelectionActions,
 } from './selection';
 
 export {
@@ -60,7 +57,6 @@ export {
   getSortedSessions,
   recomputeMatches,
   recomputeTree,
-  createSessionActions,
 } from './session';
 
 export {
@@ -117,13 +113,11 @@ export {
 
 export {
   getSessionPaneOrderKey,
-  getPaneOrder,
   getSessionPaneOrder,
   hasSessionPaneOrder,
   deleteSessionPaneOrder,
   setSessionPaneOrder,
   mergePaneOrder,
-  mergeSessionPaneOrder,
   buildSessionPaneOrderFromAggregateState,
   type SessionPaneOrderIndex,
 } from './pane-order';

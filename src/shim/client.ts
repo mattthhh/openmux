@@ -77,50 +77,6 @@ function normalizePtyMetadata(
 }
 
 /**
- * Gets PTY metadata with caching support.
- * Returns cached value if fresh, otherwise fetches from server.
- * @param ptyId - PTY identifier
- * @param options - Optional force refresh and max age settings
- * @returns Complete PTY metadata
- */
-export async function getPtyMetadata(
-  ptyId: string,
-  options?: { force?: boolean; maxAgeMs?: number }
-): Promise<ShimPtyMetadata> {
-  const cached = getCachedPtyMetadata(ptyId);
-  const maxAgeMs = options?.maxAgeMs ?? PTY_METADATA_CACHE_TTL_MS;
-  if (cached && !options?.force && !cached.stale && Date.now() - cached.fetchedAt <= maxAgeMs) {
-    return cached.value;
-  }
-
-  const inFlight = getPtyMetadataRequest(ptyId);
-  if (inFlight) {
-    return inFlight;
-  }
-
-  const request = (async () => {
-    const response = await sendRequest('getPtyMetadata', { ptyId });
-    const result = response.header.result as { metadata?: ShimPtyMetadata } | undefined;
-    const metadata = normalizePtyMetadata(ptyId, result?.metadata);
-    setCachedPtyMetadata(ptyId, metadata);
-    return metadata;
-  })();
-
-  setPtyMetadataRequest(ptyId, request);
-
-  try {
-    return await request;
-  } catch (error) {
-    if (cached) {
-      return cached.value;
-    }
-    throw error;
-  } finally {
-    setPtyMetadataRequest(ptyId, null);
-  }
-}
-
-/**
  * Creates a new PTY.
  * @param options - Terminal dimensions and optional working directory
  * @returns PTY identifier
@@ -447,24 +403,6 @@ export async function getForegroundProcess(ptyId: string): Promise<string | unde
 
   const result = response.header.result as { process?: string } | undefined;
   return result?.process;
-}
-
-/**
- * Gets the Git branch for a PTY's CWD.
- * @param ptyId - PTY identifier
- * @returns Branch name or undefined
- */
-export async function getGitBranch(ptyId: string): Promise<string | undefined> {
-  const response = await sendRequest('getGitBranch', { ptyId }).catch((e) => {
-    console.warn(`[shim/client] Failed to get Git branch for PTY ${ptyId}:`, e);
-    return null;
-  });
-  if (!response) {
-    return buildFallbackPtyMetadata(ptyId).gitInfo?.branch;
-  }
-
-  const result = response.header.result as { branch?: string } | undefined;
-  return result?.branch;
 }
 
 /**

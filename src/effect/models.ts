@@ -34,17 +34,6 @@ export const createRectangle = (data: Omit<Rectangle, 'contains'>): Rectangle =>
     return px >= this.x && px < this.x + this.width && py >= this.y && py < this.y + this.height;
   },
 });
-
-/** Pane data with optional PTY and layout info */
-export const PaneDataSchema = z.object({
-  id: PaneIdSchema,
-  ptyId: PtyIdSchema.optional(),
-  title: z.string().optional(),
-  rectangle: RectangleSchema.optional(),
-});
-
-export type PaneData = z.infer<typeof PaneDataSchema>;
-
 /** PTY session information */
 export const PtySessionSchema = z.object({
   id: PtyIdSchema,
@@ -305,25 +294,3 @@ export function createTemplateWorkspaceLayout(
     stack: data.stack ?? [],
   };
 }
-
-/** Terminal cell data */
-export const TerminalCellSchema = z.object({
-  char: z.string(),
-  fg: z.number().int(),
-  bg: z.number().int(),
-  bold: z.boolean(),
-  italic: z.boolean(),
-  underline: z.boolean(),
-  strikethrough: z.boolean(),
-});
-
-export type TerminalCell = z.infer<typeof TerminalCellSchema>;
-
-/** Terminal cursor position */
-export const CursorPositionSchema = z.object({
-  x: z.number().int(),
-  y: z.number().int(),
-  visible: z.boolean(),
-});
-
-export type CursorPosition = z.infer<typeof CursorPositionSchema>;

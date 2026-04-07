@@ -214,19 +214,3 @@ export function createTestClipboard(): Clipboard {
     read,
   };
 }
-
-/** Production Clipboard instance (singleton) */
-let clipboardInstance: Clipboard | null = null;
-
-/** Get or create the production Clipboard instance */
-export async function getClipboard(): Promise<Clipboard> {
-  if (!clipboardInstance) {
-    clipboardInstance = await createClipboard();
-  }
-  return clipboardInstance;
-}
-
-/** Reset the singleton instance (for testing) */
-export function resetClipboard(): void {
-  clipboardInstance = null;
-}

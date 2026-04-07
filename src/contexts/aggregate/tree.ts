@@ -137,25 +137,6 @@ export function buildTreeRoot(
   return root;
 }
 
-export function computeTreePrefix(depth: number, isLast: boolean): string {
-  if (depth === 0) return '';
-  return isLast ? TREE_GLYPHS.BRANCH_LAST : TREE_GLYPHS.BRANCH_MIDDLE;
-}
-
-export function computeIndentPrefix(ancestorIsLast: boolean[]): string {
-  if (ancestorIsLast.length === 0) return '';
-
-  let prefix = '';
-  for (let index = 0; index < ancestorIsLast.length - 1; index++) {
-    prefix += ancestorIsLast[index] ? TREE_GLYPHS.EMPTY : TREE_GLYPHS.VERTICAL;
-  }
-  prefix += ancestorIsLast[ancestorIsLast.length - 1]
-    ? TREE_GLYPHS.BRANCH_LAST
-    : TREE_GLYPHS.BRANCH_MIDDLE;
-
-  return prefix;
-}
-
 export function getSessionIdForItem(item: FlattenedTreeItem | undefined): string | null {
   if (!item) return null;
   if (item.node.type === 'session') return item.node.session.id;

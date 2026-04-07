@@ -121,24 +121,6 @@ export class ClipboardError extends errore.createTaggedError({
 }) {}
 
 /**
- * Use when terminal/emulator startup cannot complete.
- * This is a bootstrapping error for renderer/emulator initialization, not for missing PTYs.
- */
-export class TerminalInitError extends errore.createTaggedError({
-  name: 'TerminalInitError',
-  message: 'Terminal initialization failed: $reason',
-}) {}
-
-/**
- * Use when code expects an emulator/terminal instance for a PTY but none is available.
- * Prefer this over generic not-found errors when the PTY exists but the emulator does not.
- */
-export class TerminalNotFoundError extends errore.createTaggedError({
-  name: 'TerminalNotFoundError',
-  message: 'Terminal emulator for PTY $ptyId not found',
-}) {}
-
-/**
  * Use at template persistence boundaries for template file/index I/O errors.
  * This mirrors SessionStorageError but keeps template failures distinct for callers.
  */
@@ -163,15 +145,6 @@ export class ConfigError extends errore.createTaggedError({
 export class ValidationError extends errore.createTaggedError({
   name: 'ValidationError',
   message: 'Validation failed: $reason',
-}) {}
-
-/**
- * Use when keyboard dispatch cannot resolve a route or violates overlay invariants.
- * Keep this scoped to routing/handler selection, not individual keybinding behavior.
- */
-export class KeyboardRouterError extends errore.createTaggedError({
-  name: 'KeyboardRouterError',
-  message: 'Keyboard routing error: $reason',
 }) {}
 
 /**
@@ -253,15 +226,6 @@ export class TerminalSubscriptionError extends errore.createTaggedError({
 export class SessionRefreshError extends errore.createTaggedError({
   name: 'SessionRefreshError',
   message: 'Session refresh $operation failed: $reason',
-}) {}
-
-/**
- * Use for control client request/response failures.
- * Wrap transport or validation failures in `cause` so API callers can inspect the chain.
- */
-export class ControlClientError extends errore.createTaggedError({
-  name: 'ControlClientError',
-  message: 'Control client $operation failed: $reason',
 }) {}
 
 /**

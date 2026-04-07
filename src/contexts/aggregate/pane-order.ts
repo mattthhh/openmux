@@ -22,14 +22,6 @@ function getSessionPaneOrderPrefix(sessionId: string): string {
   return `${sessionId}${SESSION_PANE_ORDER_SEPARATOR}`;
 }
 
-export function getPaneOrder(
-  sessionPaneOrders: SessionPaneOrderIndex,
-  sessionId: string,
-  paneId: string
-): number | undefined {
-  return sessionPaneOrders.get(getSessionPaneOrderKey(sessionId, paneId));
-}
-
 export function getSessionPaneOrder(
   sessionPaneOrders: SessionPaneOrderSource,
   sessionId: string
@@ -123,17 +115,6 @@ export function mergePaneOrder(
     merged.set(paneId, nextOrder);
   }
 
-  return merged;
-}
-
-export function mergeSessionPaneOrder(
-  sessionPaneOrders: SessionPaneOrderIndex,
-  sessionId: string,
-  incoming: Map<string, number>
-): Map<string, number> {
-  const existing = getSessionPaneOrder(sessionPaneOrders, sessionId);
-  const merged = mergePaneOrder(existing.size > 0 ? existing : undefined, incoming);
-  setSessionPaneOrder(sessionPaneOrders, sessionId, merged);
   return merged;
 }
 

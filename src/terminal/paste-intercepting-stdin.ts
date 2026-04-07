@@ -24,9 +24,6 @@ export interface TtyProperties {
   isTTY?: boolean;
 }
 
-/** Readable stream with TTY properties (compatible with OpenTUI stdin) */
-export type TtyReadStream = NodeJS.ReadStream & TtyProperties;
-
 /** Helper to apply TTY properties to a PassThrough stream */
 function applyTtyProperties(
   passthrough: PassThrough,

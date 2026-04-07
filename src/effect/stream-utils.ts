@@ -4,8 +4,8 @@
  */
 
 export interface RunStreamOptions {
-  label?: string
-  onError?: (cause: unknown) => void
+  label?: string;
+  onError?: (cause: unknown) => void;
 }
 
 /**
@@ -16,52 +16,52 @@ export function runStream<T>(
   iterable: AsyncIterable<T>,
   options: RunStreamOptions = {}
 ): () => void {
-  let isRunning = true
-  let iterator: AsyncIterator<T> | null = null
+  let isRunning = true;
+  let iterator: AsyncIterator<T> | null = null;
 
   const run = async () => {
     try {
-      iterator = iterable[Symbol.asyncIterator]()
+      iterator = iterable[Symbol.asyncIterator]();
       while (isRunning) {
-        const result = await iterator.next()
-        if (result.done) break
+        const result = await iterator.next();
+        if (result.done) break;
       }
     } catch (error) {
       if (options.onError) {
-        options.onError(error)
+        options.onError(error);
       } else {
-        const label = options.label ? ` (${options.label})` : ''
-        console.warn(`[openmux] stream error${label}:`, error)
+        const label = options.label ? ` (${options.label})` : '';
+        console.warn(`[openmux] stream error${label}:`, error);
       }
     } finally {
       // Ensure iterator is cleaned up
       if (iterator && typeof iterator.return === 'function') {
         try {
-          await iterator.return()
+          await iterator.return();
         } catch {
           // Ignore cleanup errors
         }
       }
     }
-  }
+  };
 
   // Start the stream
-  void run()
+  void run();
 
   // Return cleanup function
   return () => {
-    isRunning = false
+    isRunning = false;
     if (iterator && typeof iterator.return === 'function') {
-      void iterator.return()
+      void iterator.return();
     }
-  }
+  };
 }
 
 export interface SubscriptionCallbacks<T> {
   /** Emit a value to the stream */
-  emit: (value: T) => void
+  emit: (value: T) => void;
   /** Signal that the stream is complete */
-  complete: () => void
+  complete: () => void;
 }
 
 /**
@@ -74,75 +74,75 @@ export function streamFromSubscription<T>(
 ): AsyncIterable<T> {
   return {
     [Symbol.asyncIterator](): AsyncIterator<T> {
-      const buffer: T[] = []
-      let resolveNext: ((value: IteratorResult<T>) => void) | null = null
-      let cleanup: (() => void) | null = null
-      let isDone = false
+      const buffer: T[] = [];
+      let resolveNext: ((value: IteratorResult<T>) => void) | null = null;
+      let cleanup: (() => void) | null = null;
+      let isDone = false;
 
       const emit = (value: T) => {
-        if (isDone) return
+        if (isDone) return;
         if (resolveNext) {
-          resolveNext({ value, done: false })
-          resolveNext = null
+          resolveNext({ value, done: false });
+          resolveNext = null;
         } else {
-          buffer.push(value)
+          buffer.push(value);
         }
-      }
+      };
 
       const complete = () => {
-        if (isDone) return
-        isDone = true
+        if (isDone) return;
+        isDone = true;
         if (resolveNext) {
-          resolveNext({ value: undefined as T, done: true })
-          resolveNext = null
+          resolveNext({ value: undefined as T, done: true });
+          resolveNext = null;
         }
-      }
+      };
 
       // Initialize subscription
       const initPromise = Promise.resolve(subscribe({ emit, complete })).then((cleanupFn) => {
-        cleanup = cleanupFn
-      })
+        cleanup = cleanupFn;
+      });
 
       return {
         async next(): Promise<IteratorResult<T>> {
-          await initPromise
+          await initPromise;
 
           if (buffer.length > 0) {
-            return { value: buffer.shift()!, done: false }
+            return { value: buffer.shift()!, done: false };
           }
 
           if (isDone) {
-            return { value: undefined as T, done: true }
+            return { value: undefined as T, done: true };
           }
 
           return new Promise((resolve) => {
             resolveNext = (result) => {
-              resolveNext = null
-              resolve(result)
-            }
-          })
+              resolveNext = null;
+              resolve(result);
+            };
+          });
         },
 
         async return(): Promise<IteratorResult<T>> {
-          isDone = true
-          
+          isDone = true;
+
           // Resolve any pending next() call with done
           if (resolveNext) {
-            resolveNext({ value: undefined as T, done: true })
-            resolveNext = null
+            resolveNext({ value: undefined as T, done: true });
+            resolveNext = null;
           }
-          
+
           // Always call cleanup to release resources
           // This handles both early termination and natural completion
           if (cleanup) {
-            cleanup()
-            cleanup = null
+            cleanup();
+            cleanup = null;
           }
-          return { value: undefined as T, done: true }
+          return { value: undefined as T, done: true };
         },
-      }
+      };
     },
-  }
+  };
 }
 
 /**
@@ -155,11 +155,11 @@ export function tap<T>(
   return {
     async *[Symbol.asyncIterator]() {
       for await (const value of iterable) {
-        await fn(value)
-        yield value
+        await fn(value);
+        yield value;
       }
     },
-  }
+  };
 }
 
 /**
@@ -173,76 +173,73 @@ export function filter<T>(
     async *[Symbol.asyncIterator]() {
       for await (const value of iterable) {
         if (predicate(value)) {
-          yield value
+          yield value;
         }
       }
     },
-  }
+  };
 }
 
 /**
  * Debounce an async iterable by a delay in milliseconds.
  * Only emits the last value after the delay has passed without new values.
  */
-export function debounce<T>(
-  iterable: AsyncIterable<T>,
-  delayMs: number
-): AsyncIterable<T> {
+export function debounce<T>(iterable: AsyncIterable<T>, delayMs: number): AsyncIterable<T> {
   return {
     async *[Symbol.asyncIterator]() {
-      const iterator = iterable[Symbol.asyncIterator]()
-      let lastValue: T | undefined = undefined
-      let debounceTimer: ReturnType<typeof setTimeout> | null = null
+      const iterator = iterable[Symbol.asyncIterator]();
+      let lastValue: T | undefined = undefined;
+      let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
       while (true) {
         // Set up debounce timer if we have a pending value
-        let debouncePromise: Promise<void> | null = null
+        let debouncePromise: Promise<void> | null = null;
         if (lastValue !== undefined) {
           debouncePromise = new Promise((resolve) => {
             debounceTimer = setTimeout(() => {
-              debounceTimer = null
-              resolve()
-            }, delayMs)
-          })
+              debounceTimer = null;
+              resolve();
+            }, delayMs);
+          });
         }
 
         // Race between next value and debounce firing
         const raceResult = await Promise.race([
-          iterator.next().then(result => ({ type: 'value' as const, result })),
-          debouncePromise?.then(() => ({ type: 'debounce' as const }))
-            ?? new Promise<never>(() => {}) // never resolves if no debounce
-        ])
+          iterator.next().then((result) => ({ type: 'value' as const, result })),
+          debouncePromise?.then(() => ({ type: 'debounce' as const })) ??
+            new Promise<never>(() => {}), // never resolves if no debounce
+        ]);
 
         if (raceResult.type === 'debounce') {
           // Debounce fired, yield the pending value
           if (lastValue !== undefined) {
-            yield lastValue
-            lastValue = undefined
+            yield lastValue;
+            lastValue = undefined;
           }
         } else {
           // Got a new value
-          const result = raceResult.result
+          const result = raceResult.result;
 
           if (result.done) {
             // Iterator done, yield pending value if any
             if (lastValue !== undefined) {
-              yield lastValue
+              yield lastValue;
             }
-            break
+            break;
           }
 
           // Cancel previous debounce if any
           if (debounceTimer) {
-            clearTimeout(debounceTimer)
-            debounceTimer = null
+            clearTimeout(debounceTimer);
+            debounceTimer = null;
           }
 
           // Store new value (will trigger debounce on next iteration)
-          lastValue = result.value
+          lastValue = result.value;
         }
       }
     },
-  }
+  };
 }
 
 /**
@@ -255,114 +252,97 @@ export function repeatWithInterval<T>(
 ): AsyncIterable<T> {
   return {
     [Symbol.asyncIterator](): AsyncIterator<T> {
-      let isRunning = true
-      let timeoutId: ReturnType<typeof setTimeout> | null = null
+      let isRunning = true;
+      let timeoutId: ReturnType<typeof setTimeout> | null = null;
 
       const cleanup = () => {
-        isRunning = false
+        isRunning = false;
         if (timeoutId) {
-          clearTimeout(timeoutId)
-          timeoutId = null
+          clearTimeout(timeoutId);
+          timeoutId = null;
         }
-      }
+      };
 
       const iterator: AsyncIterator<T> = {
         async next(): Promise<IteratorResult<T>> {
           if (!isRunning) {
-            return { value: undefined as T, done: true }
+            return { value: undefined as T, done: true };
           }
 
           try {
-            const value = await fn()
+            const value = await fn();
             if (!isRunning) {
-              return { value: undefined as T, done: true }
+              return { value: undefined as T, done: true };
             }
-            
+
             // Set up timeout for next iteration
             await new Promise<void>((resolve) => {
               timeoutId = setTimeout(() => {
-                timeoutId = null
-                resolve()
-              }, intervalMs)
-            })
-            
-            return { value, done: false }
+                timeoutId = null;
+                resolve();
+              }, intervalMs);
+            });
+
+            return { value, done: false };
           } catch {
             // Continue on error - set up timeout and return next value
             if (isRunning) {
               await new Promise<void>((resolve) => {
                 timeoutId = setTimeout(() => {
-                  timeoutId = null
-                  resolve()
-                }, intervalMs)
-              })
+                  timeoutId = null;
+                  resolve();
+                }, intervalMs);
+              });
             }
-            return iterator.next()
+            return iterator.next();
           }
         },
 
         async return(): Promise<IteratorResult<T>> {
-          cleanup()
-          return { value: undefined as T, done: true }
+          cleanup();
+          return { value: undefined as T, done: true };
         },
-      }
+      };
 
-      return iterator
+      return iterator;
     },
-  }
+  };
 }
 
-/**
- * Create an async iterable from a file system watcher.
- */
-export function watchFileChanges(
-  watchFn: (callback: (filename: string | null) => void) => (() => void)
-): AsyncIterable<string | null> {
-  return streamFromSubscription(async ({ emit }) => {
-    return watchFn(emit)
-  })
-}
-
-/**
- * Take only the first N values from an async iterable.
- */
-export function take<T>(
-  iterable: AsyncIterable<T>,
-  count: number
-): AsyncIterable<T> {
+export function take<T>(iterable: AsyncIterable<T>, count: number): AsyncIterable<T> {
   return {
     [Symbol.asyncIterator](): AsyncIterator<T> {
-      const iterator = iterable[Symbol.asyncIterator]()
-      let taken = 0
+      const iterator = iterable[Symbol.asyncIterator]();
+      let taken = 0;
 
       return {
         async next(): Promise<IteratorResult<T>> {
           if (taken >= count) {
             // Close the underlying iterator when we're done
             if (iterator.return) {
-              await iterator.return()
+              await iterator.return();
             }
-            return { value: undefined as T, done: true }
+            return { value: undefined as T, done: true };
           }
 
-          const result = await iterator.next()
+          const result = await iterator.next();
           if (result.done) {
-            return { value: undefined as T, done: true }
+            return { value: undefined as T, done: true };
           }
 
-          taken++
-          return { value: result.value, done: false }
+          taken++;
+          return { value: result.value, done: false };
         },
 
         async return(): Promise<IteratorResult<T>> {
           if (iterator.return) {
-            await iterator.return()
+            await iterator.return();
           }
-          return { value: undefined as T, done: true }
+          return { value: undefined as T, done: true };
         },
-      }
+      };
     },
-  }
+  };
 }
 
 /**
@@ -375,19 +355,19 @@ export function map<T, U>(
   return {
     async *[Symbol.asyncIterator]() {
       for await (const value of iterable) {
-        yield await fn(value)
+        yield await fn(value);
       }
     },
-  }
+  };
 }
 
 /**
  * Collect all values from an async iterable into an array.
  */
 export async function collect<T>(iterable: AsyncIterable<T>): Promise<T[]> {
-  const results: T[] = []
+  const results: T[] = [];
   for await (const value of iterable) {
-    results.push(value)
+    results.push(value);
   }
-  return results
+  return results;
 }

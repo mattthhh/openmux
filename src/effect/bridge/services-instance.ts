@@ -47,10 +47,6 @@ export function getSessionManager(): AppServices['sessionManager'] {
   return getService('sessionManager');
 }
 
-export function getSessionStorage(): AppServices['sessionStorage'] {
-  return getService('sessionStorage');
-}
-
 export function getTemplateStorage(): AppServices['templateStorage'] {
   return getService('templateStorage');
 }
@@ -59,16 +55,8 @@ export function getClipboardService(): AppServices['clipboard'] {
   return getService('clipboard');
 }
 
-export function getFileSystem(): AppServices['fs'] {
-  return getService('fs');
-}
-
 export function getKeyboardRouter(): AppServices['keyboardRouter'] {
   return getService('keyboardRouter');
-}
-
-export function getConfig(): AppServices['config'] {
-  return getService('config');
 }
 
 export function disposeServicesSingleton(): void {

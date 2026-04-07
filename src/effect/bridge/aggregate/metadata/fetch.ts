@@ -110,24 +110,3 @@ export async function* batchFetchPtyMetadata(
     }
   }
 }
-
-/**
- * Fetch metadata for a single PTY by ID with error handling.
- * Returns PtyMetadataError on failure instead of null.
- */
-export async function fetchPtyMetadataSafe(
-  pty: PtyService,
-  ptyId: PtyId,
-  options: FetchPtyMetadataOptions = {}
-): Promise<PtyMetadata | PtyMetadataError | null> {
-  try {
-    const result = await fetchPtyMetadata(pty, ptyId, options);
-    return result;
-  } catch (e) {
-    return new PtyMetadataError({
-      operation: 'fetch',
-      ptyId,
-      reason: e instanceof Error ? e.message : String(e),
-    });
-  }
-}

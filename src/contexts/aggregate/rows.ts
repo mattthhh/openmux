@@ -12,10 +12,6 @@ export function getSavedAggregatePtyId(sessionId: string, paneId: string): strin
   return `${AGGREGATE_SAVED_PTY_PREFIX}${sessionId}:${paneId}`;
 }
 
-export function isPendingAggregatePtyId(ptyId: string): boolean {
-  return ptyId.startsWith(AGGREGATE_PENDING_PTY_PREFIX);
-}
-
 export function getPendingAggregatePtyId(pendingId: string): string {
   return `${AGGREGATE_PENDING_PTY_PREFIX}${pendingId}`;
 }

@@ -8,25 +8,6 @@ import { runStream } from '../../effect/stream-utils';
 type FrameHandler = (header: ShimHeader, payloads: Buffer[]) => void;
 
 /**
- * Creates a handler for socket data events.
- * Returns a cleanup function to remove the listener.
- */
-export function createSocketDataHandler(
-  client: net.Socket,
-  frameReader: FrameReader,
-  handleFrame: FrameHandler
-): () => void {
-  const handleData = (chunk: Buffer) => {
-    frameReader.feed(chunk, handleFrame);
-  };
-  client.on('data', handleData);
-
-  return () => {
-    client.off('data', handleData);
-  };
-}
-
-/**
  * Sets up socket data handling using an async iterable approach.
  * This feeds chunks to the frameReader as they arrive.
  * Returns a cleanup function to stop the stream.

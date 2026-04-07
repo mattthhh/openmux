@@ -22,8 +22,6 @@
 
 import * as errore from 'errore';
 
-export const AsyncDisposableStack = errore.AsyncDisposableStack;
-
 /**
  * Resource stack with typed error handling.
  * Wraps AsyncDisposableStack with our error patterns.

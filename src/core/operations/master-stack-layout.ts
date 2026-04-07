@@ -406,11 +406,3 @@ export function findPaneInWorkspace(workspace: Workspace, paneId: string): PaneD
   }
   return null;
 }
-
-/**
- * Get the index of a pane (main = 0, stack panes = 1+)
- */
-export function getPaneIndex(workspace: Workspace, paneId: string): number {
-  const allPanes = getAllWorkspacePanes(workspace);
-  return allPanes.findIndex((pane) => pane.id === paneId);
-}
