@@ -1,0 +1,21 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "entry": ["src/index.tsx", "src/shim/main.ts"],
+  "ignoreExportsUsedInFile": true,
+  "ignoreDependencies": ["@types/bun", "@types/node"],
+  "ignore": [
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "tests/**",
+    "scripts/**",
+    "native/**",
+    "vendor/**",
+    "bin/**",
+    "autoresearch/**",
+    ".pi/**",
+    ".agents/**",
+    "**/__tests__/**",
+    "**/__mocks__/**",
+    "**/__fixtures__/**"
+  ]
+}
