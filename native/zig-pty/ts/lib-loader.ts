@@ -110,4 +110,7 @@ export const lib = dlopen(libPath, {
   bun_pty_notify_register: { args: [FFIType.cstring, FFIType.pointer], returns: FFIType.i32 },
   bun_pty_notify_cancel: { args: [FFIType.i32], returns: FFIType.i32 },
   bun_pty_notify_register_signal: { args: [FFIType.cstring, FFIType.i32], returns: FFIType.i32 },
+  // Foreground process change tracking
+  bun_pty_get_foreground_change_count: { args: [FFIType.i32], returns: FFIType.i32 },
+  bun_pty_get_last_foreground_pid: { args: [FFIType.i32], returns: FFIType.i32 },
 });

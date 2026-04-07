@@ -130,6 +130,11 @@ export interface PtyService {
   /** Subscribe to stdout activity events across ALL PTYs */
   subscribeToAllActivity(callback: (event: { ptyId: PtyId }) => void): () => void;
 
+  /** Subscribe to foreground process changes across ALL PTYs */
+  subscribeToForegroundProcessChange(
+    callback: (event: { ptyId: PtyId; processName: string }) => void
+  ): () => void;
+
   /** Dispose the PTY service and clean up all resources */
   dispose(): void;
 }

@@ -9,8 +9,10 @@ import { runStream, streamFromSubscription, tap } from '../../effect/stream-util
 import {
   subscribeToAllPtyActivity,
   subscribeToAllTitleChanges,
+  subscribeToForegroundProcessChanges,
   subscribeToPtyLifecycle,
   type PtyTitleChangeEvent,
+  type PtyForegroundProcessChangeEvent,
 } from '../../effect/bridge/pty-bridge';
 import { getPtyMetadata, removeAggregateSessionMappingForPty } from '../../effect/bridge/aggregate';
 import { getGlobalGitMetadataCache } from '../git-metadata-cache';
@@ -44,6 +46,7 @@ import { recomputeMatches, recomputeTree } from './session';
 export interface SubscriptionManager {
   lifecycle: (() => void) | null;
   titleChange: (() => void) | null;
+  processChange: (() => void) | null;
   gitChanges: (() => void) | null;
   polling: (() => void) | null;
 }
@@ -95,6 +98,7 @@ export interface SubscriptionSetupDeps {
   refreshPtys: () => Promise<void>;
   refreshPtysSubset: (ptyIds: string[]) => Promise<void>;
   handleTitleChange: TitleChangeHandler;
+  handleProcessChange: (event: ProcessChangeEvent) => void;
   lifecycleHandlers: LifecycleHandlers;
 }
 
@@ -102,6 +106,7 @@ export function createSubscriptionManager(): SubscriptionManager {
   return {
     lifecycle: null,
     titleChange: null,
+    processChange: null,
     gitChanges: null,
     polling: null,
   };
@@ -697,6 +702,37 @@ export function createTitleChangeHandler(
   };
 }
 
+export interface ProcessChangeEvent {
+  ptyId: string;
+  processName: string;
+}
+
+export function createProcessChangeHandler(
+  setState: SetStoreFunction<AggregateViewState>
+): (event: ProcessChangeEvent) => void {
+  return (event: ProcessChangeEvent) => {
+    setState(
+      produce((s) => {
+        const allIndex = s.allPtysIndex.get(event.ptyId);
+        if (allIndex !== undefined && s.allPtys[allIndex]) {
+          const ptyAtIndex = s.allPtys[allIndex];
+          if (ptyAtIndex.ptyId === event.ptyId) {
+            s.allPtys[allIndex] = { ...ptyAtIndex, foregroundProcess: event.processName };
+          }
+        }
+
+        const matchedIndex = s.matchedPtysIndex.get(event.ptyId);
+        if (matchedIndex !== undefined && s.matchedPtys[matchedIndex]) {
+          const ptyAtIndex = s.matchedPtys[matchedIndex];
+          if (ptyAtIndex.ptyId === event.ptyId) {
+            s.matchedPtys[matchedIndex] = { ...ptyAtIndex, foregroundProcess: event.processName };
+          }
+        }
+      })
+    );
+  };
+}
+
 export async function setupSubscriptions(
   state: AggregateViewState,
   deps: SubscriptionSetupDeps
@@ -743,6 +779,22 @@ export async function setupSubscriptions(
     return;
   }
   subscriptions.titleChange = titleUnsub;
+
+  const processChangeStream = tap(
+    streamFromSubscription<PtyForegroundProcessChangeEvent>(({ emit }) =>
+      subscribeToForegroundProcessChanges(emit)
+    ),
+    (event) => deps.handleProcessChange(event)
+  );
+  const processChangeUnsub = runStream(processChangeStream, {
+    label: 'aggregate-view-process-change',
+  });
+
+  if (epoch !== subscriptionsEpoch.value || !state.showAggregateView) {
+    processChangeUnsub();
+    return;
+  }
+  subscriptions.processChange = processChangeUnsub;
 
   const gitChangeUnsub = createGitRepoChangeRefresh(
     state,
@@ -857,10 +909,12 @@ export function cleanupSubscriptions(
   subscriptionsEpoch.value += 1;
   subscriptions.lifecycle?.();
   subscriptions.titleChange?.();
+  subscriptions.processChange?.();
   subscriptions.gitChanges?.();
   subscriptions.polling?.();
   subscriptions.lifecycle = null;
   subscriptions.titleChange = null;
+  subscriptions.processChange = null;
   subscriptions.gitChanges = null;
   subscriptions.polling = null;
 }

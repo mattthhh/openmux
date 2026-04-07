@@ -38,6 +38,7 @@ export interface SessionFactoryDeps {
   onLifecycleEvent: (event: { type: 'created' | 'destroyed'; ptyId: PtyId }) => void;
   onTitleChange: (ptyId: PtyId, title: string) => void;
   onActivity: (ptyId: PtyId) => void;
+  onForegroundProcessChange: (ptyId: PtyId, processName: string) => void;
   onExit?: (ptyId: PtyId, exitCode: number) => void;
 }
 
@@ -250,6 +251,11 @@ export async function createSession(
       deps.onActivity(id);
     }
     handleData(data);
+  });
+
+  // Wire up foreground process change handler
+  pty.onForegroundProcessChange((processName: string) => {
+    deps.onForegroundProcessChange(id, processName);
   });
 
   // Wire up mode change handler for DECSET 2048 (in-band resize notifications)

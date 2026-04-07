@@ -36,10 +36,13 @@ export function createPtyService(config: PtyServiceConfig, _fs?: unknown): PtySe
 
   type LifecycleEvent = { type: 'created' | 'destroyed'; ptyId: PtyId };
   type ActivityEvent = { ptyId: PtyId };
+  type ForegroundProcessChangeEvent = { ptyId: PtyId; processName: string };
 
   const lifecycleRegistry = createSubscriptionRegistry<LifecycleEvent>();
   const globalTitleRegistry = createSubscriptionRegistry<PtyTitleChangeEvent>();
   const globalActivityRegistry = createSubscriptionRegistry<ActivityEvent>();
+  const globalForegroundProcessChangeRegistry =
+    createSubscriptionRegistry<ForegroundProcessChangeEvent>();
   const scrollbackArchiveManager = new ScrollbackArchiveManager(
     SCROLLBACK_ARCHIVE_MAX_BYTES_GLOBAL
   );
@@ -73,6 +76,8 @@ export function createPtyService(config: PtyServiceConfig, _fs?: unknown): PtySe
         onLifecycleEvent: (event) => lifecycleRegistry.notify(event),
         onTitleChange: (ptyId, title) => globalTitleRegistry.notifySync({ ptyId, title }),
         onActivity: (ptyId) => globalActivityRegistry.notifySync({ ptyId }),
+        onForegroundProcessChange: (ptyId, processName) =>
+          globalForegroundProcessChangeRegistry.notifySync({ ptyId, processName }),
         onExit: handleExit,
       },
       options
@@ -99,6 +104,7 @@ export function createPtyService(config: PtyServiceConfig, _fs?: unknown): PtySe
     lifecycleRegistry,
     globalTitleRegistry,
     globalActivityRegistry,
+    globalForegroundProcessChangeRegistry,
   });
 
   async function setHostColors(colors: TerminalColors): Promise<void> {
@@ -139,6 +145,7 @@ export function createPtyService(config: PtyServiceConfig, _fs?: unknown): PtySe
     subscribeToLifecycle: subscriptions.subscribeToLifecycle,
     subscribeToTitle: subscriptions.subscribeToTitle,
     subscribeToAllActivity: subscriptions.subscribeToAllActivity,
+    subscribeToForegroundProcessChange: subscriptions.subscribeToForegroundProcessChange,
     dispose,
   };
 }

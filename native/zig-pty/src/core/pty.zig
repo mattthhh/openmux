@@ -24,6 +24,9 @@ pub const Pty = struct {
     stopping: std.atomic.Value(bool),
     ring: RingBuffer,
     reader_thread: ?std.Thread,
+    // Foreground process change tracking
+    last_foreground_pid: std.atomic.Value(c_int),
+    foreground_change_count: std.atomic.Value(u32),
 
     pub fn initInPlace(
         self: *Pty,
@@ -51,6 +54,8 @@ pub const Pty = struct {
         self.exit_detected = std.atomic.Value(bool).init(false);
         self.exit_code = std.atomic.Value(c_int).init(-1);
         self.stopping = std.atomic.Value(bool).init(false);
+        self.last_foreground_pid = std.atomic.Value(c_int).init(0);
+        self.foreground_change_count = std.atomic.Value(u32).init(0);
         self.ring.initInPlace();
         self.reader_thread = null;
     }
@@ -159,6 +164,11 @@ pub const Pty = struct {
             }
 
             if (poll_result == 0) {
+                // Poll timeout - check foreground process change
+                if (self.checkForegroundProcessChange()) {
+                    self.signalWakeup();
+                }
+
                 if (self.hasProcExitWatcher()) {
                     if (self.exit_detected.load(.acquire)) break;
                     continue;
@@ -287,6 +297,33 @@ pub const Pty = struct {
             self.exited.store(true, .release);
             self.exit_detected.store(true, .release);
         }
+    }
+
+    /// Check if foreground process has changed and update tracking.
+    /// Returns: true if the foreground process changed since last check.
+    pub fn checkForegroundProcessChange(self: *Pty) bool {
+        if (self.exited.load(.acquire)) return false;
+
+        const current_fg = c.tcgetpgrp(self.master_fd);
+        if (current_fg < 0) return false;
+
+        const last_fg = self.last_foreground_pid.load(.acquire);
+        
+        // First time checking - just store and return false (no "change" yet)
+        if (last_fg == 0) {
+            self.last_foreground_pid.store(current_fg, .release);
+            return false;
+        }
+
+        // No change
+        if (current_fg == last_fg) {
+            return false;
+        }
+
+        // Foreground process changed!
+        self.last_foreground_pid.store(current_fg, .release);
+        _ = self.foreground_change_count.fetchAdd(1, .acq_rel);
+        return true;
     }
 
     pub fn duplicateWakeReadFd(self: *Pty) c_int {

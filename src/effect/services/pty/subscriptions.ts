@@ -16,10 +16,20 @@ export interface SubscriptionsDeps {
   lifecycleRegistry: SubscriptionRegistry<{ type: 'created' | 'destroyed'; ptyId: PtyId }>;
   globalTitleRegistry: SubscriptionRegistry<PtyTitleChangeEvent>;
   globalActivityRegistry: SubscriptionRegistry<{ ptyId: PtyId }>;
+  globalForegroundProcessChangeRegistry: SubscriptionRegistry<{
+    ptyId: PtyId;
+    processName: string;
+  }>;
 }
 
 export function createSubscriptions(deps: SubscriptionsDeps) {
-  const { getSessionOrFail, lifecycleRegistry, globalTitleRegistry, globalActivityRegistry } = deps;
+  const {
+    getSessionOrFail,
+    lifecycleRegistry,
+    globalTitleRegistry,
+    globalActivityRegistry,
+    globalForegroundProcessChangeRegistry,
+  } = deps;
 
   async function subscribe(
     id: PtyId,
@@ -150,6 +160,12 @@ export function createSubscriptions(deps: SubscriptionsDeps) {
     return globalActivityRegistry.subscribe(callback);
   }
 
+  function subscribeToForegroundProcessChange(
+    callback: (event: { ptyId: PtyId; processName: string }) => void
+  ): () => void {
+    return globalForegroundProcessChangeRegistry.subscribe(callback);
+  }
+
   return {
     subscribe,
     onExit,
@@ -158,5 +174,6 @@ export function createSubscriptions(deps: SubscriptionsDeps) {
     subscribeToLifecycle,
     subscribeToTitle,
     subscribeToAllActivity,
+    subscribeToForegroundProcessChange,
   };
 }

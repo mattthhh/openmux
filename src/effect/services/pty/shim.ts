@@ -324,6 +324,11 @@ export function createShimPtyService(): PtyService {
         unsubscribe?.();
       };
     },
+    subscribeToForegroundProcessChange: (_callback) => {
+      // Shim doesn't have native process change detection yet
+      // Return no-op unsubscribe
+      return () => {};
+    },
     dispose: () => {
       // Shim service doesn't need cleanup - it's a proxy.
     },

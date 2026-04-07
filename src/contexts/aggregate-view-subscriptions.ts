@@ -15,6 +15,7 @@ import {
   createActivityBasedRefresh,
   createGitRepoChangeRefresh,
   createLifecycleHandlers as createAggregateLifecycleHandlers,
+  createProcessChangeHandler,
   createRefreshState,
   createSubscriptionManager,
   createTitleChangeHandler,
@@ -24,6 +25,7 @@ import {
   type LifecycleEvent,
   type LifecycleHandlerDeps,
   type LifecycleHandlers,
+  type ProcessChangeEvent,
   type PtyOwnership,
   type RefreshFlagKey,
   type RefreshState,
@@ -38,6 +40,7 @@ export {
   createSubscriptionManager,
   createRefreshState,
   createTitleChangeHandler,
+  createProcessChangeHandler,
 };
 export {
   createAggregateViewRefreshers,
@@ -88,6 +91,7 @@ export async function setupSubscriptions(
   refreshPtys: () => Promise<void>,
   refreshPtysSubset: (ptyIds: string[]) => Promise<void>,
   handleTitleChange: (event: { ptyId: string; title: string }) => void,
+  handleProcessChange: (event: { ptyId: string; processName: string }) => void,
   lifecycleHandlers: {
     handlePtyCreated: (ptyId: string) => Promise<void>;
     handlePtyDestroyed: (ptyId: string) => void;
@@ -99,6 +103,7 @@ export async function setupSubscriptions(
     refreshPtys,
     refreshPtysSubset,
     handleTitleChange,
+    handleProcessChange,
     lifecycleHandlers,
   });
 }

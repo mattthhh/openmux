@@ -26,6 +26,7 @@ export interface IPty {
   readonly process: string;
   readonly onData: (listener: (data: string) => void) => IDisposable;
   readonly onExit: (listener: (event: IExitEvent) => void) => IDisposable;
+  readonly onForegroundProcessChange: (listener: (processName: string) => void) => IDisposable;
   write(data: string): void;
   resize(columns: number, rows: number): void;
   resizeWithPixels(columns: number, rows: number, pixelWidth: number, pixelHeight: number): void;
@@ -44,7 +45,7 @@ export type ExitEvent = IExitEvent;
 // Constants
 export const DEFAULT_COLS = 80;
 export const DEFAULT_ROWS = 24;
-export const DEFAULT_FILE = "sh";
+export const DEFAULT_FILE = 'sh';
 
 // Async spawn return codes
 export const SPAWN_PENDING = -3;

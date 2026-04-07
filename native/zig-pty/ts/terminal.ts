@@ -42,6 +42,10 @@ export class Terminal implements IPty {
   private _draining: boolean = false;
   private _drainRequested: boolean = false;
   private _pollingFallback: boolean = false;
+  // Foreground process change tracking
+  private _onForegroundProcessChange = new EventEmitter<string>();
+  private _lastForegroundChangeCount = 0;
+  private _lastForegroundProcessName: string | null = null;
 
   /**
    * Create a Terminal from an already-spawned handle (used by spawnAsync)
@@ -109,6 +113,14 @@ export class Terminal implements IPty {
 
   get onExit() {
     return this._onExit.event;
+  }
+
+  /**
+   * Event fired when the foreground process changes.
+   * Provides the new foreground process name.
+   */
+  get onForegroundProcessChange() {
+    return this._onForegroundProcessChange.event;
   }
 
   write(data: string): void {
@@ -288,6 +300,24 @@ export class Terminal implements IPty {
     void this._drainAvailableData();
   }
 
+  private _checkForegroundProcessChange(): void {
+    if (this.handle < 0 || this._closing) return;
+
+    const currentCount = lib.symbols.bun_pty_get_foreground_change_count(this.handle);
+    if (currentCount < 0) return;
+
+    if (currentCount !== this._lastForegroundChangeCount) {
+      this._lastForegroundChangeCount = currentCount;
+
+      // Get the new foreground process name
+      const fgName = this.getForegroundProcessName();
+      if (fgName && fgName !== this._lastForegroundProcessName) {
+        this._lastForegroundProcessName = fgName;
+        this._onForegroundProcessChange.fire(fgName);
+      }
+    }
+  }
+
   private async _drainAvailableData(): Promise<void> {
     let chunksSinceYield = 0;
 
@@ -324,6 +354,9 @@ export class Terminal implements IPty {
 
       break;
     }
+
+    // Check for foreground process changes after draining data
+    this._checkForegroundProcessChange();
 
     this._draining = false;
 
@@ -364,6 +397,9 @@ export class Terminal implements IPty {
         this._handleReadFailure();
         return;
       }
+
+      // Check for foreground process changes during polling
+      this._checkForegroundProcessChange();
 
       await Bun.sleep(1);
     }

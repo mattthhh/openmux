@@ -23,6 +23,7 @@ import {
   createRefreshState,
   createAggregateViewRefreshers,
   createTitleChangeHandler,
+  createProcessChangeHandler,
   createLifecycleHandlers,
   setupSubscriptions,
   cleanupSubscriptions,
@@ -168,6 +169,7 @@ export function AggregateViewProvider(props: AggregateViewProviderProps) {
   );
 
   const handleTitleChange = createTitleChangeHandler(setState);
+  const handleProcessChange = createProcessChangeHandler(setState);
 
   const lifecycleHandlers = createLifecycleHandlers(
     state,
@@ -232,6 +234,7 @@ export function AggregateViewProvider(props: AggregateViewProviderProps) {
               refreshPtys,
               refreshPtysSubset,
               handleTitleChange,
+              handleProcessChange,
               lifecycleHandlers
             );
 

@@ -114,8 +114,16 @@ pub fn bun_pty_get_process_name(pid: c_int, buf: [*]u8, len: c_int) c_int {
 }
 
 // ============================================================================
-// macOS notify(3) helpers
+// Foreground Process Change Tracking
 // ============================================================================
+
+pub fn bun_pty_get_foreground_change_count(handle: c_int) c_int {
+    return pty_ops.getForegroundChangeCount(handle);
+}
+
+pub fn bun_pty_get_last_foreground_pid(handle: c_int) c_int {
+    return pty_ops.getLastForegroundPid(handle);
+}
 
 pub fn bun_pty_notify_register(name: [*:0]const u8, out_token: *c_int) c_int {
     return notify.notifyRegister(name, out_token);

@@ -135,6 +135,7 @@ export function createTestPtyService(): PtyService {
     subscribeToLifecycle: () => () => {},
     subscribeToTitle,
     subscribeToAllActivity: () => () => {},
+    subscribeToForegroundProcessChange: () => () => {},
     dispose: () => {
       ptyIds.clear();
     },

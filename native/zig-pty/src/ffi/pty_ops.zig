@@ -192,3 +192,32 @@ pub fn getForegroundPid(handle: c_int) c_int {
     // tcgetpgrp returned shell's PID (job control not active) - find children
     return process_info.findChildProcess(pty.pid);
 }
+
+/// Get the number of times foreground process has changed.
+/// Used by JS side to detect process changes without polling.
+/// Returns: change count (>= 0) or ERROR (-1).
+pub fn getForegroundChangeCount(handle: c_int) c_int {
+    if (handle <= 0) {
+        return constants.ERROR;
+    }
+
+    const h: u32 = @intCast(handle);
+    const pty = handle_registry.acquireHandle(h) orelse return constants.ERROR;
+    defer handle_registry.releaseHandle(h);
+
+    return @intCast(pty.foreground_change_count.load(.acquire));
+}
+
+/// Get the last seen foreground PID.
+/// Returns: PID (> 0), 0 if not yet checked, or ERROR (-1).
+pub fn getLastForegroundPid(handle: c_int) c_int {
+    if (handle <= 0) {
+        return constants.ERROR;
+    }
+
+    const h: u32 = @intCast(handle);
+    const pty = handle_registry.acquireHandle(h) orelse return constants.ERROR;
+    defer handle_registry.releaseHandle(h);
+
+    return pty.last_foreground_pid.load(.acquire);
+}

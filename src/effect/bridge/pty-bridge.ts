@@ -336,6 +336,12 @@ export interface PtyActivityEvent {
   ptyId: string;
 }
 
+/** PTY foreground process change event */
+export interface PtyForegroundProcessChangeEvent {
+  ptyId: string;
+  processName: string;
+}
+
 /** Subscribe to all PTY title changes */
 export function subscribeToAllTitleChanges(
   callback: (event: PtyTitleChangeEvent) => void
@@ -356,6 +362,18 @@ export function subscribeToAllPtyActivity(
   return Promise.resolve(
     pty.subscribeToAllActivity((event: { ptyId: string }) => {
       callback({ ptyId: event.ptyId });
+    })
+  );
+}
+
+/** Subscribe to foreground process changes across all PTYs */
+export function subscribeToForegroundProcessChanges(
+  callback: (event: PtyForegroundProcessChangeEvent) => void
+): Promise<() => void> {
+  const pty = getPtyService();
+  return Promise.resolve(
+    pty.subscribeToForegroundProcessChange((event: { ptyId: string; processName: string }) => {
+      callback({ ptyId: event.ptyId, processName: event.processName });
     })
   );
 }

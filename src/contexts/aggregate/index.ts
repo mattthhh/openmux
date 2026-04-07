@@ -77,6 +77,7 @@ export {
   RefreshGuard,
   createLifecycleHandlers,
   createTitleChangeHandler,
+  createProcessChangeHandler,
   setupSubscriptions,
   createGitRepoChangeRefresh,
   createActivityBasedRefresh,
@@ -90,6 +91,7 @@ export {
   type SubscriptionSetupDeps,
   type LifecycleHandlerDeps,
   type TitleChangeEvent,
+  type ProcessChangeEvent,
 } from './subscriptions';
 
 export type {

@@ -59,6 +59,7 @@ describe('createSession', () => {
         return { dispose: () => {} };
       },
       onData: vi.fn(),
+      onForegroundProcessChange: vi.fn(),
       write: vi.fn(),
       resize: vi.fn(),
       kill: vi.fn(),
@@ -125,6 +126,7 @@ describe('createSession', () => {
     const fakePty = {
       onExit: vi.fn(() => ({ dispose: () => {} })),
       onData: vi.fn(),
+      onForegroundProcessChange: vi.fn(),
       write: vi.fn(),
       resize: vi.fn(),
       resizeWithPixels,
@@ -195,6 +197,7 @@ describe('createSession', () => {
       onData: vi.fn((cb: (data: string) => void) => {
         dataHandler = cb;
       }),
+      onForegroundProcessChange: vi.fn(),
       write: vi.fn(),
       resize: vi.fn(),
       resizeWithPixels: vi.fn(),
