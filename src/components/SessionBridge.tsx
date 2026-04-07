@@ -13,7 +13,7 @@ import type { Workspaces } from '../core/operations/layout-actions';
 import { collectPanes } from '../core/layout-tree';
 import { createWorkspace } from '../core/operations/layout-actions/helpers';
 import { generatePaneId } from '../core/operations/layout-actions/helpers';
-import { pruneMissingPanes } from './session-bridge-utils';
+import { countWorkspacePanes, pruneMissingPanes } from './session-bridge-utils';
 import { deferMacrotask } from '../core/scheduling';
 import {
   clearPtyTracking,
@@ -135,6 +135,7 @@ export function SessionBridge(props: SessionBridgeProps) {
     let activeWorkspaceIdToLoad = activeWorkspaceId;
 
     if (allowPrune && missingPaneIds.length > 0) {
+      const previousPaneCount = countWorkspacePanes(workspacesToLoad);
       const pruned = pruneMissingPanes({
         workspaces: workspacesToLoad,
         activeWorkspaceId: activeWorkspaceIdToLoad,
@@ -142,11 +143,23 @@ export function SessionBridge(props: SessionBridgeProps) {
         viewport: layout.state.viewport,
         config: layout.state.config,
       });
-      workspacesToLoad = pruned.workspaces;
-      activeWorkspaceIdToLoad = pruned.activeWorkspaceId;
-      for (const paneId of new Set(missingPaneIds)) {
-        cwdMap.delete(paneId);
-        commandMap.delete(paneId);
+      const prunedPaneCount = countWorkspacePanes(pruned.workspaces);
+      const wouldWipeSession =
+        previousPaneCount > 0 && prunedPaneCount === 0 && (restoredPtys?.size ?? 0) === 0;
+
+      if (!wouldWipeSession) {
+        workspacesToLoad = pruned.workspaces;
+        activeWorkspaceIdToLoad = pruned.activeWorkspaceId;
+        for (const paneId of new Set(missingPaneIds)) {
+          cwdMap.delete(paneId);
+          commandMap.delete(paneId);
+        }
+      } else {
+        console.warn(
+          '[SessionBridge] Ignoring stale prune that would wipe the session layout:',
+          sessionId,
+          missingPaneIds
+        );
       }
     }
 

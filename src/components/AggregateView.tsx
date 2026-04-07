@@ -59,6 +59,7 @@ import {
   AggregateStateManager,
 } from './aggregate/controllers';
 import { isSavedAggregatePtyId } from '../contexts/aggregate/rows';
+import { findLivePtyIdForPane } from './aggregate/utils';
 
 interface AggregateViewProps {
   width: number;
@@ -87,10 +88,27 @@ export function AggregateView(props: AggregateViewProps) {
 
   const getPreviewableSelectedPtyId = () => {
     const selectedPtyId = aggregate.state.selectedPtyId;
-    if (!selectedPtyId || isSavedAggregatePtyId(selectedPtyId)) {
+    if (!selectedPtyId) {
       return null;
     }
-    return selectedPtyId;
+    if (!isSavedAggregatePtyId(selectedPtyId)) {
+      return selectedPtyId;
+    }
+
+    const selectedItem = aggregate.state.flattenedTree[aggregate.state.selectedIndex];
+    if (
+      selectedItem?.node.type !== 'pty' ||
+      selectedItem.node.ptyInfo.sessionId !== session.state.activeSessionId
+    ) {
+      return null;
+    }
+
+    const paneId = selectedItem.node.ptyInfo.paneId;
+    if (!paneId) {
+      return null;
+    }
+
+    return findLivePtyIdForPane(paneId, layout.state.workspaces);
   };
 
   // Hooks

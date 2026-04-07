@@ -60,3 +60,23 @@ export function findPaneLocation(
   }
   return null;
 }
+
+export function findLivePtyIdForPane(paneId: string, workspaces: Workspaces): string | null {
+  for (const workspace of Object.values(workspaces)) {
+    if (!workspace) continue;
+    const nodes = [];
+    if (workspace.mainPane) nodes.push(workspace.mainPane);
+    nodes.push(...workspace.stackPanes);
+
+    for (const node of nodes) {
+      const panes = collectPanes(node);
+      for (const pane of panes) {
+        if (pane.id === paneId) {
+          return pane.ptyId ?? null;
+        }
+      }
+    }
+  }
+
+  return null;
+}

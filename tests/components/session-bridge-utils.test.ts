@@ -1,7 +1,7 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from 'bun:test';
 import type { PaneData } from '../../src/core/types';
 import { DEFAULT_CONFIG } from '../../src/core/config';
-import { pruneMissingPanes } from '../../src/components/session-bridge-utils';
+import { countWorkspacePanes, pruneMissingPanes } from '../../src/components/session-bridge-utils';
 import {
   createWorkspaceWithPanes,
   defaultViewport,
@@ -47,5 +47,14 @@ describe('pruneMissingPanes', () => {
     expect(updated.mainPane?.id).toBe('pane-1');
     expect(updated.stackPanes).toHaveLength(1);
     expect(updated.stackPanes[0]!.id).toBe('pane-3');
+  });
+
+  it('counts panes across main and stack nodes', () => {
+    const mainPane: PaneData = { id: 'pane-1' };
+    const stackPaneA: PaneData = { id: 'pane-2' };
+    const stackPaneB: PaneData = { id: 'pane-3' };
+    const workspace = createWorkspaceWithPanes(1, mainPane, [stackPaneA, stackPaneB]);
+
+    expect(countWorkspacePanes({ 1: workspace })).toBe(3);
   });
 });
