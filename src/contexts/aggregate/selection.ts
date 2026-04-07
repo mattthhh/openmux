@@ -37,10 +37,7 @@ export function clearPreviewState(
   state.previewZoomed = false;
 }
 
-export function getSelectedPty(
-  flattenedTree: FlattenedTreeItem[],
-  selectedIndex: number
-): PtyInfo | null {
+function getSelectedPty(flattenedTree: FlattenedTreeItem[], selectedIndex: number): PtyInfo | null {
   const item = flattenedTree[selectedIndex];
   if (item?.node.type === 'pty') {
     return item.node.ptyInfo;
@@ -55,7 +52,7 @@ export function getSelectedItem(
   return flattenedTree[selectedIndex];
 }
 
-export function getSelectedSessionId(
+function getSelectedSessionId(
   flattenedTree: FlattenedTreeItem[],
   selectedIndex: number
 ): string | null {
@@ -161,7 +158,7 @@ export function selectAfterPtyRemoval(
   return null;
 }
 
-export function createSelectionActions(
+function createSelectionActions(
   state: AggregateViewState,
   setState: SetStoreFunction<AggregateViewState>
 ) {

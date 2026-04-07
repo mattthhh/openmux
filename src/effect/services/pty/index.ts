@@ -32,7 +32,6 @@ export {
 
 // Helpers
 export {
-  getGitBranch,
   getGitInfo,
   getGitDiffStats,
   disposeGitHelpers,

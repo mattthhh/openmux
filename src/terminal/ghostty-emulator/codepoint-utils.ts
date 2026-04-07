@@ -4,7 +4,7 @@
  * when rendering terminal content.
  */
 
-import { ValidationError } from "../../effect/errors";
+import { ValidationError } from '../../effect/errors';
 
 /**
  * Check if a codepoint is valid and renderable.
@@ -13,7 +13,7 @@ import { ValidationError } from "../../effect/errors";
  * @param codepoint - The Unicode codepoint to validate
  * @returns true if the codepoint can be rendered as a visible character
  */
-export function isValidCodepoint(codepoint: number): boolean {
+function isValidCodepoint(codepoint: number): boolean {
   // Type safety: must be a finite positive integer
   if (
     typeof codepoint !== 'number' ||
@@ -203,9 +203,10 @@ export function codepointToChar(codepoint: number, isInvisible: boolean = false)
 function tryFromCodePoint(codepoint: number): string {
   const result = tryAsyncSync<string, ValidationError>({
     try: () => String.fromCodePoint(codepoint),
-    catch: (e) => new ValidationError({ reason: `Invalid codepoint ${codepoint}: ${String(e)}`, cause: e }),
+    catch: (e) =>
+      new ValidationError({ reason: `Invalid codepoint ${codepoint}: ${String(e)}`, cause: e }),
   });
-  
+
   if (result instanceof ValidationError) {
     return ' ';
   }

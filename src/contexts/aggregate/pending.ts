@@ -11,7 +11,7 @@ type PendingInsertionOrderState = Pick<
   'allPtys' | 'sessionPaneOrders' | 'sessionPaneOrderIndex' | 'pendingPaneCreations'
 >;
 
-export function getCurrentPendingPaneCreation(
+function getCurrentPendingPaneCreation(
   state: PendingInsertionCollectionState
 ): PendingPaneCreation | null {
   return state.pendingPaneCreations[state.pendingPaneCreations.length - 1] ?? null;
@@ -45,7 +45,7 @@ export function removePendingPaneCreations(
   );
 }
 
-export function findPendingPaneCreation(
+function findPendingPaneCreation(
   state: PendingInsertionCollectionState,
   predicate: (insertion: PendingPaneCreation) => boolean
 ): PendingPaneCreation | null {

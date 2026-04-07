@@ -374,7 +374,7 @@ export function subscribeToGitRepoChanges(
 /**
  * Get git branch for a directory (compat helper).
  */
-export async function getGitBranch(cwd: string): Promise<string | undefined> {
+async function getGitBranch(cwd: string): Promise<string | undefined> {
   const info = await getGitInfo(cwd);
   return info?.branch;
 }

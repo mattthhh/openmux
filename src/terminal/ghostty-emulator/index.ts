@@ -5,7 +5,6 @@
 
 // Codepoint utilities
 export {
-  isValidCodepoint,
   isCjkIdeograph,
   isSpaceLikeChar,
   isZeroWidthChar,
@@ -13,12 +12,5 @@ export {
 } from './codepoint-utils';
 
 // Cell conversion utilities
-export {
-  safeRgb,
-  createEmptyCell,
-  createFillCell,
-  convertCell,
-  convertLine,
-  createEmptyRow,
-} from './cell-converter';
+export { safeRgb, convertCell, convertLine, createEmptyRow } from './cell-converter';
 export type { RGB } from './cell-converter';

@@ -1,9 +1,7 @@
 export {
-  getCurrentPendingPaneCreation,
   setPendingPaneCreations,
   upsertPendingPaneCreation,
   removePendingPaneCreations,
-  findPendingPaneCreation,
   getInsertedPaneOrder,
   getAppendedPaneOrder,
   getNextPendingPaneCreationOrder,

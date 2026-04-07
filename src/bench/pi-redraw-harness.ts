@@ -70,7 +70,7 @@ export interface BenchmarkScenarioMetrics {
   dirtyRowsConsumed: number;
 }
 
-export interface PiRedrawBenchmarkResult {
+interface PiRedrawBenchmarkResult {
   cols: number;
   rows: number;
   repaints: number;
@@ -89,7 +89,7 @@ export interface PiRedrawBenchmarkResult {
   repaintOverAppend: number;
 }
 
-export interface RunPiRedrawBenchmarkOptions {
+interface RunPiRedrawBenchmarkOptions {
   cols?: number;
   rows?: number;
   repaints?: number;

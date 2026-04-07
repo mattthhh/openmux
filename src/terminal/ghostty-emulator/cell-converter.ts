@@ -7,7 +7,12 @@ import { CellFlags, type GhosttyCell } from '../ghostty-vt/types';
 import type { TerminalCell } from '../../core/types';
 import type { TerminalColors } from '../terminal-colors';
 import { extractRgb } from '../terminal-colors';
-import { isZeroWidthChar, isSpaceLikeChar, isCjkIdeograph, codepointToChar } from './codepoint-utils';
+import {
+  isZeroWidthChar,
+  isSpaceLikeChar,
+  isCjkIdeograph,
+  codepointToChar,
+} from './codepoint-utils';
 
 const KITTY_PLACEHOLDER = 0x10eeee;
 
@@ -43,7 +48,7 @@ export function safeRgb(r: number, g: number, b: number): RGB {
  * @param colors - Terminal color scheme
  * @returns Empty cell with default colors
  */
-export function createEmptyCell(colors: TerminalColors): TerminalCell {
+function createEmptyCell(colors: TerminalColors): TerminalCell {
   const fg = extractRgb(colors.foreground);
   const bg = extractRgb(colors.background);
 
@@ -70,7 +75,7 @@ export function createEmptyCell(colors: TerminalColors): TerminalCell {
  * @param colors - Terminal color scheme for defaults
  * @returns Fill cell for EOL padding
  */
-export function createFillCell(lastCell: GhosttyCell | null, colors: TerminalColors): TerminalCell {
+function createFillCell(lastCell: GhosttyCell | null, colors: TerminalColors): TerminalCell {
   const fillBg = lastCell
     ? safeRgb(lastCell.bg_r, lastCell.bg_g, lastCell.bg_b)
     : extractRgb(colors.background);
@@ -227,7 +232,11 @@ export function convertCell(cell: GhosttyCell): TerminalCell {
  * @param colors - Terminal color scheme for fill cells
  * @returns Array of TerminalCell with EOL padding
  */
-export function convertLine(line: GhosttyCell[], cols: number, colors: TerminalColors): TerminalCell[] {
+export function convertLine(
+  line: GhosttyCell[],
+  cols: number,
+  colors: TerminalColors
+): TerminalCell[] {
   const row: TerminalCell[] = [];
   const lineLength = Math.min(line.length, cols);
 

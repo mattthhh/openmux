@@ -63,8 +63,6 @@ export type {
   TitleChangeEvent,
 };
 
-export type { AggregatePtyMetadata, RefreshersResult } from './aggregate/refresh';
-
 export function createLifecycleHandlers(
   state: AggregateViewState,
   setState: SetStoreFunction<AggregateViewState>,

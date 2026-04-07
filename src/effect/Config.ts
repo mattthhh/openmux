@@ -40,7 +40,7 @@ export interface AppConfig {
 }
 
 /** Theme configuration */
-export interface ThemeConfig {
+interface ThemeConfig {
   colors: TerminalColors;
   borderStyle: 'single' | 'double' | 'rounded';
   focusedBorderColor: string;
@@ -48,7 +48,7 @@ export interface ThemeConfig {
 }
 
 /** Default terminal colors */
-export const DEFAULT_COLORS: TerminalColors = {
+const DEFAULT_COLORS: TerminalColors = {
   foreground: '#c0caf5',
   background: '#1a1b26',
   cursor: '#c0caf5',

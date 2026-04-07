@@ -51,7 +51,7 @@ export const RowsSchema = z
 export const LayoutModeSchema = z.enum(['vertical', 'horizontal', 'stacked']);
 
 /** Generate a new PaneId */
-export const makePaneId = (counter: number): PaneId => `pane-${counter}` as PaneId;
+const makePaneId = (counter: number): PaneId => `pane-${counter}` as PaneId;
 
 /** Generate a new PtyId */
 export const makePtyId = (): PtyId =>

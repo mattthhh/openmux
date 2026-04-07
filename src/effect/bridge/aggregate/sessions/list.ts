@@ -33,7 +33,7 @@ interface PtyMetadataWithSession extends PtyMetadata {
  * @param options.batchSize - Max concurrent PTY fetches (default: 8)
  * @returns Array of sessions with their PTY info
  */
-export async function listSessionsWithPtys(
+async function listSessionsWithPtys(
   options: ListSessionsWithPtysOptions = {}
 ): Promise<SessionWithPtys[]> {
   if (!hasServices()) {

@@ -82,12 +82,7 @@ export {
   type ProcessChangeEvent,
 } from './subscriptions';
 
-export {
-  ptyMetadataToInfo,
-  createAggregateViewRefreshers,
-  type AggregatePtyMetadata,
-  type RefreshersResult,
-} from './refresh';
+export { ptyMetadataToInfo, createAggregateViewRefreshers, type RefreshersResult } from './refresh';
 
 export {
   extractGitMetadata,
@@ -100,11 +95,9 @@ export {
 } from './git';
 
 export {
-  getCurrentPendingPaneCreation,
   setPendingPaneCreations,
   upsertPendingPaneCreation,
   removePendingPaneCreations,
-  findPendingPaneCreation,
   getInsertedPaneOrder,
   getAppendedPaneOrder,
   getNextPendingPaneCreationOrder,

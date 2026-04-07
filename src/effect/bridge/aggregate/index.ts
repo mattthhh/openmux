@@ -54,5 +54,4 @@ export {
   listAllPtyIdsWithService,
   listAllPtysWithMetadata,
   listAllPtysWithMetadataWithService,
-  listSessionsWithPtys,
 } from './aggregateService';

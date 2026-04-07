@@ -196,7 +196,7 @@ export async function listAllPtysWithMetadata(
   return listAllPtysWithMetadataWithService(getPtyService(), options);
 }
 
-export async function listSessionsWithPtys(
+async function listSessionsWithPtys(
   options: ListSessionsWithPtysOptions = {}
 ): Promise<SessionWithPtys[]> {
   if (!hasServices()) {

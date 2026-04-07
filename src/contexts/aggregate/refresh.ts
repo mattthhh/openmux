@@ -42,7 +42,7 @@ import { dedupeAggregatePtysByPane, getAggregatePaneKey, getSavedAggregatePtyId 
 
 export { ptyMetadataToInfo } from './pty-info';
 
-export interface AggregatePtyMetadata {
+interface AggregatePtyMetadata {
   ptyId: string;
   cwd: string;
   gitBranch: string | undefined;

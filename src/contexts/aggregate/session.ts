@@ -233,7 +233,7 @@ export function recomputeTree(state: AggregateViewState): void {
   }
 }
 
-export function createSessionActions(
+function createSessionActions(
   state: AggregateViewState,
   setState: SetStoreFunction<AggregateViewState>,
   options: {
