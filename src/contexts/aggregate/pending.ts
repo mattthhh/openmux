@@ -123,17 +123,24 @@ export function getNextPendingPaneCreationOrder(
     }
   }
 
-  const boundedPendingOrders = existingPendingOrders.filter(
-    (order) => order > insertAfterOrder && (upperOrder === undefined || order < upperOrder)
-  );
-  const lowerOrder =
-    boundedPendingOrders.length > 0 ? Math.max(...boundedPendingOrders) : insertAfterOrder;
-
   if (upperOrder === undefined) {
+    const boundedPendingOrders = existingPendingOrders.filter((order) => order > insertAfterOrder);
+    const lowerOrder =
+      boundedPendingOrders.length > 0 ? Math.max(...boundedPendingOrders) : insertAfterOrder;
     return Math.floor(lowerOrder) + 1;
   }
 
-  return lowerOrder + (upperOrder - lowerOrder) / 2;
+  // Repeated midpoint insertion collapses to the upper bound after ~50 pending panes,
+  // which makes later creations tie with the next row and fall to the bottom of the group.
+  // Use a monotonic n/(n+1) distribution within the current gap instead so large bursts of
+  // aggregate pane creation keep distinct sort orders while preserving adjacency.
+  const boundedPendingCount = existingPendingOrders.filter(
+    (order) => order > insertAfterOrder && order < upperOrder
+  ).length;
+  return (
+    insertAfterOrder +
+    ((upperOrder - insertAfterOrder) * (boundedPendingCount + 1)) / (boundedPendingCount + 2)
+  );
 }
 
 export function findPendingPaneCreationForLifecycle(
