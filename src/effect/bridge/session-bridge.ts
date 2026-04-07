@@ -16,6 +16,7 @@ import { getSessionManager } from './services-instance';
 import { resolveActiveWorkspaceId } from './session-bridge-utils';
 import type { SessionError, SessionStorageError } from '../errors';
 import { SessionCorruptedError, SessionNotFoundError } from '../errors';
+import { repairLikelyTrailingPercentCwd } from '../../core/cwd-utils';
 
 /** List all sessions */
 export async function listSessions(): Promise<readonly SessionMetadata[]> {
@@ -254,7 +255,7 @@ function deserializeLayoutNode(serialized: {
   return {
     id: serialized.id,
     title: serialized.title,
-    cwd: serialized.cwd,
+    cwd: serialized.cwd ? repairLikelyTrailingPercentCwd(serialized.cwd) : serialized.cwd,
   };
 }
 
@@ -291,7 +292,7 @@ function extractCwdMap(session: SerializedSession): Map<string, string> {
       return;
     }
     if (n.id && n.cwd) {
-      cwdMap.set(n.id, n.cwd);
+      cwdMap.set(n.id, repairLikelyTrailingPercentCwd(n.cwd));
     }
   };
 

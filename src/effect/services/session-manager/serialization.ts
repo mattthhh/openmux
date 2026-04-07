@@ -9,6 +9,7 @@ import type { SessionMetadata } from '../../models';
 import type { SerializedSession, SerializedWorkspace, SerializedLayoutNode } from '../../models';
 import { PtyCwdError } from '../../errors';
 import { makeWorkspaceId } from '../../types';
+import { repairLikelyTrailingPercentCwd } from '../../../core/cwd-utils';
 
 function isSplitNode(
   node: WorkspaceLayoutNode
@@ -98,7 +99,7 @@ export async function collectCwdMap(
         catch: (e) => new PtyCwdError({ ptyId, reason: String(e), cause: e }),
       });
       const cwd = cwdResult instanceof PtyCwdError ? fallbackCwd : cwdResult;
-      return [ptyId, cwd] as const;
+      return [ptyId, repairLikelyTrailingPercentCwd(cwd)] as const;
     })
   );
 

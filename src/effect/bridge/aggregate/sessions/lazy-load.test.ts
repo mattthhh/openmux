@@ -248,6 +248,79 @@ describe('loadSessionPtysOnDemand (litmus)', () => {
     expect(cwdArgs).toContain('/workspace3'); // Workspace 3 main pane
   });
 
+  it('should repair saved trailing-percent cwd values before creating PTYs', async () => {
+    const createSpy = mock(async () => 'pty-created');
+
+    mock.module('../../services-instance', () => ({
+      hasServices: () => true,
+      getPtyService: () => ({ create: createSpy }),
+      getSessionManager: () => ({
+        loadSession: async () => ({
+          id: 'session-1',
+          name: 'Session 1',
+          activeWorkspaceId: 1,
+          workspaces: [
+            {
+              id: 1,
+              layoutMode: 'stacked',
+              focusedPaneId: 'pane-1',
+              mainPane: { id: 'pane-1', cwd: '/tmp%', title: 'shell1' },
+              stackPanes: [],
+              activeStackIndex: 0,
+            },
+          ],
+          cwdMap: new Map([['pane-1', '/tmp%']]),
+          paneToPtyMap: new Map(),
+        }),
+      }),
+    }));
+
+    mock.module('../../shim-bridge', () => ({
+      getSessionPtyMapping: async () => undefined,
+      registerPtyPane: async () => {},
+    }));
+
+    mock.module('../metadata/fetch', () => ({
+      batchFetchPtyMetadata: async function* (_pty: unknown, ids: Iterable<string>) {
+        for (const id of ids) {
+          yield {
+            ptyId: String(id),
+            cwd: '/tmp',
+            foregroundProcess: 'bash',
+            shell: '/bin/bash',
+            title: 'shell',
+            workspaceId: 1,
+            paneId: undefined,
+            gitBranch: undefined,
+            gitDiffStats: undefined,
+            gitDirty: false,
+            gitStaged: 0,
+            gitUnstaged: 0,
+            gitUntracked: 0,
+            gitConflicted: 0,
+            gitAhead: undefined,
+            gitBehind: undefined,
+            gitStashCount: undefined,
+            gitState: undefined,
+            gitDetached: false,
+            gitRepoKey: undefined,
+          };
+        }
+      },
+    }));
+
+    const { loadSessionPtysOnDemand } =
+      await import('./lazy-load.ts?litmus-repair-trailing-percent-cwd');
+    const result = await loadSessionPtysOnDemand('session-1');
+
+    expect(result instanceof Error).toBe(false);
+    if (result instanceof Error) return;
+
+    expect(createSpy).toHaveBeenCalledTimes(1);
+    expect(createSpy.mock.calls[0]?.[0]?.cwd).toBe('/tmp');
+    expect(result.ptys).toHaveLength(1);
+  });
+
   it('should keep shim mappings authoritative over stale aggregate-local mappings', async () => {
     aggregateSessionMappings.set('session-1', new Map([['pane-1', 'pty-stale']]));
 

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'bun:test';
+import childProcess from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -77,5 +78,29 @@ describe('prepareShellIntegration', () => {
     const hook = fs.readFileSync(hookPath, 'utf8');
     expect(hook).toContain('add-zsh-hook chpwd __openmux_chpwd');
     expect(hook).toContain('openmux;cwd=%s');
+  });
+
+  it('zsh hook percent-encodes literal percent signs without appending one to plain paths', () => {
+    const { root, home } = createEnvRoot();
+    process.env.HOME = home;
+    process.env.XDG_CONFIG_HOME = path.join(root, 'xdg');
+    delete process.env.OPENMUX_SHELL_HOOKS;
+
+    const result = prepareShellIntegration('/bin/zsh', { HOME: home });
+    const hookPath = result.env.OPENMUX_SHELL_INTEGRATION;
+    expect(hookPath).toBeTruthy();
+
+    const command = `source ${JSON.stringify(hookPath)} >/dev/null; __openmux_encode "/tmp"; print; __openmux_encode "a%b"; print`;
+    const encoded = childProcess.spawnSync('zsh', ['-fc', command], {
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        HOME: home,
+        XDG_CONFIG_HOME: path.join(root, 'xdg'),
+      },
+    });
+
+    expect(encoded.status).toBe(0);
+    expect(encoded.stdout.trim().split('\n')).toEqual(['/tmp', 'a%25b']);
   });
 });

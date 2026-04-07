@@ -14,6 +14,7 @@ import { getPtyService, getSessionManager, hasServices } from '../../services-in
 import { getSessionPtyMapping, registerPtyPane } from '../../shim-bridge';
 import { ServicesNotInitializedError, AggregateBridgeError } from '../../../errors';
 import type { SessionError } from '../../../errors';
+import { repairLikelyTrailingPercentCwd } from '../../../../core/cwd-utils';
 
 /** Find the workspace ID containing a pane ID in serialized session data */
 function findWorkspaceIdForPane(session: SerializedSession, paneId: string): number | undefined {
@@ -50,7 +51,7 @@ function collectPaneRecords(
     return;
   }
   const pane = node as { id: string; cwd: string };
-  result.push({ paneId: pane.id, cwd: pane.cwd });
+  result.push({ paneId: pane.id, cwd: repairLikelyTrailingPercentCwd(pane.cwd) });
 }
 
 function getAllWorkspacePaneRecords(
