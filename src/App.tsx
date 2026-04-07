@@ -20,6 +20,7 @@ import { useTitle } from './contexts/TitleContext';
 import { PaneContainer } from './components';
 import { getFocusedPane, getFocusedPtyId } from './core/workspace-utils';
 import { type CommandPaletteCommand } from './core/command-palette';
+import { resolveAggregatePreviewPtyId } from './components/aggregate/utils';
 import {
   setKeyboardVimMode,
   type KeyboardVimMode,
@@ -135,7 +136,15 @@ function AppContent() {
 
   const getActivePtyId = () => {
     if (aggregateState.showAggregateView && aggregateState.previewMode) {
-      return aggregateState.selectedPtyId ?? undefined;
+      return (
+        resolveAggregatePreviewPtyId({
+          selectedPtyId: aggregateState.selectedPtyId,
+          selectedIndex: aggregateState.selectedIndex,
+          flattenedTree: aggregateState.flattenedTree,
+          activeSessionId: session.state.activeSessionId,
+          workspaces: layout.state.workspaces,
+        }) ?? undefined
+      );
     }
     return getFocusedPtyId(layout.activeWorkspace);
   };

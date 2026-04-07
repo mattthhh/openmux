@@ -59,7 +59,8 @@ import {
   AggregateStateManager,
 } from './aggregate/controllers';
 import { isSavedAggregatePtyId } from '../contexts/aggregate/rows';
-import { findLivePtyIdForPane } from './aggregate/utils';
+import { getAggregateSessionForPty } from '../effect/bridge/aggregate/cache/session-pty-cache';
+import { resolveAggregatePreviewPtyId, resolveAggregatePtyOwnership } from './aggregate/utils';
 
 interface AggregateViewProps {
   width: number;
@@ -86,30 +87,14 @@ export function AggregateView(props: AggregateViewProps) {
   const search = useSearch();
   const colors = useOverlayColors();
 
-  const getPreviewableSelectedPtyId = () => {
-    const selectedPtyId = aggregate.state.selectedPtyId;
-    if (!selectedPtyId) {
-      return null;
-    }
-    if (!isSavedAggregatePtyId(selectedPtyId)) {
-      return selectedPtyId;
-    }
-
-    const selectedItem = aggregate.state.flattenedTree[aggregate.state.selectedIndex];
-    if (
-      selectedItem?.node.type !== 'pty' ||
-      selectedItem.node.ptyInfo.sessionId !== session.state.activeSessionId
-    ) {
-      return null;
-    }
-
-    const paneId = selectedItem.node.ptyInfo.paneId;
-    if (!paneId) {
-      return null;
-    }
-
-    return findLivePtyIdForPane(paneId, layout.state.workspaces);
-  };
+  const getPreviewableSelectedPtyId = () =>
+    resolveAggregatePreviewPtyId({
+      selectedPtyId: aggregate.state.selectedPtyId,
+      selectedIndex: aggregate.state.selectedIndex,
+      flattenedTree: aggregate.state.flattenedTree,
+      activeSessionId: session.state.activeSessionId,
+      workspaces: layout.state.workspaces,
+    });
 
   // Hooks
   const vim = useVimMode({ isAggregateVisible: () => aggregate.state.showAggregateView });
@@ -194,6 +179,14 @@ export function AggregateView(props: AggregateViewProps) {
   const activity = useActivitySubscriptions({
     isActive: () => aggregate.state.showAggregateView,
     getTrackedPtys: () => aggregate.state.matchedPtys,
+    resolvePtyOwnership: (ptyId) =>
+      resolveAggregatePtyOwnership({
+        ptyId,
+        workspaces: layout.state.workspaces,
+        activeSessionId: session.state.activeSessionId,
+        trackedOwner: terminal.findSessionForPty(ptyId),
+        aggregateOwner: getAggregateSessionForPty(ptyId),
+      }),
   });
 
   // Helper to get item at mouse position
@@ -303,13 +296,14 @@ export function AggregateView(props: AggregateViewProps) {
   const keyboardDeps = {
     getPreviewMode: () => aggregate.state.previewMode,
     getSelectedPtyId: () => aggregate.state.selectedPtyId,
+    getPreviewPtyId: getPreviewableSelectedPtyId,
     getFilterQuery: () => aggregate.state.filterQuery,
     getSearchState: () => search.searchState,
     getInSearchMode: () => inSearchMode(),
-    getCopyModeActive: () =>
-      aggregate.state.previewMode &&
-      !!aggregate.state.selectedPtyId &&
-      copyMode.isActive(aggregate.state.selectedPtyId),
+    getCopyModeActive: () => {
+      const previewPtyId = getPreviewableSelectedPtyId();
+      return aggregate.state.previewMode && !!previewPtyId && copyMode.isActive(previewPtyId);
+    },
     getPrefixActive: prefixActive,
     getKeybindings: () => config.keybindings(),
     getMatchedCount: () => aggregate.state.flattenedTree.length,
@@ -377,19 +371,20 @@ export function AggregateView(props: AggregateViewProps) {
   });
 
   // Footer text
-  const hintsText = () =>
-    getHintsText(
+  const hintsText = () => {
+    const previewPtyId = getPreviewableSelectedPtyId();
+
+    return getHintsText(
       inSearchMode(),
       aggregate.state.previewMode,
       aggregate.state.previewZoomed,
-      aggregate.state.previewMode &&
-        !!aggregate.state.selectedPtyId &&
-        copyMode.isActive(aggregate.state.selectedPtyId),
+      aggregate.state.previewMode && !!previewPtyId && copyMode.isActive(previewPtyId),
       config.keybindings(),
       aggregate.state.showInactive,
       vim.isEnabled(),
       vim.mode()
     );
+  };
   const filterText = () => getFilterText(aggregate.state.filterQuery);
   const footerWidths = () => calculateFooterWidths(props.width, filterText(), hintsText());
   const hostBgColor = () => {

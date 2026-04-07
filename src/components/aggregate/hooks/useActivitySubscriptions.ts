@@ -10,6 +10,7 @@ import { createRenderEffect, createMemo, onCleanup, type Accessor } from 'solid-
 import * as errore from 'errore';
 import { subscribeToAllPtyActivity } from '../../../effect/bridge';
 import { recordPtyStdoutActivity } from '../../../core/shimmer';
+import { getSavedAggregatePtyId } from '../../../contexts/aggregate/rows';
 import type { PtyInfo } from '../../../contexts/aggregate-view-types';
 
 /** Error when activity subscription fails */
@@ -29,8 +30,12 @@ interface UseActivitySubscriptionsResult {
 export function useActivitySubscriptions(options: {
   isActive: Accessor<boolean>;
   getTrackedPtys: Accessor<PtyInfo[]>;
+  resolvePtyOwnership?: (
+    ptyId: string
+  ) => { sessionId: string; paneId: string | null | undefined } | null;
 }): UseActivitySubscriptionsResult {
   let currentTrackedPtyIds = new Set<string>();
+  let currentTrackedPaneAliases = new Set<string>();
   let unsubscribe: (() => void) | null = null;
   let subscribeInFlight = false;
   let disposed = false;
@@ -47,8 +52,21 @@ export function useActivitySubscriptions(options: {
     const result = await errore.tryAsync<() => void, ActivitySubscriptionError>({
       try: () =>
         subscribeToAllPtyActivity((event) => {
-          if (!currentTrackedPtyIds.has(event.ptyId)) return;
-          recordPtyStdoutActivity(event.ptyId);
+          const ownership = options.resolvePtyOwnership?.(event.ptyId) ?? null;
+          const savedRowId = ownership?.paneId
+            ? getSavedAggregatePtyId(ownership.sessionId, ownership.paneId)
+            : null;
+          const shouldRecordRaw =
+            currentTrackedPtyIds.has(event.ptyId) ||
+            (savedRowId !== null && currentTrackedPaneAliases.has(savedRowId));
+
+          if (shouldRecordRaw) {
+            recordPtyStdoutActivity(event.ptyId);
+          }
+
+          if (savedRowId !== null && currentTrackedPaneAliases.has(savedRowId)) {
+            recordPtyStdoutActivity(savedRowId);
+          }
         }),
       catch: (e) =>
         new ActivitySubscriptionError({
@@ -77,13 +95,26 @@ export function useActivitySubscriptions(options: {
   };
 
   // Use createMemo to only recompute when tracked PTYs actually change
-  const trackedPtyIdsMemo = createMemo(
-    () => new Set(options.getTrackedPtys().map((pty) => pty.ptyId))
-  );
+  const trackedPtyIdsMemo = createMemo(() => {
+    const trackedPtys = options.getTrackedPtys();
+
+    return {
+      ptyIds: new Set(trackedPtys.map((pty) => pty.ptyId)),
+      paneAliases: new Set(
+        trackedPtys.flatMap((pty) => {
+          if (!pty.paneId) {
+            return [];
+          }
+
+          return [getSavedAggregatePtyId(pty.sessionId, pty.paneId)];
+        })
+      ),
+    };
+  });
 
   createRenderEffect(() => {
     const isActive = options.isActive();
-    const ptyIds = trackedPtyIdsMemo();
+    const tracked = trackedPtyIdsMemo();
 
     if (!isActive) {
       cleanup();
@@ -91,7 +122,8 @@ export function useActivitySubscriptions(options: {
     }
 
     // Only update the tracked set reference, don't resubscribe
-    currentTrackedPtyIds = ptyIds;
+    currentTrackedPtyIds = tracked.ptyIds;
+    currentTrackedPaneAliases = tracked.paneAliases;
 
     void ensureSubscribed();
   });

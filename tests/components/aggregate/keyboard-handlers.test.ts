@@ -39,6 +39,7 @@ function createDeps(overrides: Partial<AggregateKeyboardDeps> = {}) {
   const deps: AggregateKeyboardDeps = {
     getPreviewMode: () => previewMode,
     getSelectedPtyId: () => 'pty-1',
+    getPreviewPtyId: () => 'pty-1',
     getFilterQuery: () => '',
     getSearchState: () => null,
     getInSearchMode: () => inSearchMode,

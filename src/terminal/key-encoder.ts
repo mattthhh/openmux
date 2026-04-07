@@ -3,11 +3,11 @@
  * Encodes key events using libghostty-vt to preserve modifier semantics.
  */
 
-import type { Pointer } from "bun:ffi";
-import { ghostty } from "./ghostty-vt/ffi";
-import type { ITerminalEmulator } from "./emulator-interface";
-import type { KeyboardEvent } from "../core/keyboard-event";
-import { ValidationError } from "../effect/errors";
+import type { Pointer } from 'bun:ffi';
+import { ghostty } from './ghostty-vt/ffi';
+import type { ITerminalEmulator } from './emulator-interface';
+import type { KeyboardEvent } from '../core/keyboard-event';
+import { ValidationError } from '../effect/errors';
 
 type KeyEncoderOptions = {
   cursorKeyApplication: boolean;
@@ -104,41 +104,41 @@ const SPECIAL_KEY_MAP: Record<string, number> = {
 };
 
 const PUNCT_KEY_MAP: Record<string, number> = {
-  "`": KEY_BACKQUOTE,
-  "-": KEY_MINUS,
-  "=": KEY_EQUAL,
-  "[": KEY_BRACKET_LEFT,
-  "]": KEY_BRACKET_RIGHT,
-  "\\": KEY_BACKSLASH,
-  ";": KEY_SEMICOLON,
+  '`': KEY_BACKQUOTE,
+  '-': KEY_MINUS,
+  '=': KEY_EQUAL,
+  '[': KEY_BRACKET_LEFT,
+  ']': KEY_BRACKET_RIGHT,
+  '\\': KEY_BACKSLASH,
+  ';': KEY_SEMICOLON,
   "'": KEY_QUOTE,
-  ",": KEY_COMMA,
-  ".": KEY_PERIOD,
-  "/": KEY_SLASH,
+  ',': KEY_COMMA,
+  '.': KEY_PERIOD,
+  '/': KEY_SLASH,
 };
 
 const SHIFTED_SYMBOLS: Record<string, string> = {
-  "!": "1",
-  "@": "2",
-  "#": "3",
-  "$": "4",
-  "%": "5",
-  "^": "6",
-  "&": "7",
-  "*": "8",
-  "(": "9",
-  ")": "0",
-  "_": "-",
-  "+": "=",
-  "{": "[",
-  "}": "]",
-  "|": "\\",
-  ":": ";",
-  "\"": "'",
-  "<": ",",
-  ">": ".",
-  "?": "/",
-  "~": "`",
+  '!': '1',
+  '@': '2',
+  '#': '3',
+  $: '4',
+  '%': '5',
+  '^': '6',
+  '&': '7',
+  '*': '8',
+  '(': '9',
+  ')': '0',
+  _: '-',
+  '+': '=',
+  '{': '[',
+  '}': ']',
+  '|': '\\',
+  ':': ';',
+  '"': "'",
+  '<': ',',
+  '>': '.',
+  '?': '/',
+  '~': '`',
 };
 
 class GhosttyKeyEncoder {
@@ -184,7 +184,7 @@ class GhosttyKeyEncoder {
   }
 
   private setOption(option: number, value: boolean | number): void {
-    const numeric = typeof value === "boolean" ? (value ? 1 : 0) : value;
+    const numeric = typeof value === 'boolean' ? (value ? 1 : 0) : value;
     this.optionBuffer[0] = numeric;
     ghostty.symbols.ghostty_key_encoder_setopt(this.encoder, option, this.optionBuffer);
   }
@@ -227,7 +227,7 @@ class GhosttyKeyEncoder {
     if (result === GHOSTTY_OUT_OF_MEMORY) {
       const required = Number(this.outLenBuffer[0]);
       if (!Number.isFinite(required) || required <= 0) {
-        return "";
+        return '';
       }
       this.outBuffer = Buffer.alloc(required);
       result = ghostty.symbols.ghostty_key_encoder_encode(
@@ -240,21 +240,19 @@ class GhosttyKeyEncoder {
     }
 
     if (result !== GHOSTTY_SUCCESS) {
-      return "";
+      return '';
     }
 
     const written = Number(this.outLenBuffer[0]);
     if (!written) {
-      return "";
+      return '';
     }
 
-    return this.outBuffer.subarray(0, written).toString("utf8");
+    return this.outBuffer.subarray(0, written).toString('utf8');
   }
 }
 
-function createHandle(
-  ctor: (allocator: Pointer | null, out: BigUint64Array) => number
-): Pointer {
+function createHandle(ctor: (allocator: Pointer | null, out: BigUint64Array) => number): Pointer {
   const out = new BigUint64Array(1);
   const result = ctor(null, out);
   if (result !== GHOSTTY_SUCCESS) {
@@ -314,7 +312,7 @@ function didShiftProduceText(event: KeyboardEvent, utf8: string): boolean {
   }
 
   if (utf8.length === 1) {
-    if (utf8 >= "A" && utf8 <= "Z") return true;
+    if (utf8 >= 'A' && utf8 <= 'Z') return true;
     if (Object.prototype.hasOwnProperty.call(SHIFTED_SYMBOLS, utf8)) return true;
   }
 
@@ -324,24 +322,24 @@ function didShiftProduceText(event: KeyboardEvent, utf8: string): boolean {
 }
 
 function resolveAction(event: KeyboardEvent): number {
-  if (event.eventType === "release") return KEY_ACTION_RELEASE;
-  if (event.eventType === "repeat" || event.repeated) return KEY_ACTION_REPEAT;
+  if (event.eventType === 'release') return KEY_ACTION_RELEASE;
+  if (event.eventType === 'repeat' || event.repeated) return KEY_ACTION_REPEAT;
   return KEY_ACTION_PRESS;
 }
 
 function getPrintableSequence(sequence?: string): string {
-  if (!sequence) return "";
+  if (!sequence) return '';
   for (const char of sequence) {
     const code = char.codePointAt(0) ?? 0;
     if (code < 32 || code === 127) {
-      return "";
+      return '';
     }
   }
   return sequence;
 }
 
 function resolveUnshiftedCodepoint(event: KeyboardEvent): number {
-  if (typeof event.baseCode === "number" && event.baseCode > 0) {
+  if (typeof event.baseCode === 'number' && event.baseCode > 0) {
     return event.baseCode;
   }
 
@@ -370,44 +368,169 @@ function getModeSafe(emulator: ITerminalEmulator, mode: number): boolean | Valid
 function getEncoderOptions(emulator: ITerminalEmulator): KeyEncoderOptions {
   const keypadResult = getModeSafe(emulator, 66);
   const ignoreNumlockResult = getModeSafe(emulator, 1035);
-  
+
   return {
-    cursorKeyApplication: emulator.getCursorKeyMode() === "application",
+    cursorKeyApplication: emulator.getCursorKeyMode() === 'application',
     keypadKeyApplication: keypadResult instanceof ValidationError ? false : keypadResult,
-    ignoreKeypadWithNumlock: ignoreNumlockResult instanceof ValidationError ? false : ignoreNumlockResult,
+    ignoreKeypadWithNumlock:
+      ignoreNumlockResult instanceof ValidationError ? false : ignoreNumlockResult,
     altEscPrefix: true,
     modifyOtherKeysState2: false,
     kittyFlags: emulator.getKittyKeyboardFlags(),
   };
 }
 
-const sharedEncoder = new GhosttyKeyEncoder();
+const DEFAULT_FALLBACK_OPTIONS: KeyEncoderOptions = {
+  cursorKeyApplication: false,
+  keypadKeyApplication: false,
+  ignoreKeypadWithNumlock: false,
+  altEscPrefix: true,
+  modifyOtherKeysState2: false,
+  kittyFlags: 0,
+};
 
-function isLineBreakSequence(sequence?: string): sequence is "\n" | "\r" {
-  return sequence === "\n" || sequence === "\r";
+let sharedEncoder: GhosttyKeyEncoder | null = null;
+let sharedEncoderUnavailable = false;
+let didWarnSharedEncoderFallback = false;
+
+function getSharedEncoder(): GhosttyKeyEncoder | null {
+  if (sharedEncoderUnavailable) {
+    return null;
+  }
+
+  if (sharedEncoder) {
+    return sharedEncoder;
+  }
+
+  try {
+    sharedEncoder = new GhosttyKeyEncoder();
+    return sharedEncoder;
+  } catch (error) {
+    sharedEncoderUnavailable = true;
+    if (!didWarnSharedEncoderFallback) {
+      didWarnSharedEncoderFallback = true;
+      console.warn(
+        `[key-encoder] Falling back to JS input encoding: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+    return null;
+  }
+}
+
+function isLineBreakSequence(sequence?: string): sequence is '\n' | '\r' {
+  return sequence === '\n' || sequence === '\r';
 }
 
 function isEscPrefixedLinefeed(event: KeyboardEvent): boolean {
   // Some terminal setups emit Shift+Enter as ESC+LF (meta+linefeed).
   // Treat that as a plain line break so apps can interpret it as newline
   // instead of Alt+Enter.
-  return (
-    event.sequence === "\x1b\n" &&
-    event.key === "linefeed" &&
-    !event.ctrl &&
-    !event.meta
-  );
+  return event.sequence === '\x1b\n' && event.key === 'linefeed' && !event.ctrl && !event.meta;
+}
+
+function encodeCtrlFallback(event: KeyboardEvent): string {
+  if (!event.ctrl || event.key.length !== 1) {
+    return '';
+  }
+
+  const char = event.key.toLowerCase();
+  if (char >= 'a' && char <= 'z') {
+    return String.fromCharCode(char.charCodeAt(0) - 96);
+  }
+
+  if (char === '@' || char === ' ') {
+    return '\x00';
+  }
+  if (char === '[') {
+    return '\x1b';
+  }
+  if (char === '\\') {
+    return '\x1c';
+  }
+  if (char === ']') {
+    return '\x1d';
+  }
+  if (char === '^') {
+    return '\x1e';
+  }
+  if (char === '_') {
+    return '\x1f';
+  }
+
+  return '';
+}
+
+function encodeSpecialFallback(event: KeyboardEvent, options: KeyEncoderOptions): string {
+  const cursorPrefix = options.cursorKeyApplication ? '\x1bO' : '\x1b[';
+
+  switch (event.key.toLowerCase()) {
+    case 'up':
+      return `${cursorPrefix}A`;
+    case 'down':
+      return `${cursorPrefix}B`;
+    case 'right':
+      return `${cursorPrefix}C`;
+    case 'left':
+      return `${cursorPrefix}D`;
+    case 'home':
+      return options.cursorKeyApplication ? '\x1bOH' : '\x1b[H';
+    case 'end':
+      return options.cursorKeyApplication ? '\x1bOF' : '\x1b[F';
+    case 'insert':
+      return '\x1b[2~';
+    case 'delete':
+      return '\x1b[3~';
+    case 'pageup':
+    case 'page_up':
+      return '\x1b[5~';
+    case 'pagedown':
+    case 'page_down':
+      return '\x1b[6~';
+    case 'tab':
+      return '\t';
+    case 'backspace':
+      return '\x7f';
+    case 'escape':
+    case 'esc':
+      return '\x1b';
+    default:
+      return '';
+  }
+}
+
+function encodeKeyFallback(event: KeyboardEvent, options: KeyEncoderOptions): string {
+  if (event.eventType === 'release') {
+    return '';
+  }
+
+  const ctrl = encodeCtrlFallback(event);
+  if (ctrl) {
+    return event.alt ? `\x1b${ctrl}` : ctrl;
+  }
+
+  const printable = getPrintableSequence(event.sequence);
+  if (printable) {
+    return event.alt ? `\x1b${printable}` : printable;
+  }
+
+  const special = encodeSpecialFallback(event, options);
+  if (special) {
+    return event.alt ? `\x1b${special}` : special;
+  }
+
+  return '';
 }
 
 export function encodeKeyForEmulator(
   event: KeyboardEvent,
   emulator: ITerminalEmulator | null
 ): string {
-  if (!emulator || emulator.isDisposed) return "";
+  const activeEmulator = emulator && !emulator.isDisposed ? emulator : null;
+  const options = activeEmulator ? getEncoderOptions(activeEmulator) : DEFAULT_FALLBACK_OPTIONS;
   const action = resolveAction(event);
 
   if (action !== KEY_ACTION_RELEASE && isEscPrefixedLinefeed(event)) {
-    return "\n";
+    return '\n';
   }
 
   if (
@@ -421,10 +544,17 @@ export function encodeKeyForEmulator(
     // - Plain Enter should always submit a line break.
     // - Shift+Enter should also submit a line break unless the app explicitly
     //   enabled Kitty keyboard protocol (where Shift+Enter is distinct).
-    if (!event.shift || emulator.getKittyKeyboardFlags() === 0) {
+    if (!event.shift || options.kittyFlags === 0) {
       return event.sequence;
     }
   }
 
-  return sharedEncoder.encode(event, getEncoderOptions(emulator));
+  // Fall back to default terminal modes until the emulator cache is hydrated.
+  // This keeps the first keystrokes from being swallowed right after a PTY switch.
+  const encoder = getSharedEncoder();
+  if (!encoder) {
+    return encodeKeyFallback(event, options);
+  }
+
+  return encoder.encode(event, options);
 }

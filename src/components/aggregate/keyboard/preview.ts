@@ -7,7 +7,7 @@ import type { AggregateKeyboardDeps } from './types';
 
 export function createAggregatePreviewHandler(deps: AggregateKeyboardDeps) {
   const forwardToPreviewPty = (event: KeyboardEvent): boolean => {
-    const selectedPtyId = deps.getSelectedPtyId();
+    const selectedPtyId = deps.getPreviewPtyId();
     if (selectedPtyId && !isSavedAggregatePtyId(selectedPtyId)) {
       const emulator = deps.getEmulatorSync(selectedPtyId);
       const inputStr = encodeKeyForEmulator(
@@ -44,7 +44,7 @@ export function createAggregatePreviewHandler(deps: AggregateKeyboardDeps) {
     }
 
     if (action === 'aggregate.kill') {
-      const selectedPtyId = deps.getSelectedPtyId();
+      const selectedPtyId = deps.getPreviewPtyId();
       if (selectedPtyId && deps.onRequestKillPty) {
         deps.onRequestKillPty(selectedPtyId);
       }

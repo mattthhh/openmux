@@ -41,6 +41,8 @@ describe('useActivitySubscriptions', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     clearPtyStdoutActivity('pty-1');
+    clearPtyStdoutActivity('pty-2');
+    clearPtyStdoutActivity('saved:session-2:pane-9');
   });
 
   it('records tracked PTY activity from a single global activity subscription', async () => {
@@ -148,6 +150,45 @@ describe('useActivitySubscriptions', () => {
 
     resolveSubscribe(unsubscribe);
     await flush();
+
+    dispose();
+    expect(unsubscribe).toHaveBeenCalled();
+  });
+
+  it('mirrors background PTY activity onto tracked saved rows by session and pane', async () => {
+    const { useActivitySubscriptions } =
+      await import('../../../src/components/aggregate/hooks/useActivitySubscriptions');
+    let capturedActivity: ((event: { ptyId: string }) => void) | undefined;
+    const unsubscribe = vi.fn();
+    effectBridgeMocks.subscribeToAllPtyActivity.mockImplementation(
+      async (callback: (event: { ptyId: string }) => void) => {
+        capturedActivity = callback;
+        return unsubscribe;
+      }
+    );
+
+    const savedRow = createPty('saved:session-2:pane-9');
+    savedRow.sessionId = 'session-2';
+    savedRow.paneId = 'pane-9';
+
+    let dispose!: () => void;
+    createRoot((rootDispose) => {
+      dispose = rootDispose;
+      useActivitySubscriptions({
+        isActive: () => true,
+        getTrackedPtys: () => [savedRow],
+        resolvePtyOwnership: (ptyId) =>
+          ptyId === 'pty-background' ? { sessionId: 'session-2', paneId: 'pane-9' } : null,
+      });
+    });
+
+    await flush();
+
+    capturedActivity?.({ ptyId: 'pty-background' });
+    capturedActivity?.({ ptyId: 'pty-background' });
+
+    expect(hasRecentPtyStdoutActivity('saved:session-2:pane-9')).toBe(true);
+    expect(hasRecentPtyStdoutActivity('pty-background')).toBe(true);
 
     dispose();
     expect(unsubscribe).toHaveBeenCalled();

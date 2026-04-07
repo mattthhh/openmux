@@ -34,7 +34,7 @@ import { recomputeTree } from './aggregate-view-helpers';
 import { useLayout } from './LayoutContext';
 import { useSession } from './SessionContext';
 import { useTerminal } from './TerminalContext';
-import { findPaneLocation, findPtyLocation } from '../components/aggregate/utils';
+import { resolveAggregatePtyOwnership } from '../components/aggregate/utils';
 import { collectPanes } from '../core/layout-tree';
 import {
   getAggregateSessionOrderResult,
@@ -57,38 +57,14 @@ export function AggregateViewProvider(props: AggregateViewProviderProps) {
   const subscriptionsEpoch = { value: 0 };
   const refreshState = createRefreshState();
 
-  const resolvePtyOwnership = (ptyId: string) => {
-    const tracked = terminal.findSessionForPty(ptyId);
-    if (tracked) {
-      const workspaceId = findPaneLocation(tracked.paneId, layout.state.workspaces)?.workspaceId;
-      return {
-        sessionId: tracked.sessionId,
-        paneId: tracked.paneId,
-        workspaceId,
-      };
-    }
-
-    const aggregateOwned = getAggregateSessionForPty(ptyId);
-    if (aggregateOwned) {
-      return {
-        sessionId: aggregateOwned.sessionId,
-        paneId: aggregateOwned.paneId,
-        workspaceId: undefined,
-      };
-    }
-
-    const activeSessionId = session.state.activeSessionId;
-    if (!activeSessionId) return null;
-
-    const location = findPtyLocation(ptyId, layout.state.workspaces);
-    if (!location) return null;
-
-    return {
-      sessionId: activeSessionId,
-      paneId: location.paneId,
-      workspaceId: location.workspaceId,
-    };
-  };
+  const resolvePtyOwnership = (ptyId: string) =>
+    resolveAggregatePtyOwnership({
+      ptyId,
+      workspaces: layout.state.workspaces,
+      activeSessionId: session.state.activeSessionId,
+      trackedOwner: terminal.findSessionForPty(ptyId),
+      aggregateOwner: getAggregateSessionForPty(ptyId),
+    });
 
   const getCurrentSessionHints = () => ({
     sessionId: session.state.activeSessionId,

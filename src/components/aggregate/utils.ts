@@ -4,6 +4,8 @@
 
 import type { WorkspaceId } from '../../core/types';
 import type { Workspaces } from '../../core/operations/layout-actions';
+import type { FlattenedTreeItem } from '../../contexts/aggregate-view-types';
+import { isSavedAggregatePtyId } from '../../contexts/aggregate/rows';
 import { collectPanes, containsPane } from '../../core/layout-tree';
 
 /**
@@ -79,4 +81,74 @@ export function findLivePtyIdForPane(paneId: string, workspaces: Workspaces): st
   }
 
   return null;
+}
+
+export function resolveAggregatePtyOwnership(params: {
+  ptyId: string;
+  workspaces: Workspaces;
+  activeSessionId: string | null;
+  trackedOwner: { sessionId: string; paneId: string } | null;
+  aggregateOwner: { sessionId: string; paneId: string } | null;
+}): { sessionId: string; paneId: string; workspaceId: WorkspaceId | undefined } | null {
+  if (params.trackedOwner) {
+    return {
+      sessionId: params.trackedOwner.sessionId,
+      paneId: params.trackedOwner.paneId,
+      workspaceId: findPaneLocation(params.trackedOwner.paneId, params.workspaces)?.workspaceId,
+    };
+  }
+
+  if (params.aggregateOwner) {
+    return {
+      sessionId: params.aggregateOwner.sessionId,
+      paneId: params.aggregateOwner.paneId,
+      workspaceId: undefined,
+    };
+  }
+
+  if (!params.activeSessionId) {
+    return null;
+  }
+
+  const location = findPtyLocation(params.ptyId, params.workspaces);
+  if (!location) {
+    return null;
+  }
+
+  return {
+    sessionId: params.activeSessionId,
+    paneId: location.paneId,
+    workspaceId: location.workspaceId,
+  };
+}
+
+export function resolveAggregatePreviewPtyId(params: {
+  selectedPtyId: string | null;
+  selectedIndex: number;
+  flattenedTree: FlattenedTreeItem[];
+  activeSessionId: string | null;
+  workspaces: Workspaces;
+}): string | null {
+  if (!params.selectedPtyId) {
+    return null;
+  }
+
+  if (!isSavedAggregatePtyId(params.selectedPtyId)) {
+    return params.selectedPtyId;
+  }
+
+  const selectedItem = params.flattenedTree[params.selectedIndex];
+  if (
+    selectedItem?.node.type !== 'pty' ||
+    selectedItem.node.ptyInfo.sessionId !== params.activeSessionId
+  ) {
+    return null;
+  }
+
+  const paneId = selectedItem.node.ptyInfo.paneId;
+  if (!paneId) {
+    return null;
+  }
+
+  return findLivePtyIdForPane(paneId, params.workspaces);
 }

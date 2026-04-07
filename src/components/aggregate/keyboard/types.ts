@@ -11,6 +11,7 @@ export type VimSequenceHandler = {
 export interface AggregateKeyboardDeps {
   getPreviewMode: () => boolean;
   getSelectedPtyId: () => string | null;
+  getPreviewPtyId: () => string | null;
   getFilterQuery: () => string;
   getSearchState: () => { query: string } | null;
   getInSearchMode: () => boolean;
