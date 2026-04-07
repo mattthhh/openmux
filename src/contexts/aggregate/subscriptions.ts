@@ -159,6 +159,39 @@ function getPendingInsertionOrder(
   );
 }
 
+function getEmptyGitFields(): Pick<
+  PtyInfo,
+  | 'gitBranch'
+  | 'gitDiffStats'
+  | 'gitDirty'
+  | 'gitStaged'
+  | 'gitUnstaged'
+  | 'gitUntracked'
+  | 'gitConflicted'
+  | 'gitAhead'
+  | 'gitBehind'
+  | 'gitStashCount'
+  | 'gitState'
+  | 'gitDetached'
+  | 'gitRepoKey'
+> {
+  return {
+    gitBranch: undefined,
+    gitDiffStats: undefined,
+    gitDirty: false,
+    gitStaged: 0,
+    gitUnstaged: 0,
+    gitUntracked: 0,
+    gitConflicted: 0,
+    gitAhead: undefined,
+    gitBehind: undefined,
+    gitStashCount: undefined,
+    gitState: undefined,
+    gitDetached: false,
+    gitRepoKey: undefined,
+  };
+}
+
 export function createLifecycleHandlers(
   state: AggregateViewState,
   setState: SetStoreFunction<AggregateViewState>,
@@ -235,59 +268,49 @@ export function createLifecycleHandlers(
             }
           }
 
-          if (claimedSessionId && claimedPaneId) {
-            const existingPaneIndex = findAggregatePtyIndexByPane(
-              s.allPtys,
-              claimedSessionId,
-              claimedPaneId
-            );
-            if (existingPaneIndex !== -1 && s.allPtys[existingPaneIndex]) {
-              const existingPanePty = s.allPtys[existingPaneIndex];
-              clonePtyStdoutActivity(existingPanePty.ptyId, ptyId);
-              s.allPtys[existingPaneIndex] = {
-                ...existingPanePty,
-                ptyId,
-                paneId: claimedPaneId,
-                sessionId: claimedSessionId,
-                sessionMetadata: s.allSessions.get(claimedSessionId),
-                workspaceId: existingPanePty.workspaceId ?? initialOwnership?.workspaceId,
-                sortOrderHint: pendingInsertion
-                  ? getPendingInsertionOrder(s, pendingInsertion)
-                  : existingPanePty.sortOrderHint,
-              };
-              s.allPtysIndex = buildPtyIndex(s.allPtys);
-              recomputeMatches(s);
-              recomputeTree(s);
-              return;
-            }
+          if (!claimedSessionId || !claimedPaneId) {
+            return;
+          }
+
+          const sortOrderHint = pendingInsertion
+            ? getPendingInsertionOrder(s, pendingInsertion)
+            : undefined;
+          const existingPaneIndex = findAggregatePtyIndexByPane(
+            s.allPtys,
+            claimedSessionId,
+            claimedPaneId
+          );
+          if (existingPaneIndex !== -1 && s.allPtys[existingPaneIndex]) {
+            const existingPanePty = s.allPtys[existingPaneIndex];
+            clonePtyStdoutActivity(existingPanePty.ptyId, ptyId);
+            s.allPtys[existingPaneIndex] = {
+              ...existingPanePty,
+              ...getEmptyGitFields(),
+              ptyId,
+              paneId: claimedPaneId,
+              sessionId: claimedSessionId,
+              sessionMetadata: s.allSessions.get(claimedSessionId),
+              workspaceId: existingPanePty.workspaceId ?? initialOwnership?.workspaceId,
+              sortOrderHint: sortOrderHint ?? existingPanePty.sortOrderHint,
+            };
+            s.allPtysIndex = buildPtyIndex(s.allPtys);
+            recomputeMatches(s);
+            recomputeTree(s);
+            return;
           }
 
           const placeholderPty: PtyInfo = {
             ptyId,
-            sortOrderHint: pendingInsertion
-              ? getPendingInsertionOrder(s, pendingInsertion)
-              : undefined,
+            sortOrderHint,
             cwd: '',
-            gitBranch: undefined,
-            gitDiffStats: undefined,
-            gitDirty: false,
-            gitStaged: 0,
-            gitUnstaged: 0,
-            gitUntracked: 0,
-            gitConflicted: 0,
-            gitAhead: undefined,
-            gitBehind: undefined,
-            gitStashCount: undefined,
-            gitState: undefined,
-            gitDetached: false,
-            gitRepoKey: undefined,
+            ...getEmptyGitFields(),
             foregroundProcess: undefined,
             shell: 'shell',
             title: '...',
             workspaceId: initialOwnership?.workspaceId,
             paneId: claimedPaneId,
-            sessionId: claimedSessionId ?? '',
-            sessionMetadata: claimedSessionId ? s.allSessions.get(claimedSessionId) : undefined,
+            sessionId: claimedSessionId,
+            sessionMetadata: s.allSessions.get(claimedSessionId),
           };
 
           const newIndex = s.allPtys.length;
@@ -356,6 +379,7 @@ export function createLifecycleHandlers(
         });
         s.allPtys[placeholderIndex] = {
           ...s.allPtys[placeholderIndex],
+          ...getEmptyGitFields(),
           sessionId: ownership.sessionId,
           sessionMetadata,
           workspaceId: s.allPtys[placeholderIndex].workspaceId ?? ownership.workspaceId,
@@ -390,6 +414,7 @@ export function createLifecycleHandlers(
           if (index !== undefined) {
             s.allPtys[index] = {
               ...s.allPtys[index],
+              ...getEmptyGitFields(),
               sessionId: ownership.sessionId,
               sessionMetadata,
               title: metadataResult instanceof Error ? 'error' : 'shell',

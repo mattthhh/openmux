@@ -172,6 +172,16 @@ const createHarness = () => {
     setState,
     refreshers,
     lifecycleHandlers,
+    setOwnership: (
+      ptyId: string,
+      ownership: { sessionId: string; paneId: string; workspaceId: number } | null
+    ) => {
+      if (!ownership) {
+        ownershipByPtyId.delete(ptyId);
+        return;
+      }
+      ownershipByPtyId.set(ptyId, ownership);
+    },
     setCurrentSessionPaneOrder: (next: Map<string, number>) => {
       currentSessionPaneOrder = next;
     },
@@ -343,8 +353,8 @@ describe('aggregate insertion ordering', () => {
             sessionId: 'session-1',
             insertAfterPtyId: 'pty-1',
             insertAfterPaneId: 'pane-1',
-            pendingPtyId: null,
-            pendingPaneId: null,
+            pendingPtyId: 'pty-new',
+            pendingPaneId: 'pane-3',
           },
         ];
       })
@@ -448,8 +458,8 @@ describe('aggregate insertion ordering', () => {
             sessionId: 'session-1',
             insertAfterPtyId: 'pty-1',
             insertAfterPaneId: 'pane-1',
-            pendingPtyId: null,
-            pendingPaneId: null,
+            pendingPtyId: 'pty-new',
+            pendingPaneId: 'pane-3',
           },
         ];
       })
@@ -747,6 +757,259 @@ describe('aggregate insertion ordering', () => {
     expect(getSessionPaneOrder(state.sessionPaneOrders, 'session-1').get('pane-4')).toBe(0.75);
     expect(getVisiblePtyIds(state)).toEqual(['pty-1', 'pty-new', 'pty-new-2', 'pty-2']);
     expect(state.pendingPaneCreations).toEqual([]);
+  });
+
+  it('keeps pending burst panes adjacent across refreshes before lifecycle ordering settles', async () => {
+    const { state, setState, refreshers, setCurrentSessionPaneOrder, setCurrentSessionPtys } =
+      createHarness();
+
+    vi.mocked(getPtyMetadata).mockImplementation(async (ptyId: string) => {
+      if (!ptyId.startsWith('pty-burst-')) {
+        return null;
+      }
+
+      const index = Number(ptyId.replace('pty-burst-', ''));
+      return {
+        ptyId,
+        cwd: `/repo-${index}`,
+        foregroundProcess: 'bash',
+        shell: '/bin/bash',
+        title: `burst-${index}`,
+        workspaceId: 1,
+        paneId: `pane-${index + 2}`,
+        gitBranch: undefined,
+        gitDiffStats: undefined,
+        gitDirty: false,
+        gitStaged: 0,
+        gitUnstaged: 0,
+        gitUntracked: 0,
+        gitConflicted: 0,
+        gitAhead: undefined,
+        gitBehind: undefined,
+        gitStashCount: undefined,
+        gitState: undefined,
+        gitDetached: false,
+        gitRepoKey: undefined,
+      };
+    });
+
+    await refreshers.initialLoad();
+
+    const burstPtys = Array.from({ length: 5 }, (_, index) => ({
+      ptyId: `pty-burst-${index + 1}`,
+      cwd: `/repo-${index + 1}`,
+      foregroundProcess: undefined,
+      shell: 'shell',
+      workspaceId: 1,
+      paneId: `pane-${index + 3}`,
+      sessionId: 'session-1',
+      sessionMetadata: session,
+      title: '...',
+      sortOrderHint: 0.5 + index * 0.1,
+      gitBranch: undefined,
+      gitDiffStats: undefined,
+      gitDirty: false,
+      gitStaged: 0,
+      gitUnstaged: 0,
+      gitUntracked: 0,
+      gitConflicted: 0,
+      gitAhead: undefined,
+      gitBehind: undefined,
+      gitStashCount: undefined,
+      gitState: undefined,
+      gitDetached: false,
+      gitRepoKey: undefined,
+    }));
+
+    setState(
+      produce((s) => {
+        s.allPtys = [s.allPtys[0]!, ...burstPtys, s.allPtys[1]!];
+        s.allPtysIndex = new Map(s.allPtys.map((pty, index) => [pty.ptyId, index] as const));
+        s.pendingPaneCreations = burstPtys.map((pty, index) => ({
+          id: `pending-burst-${index + 1}`,
+          sessionId: 'session-1',
+          insertAfterPtyId: 'pty-1',
+          insertAfterPaneId: 'pane-1',
+          pendingPtyId: pty.ptyId,
+          pendingPaneId: pty.paneId ?? null,
+          sortOrderHint: pty.sortOrderHint,
+        }));
+        for (const pty of burstPtys) {
+          s.pendingPtyIds.add(pty.ptyId);
+        }
+        recomputeMatches(s);
+        recomputeTree(s);
+      })
+    );
+
+    setCurrentSessionPaneOrder(
+      new Map([
+        ['pane-1', 0],
+        ['pane-2', 1],
+        ['pane-3', 2],
+        ['pane-4', 3],
+        ['pane-5', 4],
+        ['pane-6', 5],
+        ['pane-7', 6],
+      ])
+    );
+    setCurrentSessionPtys([
+      { ptyId: 'pty-1', paneId: 'pane-1', workspaceId: 1, title: 'one', cwd: '/tmp' },
+      ...burstPtys.map((pty) => ({
+        ptyId: pty.ptyId,
+        paneId: pty.paneId!,
+        workspaceId: 1,
+        title: pty.title,
+        cwd: pty.cwd,
+      })),
+      { ptyId: 'pty-2', paneId: 'pane-2', workspaceId: 1, title: 'two', cwd: '/tmp' },
+    ]);
+
+    await refreshers.refreshPtys();
+
+    expect(getVisiblePtyIds(state)).toEqual([
+      'pty-1',
+      'pty-burst-1',
+      'pty-burst-2',
+      'pty-burst-3',
+      'pty-burst-4',
+      'pty-burst-5',
+      'pty-2',
+    ]);
+  });
+
+  it('ignores early lifecycle events until a pending pane has an explicit PTY or pane claim', async () => {
+    const { state, setState, refreshers, lifecycleHandlers, setOwnership } = createHarness();
+
+    await refreshers.initialLoad();
+
+    setState(
+      produce((s) => {
+        s.pendingPaneCreations = [
+          {
+            id: 'pending-1',
+            sessionId: 'session-1',
+            insertAfterPtyId: 'pty-1',
+            insertAfterPaneId: 'pane-1',
+            pendingPtyId: null,
+            pendingPaneId: null,
+            sortOrderHint: 0.5,
+          },
+          {
+            id: 'pending-2',
+            sessionId: 'session-1',
+            insertAfterPtyId: 'pty-1',
+            insertAfterPaneId: 'pane-1',
+            pendingPtyId: null,
+            pendingPaneId: null,
+            sortOrderHint: 0.75,
+          },
+        ];
+        recomputeMatches(s);
+        recomputeTree(s);
+      })
+    );
+
+    setOwnership('pty-race', null);
+    await lifecycleHandlers.handlePtyCreated('pty-race');
+
+    expect(state.allPtys.map((pty) => pty.ptyId)).toEqual(['pty-1', 'pty-2']);
+    expect(state.pendingPaneCreations.map((insertion) => insertion.pendingPtyId)).toEqual([
+      null,
+      null,
+    ]);
+  });
+
+  it('clears stale git metadata while a saved row is being claimed by a live PTY', async () => {
+    const { state, setState, refreshers, lifecycleHandlers } = createHarness();
+    const metadataDeferred = createDeferred<Awaited<ReturnType<typeof getPtyMetadata>>>();
+
+    vi.mocked(getPtyMetadata).mockImplementation(async (ptyId: string) => {
+      if (ptyId !== 'pty-new') {
+        return null;
+      }
+      return metadataDeferred.promise;
+    });
+
+    await refreshers.initialLoad();
+
+    setState(
+      produce((s) => {
+        s.allPtys.push({
+          ptyId: 'saved:session-1:pane-3',
+          cwd: '/tmp',
+          foregroundProcess: 'git',
+          shell: '/bin/bash',
+          workspaceId: 1,
+          paneId: 'pane-3',
+          sessionId: 'session-1',
+          sessionMetadata: session,
+          title: 'saved-shell',
+          sortOrderHint: 0.5,
+          gitBranch: 'wrong-branch',
+          gitDiffStats: { added: 9, removed: 3, binary: 0 },
+          gitDirty: true,
+          gitStaged: 1,
+          gitUnstaged: 2,
+          gitUntracked: 0,
+          gitConflicted: 0,
+          gitAhead: 4,
+          gitBehind: 1,
+          gitStashCount: 0,
+          gitState: undefined,
+          gitDetached: false,
+          gitRepoKey: '/wrong-repo',
+        });
+        s.allPtysIndex = new Map(s.allPtys.map((pty, index) => [pty.ptyId, index] as const));
+        s.pendingPaneCreations = [
+          {
+            id: 'pending-1',
+            sessionId: 'session-1',
+            insertAfterPtyId: 'pty-1',
+            insertAfterPaneId: 'pane-1',
+            pendingPtyId: 'pty-new',
+            pendingPaneId: 'pane-3',
+            sortOrderHint: 0.5,
+          },
+        ];
+        recomputeMatches(s);
+        recomputeTree(s);
+      })
+    );
+
+    const createPromise = lifecycleHandlers.handlePtyCreated('pty-new');
+    await Promise.resolve();
+
+    expect(state.allPtys.find((pty) => pty.ptyId === 'pty-new')).toMatchObject({
+      paneId: 'pane-3',
+      gitBranch: undefined,
+      gitRepoKey: undefined,
+      gitDiffStats: undefined,
+    });
+
+    metadataDeferred.resolve({
+      ptyId: 'pty-new',
+      cwd: '/tmp',
+      foregroundProcess: 'bash',
+      shell: '/bin/bash',
+      title: 'new',
+      workspaceId: 1,
+      paneId: 'pane-3',
+      gitBranch: undefined,
+      gitDiffStats: undefined,
+      gitDirty: false,
+      gitStaged: 0,
+      gitUnstaged: 0,
+      gitUntracked: 0,
+      gitConflicted: 0,
+      gitAhead: undefined,
+      gitBehind: undefined,
+      gitStashCount: undefined,
+      gitState: undefined,
+      gitDetached: false,
+      gitRepoKey: undefined,
+    });
+    await createPromise;
   });
 
   it('does not re-add tombstoned PTYs during initial load', async () => {

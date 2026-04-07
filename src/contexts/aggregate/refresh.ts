@@ -570,21 +570,50 @@ export function createAggregateViewRefreshers(
           setSessionPaneOrder(s.sessionPaneOrderIndex, sessionId, mergedPaneOrder);
         }
 
+        const optimisticPaneOrders = new Map<string, Map<string, number>>();
+        const setOptimisticPaneOrder = (
+          sessionId: string,
+          paneId: string,
+          order: number | undefined
+        ): void => {
+          if (order === undefined) {
+            return;
+          }
+
+          const sessionPaneOrder = optimisticPaneOrders.get(sessionId) ?? new Map<string, number>();
+          sessionPaneOrder.set(paneId, order);
+          optimisticPaneOrders.set(sessionId, sessionPaneOrder);
+        };
+
         for (const pty of optimisticPtys) {
           if (!pty.paneId) continue;
-          const previousOrder = previousPaneOrderIndex.get(
-            getSessionPaneOrderKey(pty.sessionId, pty.paneId)
+          setOptimisticPaneOrder(
+            pty.sessionId,
+            pty.paneId,
+            pty.sortOrderHint ??
+              previousPaneOrderIndex.get(getSessionPaneOrderKey(pty.sessionId, pty.paneId))
           );
-          if (previousOrder === undefined) continue;
+        }
 
-          s.sessionPaneOrderIndex.set(
-            getSessionPaneOrderKey(pty.sessionId, pty.paneId),
-            previousOrder
+        for (const insertion of s.pendingPaneCreations) {
+          if (!insertion.pendingPaneId) {
+            continue;
+          }
+
+          setOptimisticPaneOrder(
+            insertion.sessionId,
+            insertion.pendingPaneId,
+            insertion.sortOrderHint
           );
-          const sessionPaneOrder =
-            s.sessionPaneOrders.get(pty.sessionId) ?? new Map<string, number>();
-          sessionPaneOrder.set(pty.paneId, previousOrder);
-          s.sessionPaneOrders.set(pty.sessionId, sessionPaneOrder);
+        }
+
+        for (const [sessionId, paneOrder] of optimisticPaneOrders) {
+          const sessionPaneOrder = s.sessionPaneOrders.get(sessionId) ?? new Map<string, number>();
+          for (const [paneId, order] of paneOrder) {
+            sessionPaneOrder.set(paneId, order);
+          }
+          s.sessionPaneOrders.set(sessionId, sessionPaneOrder);
+          setSessionPaneOrder(s.sessionPaneOrderIndex, sessionId, sessionPaneOrder);
         }
 
         s.allPtys = dedupeAggregatePtysByPane([...mergedSnapshotPtys, ...carriedOptimisticPtys]);

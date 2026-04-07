@@ -169,17 +169,8 @@ export function findPendingPaneCreationForLifecycle(
     }
   }
 
-  const unresolvedInsertions = sessionInsertions
-    .map((insertion, index) => ({ insertion, index }))
-    .filter(({ insertion }) => !insertion.pendingPaneId && !insertion.pendingPtyId)
-    .sort((a, b) => {
-      const aOrder = a.insertion.sortOrderHint ?? Number.MAX_SAFE_INTEGER;
-      const bOrder = b.insertion.sortOrderHint ?? Number.MAX_SAFE_INTEGER;
-      if (aOrder !== bOrder) {
-        return aOrder - bOrder;
-      }
-      return a.index - b.index;
-    });
-
-  return unresolvedInsertions[0]?.insertion ?? null;
+  // Do not guess based on insertion order alone. PTY lifecycle events can arrive
+  // before createPaneWithPTY reports the pane/PTY ids, so claiming the earliest
+  // unresolved insertion can attach a live PTY to the wrong optimistic row.
+  return null;
 }
