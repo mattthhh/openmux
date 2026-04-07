@@ -22,7 +22,7 @@ import { getGitDiffStats, getGitInfo } from '../../effect/services/pty/helpers';
 import { buildPtyIndex } from './filter';
 import { applyGitMetadataSnapshot } from './git';
 import { ptyMetadataToInfo } from './pty-info';
-import { setSessionPaneOrder } from './pane-order';
+import { getSessionPaneOrderKey, setSessionPaneOrder } from './pane-order';
 import {
   RefreshGuard,
   type CurrentSessionHints,
@@ -488,6 +488,37 @@ export function createAggregateViewRefreshers(
   }) => {
     setState(
       produce((s) => {
+        const previousPaneOrderIndex = new Map(s.sessionPaneOrderIndex);
+        const optimisticPtys = s.allPtys.filter(
+          (pty) =>
+            (s.pendingPtyIds.has(pty.ptyId) || s.recentlyAddedPtyIds.has(pty.ptyId)) &&
+            !s.deletedPtyIds.has(pty.ptyId)
+        );
+        const optimisticById = new Map(optimisticPtys.map((pty) => [pty.ptyId, pty] as const));
+        const snapshotPtys = snapshot.ptys.filter((pty) => !s.deletedPtyIds.has(pty.ptyId));
+        const snapshotPtyIds = new Set(snapshotPtys.map((pty) => pty.ptyId));
+        const mergedSnapshotPtys = snapshotPtys.map((pty) => {
+          const optimistic = optimisticById.get(pty.ptyId);
+          if (!optimistic) {
+            return pty;
+          }
+
+          return {
+            ...pty,
+            sortOrderHint: optimistic.sortOrderHint ?? pty.sortOrderHint,
+            title:
+              s.pendingPtyIds.has(pty.ptyId) && optimistic.title === '...'
+                ? optimistic.title
+                : pty.title,
+          };
+        });
+        const carriedOptimisticPtys = s.allPtys.filter(
+          (pty) =>
+            !snapshotPtyIds.has(pty.ptyId) &&
+            (s.pendingPtyIds.has(pty.ptyId) || s.recentlyAddedPtyIds.has(pty.ptyId)) &&
+            !s.deletedPtyIds.has(pty.ptyId)
+        );
+
         s.isLoading = false;
         s.allSessions.clear();
         for (const session of snapshot.sessions) {
@@ -508,11 +539,25 @@ export function createAggregateViewRefreshers(
           setSessionPaneOrder(s.sessionPaneOrderIndex, sessionId, paneOrder);
         }
 
-        s.allPtys = snapshot.ptys;
+        for (const pty of optimisticPtys) {
+          if (!pty.paneId) continue;
+          const previousOrder = previousPaneOrderIndex.get(
+            getSessionPaneOrderKey(pty.sessionId, pty.paneId)
+          );
+          if (previousOrder === undefined) continue;
+
+          s.sessionPaneOrderIndex.set(
+            getSessionPaneOrderKey(pty.sessionId, pty.paneId),
+            previousOrder
+          );
+          const sessionPaneOrder =
+            s.sessionPaneOrders.get(pty.sessionId) ?? new Map<string, number>();
+          sessionPaneOrder.set(pty.paneId, previousOrder);
+          s.sessionPaneOrders.set(pty.sessionId, sessionPaneOrder);
+        }
+
+        s.allPtys = [...mergedSnapshotPtys, ...carriedOptimisticPtys];
         s.allPtysIndex = buildPtyIndex(s.allPtys);
-        s.pendingPtyIds.clear();
-        s.recentlyAddedPtyIds.clear();
-        s.deletedPtyIds.clear();
 
         if (s.expandedSessionIds.size === 0) {
           for (const session of snapshot.sessions) {

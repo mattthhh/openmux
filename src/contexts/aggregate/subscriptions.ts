@@ -32,6 +32,7 @@ import {
 } from './pending';
 import { ptyMetadataToInfo } from './pty-info';
 import { clearPreviewState } from './selection';
+import { buildSessionPaneOrderFromAggregateState, setSessionPaneOrder } from './pane-order';
 import { recomputeMatches, recomputeTree } from './session';
 
 export interface SubscriptionManager {
@@ -128,31 +129,14 @@ export interface LifecycleHandlerDeps {
 }
 
 function buildSessionPaneOrderFromState(
-  state: Pick<AggregateViewState, 'allPtys' | 'sessionPaneOrders'>,
+  state: Pick<AggregateViewState, 'allPtys' | 'sessionPaneOrders' | 'sessionPaneOrderIndex'>,
   sessionId: string
 ): Map<string, number> {
-  const existingOrder = state.sessionPaneOrders.get(sessionId);
-  if (existingOrder) {
-    return existingOrder;
-  }
-
-  const sessionPaneIds = state.allPtys
-    .filter((pty) => pty.sessionId === sessionId && !!pty.paneId)
-    .sort((a, b) => {
-      const aOrder = a.sortOrderHint ?? Number.MAX_SAFE_INTEGER;
-      const bOrder = b.sortOrderHint ?? Number.MAX_SAFE_INTEGER;
-      if (aOrder !== bOrder) {
-        return aOrder - bOrder;
-      }
-      return (a.paneId ?? a.ptyId).localeCompare(b.paneId ?? b.ptyId);
-    })
-    .map((pty) => pty.paneId as string);
-
-  return new Map(sessionPaneIds.map((paneId, index) => [paneId, index] as const));
+  return buildSessionPaneOrderFromAggregateState(state, sessionId);
 }
 
 function getPendingInsertionOrder(
-  state: Pick<AggregateViewState, 'allPtys' | 'sessionPaneOrders'>,
+  state: Pick<AggregateViewState, 'allPtys' | 'sessionPaneOrders' | 'sessionPaneOrderIndex'>,
   insertion: PendingPaneCreation
 ): number {
   if (insertion.sortOrderHint !== undefined) {
@@ -439,6 +423,8 @@ export function createLifecycleHandlers(
           const newOrder = getPendingInsertionOrder(s, pendingInsertion);
 
           sessionPaneOrder.set(nextPty.paneId, newOrder);
+          s.sessionPaneOrders.set(ownership.sessionId, new Map(sessionPaneOrder));
+          setSessionPaneOrder(s.sessionPaneOrderIndex, ownership.sessionId, sessionPaneOrder);
           const nextIndex = s.allPtysIndex.get(ptyId);
           if (nextIndex !== undefined && s.allPtys[nextIndex]) {
             s.allPtys[nextIndex] = {

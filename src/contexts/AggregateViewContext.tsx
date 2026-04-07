@@ -23,6 +23,7 @@ import {
   createRefreshState,
   createAggregateViewRefreshers,
   createTitleChangeHandler,
+  createLifecycleHandlers,
   setupSubscriptions,
   cleanupSubscriptions,
   createActivityBasedRefresh,
@@ -185,14 +186,12 @@ export function AggregateViewProvider(props: AggregateViewProviderProps) {
 
   const handleTitleChange = createTitleChangeHandler(setState);
 
-  const lifecycleHandlers = {
-    handlePtyCreated: async (_ptyId: string) => {
-      await refreshPtys();
-    },
-    handlePtyDestroyed: (_ptyId: string) => {
-      void refreshPtys();
-    },
-  };
+  const lifecycleHandlers = createLifecycleHandlers(
+    state,
+    setState,
+    resolvePtyOwnership,
+    getCurrentSessionHints
+  );
 
   const loadPersistedSessionOrder = async (): Promise<void> => {
     const persistedOrder = await getAggregateSessionOrderResult();

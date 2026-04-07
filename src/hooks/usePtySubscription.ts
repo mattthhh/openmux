@@ -3,11 +3,7 @@
  * Consolidates duplicated subscription logic from TerminalContext
  */
 
-import {
-  onPtyExit,
-  subscribeUnifiedToPty,
-  getEmulator,
-} from '../effect/bridge';
+import { onPtyExit, subscribeUnifiedToPty, getEmulator } from '../effect/bridge';
 import type { TerminalScrollState, UnifiedTerminalUpdate } from '../core/types';
 import type { ITerminalEmulator } from '../terminal/emulator-interface';
 import { runStream, streamFromSubscription, tap } from '../effect/stream-utils';
@@ -31,22 +27,24 @@ export async function subscribeToPtyWithCaches(
   onExit: (ptyId: string, paneId: string) => void,
   options?: { cacheScrollState?: boolean; skipExit?: boolean }
 ): Promise<() => void> {
-  const unsubExit = options?.skipExit
-    ? () => {}
-    : await subscribeToPtyExit(ptyId, paneId, onExit);
+  const unsubExit = options?.skipExit ? () => {} : await subscribeToPtyExit(ptyId, paneId, onExit);
 
-  // Cache the emulator for synchronous access (selection text extraction)
-  const emulator = await getEmulator(ptyId);
-  if (emulator) {
-    caches.emulators.set(ptyId, emulator);
-  }
+  // Cache the emulator for synchronous access (selection text extraction),
+  // but do not block session resume on this fetch.
+  void getEmulator(ptyId)
+    .then((emulator) => {
+      if (emulator) {
+        caches.emulators.set(ptyId, emulator);
+      }
+    })
+    .catch((error) => {
+      console.warn(`[usePtySubscription] Failed to cache emulator for ${ptyId}:`, error);
+    });
 
   // Subscribe to unified updates (terminal + scroll combined)
   // This eliminates race conditions from separate subscriptions
   const unifiedStream = tap(
-    streamFromSubscription<UnifiedTerminalUpdate>(({ emit }) =>
-      subscribeUnifiedToPty(ptyId, emit)
-    ),
+    streamFromSubscription<UnifiedTerminalUpdate>(({ emit }) => subscribeUnifiedToPty(ptyId, emit)),
     (update) => {
       if (options?.cacheScrollState !== false) {
         caches.scrollStates.set(ptyId, update.scrollState);

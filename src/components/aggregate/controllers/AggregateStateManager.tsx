@@ -206,6 +206,7 @@ export function AggregateStateManager(props: AggregateStateManagerProps) {
 
   createEffect(() => {
     if (!props.isActive()) return;
+    if (!props.previewMode()) return;
     if (sessionState.switching) return;
 
     const selectedItem = props.flattenedTree()[props.selectedIndex()];

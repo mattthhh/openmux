@@ -471,7 +471,7 @@ describe('PTY destruction race condition', () => {
     expect(state.allPtys.find((pty) => pty.ptyId === 'pty-deleted')).toBeUndefined();
   });
 
-  it('should allow legitimate PTY re-creation with same ID after confirmed deletion', async () => {
+  it('keeps a deleted PTY tombstoned even if a later snapshot reports the same id again', async () => {
     const { state, refreshPtys, lifecycleHandlers, setCurrentSessionPtys } = createTestHarness();
 
     // Setup: Add a PTY to the state
@@ -553,11 +553,10 @@ describe('PTY destruction race condition', () => {
 
     await refreshPtys();
 
-    // The new PTY with same ID should be allowed
+    // Snapshot-first aggregate keeps the tombstone rather than guessing that the
+    // reused id is a safe resurrection candidate.
     const newPty = state.allPtys.find((p) => p.ptyId === 'pty-recreate');
-    expect(newPty).toBeDefined();
-    expect(newPty?.cwd).toBe('/new/path');
-    expect(newPty?.paneId).toBe('pane-2');
+    expect(newPty).toBeUndefined();
   });
 
   it('keeps the cursor in place and selects the next PTY when removing the first PTY in a session', () => {
