@@ -10,9 +10,6 @@ import { z } from 'zod';
 declare const __brand: unique symbol;
 type Brand<T, B> = T & { readonly [__brand]: B };
 
-/** Unique identifier for a pane */
-export type PaneId = Brand<string, 'PaneId'>;
-
 /** Unique identifier for a PTY session */
 export type PtyId = Brand<string, 'PtyId'>;
 export const PtyIdSchema = z.string().transform((s) => s as PtyId);
