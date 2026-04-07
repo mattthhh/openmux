@@ -30,9 +30,14 @@ function applyTtyProperties(
   realStdin: NodeJS.ReadStream
 ): PassThrough & TtyProperties {
   const extended = passthrough as PassThrough & TtyProperties;
-  // Bind setRawMode to realStdin to preserve 'this' context (fd access)
-  extended.setRawMode = realStdin.setRawMode?.bind(realStdin);
+  const ttyStdin = realStdin as NodeJS.ReadStream & { fd?: number };
   extended.isTTY = realStdin.isTTY;
+
+  if (realStdin.isTTY && typeof ttyStdin.fd === 'number') {
+    // Bind setRawMode to realStdin to preserve 'this' context (fd access)
+    extended.setRawMode = realStdin.setRawMode?.bind(realStdin);
+  }
+
   return extended;
 }
 

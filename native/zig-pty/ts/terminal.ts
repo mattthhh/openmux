@@ -228,6 +228,9 @@ export class Terminal implements IPty {
     this._exitFired = false;
     this._onData = new EventEmitter<string>();
     this._onExit = new EventEmitter<IExitEvent>();
+    this._onForegroundProcessChange = new EventEmitter<string>();
+    this._lastForegroundChangeCount = 0;
+    this._lastForegroundProcessName = null;
     this._decoder = new TextDecoder('utf-8', { fatal: false });
     this._readBuffer = Buffer.alloc(READ_BUFFER_SIZE);
     this._wakeupFd = -1;

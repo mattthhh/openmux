@@ -19,6 +19,7 @@ describe('createPasteInterceptingStdin', () => {
         return true;
       };
       realStdin.isTTY = true;
+      Object.assign(realStdin, { fd: 0 });
 
       const passthrough = createPasteInterceptingStdin(realStdin, {
         onPasteTriggered: () => {},
@@ -43,10 +44,23 @@ describe('createPasteInterceptingStdin', () => {
       expect(passthrough.isTTY).toBe(false);
     });
 
+    it('should not expose setRawMode for non-tty stdin streams', () => {
+      const realStdin = new PassThrough() as NodeJS.ReadStream & TtyProperties;
+      realStdin.setRawMode = () => true;
+      realStdin.isTTY = false;
+
+      const passthrough = createPasteInterceptingStdin(realStdin, {
+        onPasteTriggered: () => {},
+      });
+
+      expect(passthrough.setRawMode).toBeUndefined();
+    });
+
     it('should handle undefined setRawMode gracefully', () => {
       const realStdin = new PassThrough() as NodeJS.ReadStream & TtyProperties;
       // No setRawMode defined
       realStdin.isTTY = true;
+      Object.assign(realStdin, { fd: 0 });
 
       const passthrough = createPasteInterceptingStdin(realStdin, {
         onPasteTriggered: () => {},
