@@ -3,11 +3,7 @@
  */
 
 import { describe, it, expect } from 'bun:test';
-import {
-  collectSerializedPaneIds,
-  buildSessionPaneOrder,
-  findWorkspaceIdForPane,
-} from '../refresh';
+import { collectSerializedPaneIds, buildSessionPaneOrder, findWorkspaceIdForPane } from './helpers';
 import type { SerializedSession, SerializedLayoutNode } from '../../effect/models';
 
 describe('session utils (litmus)', () => {

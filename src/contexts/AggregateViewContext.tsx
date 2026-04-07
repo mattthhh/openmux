@@ -157,16 +157,15 @@ export function AggregateViewProvider(props: AggregateViewProviderProps) {
     return ptys;
   };
 
-  const { refreshPtys, refreshPtysSubset, initialLoad, bootstrapPtys } =
-    createAggregateViewRefreshers(
-      state,
-      setState,
-      refreshState,
-      resolvePtyOwnership,
-      getCurrentSessionHints,
-      getCurrentSessionPaneOrder,
-      getCurrentSessionPtys
-    );
+  const { refreshPtys, refreshPtysSubset, initialLoad } = createAggregateViewRefreshers(
+    state,
+    setState,
+    refreshState,
+    resolvePtyOwnership,
+    getCurrentSessionHints,
+    getCurrentSessionPaneOrder,
+    getCurrentSessionPtys
+  );
 
   const handleTitleChange = createTitleChangeHandler(setState);
 
@@ -236,9 +235,7 @@ export function AggregateViewProvider(props: AggregateViewProviderProps) {
               lifecycleHandlers
             );
 
-            // Bootstrap mapped PTYs from saved session data so rows appear quickly,
-            // then hydrate live metadata in the background.
-            void bootstrapPtys();
+            // Hydrate live metadata in the background.
             void refreshPtys();
           })();
         } else {

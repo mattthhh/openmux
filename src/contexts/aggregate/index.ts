@@ -100,9 +100,6 @@ export type {
 
 export {
   ptyMetadataToInfo,
-  collectSerializedPaneIds,
-  buildSessionPaneOrder,
-  findWorkspaceIdForPane,
   createAggregateViewRefreshers,
   type AggregatePtyMetadata,
   type ResolvedPty,

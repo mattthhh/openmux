@@ -92,10 +92,9 @@ export interface RefreshersResult {
   refreshPtys: () => Promise<void>;
   refreshPtysSubset: (ptyIds: string[]) => Promise<void>;
   initialLoad: () => Promise<void | Error>;
-  bootstrapPtys: () => Promise<void>;
 }
 
-export function collectSerializedPaneIds(
+function collectSerializedPaneIds(
   node: SerializedLayoutNode | null | undefined,
   result: string[]
 ): void {
@@ -108,7 +107,7 @@ export function collectSerializedPaneIds(
   result.push(node.id);
 }
 
-export function buildSessionPaneOrder(session: SerializedSession): Map<string, number> {
+function buildSessionPaneOrder(session: SerializedSession): Map<string, number> {
   const paneIds: string[] = [];
 
   for (const workspace of session.workspaces) {
@@ -121,10 +120,7 @@ export function buildSessionPaneOrder(session: SerializedSession): Map<string, n
   return new Map(paneIds.map((paneId, index) => [paneId, index] as const));
 }
 
-export function findWorkspaceIdForPane(
-  session: SerializedSession,
-  paneId: string
-): number | undefined {
+function findWorkspaceIdForPane(session: SerializedSession, paneId: string): number | undefined {
   const containsPane = (node: SerializedLayoutNode | null | undefined): boolean => {
     if (!node) return false;
     if ('type' in node && node.type === 'split') {
@@ -665,10 +661,6 @@ export function createAggregateViewRefreshers(
     return refreshPtysOnce(false);
   };
 
-  const bootstrapPtys = async () => {
-    // No-op: the aggregate list is rebuilt from workspace snapshots directly.
-  };
-
   const refreshPtysSubset = async (_ptyIds: string[]) => {
     // Simplicity over clever partial mutation: rebuild the stable snapshot.
     await refreshPtys();
@@ -678,6 +670,5 @@ export function createAggregateViewRefreshers(
     refreshPtys,
     refreshPtysSubset,
     initialLoad,
-    bootstrapPtys,
   };
 }

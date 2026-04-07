@@ -151,7 +151,7 @@ describe('PTY destruction race condition', () => {
         ['pane-2', 1],
       ]);
 
-    const { refreshPtys, bootstrapPtys } = createAggregateViewRefreshers(
+    const { refreshPtys } = createAggregateViewRefreshers(
       state,
       setState,
       refreshState,
@@ -172,7 +172,6 @@ describe('PTY destruction race condition', () => {
       state,
       setState,
       refreshPtys,
-      bootstrapPtys,
       lifecycleHandlers,
       refreshState,
       setCurrentSessionPtys: (
@@ -402,73 +401,6 @@ describe('PTY destruction race condition', () => {
     await refreshPtys();
 
     expect(state.allPtys.find((pty) => pty.ptyId === 'pty-stale-mapping')).toBeUndefined();
-  });
-
-  it('does not bootstrap stale PTYs missing from the raw service list', async () => {
-    const { state, bootstrapPtys } = createTestHarness();
-
-    vi.mocked(listSessionsResult).mockResolvedValue([createMockSession()]);
-    vi.mocked(listAllPtyIds).mockResolvedValue([]);
-    vi.mocked(loadSession).mockResolvedValue({
-      id: 'session-1',
-      name: 'Test Session',
-      activeWorkspaceId: 1,
-      workspaces: [
-        {
-          id: 1,
-          layoutMode: 'vertical',
-          focusedPaneId: 'pane-1',
-          mainPane: { id: 'pane-1', title: 'shell' },
-          stackPanes: [],
-          activeStackIndex: 0,
-        },
-      ],
-      cwdMap: new Map(),
-      paneToPtyMap: new Map([['pane-1', 'pty-stale-bootstrap']]),
-    });
-    vi.mocked(getAggregateSessionPtyMapping).mockResolvedValue({
-      sessionId: 'session-1',
-      mapping: new Map([['pane-1', 'pty-stale-bootstrap']]),
-      stalePaneIds: [],
-    });
-
-    await bootstrapPtys();
-
-    expect(state.allPtys.find((pty) => pty.ptyId === 'pty-stale-bootstrap')).toBeUndefined();
-  });
-
-  it('should not bootstrap deleted PTYs back into the list from saved mappings', async () => {
-    const { state, bootstrapPtys } = createTestHarness();
-
-    state.deletedPtyIds.add('pty-deleted');
-
-    vi.mocked(listSessionsResult).mockResolvedValue([createMockSession()]);
-    vi.mocked(loadSession).mockResolvedValue({
-      id: 'session-1',
-      name: 'Test Session',
-      activeWorkspaceId: 1,
-      workspaces: [
-        {
-          id: 1,
-          layoutMode: 'vertical',
-          focusedPaneId: 'pane-1',
-          mainPane: { id: 'pane-1', title: 'shell' },
-          stackPanes: [],
-          activeStackIndex: 0,
-        },
-      ],
-      cwdMap: new Map(),
-      paneToPtyMap: new Map([['pane-1', 'pty-deleted']]),
-    });
-    vi.mocked(getAggregateSessionPtyMapping).mockResolvedValue({
-      sessionId: 'session-1',
-      mapping: new Map([['pane-1', 'pty-deleted']]),
-      stalePaneIds: [],
-    });
-
-    await bootstrapPtys();
-
-    expect(state.allPtys.find((pty) => pty.ptyId === 'pty-deleted')).toBeUndefined();
   });
 
   it('keeps a deleted PTY tombstoned even if a later snapshot reports the same id again', async () => {
