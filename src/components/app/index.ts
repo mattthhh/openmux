@@ -8,28 +8,10 @@ export {
   type ConfirmationState,
 } from './confirmation-handlers';
 
-export {
-  createPaneResizeHandlers,
-  type PaneResizeDeps,
-} from './pane-resize';
+export { createPaneResizeHandlers, type PaneResizeDeps } from './pane-resize';
 
-export {
-  createPasteHandler,
-  type PasteHandlerDeps,
-} from './paste-handler';
+export { createPasteHandler, type PasteHandlerDeps } from './paste-handler';
 
-export {
-  createActionHandlers,
-  type ActionHandlersDeps,
-  type ActionHandlers,
-} from './action-handlers';
+export { handleSearchKeyboard, type SearchKeyboardDeps } from './search-keyboard';
 
-export {
-  handleSearchKeyboard,
-  type SearchKeyboardDeps,
-} from './search-keyboard';
-
-export {
-  processNormalModeKey,
-  type KeyProcessorDeps,
-} from './key-processor';
+export { processNormalModeKey, type KeyProcessorDeps } from './key-processor';

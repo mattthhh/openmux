@@ -23,9 +23,3 @@ export class SessionOperationError extends errore.createTaggedError({
   name: 'SessionOperationError',
   message: 'Session operation $operation failed: $reason',
 }) {}
-
-export type AggregateViewError =
-  | TreeOperationError
-  | FilterOperationError
-  | SelectionOperationError
-  | SessionOperationError;

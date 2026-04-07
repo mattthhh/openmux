@@ -159,20 +159,6 @@ export async function getSessionInfo(
 }
 
 /**
- * Keep the legacy summary helper for bridge wrappers that still expose summary-only reads.
- */
-export async function getSessionSummary(
-  storage: SessionStorage,
-  id: SessionId
-): Promise<SessionError | SessionSummary | null> {
-  const info = await getSessionInfo(storage, id);
-  if (info instanceof Error || info === null) {
-    return info;
-  }
-  return info.summary;
-}
-
-/**
  * Update auto-name for a session based on cwd.
  */
 export async function updateAutoName(

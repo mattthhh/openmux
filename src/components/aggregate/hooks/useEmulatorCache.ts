@@ -9,14 +9,6 @@ import { createRenderEffect, onCleanup, type Accessor } from 'solid-js';
 import type { ITerminalEmulator } from '../../../terminal/emulator-interface';
 import { getEmulator } from '../../../effect/bridge/pty-bridge';
 
-/** Error types for emulator cache operations */
-export class EmulatorCacheError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'EmulatorCacheError';
-  }
-}
-
 /** Result type for useEmulatorCache hook */
 export interface UseEmulatorCacheResult {
   /** Get cached emulator for a PTY, or undefined if not cached */

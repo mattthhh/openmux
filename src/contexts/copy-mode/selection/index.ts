@@ -3,7 +3,7 @@
  * Selection state management and queries
  */
 
-export type { SelectionState, SelectionResult, WordSelectionContext } from './types';
+export type { SelectionResult } from './types';
 export {
   buildSelection,
   recomputeSelection,
@@ -13,9 +13,4 @@ export {
   selectLine,
   buildWordSelection,
 } from './state';
-export {
-  hasSelection,
-  isCellSelected,
-  isCellSelectedSync,
-  isCopyModeActive,
-} from './queries';
+export { hasSelection, isCellSelected, isCellSelectedSync, isCopyModeActive } from './queries';

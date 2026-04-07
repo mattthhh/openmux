@@ -25,30 +25,6 @@ export type RunResult = SpanResult & {
   kind: 'word' | 'punct';
 };
 
-export const getLineEndX = (line: TerminalCell[] | null): number => {
-  if (!line || line.length === 0) return 0;
-  for (let x = line.length - 1; x >= 0; x -= 1) {
-    const cell = line[x];
-    const char = cell?.char ?? ' ';
-    if (char.trim().length > 0) {
-      return x;
-    }
-  }
-  return 0;
-};
-
-export const getLineStartX = (line: TerminalCell[] | null): number => {
-  if (!line || line.length === 0) return 0;
-  for (let x = 0; x < line.length; x += 1) {
-    const cell = line[x];
-    const char = cell?.char ?? ' ';
-    if (char.trim().length > 0) {
-      return x;
-    }
-  }
-  return 0;
-};
-
 export const isWordChar = (char: string): boolean => {
   if (!char) return false;
   const code = char.charCodeAt(0);
@@ -68,11 +44,7 @@ const isPunctChar = (char: string): boolean => {
   return !isWhitespaceChar(char) && !isWordChar(char);
 };
 
-export const getRunAt = (
-  access: LineAccessor,
-  absY: number,
-  x: number
-): RunResult | null => {
+export const getRunAt = (access: LineAccessor, absY: number, x: number): RunResult | null => {
   const line = access.getLine(absY) ?? [];
   const limit = line.length;
   if (limit === 0) return null;

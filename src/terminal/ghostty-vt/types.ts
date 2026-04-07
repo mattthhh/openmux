@@ -14,7 +14,6 @@ export const enum CellFlags {
   UNDERLINE = 1 << 2,
   STRIKETHROUGH = 1 << 3,
   INVERSE = 1 << 4,
-  INVISIBLE = 1 << 5,
   BLINK = 1 << 6,
   FAINT = 1 << 7,
 }

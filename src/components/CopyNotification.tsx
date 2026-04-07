@@ -76,7 +76,9 @@ export function CopyNotification(props: CopyNotificationProps) {
     toRgba(mixColor(backgroundColor(), foregroundColor(), BG_BLEND), BG_ALPHA)
   );
   const autoTextColor = createMemo(() => toRgba(foregroundColor()));
-  const autoBorderColor = createMemo(() => parseRgbaHex(theme.pane.focusedBorderColor, autoTextColor()));
+  const autoBorderColor = createMemo(() =>
+    parseRgbaHex(theme.pane.focusedBorderColor, autoTextColor())
+  );
   const bgColor = () => parseRgbaHex(copyColors().backgroundColor, autoBgColor());
   const textColor = () => parseRgbaHex(copyColors().textColor, autoTextColor());
   const borderColor = () => parseRgbaHex(copyColors().borderColor, autoBorderColor());
@@ -122,5 +124,3 @@ export function CopyNotification(props: CopyNotificationProps) {
     </Show>
   );
 }
-
-export default CopyNotification;

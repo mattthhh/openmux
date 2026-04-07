@@ -74,21 +74,3 @@ export const unregisterVisiblePty = (ptyId: string, emulator: ITerminalEmulator 
 export const clearVisiblePty = (ptyId: string, emulator?: ITerminalEmulator | null) => {
   clearPtyUpdates(visiblePtyCounts, ptyId, emulator);
 };
-
-export const registerActivityPty = (ptyId: string) => {
-  retainPtyUpdates(activityPtyCounts, ptyId);
-};
-
-export const ensureActivityPtyEnabled = (ptyId: string) => {
-  if ((activityPtyCounts.get(ptyId) ?? 0) > 0) {
-    applyUpdateGate(ptyId, true);
-  }
-};
-
-export const unregisterActivityPty = (ptyId: string) => {
-  releasePtyUpdates(activityPtyCounts, ptyId);
-};
-
-export const clearActivityPty = (ptyId: string) => {
-  clearPtyUpdates(activityPtyCounts, ptyId);
-};

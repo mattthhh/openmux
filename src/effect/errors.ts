@@ -63,9 +63,6 @@ export class PtyCwdError extends errore.createTaggedError({
   message: 'Failed to get CWD for PTY $ptyId: $reason',
 }) {}
 
-/** Union of all PTY errors for exhaustive handling. */
-export type PtyError = PtySpawnError | PtyNotFoundError | PtyCwdError;
-
 /**
  * Use when a requested session id does not exist in the session index.
  * Return this from CRUD operations that require the session to already exist.

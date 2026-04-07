@@ -5,7 +5,7 @@
  */
 
 export { useVimMode, type VimHandlers } from './useVimMode';
-export { useEmulatorCache, type EmulatorCacheError } from './useEmulatorCache';
+export { useEmulatorCache } from './useEmulatorCache';
 export {
   useActivitySubscriptions,
   type ActivitySubscriptionError,

@@ -25,18 +25,11 @@ export {
   createErrorPlaceholder,
   createUnloadedPlaceholder,
   buildTreeRoot,
-  computeTreePrefix,
-  computeIndentPrefix,
   getSessionIdForItem,
   isSelectableItem,
   buildFlattenedTreeIndex,
   findNearestSelectableIndex,
   flattenTree,
-  navigateUp,
-  navigateDown,
-  navigateToIndex,
-  findPtyIndex,
-  type NavigationResult,
 } from './aggregate/tree';
 
 export {

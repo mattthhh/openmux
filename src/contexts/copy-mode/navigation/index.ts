@@ -3,12 +3,9 @@
  * Cursor movement, viewport handling, and word navigation
  */
 
-export type { ScrollMeta, GetScrollMeta } from './types';
+export type { ScrollMeta } from './types';
 export { clampCursor, calculateInitialCursor, moveCursorBy } from './cursor';
-export {
-  calculateScrollForVisibility,
-  getLineCellsAt,
-} from './viewport';
+export { calculateScrollForVisibility, getLineCellsAt } from './viewport';
 export {
   moveWordForward,
   moveWordBackward,

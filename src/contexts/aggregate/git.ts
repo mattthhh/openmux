@@ -22,11 +22,6 @@ export interface GitMetadataFields {
   gitRepoKey: string | undefined;
 }
 
-export interface PtyChangeResult {
-  changed: boolean;
-  fields: Array<keyof GitMetadataFields>;
-}
-
 export function extractGitMetadata(metadata: GitRepoMetadata | undefined): GitMetadataFields {
   if (!metadata) {
     return {

@@ -21,19 +21,16 @@ export {
   SessionPtyCache,
   sessionPtyCache,
   aggregateSessionMappings,
-  clearAllCaches,
-  invalidateSessionCache,
   removeAggregateSessionMappingForPty,
   DEFAULT_CACHE_MAX_AGE_MS,
   asPtyId,
 } from './cache/session-pty-cache';
 
-export { fetchPtyMetadata, batchFetchPtyMetadata, fetchPtyMetadataSafe } from './metadata/fetch';
+export { fetchPtyMetadata, batchFetchPtyMetadata } from './metadata/fetch';
 
 export { listSessionsWithPtysWithService } from './sessions/list';
 
 export {
-  loadSessionPtys,
   loadSessionPtysWithService,
   loadSessionPtysOnDemand,
   loadSessionPtysOnDemandWithService,

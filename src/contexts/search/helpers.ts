@@ -28,79 +28,10 @@ export function extractLineText(cells: TerminalCell[]): string {
 }
 
 /**
- * Perform case-insensitive search across scrollback and visible terminal
- */
-export function performSearch(
-  query: string,
-  emulator: ITerminalEmulator,
-  terminalState: TerminalState
-): SearchMatch[] {
-  if (!query) return [];
-
-  const matches: SearchMatch[] = [];
-  const lowerQuery = query.toLowerCase();
-  const scrollbackLength = emulator.getScrollbackLength();
-
-  // Search scrollback lines (oldest to newest)
-  for (let offset = 0; offset < scrollbackLength; offset++) {
-    const cells = emulator.getScrollbackLine(offset);
-    if (!cells) continue;
-
-    const lineText = extractLineText(cells).toLowerCase();
-    let searchPos = 0;
-
-    while (true) {
-      const matchStart = lineText.indexOf(lowerQuery, searchPos);
-      if (matchStart === -1) break;
-
-      matches.push({
-        lineIndex: offset,
-        startCol: matchStart,
-        endCol: matchStart + query.length,
-      });
-
-      searchPos = matchStart + 1; // Find overlapping matches
-    }
-  }
-
-  // Search visible terminal lines
-  for (let row = 0; row < terminalState.rows; row++) {
-    const cells = terminalState.cells[row];
-    if (!cells) continue;
-
-    const lineText = extractLineText(cells).toLowerCase();
-    let searchPos = 0;
-
-    while (true) {
-      const matchStart = lineText.indexOf(lowerQuery, searchPos);
-      if (matchStart === -1) break;
-
-      matches.push({
-        lineIndex: scrollbackLength + row,
-        startCol: matchStart,
-        endCol: matchStart + query.length,
-      });
-
-      searchPos = matchStart + 1;
-    }
-  }
-
-  return matches;
-}
-
-/**
  * Check if a cell at (x, absoluteY) is within a match
  */
-export function isCellInMatch(
-  x: number,
-  absoluteY: number,
-  match: SearchMatch
-): boolean {
-  return (
-    absoluteY === match.lineIndex &&
-    x >= match.startCol &&
-    x < match.endCol
-  );
+export function isCellInMatch(x: number, absoluteY: number, match: SearchMatch): boolean {
+  return absoluteY === match.lineIndex && x >= match.startCol && x < match.endCol;
 }
 
 /**

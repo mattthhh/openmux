@@ -131,25 +131,6 @@ export async function getAggregateSessionPtyMapping(
 }
 
 /**
- * Load a specific session's PTYs on demand.
- * Useful for lazy-loading unloaded sessions in the tree view.
- *
- * @param sessionId - The session ID to load
- * @param options.skipGitDiffStats - Skip expensive git diff stats
- * @returns The loaded PTY metadata or null if session not found
- */
-export async function loadSessionPtys(
-  sessionId: string,
-  options: { skipGitDiffStats?: boolean } = {}
-): Promise<PtyMetadata[] | null> {
-  if (!hasServices()) {
-    console.warn('Services not initialized, cannot load session PTYs');
-    return null;
-  }
-  return loadSessionPtysWithService(getPtyService(), getSessionManager(), sessionId, options);
-}
-
-/**
  * Load a specific session's PTYs with explicit services.
  *
  * @param pty - The PTY service

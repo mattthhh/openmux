@@ -67,27 +67,6 @@ export interface AggregatePtyMetadata {
   sessionMetadata?: SessionMetadata;
 }
 
-export interface ResolvedPty {
-  metadata: AggregatePtyMetadata;
-  ownership: PtyOwnership;
-  sessionMetadata: SessionMetadata;
-}
-
-export interface SessionSummary {
-  workspaceCount: number;
-  paneCount: number;
-}
-
-export interface CreateRefreshersParams {
-  state: AggregateViewState;
-  setState: SetStoreFunction<AggregateViewState>;
-  refreshState: RefreshState;
-  resolvePtyOwnership: (ptyId: string) => PtyOwnership | null;
-  getCurrentSessionHints: () => CurrentSessionHints;
-  getCurrentSessionPaneOrder: () => Map<string, number> | null;
-  getCurrentSessionPtys?: () => CurrentSessionPty[];
-}
-
 export interface RefreshersResult {
   refreshPtys: () => Promise<void>;
   refreshPtysSubset: (ptyIds: string[]) => Promise<void>;

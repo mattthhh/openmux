@@ -67,13 +67,6 @@ export function getAutoName(cwd: string): string {
 }
 
 /**
- * Check if session name should be auto-updated based on cwd
- */
-export function shouldUpdateAutoName(session: SessionMetadata, newName: string): boolean {
-  return session.autoNamed && newName !== session.name;
-}
-
-/**
  * Collect all CWDs from workspaces
  * Returns a map of ptyId -> cwd
  */

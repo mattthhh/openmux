@@ -8,9 +8,6 @@ export type SplitDirection = 'horizontal' | 'vertical';
 /** Direction for navigation and operations */
 export type Direction = 'north' | 'south' | 'east' | 'west';
 
-/** Automatic split scheme when inserting new panes */
-export type AutomaticScheme = 'longest_side' | 'alternate' | 'spiral';
-
 /**
  * Layout mode - how panes are arranged in a workspace (Zellij-style)
  * - vertical: main pane left, stack panes split vertically on right
@@ -84,22 +81,6 @@ export interface SplitNode {
   ratio: number;
   first: LayoutNode;
   second: LayoutNode;
-  /** Computed layout rectangle */
-  rectangle?: Rectangle;
-}
-
-/**
- * Pane node - leaf node representing an actual terminal pane
- */
-export interface PaneNode {
-  type: 'pane';
-  id: NodeId;
-  /** Reference to PTY session */
-  ptyId?: string;
-  /** Pane title (shell name, process, etc.) */
-  title?: string;
-  /** Working directory */
-  cwd?: string;
   /** Computed layout rectangle */
   rectangle?: Rectangle;
 }
@@ -349,31 +330,6 @@ export interface Theme {
   searchAccentColor: string;
 }
 
-/**
- * Layout state containing the layout tree
- */
-export interface LayoutState {
-  root: LayoutNode | null;
-  focusedPaneId: NodeId | null;
-  splitPreview?: {
-    targetPaneId: NodeId;
-    direction: SplitDirection;
-    ratio: number;
-  };
-}
-
-/**
- * PTY session information
- */
-export interface PTYSession {
-  id: string;
-  pid?: number;
-  cols: number;
-  rows: number;
-  cwd: string;
-  shell: string;
-}
-
 /** Session ID - unique identifier */
 export type SessionId = string;
 
@@ -405,29 +361,3 @@ export interface SerializedSplitNode {
 
 /** Serializable layout node - pane or split */
 export type SerializedLayoutNode = SerializedPaneData | SerializedSplitNode;
-
-/** Serializable workspace state */
-export interface SerializedWorkspace {
-  id: WorkspaceId;
-  label?: string;
-  mainPane: SerializedLayoutNode | null;
-  stackPanes: SerializedLayoutNode[];
-  focusedPaneId: string | null;
-  activeStackIndex: number;
-  lastFocusedPaneIds: (string | null)[];
-  layoutMode: LayoutMode;
-  zoomed: boolean;
-}
-
-/** Complete session state for persistence */
-export interface SerializedSession {
-  metadata: SessionMetadata;
-  workspaces: SerializedWorkspace[];
-  activeWorkspaceId: WorkspaceId;
-}
-
-/** Session index file structure */
-export interface SessionIndex {
-  sessions: SessionMetadata[];
-  activeSessionId: SessionId | null;
-}

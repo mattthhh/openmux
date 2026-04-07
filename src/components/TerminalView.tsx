@@ -135,5 +135,3 @@ export function TerminalView(props: TerminalViewProps) {
     </Show>
   );
 }
-
-export default TerminalView;

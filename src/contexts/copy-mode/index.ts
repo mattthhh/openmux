@@ -3,20 +3,12 @@
  * Vim-style copy mode for terminal panes
  */
 
-export type {
-  CopyModeContextValue,
-  CopyCursor,
-  CopyVisualType,
-  CopyModeState,
-} from './types';
+export type { CopyModeContextValue, CopyCursor, CopyVisualType, CopyModeState } from './types';
 
-export {
-  CopyModeProvider,
-  useCopyMode,
-} from './CopyModeContext';
+export { CopyModeProvider, useCopyMode } from './CopyModeContext';
 
 // Navigation exports
-export type { ScrollMeta, GetScrollMeta, WordNavResult } from './navigation';
+export type { ScrollMeta, WordNavResult } from './navigation';
 export {
   clampCursor,
   calculateInitialCursor,
@@ -34,7 +26,7 @@ export {
 } from './navigation';
 
 // Selection exports
-export type { SelectionState, SelectionResult, WordSelectionContext } from './selection';
+export type { SelectionResult } from './selection';
 export {
   buildSelection,
   recomputeSelection,
@@ -63,8 +55,6 @@ export {
 // Re-export text-utils for external use
 export type { LineAccessor, SpanResult, RunResult } from './text-utils';
 export {
-  getLineEndX as getLineEndXFromUtils,
-  getLineStartX as getLineStartXFromUtils,
   isWordChar,
   isWhitespaceChar,
   isWideWordChar,

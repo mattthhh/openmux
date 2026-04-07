@@ -21,13 +21,6 @@ export interface ActiveSessionDeps {
 }
 
 /**
- * Get the active session ID
- */
-export function getActiveSessionId(deps: ActiveSessionDeps): SessionId | null {
-  return deps.getActiveSessionId();
-}
-
-/**
  * Set the active session ID
  */
 export async function setActiveSessionId(

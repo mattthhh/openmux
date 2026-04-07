@@ -116,17 +116,3 @@ export function useShimmerStateVersion(): Accessor<number> {
 
   return version;
 }
-
-/**
- * Get the current render time without subscribing (for memoized calculations).
- */
-export function getRenderTime(): number {
-  return globalRenderTime;
-}
-
-/**
- * Manually trigger a render update (for testing or forced refresh).
- */
-export function triggerRenderUpdate(): void {
-  setRenderTimeSignal(Date.now());
-}

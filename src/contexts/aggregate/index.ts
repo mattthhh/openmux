@@ -7,7 +7,6 @@ export {
   FilterOperationError,
   SelectionOperationError,
   SessionOperationError,
-  type AggregateViewError,
 } from './errors';
 
 export {
@@ -28,18 +27,11 @@ export {
   createErrorPlaceholder,
   createUnloadedPlaceholder,
   buildTreeRoot,
-  computeTreePrefix,
-  computeIndentPrefix,
   getSessionIdForItem,
   isSelectableItem,
   buildFlattenedTreeIndex,
   findNearestSelectableIndex,
   flattenTree,
-  navigateUp,
-  navigateDown,
-  navigateToIndex,
-  findPtyIndex,
-  type NavigationResult,
   type SessionLoadState,
   type SessionTreeNode,
   type PtyTreeNode,
@@ -94,19 +86,10 @@ export {
   type ProcessChangeEvent,
 } from './subscriptions';
 
-export type {
-  PtyOwnership,
-  CurrentSessionMetadata,
-  CurrentSessionLayoutPty,
-} from './current-session';
-
 export {
   ptyMetadataToInfo,
   createAggregateViewRefreshers,
   type AggregatePtyMetadata,
-  type ResolvedPty,
-  type SessionSummary,
-  type CreateRefreshersParams,
   type RefreshersResult,
 } from './refresh';
 
@@ -118,7 +101,6 @@ export {
   mergePtyInfoPreservingGitMetadata,
   didPtyInfoChange,
   type GitMetadataFields,
-  type PtyChangeResult,
 } from './git';
 
 export {

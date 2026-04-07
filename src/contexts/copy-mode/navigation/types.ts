@@ -16,9 +16,3 @@ export interface ScrollMeta {
   cols: number;
   viewportOffset: number;
 }
-
-/** Function to get scroll metadata for a PTY */
-export type GetScrollMeta = (
-  ptyId: string,
-  overrideGetTerminalState?: (ptyId: string) => TerminalState | null
-) => ScrollMeta;

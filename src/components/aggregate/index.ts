@@ -47,7 +47,6 @@ export {
   useActivitySubscriptions,
   useSessionDrag,
   type VimHandlers,
-  type EmulatorCacheError,
   type ActivitySubscriptionError,
   type DragState,
 } from './hooks';
