@@ -3,6 +3,7 @@
   "entry": ["src/shim/main.ts"],
   "ignoreExportsUsedInFile": true,
   "ignoreDependencies": [],
+  "ignoreBinaries": ["tsc"],
   "ignore": [
     "**/*.test.ts",
     "**/*.test.tsx",
