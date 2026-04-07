@@ -86,7 +86,13 @@ export class GitMetadataCache {
     }
 
     const fallbackByCwd = new Map(
-      uniqueCwds.map((cwd) => [cwd, this.getCachedMetadata(cwd, { skipDiffStats: true })] as const)
+      uniqueCwds.map(
+        (cwd) =>
+          [
+            cwd,
+            options.forceRefresh ? undefined : this.getCachedMetadata(cwd, { skipDiffStats: true }),
+          ] as const
+      )
     );
 
     const gitInfoEntries: Array<readonly [string, GitInfo | undefined]> = [];

@@ -34,7 +34,11 @@ import {
 import { ptyMetadataToInfo } from './pty-info';
 import { clearPreviewState } from './selection';
 import { buildSessionPaneOrderFromAggregateState, setSessionPaneOrder } from './pane-order';
-import { dedupeAggregatePtysByPane, getSavedAggregatePtyId } from './rows';
+import {
+  dedupeAggregatePtysByPane,
+  findAggregatePtyIndexByPane,
+  getSavedAggregatePtyId,
+} from './rows';
 import { recomputeMatches, recomputeTree } from './session';
 
 export interface SubscriptionManager {
@@ -221,6 +225,43 @@ export function createLifecycleHandlers(
             sessionId: initialOwnership?.sessionId,
             paneId: initialOwnership?.paneId,
           });
+          const claimedSessionId = pendingInsertion?.sessionId ?? initialOwnership?.sessionId;
+          const claimedPaneId = pendingInsertion?.pendingPaneId ?? initialOwnership?.paneId;
+
+          if (pendingInsertion) {
+            pendingInsertion.pendingPtyId = ptyId;
+            if (claimedPaneId && !pendingInsertion.pendingPaneId) {
+              pendingInsertion.pendingPaneId = claimedPaneId;
+            }
+          }
+
+          if (claimedSessionId && claimedPaneId) {
+            const existingPaneIndex = findAggregatePtyIndexByPane(
+              s.allPtys,
+              claimedSessionId,
+              claimedPaneId
+            );
+            if (existingPaneIndex !== -1 && s.allPtys[existingPaneIndex]) {
+              const existingPanePty = s.allPtys[existingPaneIndex];
+              clonePtyStdoutActivity(existingPanePty.ptyId, ptyId);
+              s.allPtys[existingPaneIndex] = {
+                ...existingPanePty,
+                ptyId,
+                paneId: claimedPaneId,
+                sessionId: claimedSessionId,
+                sessionMetadata: s.allSessions.get(claimedSessionId),
+                workspaceId: existingPanePty.workspaceId ?? initialOwnership?.workspaceId,
+                sortOrderHint: pendingInsertion
+                  ? getPendingInsertionOrder(s, pendingInsertion)
+                  : existingPanePty.sortOrderHint,
+              };
+              s.allPtysIndex = buildPtyIndex(s.allPtys);
+              recomputeMatches(s);
+              recomputeTree(s);
+              return;
+            }
+          }
+
           const placeholderPty: PtyInfo = {
             ptyId,
             sortOrderHint: pendingInsertion
@@ -241,14 +282,12 @@ export function createLifecycleHandlers(
             gitDetached: false,
             gitRepoKey: undefined,
             foregroundProcess: undefined,
-            shell: undefined,
+            shell: 'shell',
             title: '...',
-            workspaceId: undefined,
-            paneId: undefined,
-            sessionId: pendingInsertion?.sessionId ?? '',
-            sessionMetadata: pendingInsertion?.sessionId
-              ? s.allSessions.get(pendingInsertion.sessionId)
-              : undefined,
+            workspaceId: initialOwnership?.workspaceId,
+            paneId: claimedPaneId,
+            sessionId: claimedSessionId ?? '',
+            sessionMetadata: claimedSessionId ? s.allSessions.get(claimedSessionId) : undefined,
           };
 
           const newIndex = s.allPtys.length;

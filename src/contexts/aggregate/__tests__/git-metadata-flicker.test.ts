@@ -85,7 +85,7 @@ describe('GitMetadataCache refresh behavior', () => {
     expect(second?.dirty).toBe(true);
   });
 
-  it('preserves cached metadata when a forced refresh fails transiently', async () => {
+  it('drops cached metadata on forced refresh failures instead of leaking stale repo state', async () => {
     const cache = createCache();
 
     await cache.getMetadata('/project', { skipDiffStats: false });
@@ -96,9 +96,7 @@ describe('GitMetadataCache refresh behavior', () => {
       forceRefresh: true,
     });
 
-    expect(refreshed?.diffStats).toEqual({ added: 541, removed: 213, binary: 0 });
-    expect(refreshed?.ahead).toBe(7);
-    expect(refreshed?.dirty).toBe(true);
+    expect(refreshed).toBeUndefined();
   });
 
   it('refreshes cached metadata when the repo changes from dirty to clean', async () => {

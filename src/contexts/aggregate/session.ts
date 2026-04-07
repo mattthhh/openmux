@@ -10,6 +10,7 @@ import { SessionOperationError } from './errors';
 import { buildPtyIndex, filterPtys, filterPtysByActivity, groupPtysBySession } from './filter';
 import { clearPreviewState } from './selection';
 import { buildFlattenedTreeIndex, buildTreeRoot, flattenTree } from './tree';
+import { buildPendingAggregatePtys, dedupeAggregatePtysByPane } from './rows';
 
 export function toggleSessionExpanded(
   expandedSessionIds: Set<string>,
@@ -47,7 +48,11 @@ export function getSortedSessions(
 }
 
 export function recomputeMatches(state: AggregateViewState): void {
-  const basePtys = filterPtysByActivity(state.allPtys, state.showInactive);
+  const effectivePtys = dedupeAggregatePtysByPane([
+    ...state.allPtys,
+    ...buildPendingAggregatePtys(state),
+  ]);
+  const basePtys = filterPtysByActivity(effectivePtys, state.showInactive);
   const matchedPtysResult = filterPtys(basePtys, state.filterQuery);
 
   if (matchedPtysResult instanceof Error) {

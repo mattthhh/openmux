@@ -636,6 +636,8 @@ export function createAggregateViewActions(params: AggregateViewActionsParams) {
     setState(
       produce((s) => {
         upsertPendingPaneCreation(s, insertion);
+        recomputeMatches(s);
+        recomputeTree(s);
       })
     );
   };
@@ -645,6 +647,8 @@ export function createAggregateViewActions(params: AggregateViewActionsParams) {
     setState(
       produce((s) => {
         removePendingPaneCreations(s, (insertion) => insertion.id === id);
+        recomputeMatches(s);
+        recomputeTree(s);
       })
     );
   };
@@ -654,6 +658,8 @@ export function createAggregateViewActions(params: AggregateViewActionsParams) {
     setState(
       produce((s) => {
         s.pendingPaneCreations = [];
+        recomputeMatches(s);
+        recomputeTree(s);
       })
     );
   };

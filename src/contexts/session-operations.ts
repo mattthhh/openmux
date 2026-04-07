@@ -119,18 +119,23 @@ export function createSessionOperations(params: SessionOperationsParams) {
     const state = getState();
     if (id === state.activeSessionId) return;
 
-    // Save current session
+    const dataPromise = options.preloadedData
+      ? Promise.resolve(options.preloadedData)
+      : loadSessionData(id);
+
+    // Save current session and suspend it in parallel.
     if (state.activeSession && state.activeSessionId) {
       const workspaces = getWorkspaces();
       const activeWorkspaceId = getActiveWorkspaceId();
-      if (!options.skipSave && shouldPersistSession(workspaces)) {
-        await saveCurrentSession(state.activeSession, workspaces, activeWorkspaceId, getCwd);
-      }
+      const savePromise =
+        !options.skipSave && shouldPersistSession(workspaces)
+          ? saveCurrentSession(state.activeSession, workspaces, activeWorkspaceId, getCwd)
+          : Promise.resolve();
+      const beforeSwitchPromise = options.skipBeforeSwitch
+        ? Promise.resolve()
+        : onBeforeSwitch(state.activeSessionId);
 
-      // Suspend PTYs for current session (save mapping, don't destroy)
-      if (!options.skipBeforeSwitch) {
-        await onBeforeSwitch(state.activeSessionId);
-      }
+      await Promise.all([savePromise, beforeSwitchPromise]);
     }
 
     // Mark switching in progress to prevent "No panes" flash
@@ -143,10 +148,6 @@ export function createSessionOperations(params: SessionOperationsParams) {
     });
     await using _switchGuard = new SwitchingGuard(dispatch, true);
     void _switchGuard;
-
-    const dataPromise = options.preloadedData
-      ? Promise.resolve(options.preloadedData)
-      : loadSessionData(id);
 
     const switchResult = await switchToSession(id);
     if (

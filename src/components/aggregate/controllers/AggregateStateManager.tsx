@@ -209,6 +209,8 @@ export function AggregateStateManager(props: AggregateStateManagerProps) {
   createEffect(() => {
     if (!props.isActive()) return;
     if (sessionState.switching) return;
+    if (props.pendingPaneCreations().length > 0) return;
+    if (pendingPaneFocus()) return;
 
     const selectedItem = props.flattenedTree()[props.selectedIndex()];
     if (selectedItem?.node.type !== 'pty') return;
