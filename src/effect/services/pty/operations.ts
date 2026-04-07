@@ -175,13 +175,18 @@ export function createOperations(deps: OperationsDeps) {
     }
     const session = sessionOrError;
 
-    if (session.pty.pid === undefined) {
+    if (session.cwdReported === true || session.pty.pid === undefined) {
       return session.cwd;
     }
 
-    // Use native zig-pty method directly (no subprocess spawning)
+    // Fall back to the native PTY lookup when the shell has not reported cwd updates yet.
     const cwd = session.pty.getCwd();
-    return cwd ?? session.cwd;
+    if (cwd) {
+      session.cwd = cwd;
+      return cwd;
+    }
+
+    return session.cwd;
   }
 
   async function destroy(id: PtyId): Promise<void> {

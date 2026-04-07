@@ -4,17 +4,20 @@
  * Parses OSC 777 sequences of the form:
  *   ESC ] 777 ; openmux ; cmd=<encoded> BEL
  *   ESC ] 777 ; openmux ; cmd=<encoded> ST
+ *   ESC ] 777 ; openmux ; cwd=<encoded> BEL
+ *   ESC ] 777 ; openmux ; cwd=<encoded> ST
  *
  * Where <encoded> is percent-encoded to avoid control characters.
  */
 
-import * as errore from "errore";
-import { ValidationError } from "../effect/errors";
+import * as errore from 'errore';
+import { ValidationError } from '../effect/errors';
 
 const ESC = '\x1b';
 const BEL = '\x07';
 const COMMAND_CODE = 777;
 const COMMAND_PREFIX = 'openmux;cmd=';
+const CWD_PREFIX = 'openmux;cwd=';
 const NOTIFY_CODE = 9;
 const NOTIFY_PREFIX = 'notify;';
 
@@ -28,6 +31,7 @@ export interface DesktopNotification {
 
 export interface CommandParserOptions {
   onCommand: (command: string) => void;
+  onCwd?: (cwd: string) => void;
   onNotification?: (notification: DesktopNotification) => void;
   shellName?: string;
 }
@@ -36,7 +40,8 @@ async function decodeOscText(encoded: string): Promise<ValidationError | string>
   if (!encoded) return '';
   const result = await errore.tryAsync<string, ValidationError>({
     try: () => Promise.resolve(decodeURIComponent(encoded)),
-    catch: (e) => new ValidationError({ reason: `Failed to decode OSC text: ${String(e)}`, cause: e }),
+    catch: (e) =>
+      new ValidationError({ reason: `Failed to decode OSC text: ${String(e)}`, cause: e }),
   });
   if (result instanceof ValidationError) {
     return encoded;
@@ -99,7 +104,10 @@ function splitNotificationPayload(payload: string): { title: string; body: strin
   return { title, body };
 }
 
-async function parseDesktopNotification(code: number, oscText: string): Promise<DesktopNotification | null> {
+async function parseDesktopNotification(
+  code: number,
+  oscText: string
+): Promise<DesktopNotification | null> {
   if (code === NOTIFY_CODE) {
     if (isConEmuOsc9Payload(oscText)) return null;
     const decoded = await decodeOscText(oscText);
@@ -147,11 +155,25 @@ function sanitizeCommand(command: string, shellName?: string): string {
   return result;
 }
 
+async function parseReportedCwd(code: number, oscText: string): Promise<string | null> {
+  if (code !== COMMAND_CODE || !oscText.startsWith(CWD_PREFIX)) {
+    return null;
+  }
+
+  const encoded = oscText.slice(CWD_PREFIX.length);
+  const decoded = await decodeOscText(encoded);
+  if (decoded instanceof ValidationError) {
+    return encoded || null;
+  }
+
+  return decoded || null;
+}
+
 /**
  * Creates a command parser that can be called with data chunks.
  */
 export function createCommandParser(options: CommandParserOptions) {
-  const { onCommand, shellName, onNotification } = options;
+  const { onCommand, onCwd, shellName, onNotification } = options;
 
   // State for OSC sequence parsing
   let inOscSequence = false;
@@ -204,7 +226,7 @@ export function createCommandParser(options: CommandParserOptions) {
     const oscText = oscTextBuffer.join('');
     const code = Number.parseInt(oscCode, 10);
 
-    let handledCommand = false;
+    let handledOpenmuxEvent = false;
 
     if (code === COMMAND_CODE && oscText.startsWith(COMMAND_PREFIX)) {
       const encoded = oscText.slice(COMMAND_PREFIX.length);
@@ -213,10 +235,18 @@ export function createCommandParser(options: CommandParserOptions) {
       if (sanitized) {
         onCommand(sanitized);
       }
-      handledCommand = true;
+      handledOpenmuxEvent = true;
     }
 
-    if (!handledCommand && onNotification) {
+    if (!handledOpenmuxEvent && onCwd) {
+      const cwd = await parseReportedCwd(code, oscText);
+      if (cwd) {
+        onCwd(cwd);
+        handledOpenmuxEvent = true;
+      }
+    }
+
+    if (!handledOpenmuxEvent && onNotification) {
       const notification = await parseDesktopNotification(code, oscText);
       if (notification) {
         onNotification(notification);

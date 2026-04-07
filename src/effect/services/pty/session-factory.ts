@@ -156,6 +156,7 @@ export async function createSession(
     pixelWidth: hasPixels ? pixelWidth! : cols * DEFAULT_CELL_WIDTH,
     pixelHeight: hasPixels ? pixelHeight! : rows * DEFAULT_CELL_HEIGHT,
     cwd,
+    cwdReported: false,
     shell,
     closing: false,
     unifiedSubscribers: new Set(),
@@ -214,6 +215,10 @@ export async function createSession(
     shellName,
     onCommand: (command: string) => {
       session.lastCommand = command;
+    },
+    onCwd: (nextCwd: string) => {
+      session.cwd = nextCwd;
+      session.cwdReported = true;
     },
     onNotification: (notification) => {
       const subtitle = session.emulator.getTitle() || session.lastCommand || '';

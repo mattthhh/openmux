@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'bun:test';
+import { afterEach, describe, expect, it, vi } from 'bun:test';
 
 import { createRequestHandler } from './server-requests';
 import { createShimServerState } from './server-state';
@@ -72,6 +72,11 @@ function createContext(overrides?: { pty?: Record<string, (...args: any[]) => an
 }
 
 describe('shim/server-requests', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
   it('returns consolidated PTY metadata', async () => {
     const fixture = createContext();
 
@@ -204,5 +209,164 @@ describe('shim/server-requests', () => {
     expect(fixture.errors).toEqual([]);
     expect(fixture.responses[0]?.result).toEqual({ cwd: '/session-cwd' });
     expect(fixture.responses[1]?.result).toEqual({ branch: 'feature/refactor' });
+  });
+
+  it('serves getCwd without triggering expensive git or process lookups', async () => {
+    const calls: string[] = [];
+    const fixture = createContext({
+      pty: {
+        getSession: () => {
+          calls.push('getSession');
+          return {
+            id: 'pty-1',
+            pid: 42,
+            cols: 80,
+            rows: 24,
+            cwd: '/session-cwd',
+            shell: '/bin/zsh',
+            title: 'editor',
+            lastCommand: 'git status',
+          };
+        },
+        getCwd: () => {
+          calls.push('getCwd');
+          return '/live-cwd';
+        },
+        getForegroundProcess: () => {
+          calls.push('getForegroundProcess');
+          return 'vim';
+        },
+        getGitInfo: () => {
+          calls.push('getGitInfo');
+          return undefined;
+        },
+      },
+    });
+
+    await fixture.handleRequest(
+      fixture.socket,
+      {
+        type: 'request',
+        requestId: 3,
+        method: 'getCwd',
+        params: { ptyId: 'pty-1' },
+      },
+      []
+    );
+
+    expect(fixture.responses[0]?.result).toEqual({ cwd: '/live-cwd' });
+    expect(calls).toContain('getCwd');
+    expect(calls).not.toContain('getSession');
+    expect(calls).not.toContain('getForegroundProcess');
+    expect(calls).not.toContain('getGitInfo');
+  });
+
+  it('serves batched cwd lookups with per-pty session fallback only when needed', async () => {
+    const calls: string[] = [];
+    const fixture = createContext({
+      pty: {
+        getCwd: (ptyId: string) => {
+          calls.push(`getCwd:${ptyId}`);
+          if (ptyId === 'pty-2') {
+            return new Error('cwd unavailable');
+          }
+          return `/live/${ptyId}`;
+        },
+        getSession: (ptyId: string) => {
+          calls.push(`getSession:${ptyId}`);
+          return {
+            id: ptyId,
+            pid: 42,
+            cols: 80,
+            rows: 24,
+            cwd: `/session/${ptyId}`,
+            shell: '/bin/zsh',
+          };
+        },
+        getForegroundProcess: (ptyId: string) => {
+          calls.push(`getForegroundProcess:${ptyId}`);
+          return 'vim';
+        },
+        getGitInfo: (ptyId: string) => {
+          calls.push(`getGitInfo:${ptyId}`);
+          return undefined;
+        },
+      },
+    });
+
+    await fixture.handleRequest(
+      fixture.socket,
+      {
+        type: 'request',
+        requestId: 4,
+        method: 'getPtyCwds',
+        params: { ptyIds: ['pty-1', 'pty-2'] },
+      },
+      []
+    );
+
+    expect(fixture.responses[0]?.result).toEqual({
+      entries: [
+        { ptyId: 'pty-1', cwd: '/live/pty-1' },
+        { ptyId: 'pty-2', cwd: '/session/pty-2' },
+      ],
+    });
+    expect(calls).toContain('getCwd:pty-1');
+    expect(calls).toContain('getCwd:pty-2');
+    expect(calls).not.toContain('getSession:pty-1');
+    expect(calls).toContain('getSession:pty-2');
+    expect(calls).not.toContain('getForegroundProcess:pty-1');
+    expect(calls).not.toContain('getForegroundProcess:pty-2');
+    expect(calls).not.toContain('getGitInfo:pty-1');
+    expect(calls).not.toContain('getGitInfo:pty-2');
+  });
+
+  it('acknowledges shutdown before tearing PTYs down in the background', async () => {
+    vi.useFakeTimers();
+
+    let resolveDestroy!: () => void;
+    const steps: string[] = [];
+    const destroyPromise = new Promise<void>((resolve) => {
+      resolveDestroy = () => {
+        steps.push('destroy-resolved');
+        resolve();
+      };
+    });
+
+    const exitSpy = vi
+      .spyOn(process, 'exit')
+      .mockImplementation((() => undefined) as typeof process.exit);
+
+    const fixture = createContext({
+      pty: {
+        destroyAll: () => {
+          steps.push('destroy-started');
+          return destroyPromise;
+        },
+      },
+    });
+
+    await fixture.handleRequest(
+      fixture.socket,
+      {
+        type: 'request',
+        requestId: 4,
+        method: 'shutdown',
+        params: {},
+      },
+      []
+    );
+
+    expect(fixture.responses[0]?.result).toBeUndefined();
+    expect(steps).toEqual([]);
+
+    await vi.advanceTimersByTimeAsync(10);
+    expect(steps).toEqual(['destroy-started']);
+
+    resolveDestroy();
+    await destroyPromise;
+    await vi.runAllTimersAsync();
+
+    expect(exitSpy).toHaveBeenCalledWith(0);
   });
 });

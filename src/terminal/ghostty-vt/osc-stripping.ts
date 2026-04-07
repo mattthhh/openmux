@@ -12,7 +12,7 @@
  * Stripped sequences:
  * - OSC 0/1/2: Title sequences (handled by title parser)
  * - OSC 7: Working directory notification (not needed for rendering)
- * - OSC 9/777: Desktop notification payloads (handled outside emulator)
+ * - OSC 9/777: Desktop notifications and openmux shell-control payloads (handled outside emulator)
  * - OSC 10/11/12: Foreground/background/cursor color SET commands
  * - OSC 22/23: Window icon / title stack operations
  *
@@ -23,14 +23,7 @@ export function stripProblematicOscSequences(text: string): string {
   const ESC = '\x1b';
   const BEL = '\x07';
 
-  const stripCodes = new Set([
-    0, 1, 2,
-    7,
-    9,
-    10, 11, 12,
-    22, 23,
-    777,
-  ]);
+  const stripCodes = new Set([0, 1, 2, 7, 9, 10, 11, 12, 22, 23, 777]);
 
   let result = '';
   let i = 0;

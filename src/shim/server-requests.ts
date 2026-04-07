@@ -87,6 +87,22 @@ function serializeSession(session: unknown): ShimPtySessionInfo | null {
   };
 }
 
+function getRuntimeSessionFields(session: unknown): { title: string; lastCommand?: string } {
+  if (!session || typeof session !== 'object') {
+    return { title: '' };
+  }
+
+  const value = session as {
+    title?: string;
+    lastCommand?: string;
+  };
+
+  return {
+    title: value.title ?? '',
+    lastCommand: value.lastCommand ?? undefined,
+  };
+}
+
 /**
  * Retrieves comprehensive metadata for a PTY.
  * Aggregates session info, CWD, foreground process, git info, title, and last command.
@@ -105,13 +121,7 @@ async function getPtyMetadata(
     readPtyValue(context, (pty) => pty.getGitInfo(asPtyId(ptyId), { includeDiffStats: true })),
   ]);
 
-  const runtimeSession =
-    sessionValue && typeof sessionValue === 'object'
-      ? (sessionValue as {
-          title?: string;
-          lastCommand?: string;
-        })
-      : null;
+  const runtimeSession = getRuntimeSessionFields(sessionValue);
   const session = serializeSession(sessionValue);
 
   const gitInfo = gitInfoWithDiff
@@ -138,9 +148,55 @@ async function getPtyMetadata(
     foregroundProcess: foregroundProcess ?? undefined,
     gitInfo,
     gitDiffStats,
-    title: runtimeSession?.title ?? '',
-    lastCommand: runtimeSession?.lastCommand ?? undefined,
+    title: runtimeSession.title,
+    lastCommand: runtimeSession.lastCommand,
   };
+}
+
+async function getPtyCwdEntries(
+  context: ShimHandlerContext,
+  ptyIds: string[]
+): Promise<Array<{ ptyId: string; cwd: string }>> {
+  const uniquePtyIds = [...new Set(ptyIds)];
+  if (uniquePtyIds.length === 0) {
+    return [];
+  }
+
+  const liveCwdEntries = await Promise.all(
+    uniquePtyIds.map(async (ptyId) => {
+      const cwd = await readPtyValue(context, (pty) => pty.getCwd(asPtyId(ptyId)));
+      return [ptyId, cwd] as const;
+    })
+  );
+
+  const cwdByPtyId = new Map<string, string>();
+  const missingPtyIds: string[] = [];
+
+  for (const [ptyId, cwd] of liveCwdEntries) {
+    if (cwd !== null) {
+      cwdByPtyId.set(ptyId, cwd);
+      continue;
+    }
+    missingPtyIds.push(ptyId);
+  }
+
+  if (missingPtyIds.length > 0) {
+    const sessionEntries = await Promise.all(
+      missingPtyIds.map(async (ptyId) => {
+        const sessionValue = await readPtyValue(context, (pty) => pty.getSession(asPtyId(ptyId)));
+        return [ptyId, serializeSession(sessionValue)] as const;
+      })
+    );
+
+    for (const [ptyId, session] of sessionEntries) {
+      cwdByPtyId.set(ptyId, session?.cwd ?? '');
+    }
+  }
+
+  return uniquePtyIds.map((ptyId) => ({
+    ptyId,
+    cwd: cwdByPtyId.get(ptyId) ?? '',
+  }));
 }
 
 /**
@@ -288,10 +344,17 @@ export function createRequestHandler(context: ShimHandlerContext) {
           return;
 
         case 'shutdown':
-          await context.withPty((pty) => pty.destroyAll());
+          // Acknowledge first so the UI can exit immediately; PTY teardown continues in the background.
           context.sendResponse(socket, requestId);
           setTimeout(() => {
-            process.exit(0);
+            void context
+              .withPty((pty) => pty.destroyAll())
+              .catch((error) => {
+                console.warn('[shim] Failed to destroy PTYs during shutdown:', error);
+              })
+              .finally(() => {
+                process.exit(0);
+              });
           }, 10);
           return;
 
@@ -306,10 +369,20 @@ export function createRequestHandler(context: ShimHandlerContext) {
         case 'getCwd': {
           const ptyId = requirePtyId(context, socket, requestId, requestParams);
           if (!ptyId) return;
-          const metadata = await getPtyMetadata(context, ptyId);
+
+          const entries = await getPtyCwdEntries(context, [ptyId]);
           context.sendResponse(socket, requestId, {
-            cwd: metadata.cwd ?? metadata.session?.cwd ?? '',
+            cwd: entries[0]?.cwd ?? '',
           });
+          return;
+        }
+
+        case 'getPtyCwds': {
+          const ptyIds = Array.isArray(requestParams.ptyIds)
+            ? requestParams.ptyIds.filter((value): value is string => typeof value === 'string')
+            : [];
+          const entries = await getPtyCwdEntries(context, ptyIds);
+          context.sendResponse(socket, requestId, { entries });
           return;
         }
 
@@ -435,56 +508,66 @@ export function createRequestHandler(context: ShimHandlerContext) {
         case 'getSession': {
           const ptyId = requirePtyId(context, socket, requestId, requestParams);
           if (!ptyId) return;
-          const metadata = await getPtyMetadata(context, ptyId);
-          context.sendResponse(socket, requestId, { session: metadata.session });
+          const sessionValue = await readPtyValue(context, (pty) => pty.getSession(asPtyId(ptyId)));
+          context.sendResponse(socket, requestId, { session: serializeSession(sessionValue) });
           return;
         }
 
         case 'getForegroundProcess': {
           const ptyId = requirePtyId(context, socket, requestId, requestParams);
           if (!ptyId) return;
-          const metadata = await getPtyMetadata(context, ptyId);
-          context.sendResponse(socket, requestId, { process: metadata.foregroundProcess });
+          const processName = await readPtyValue(context, (pty) =>
+            pty.getForegroundProcess(asPtyId(ptyId))
+          );
+          context.sendResponse(socket, requestId, { process: processName ?? undefined });
           return;
         }
 
         case 'getGitBranch': {
           const ptyId = requirePtyId(context, socket, requestId, requestParams);
           if (!ptyId) return;
-          const metadata = await getPtyMetadata(context, ptyId);
-          context.sendResponse(socket, requestId, { branch: metadata.gitInfo?.branch });
+          const info = await readPtyValue(context, (pty) =>
+            pty.getGitInfo(asPtyId(ptyId), { includeDiffStats: false })
+          );
+          context.sendResponse(socket, requestId, { branch: info?.branch });
           return;
         }
 
         case 'getGitInfo': {
           const ptyId = requirePtyId(context, socket, requestId, requestParams);
           if (!ptyId) return;
-          const metadata = await getPtyMetadata(context, ptyId);
-          context.sendResponse(socket, requestId, { info: metadata.gitInfo });
+          const info = await readPtyValue(context, (pty) =>
+            pty.getGitInfo(asPtyId(ptyId), { includeDiffStats: false })
+          );
+          context.sendResponse(socket, requestId, { info: info ?? undefined });
           return;
         }
 
         case 'getGitDiffStats': {
           const ptyId = requirePtyId(context, socket, requestId, requestParams);
           if (!ptyId) return;
-          const metadata = await getPtyMetadata(context, ptyId);
-          context.sendResponse(socket, requestId, { diff: metadata.gitDiffStats });
+          const info = await readPtyValue(context, (pty) =>
+            pty.getGitInfo(asPtyId(ptyId), { includeDiffStats: true })
+          );
+          context.sendResponse(socket, requestId, { diff: info?.diffStats });
           return;
         }
 
         case 'getTitle': {
           const ptyId = requirePtyId(context, socket, requestId, requestParams);
           if (!ptyId) return;
-          const metadata = await getPtyMetadata(context, ptyId);
-          context.sendResponse(socket, requestId, { title: metadata.title });
+          const sessionValue = await readPtyValue(context, (pty) => pty.getSession(asPtyId(ptyId)));
+          const runtimeSession = getRuntimeSessionFields(sessionValue);
+          context.sendResponse(socket, requestId, { title: runtimeSession.title });
           return;
         }
 
         case 'getLastCommand': {
           const ptyId = requirePtyId(context, socket, requestId, requestParams);
           if (!ptyId) return;
-          const metadata = await getPtyMetadata(context, ptyId);
-          context.sendResponse(socket, requestId, { command: metadata.lastCommand });
+          const sessionValue = await readPtyValue(context, (pty) => pty.getSession(asPtyId(ptyId)));
+          const runtimeSession = getRuntimeSessionFields(sessionValue);
+          context.sendResponse(socket, requestId, { command: runtimeSession.lastCommand });
           return;
         }
 

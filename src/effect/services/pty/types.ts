@@ -32,6 +32,8 @@ export interface InternalPtySession {
   cellWidth: number;
   cellHeight: number;
   cwd: string;
+  /** True once the shell integration has reported a live cwd update for this PTY. */
+  cwdReported?: boolean;
   shell: string;
   closing: boolean;
   /** Unified subscribers receive both terminal and scroll updates in one callback */

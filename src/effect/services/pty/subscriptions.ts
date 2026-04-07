@@ -93,8 +93,15 @@ export function createSubscriptions(deps: SubscriptionsDeps) {
       return sessionOrError as PtyNotFoundError;
     }
 
-    const cwd = sessionOrError.pty.getCwd();
+    const cwd =
+      sessionOrError.cwdReported === true
+        ? sessionOrError.cwd
+        : (sessionOrError.pty.getCwd() ?? sessionOrError.cwd);
     if (!cwd) return undefined;
+
+    if (sessionOrError.cwdReported !== true) {
+      sessionOrError.cwd = cwd;
+    }
 
     return getGitInfo(cwd, { includeDiffStats: options.includeDiffStats });
   }

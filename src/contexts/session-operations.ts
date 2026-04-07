@@ -372,7 +372,8 @@ export function createSessionOperations(params: SessionOperationsParams) {
 
     if (shouldPersistSession(workspaces)) {
       await saveCurrentSession(state.activeSession, workspaces, activeWorkspaceId, getCwd);
-      await refreshSessions();
+      // Persist first, then refresh summaries in the background so detach/quit stays snappy.
+      refreshSessionsInBackground();
     }
   };
 

@@ -6,7 +6,7 @@ import * as ShimClient from '../../../shim/client';
 import type { TerminalState, UnifiedTerminalUpdate } from '../../../core/types';
 import type { ITerminalEmulator } from '../../../terminal/emulator-interface';
 import type { TerminalColors } from '../../../terminal/terminal-colors';
-import { PtyNotFoundError } from '../../errors';
+import { PtyCwdError, PtyNotFoundError } from '../../errors';
 import type { PtyId } from '../../types';
 import type { PtySession } from '../../models';
 import type { GitInfo } from './helpers';
@@ -17,6 +17,13 @@ import type { GetPtyGitInfoOptions, PtyService, PtyTitleChangeEvent } from './in
  */
 export function createShimPtyService(): PtyService {
   let shimReady = false;
+  let cwdBatchFallbackLogged = false;
+  const pendingCwdRequests = new Map<
+    string,
+    Array<{ resolve: (value: string | PtyCwdError) => void }>
+  >();
+  let flushCwdBatchScheduled = false;
+
   const shimReadyPromise = ShimClient.waitForShim().then(() => {
     shimReady = true;
   });
@@ -25,6 +32,105 @@ export function createShimPtyService(): PtyService {
     if (!shimReady) {
       await shimReadyPromise;
     }
+  }
+
+  function scheduleFlushCwdBatch(): void {
+    if (flushCwdBatchScheduled) {
+      return;
+    }
+
+    flushCwdBatchScheduled = true;
+    queueMicrotask(() => {
+      flushCwdBatchScheduled = false;
+      void flushCwdBatch();
+    });
+  }
+
+  async function flushCwdBatch(): Promise<void> {
+    const batch = new Map(pendingCwdRequests);
+    pendingCwdRequests.clear();
+
+    const ptyIds = [...batch.keys()];
+    if (ptyIds.length === 0) {
+      return;
+    }
+
+    const resolveBatch = (values: Map<string, string | PtyCwdError>): void => {
+      for (const [ptyId, requests] of batch) {
+        const value =
+          values.get(ptyId) ??
+          new PtyCwdError({
+            ptyId,
+            reason: 'Shim returned no CWD for batched lookup',
+          });
+        for (const request of requests) {
+          request.resolve(value);
+        }
+      }
+    };
+
+    const batchErrorForAll = (reason: string, cause?: unknown): Map<string, PtyCwdError> =>
+      new Map(
+        ptyIds.map((ptyId) => [
+          ptyId,
+          new PtyCwdError({
+            ptyId,
+            reason,
+            cause,
+          }),
+        ])
+      );
+
+    const batchedValues = await (async (): Promise<Map<string, string | PtyCwdError>> => {
+      const ensureError = await ensureShim().then(
+        () => null,
+        (error) => error
+      );
+      if (ensureError) {
+        return batchErrorForAll('Failed to connect to shim before batched CWD lookup', ensureError);
+      }
+
+      const batchResult = await ShimClient.getPtyCwds(ptyIds)
+        .then((values) => new Map<string, string | PtyCwdError>(values))
+        .catch(async (error) => {
+          if (!cwdBatchFallbackLogged) {
+            cwdBatchFallbackLogged = true;
+            console.warn(
+              '[shim-pty] Batch CWD lookup unavailable, falling back to per-PTY requests:',
+              error
+            );
+          }
+
+          const fallbackEntries = await Promise.all(
+            ptyIds.map(async (ptyId) => {
+              const value = await ShimClient.getPtyCwd(ptyId).catch(
+                (fallbackError) =>
+                  new PtyCwdError({
+                    ptyId,
+                    reason: 'Fallback single-PTY CWD lookup failed',
+                    cause: fallbackError,
+                  })
+              );
+              return [ptyId, value] as const;
+            })
+          );
+
+          return new Map<string, string | PtyCwdError>(fallbackEntries);
+        });
+
+      return batchResult;
+    })().catch((error) => batchErrorForAll('Batched CWD lookup failed', error));
+
+    resolveBatch(batchedValues);
+  }
+
+  function queueCwdLookup(ptyId: string): Promise<string | PtyCwdError> {
+    return new Promise((resolve) => {
+      const requests = pendingCwdRequests.get(ptyId) ?? [];
+      requests.push({ resolve });
+      pendingCwdRequests.set(ptyId, requests);
+      scheduleFlushCwdBatch();
+    });
   }
 
   function getEmulator(id: PtyId, options: { sync: true }): ITerminalEmulator | null;
@@ -107,8 +213,7 @@ export function createShimPtyService(): PtyService {
       );
     },
     getCwd: async (id) => {
-      await ensureShim();
-      return ShimClient.getPtyCwd(String(id));
+      return queueCwdLookup(String(id));
     },
     destroy: async (id) => {
       await ensureShim();

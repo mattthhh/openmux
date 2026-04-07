@@ -18,7 +18,7 @@ class ClipboardDecodeError extends errore.createTaggedError({
 interface DataHandlerOptions {
   session: InternalPtySession;
   syncParser: SyncModeParser;
-  commandParser?: { processData: (data: string) => void };
+  commandParser?: { processData: (data: string) => void | Promise<void> };
   syncTimeoutMs?: number;
 }
 
@@ -451,7 +451,7 @@ export function createDataHandler(options: DataHandlerOptions) {
     }
 
     if (commandParser) {
-      commandParser.processData(textData);
+      void commandParser.processData(textData);
     }
 
     // Process through sync mode parser to respect frame boundaries

@@ -201,8 +201,35 @@ export async function setHostColors(colors: TerminalColors): Promise<void> {
  * @returns Current working directory path
  */
 export async function getPtyCwd(ptyId: string): Promise<string> {
-  const metadata = await getPtyMetadata(ptyId).catch(() => buildFallbackPtyMetadata(ptyId));
-  return metadata.cwd ?? metadata.session?.cwd ?? '';
+  const response = await sendRequest('getCwd', { ptyId }).catch(() => null);
+  const fallback = buildFallbackPtyMetadata(ptyId);
+  if (!response) {
+    return fallback.cwd ?? fallback.session?.cwd ?? '';
+  }
+
+  const result = response.header.result as { cwd?: string } | undefined;
+  return result?.cwd || fallback.cwd || fallback.session?.cwd || '';
+}
+
+/**
+ * Gets current working directories for multiple PTYs in a single shim round trip.
+ * @param ptyIds - PTY identifiers to resolve
+ * @returns Map of PTY identifier to current working directory
+ */
+export async function getPtyCwds(ptyIds: string[]): Promise<Map<string, string>> {
+  const uniquePtyIds = [...new Set(ptyIds)];
+  if (uniquePtyIds.length === 0) {
+    return new Map();
+  }
+
+  const response = await sendRequest('getPtyCwds', { ptyIds: uniquePtyIds });
+  const result = response.header.result as
+    | {
+        entries?: Array<{ ptyId: string; cwd: string }>;
+      }
+    | undefined;
+
+  return new Map((result?.entries ?? []).map((entry) => [entry.ptyId, entry.cwd]));
 }
 
 /**
@@ -378,8 +405,24 @@ export async function getSessionInfo(ptyId: string): Promise<{
   cwd: string;
   shell: string;
 } | null> {
-  const metadata = await getPtyMetadata(ptyId).catch(() => buildFallbackPtyMetadata(ptyId));
-  return metadata.session;
+  const response = await sendRequest('getSession', { ptyId }).catch(() => null);
+  if (!response) {
+    return buildFallbackPtyMetadata(ptyId).session;
+  }
+
+  const result = response.header.result as
+    | {
+        session?: {
+          id: string;
+          pid: number;
+          cols: number;
+          rows: number;
+          cwd: string;
+          shell: string;
+        } | null;
+      }
+    | undefined;
+  return result?.session ?? null;
 }
 
 /**
@@ -388,8 +431,13 @@ export async function getSessionInfo(ptyId: string): Promise<{
  * @returns Process name or undefined
  */
 export async function getForegroundProcess(ptyId: string): Promise<string | undefined> {
-  const metadata = await getPtyMetadata(ptyId).catch(() => buildFallbackPtyMetadata(ptyId));
-  return metadata.foregroundProcess;
+  const response = await sendRequest('getForegroundProcess', { ptyId }).catch(() => null);
+  if (!response) {
+    return buildFallbackPtyMetadata(ptyId).foregroundProcess;
+  }
+
+  const result = response.header.result as { process?: string } | undefined;
+  return result?.process;
 }
 
 /**
@@ -398,8 +446,13 @@ export async function getForegroundProcess(ptyId: string): Promise<string | unde
  * @returns Branch name or undefined
  */
 export async function getGitBranch(ptyId: string): Promise<string | undefined> {
-  const metadata = await getPtyMetadata(ptyId).catch(() => buildFallbackPtyMetadata(ptyId));
-  return metadata.gitInfo?.branch;
+  const response = await sendRequest('getGitBranch', { ptyId }).catch(() => null);
+  if (!response) {
+    return buildFallbackPtyMetadata(ptyId).gitInfo?.branch;
+  }
+
+  const result = response.header.result as { branch?: string } | undefined;
+  return result?.branch;
 }
 
 /**
@@ -408,9 +461,12 @@ export async function getGitBranch(ptyId: string): Promise<string | undefined> {
  * @returns Git info or undefined
  */
 export async function getGitInfo(ptyId: string): Promise<GitInfo | undefined> {
-  const metadata = await getPtyMetadata(ptyId).catch(() => buildFallbackPtyMetadata(ptyId));
-  const info = metadata.gitInfo;
+  const response = await sendRequest('getGitInfo', { ptyId }).catch(() => null);
+  const info = response
+    ? ((response.header.result as { info?: GitInfo } | undefined)?.info ?? undefined)
+    : buildFallbackPtyMetadata(ptyId).gitInfo;
   if (!info?.repoKey) return undefined;
+
   return {
     branch: info.branch ?? undefined,
     dirty: Boolean(info.dirty),
@@ -435,9 +491,16 @@ export async function getGitInfo(ptyId: string): Promise<GitInfo | undefined> {
 export async function getGitDiffStats(
   ptyId: string
 ): Promise<{ added: number; removed: number; binary: number } | undefined> {
-  const metadata = await getPtyMetadata(ptyId).catch(() => buildFallbackPtyMetadata(ptyId));
-  const diff = metadata.gitDiffStats;
+  const response = await sendRequest('getGitDiffStats', { ptyId }).catch(() => null);
+  const diff = response
+    ? ((
+        response.header.result as
+          | { diff?: { added: number; removed: number; binary: number } }
+          | undefined
+      )?.diff ?? undefined)
+    : buildFallbackPtyMetadata(ptyId).gitDiffStats;
   if (!diff) return undefined;
+
   return {
     added: Number(diff.added ?? 0),
     removed: Number(diff.removed ?? 0),
@@ -468,8 +531,13 @@ export async function getTitle(ptyId: string): Promise<string> {
  * @returns Last command or undefined
  */
 export async function getLastCommand(ptyId: string): Promise<string | undefined> {
-  const metadata = await getPtyMetadata(ptyId).catch(() => buildFallbackPtyMetadata(ptyId));
-  return metadata.lastCommand;
+  const response = await sendRequest('getLastCommand', { ptyId }).catch(() => null);
+  if (!response) {
+    return buildFallbackPtyMetadata(ptyId).lastCommand;
+  }
+
+  const result = response.header.result as { command?: string } | undefined;
+  return result?.command;
 }
 
 /**
