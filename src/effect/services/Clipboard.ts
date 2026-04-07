@@ -19,12 +19,8 @@ function isWayland(): boolean {
 
 /** Check if a command is available in PATH */
 async function commandExists(cmd: string): Promise<boolean> {
-  try {
-    const result = await Bun.$`which ${cmd}`.quiet();
-    return result.exitCode === 0;
-  } catch {
-    return false;
-  }
+  const result = await Bun.$`which ${cmd}`.quiet().catch(() => ({ exitCode: 1 }));
+  return result.exitCode === 0;
 }
 
 /** Production implementation - uses platform-specific clipboard commands */
@@ -118,12 +114,11 @@ export async function createClipboard(): Promise<Clipboard> {
       }, 5000);
     });
 
-    try {
-      return await Promise.race([result, timeoutPromise]);
-    } catch (error) {
+    // Race with timeout - Promise.race unwraps the error, so catch and wrap
+    return Promise.race([result, timeoutPromise]).catch((error) => {
       if (error instanceof ClipboardError) return error;
       return new ClipboardError({ operation: 'write', reason: String(error) });
-    }
+    });
   };
 
   const read = async (): Promise<ClipboardError | string> => {
@@ -178,12 +173,11 @@ export async function createClipboard(): Promise<Clipboard> {
       }, 5000);
     });
 
-    try {
-      return await Promise.race([result, timeoutPromise]);
-    } catch (error) {
+    // Race with timeout - Promise.race unwraps the error, so catch and wrap
+    return Promise.race([result, timeoutPromise]).catch((error) => {
       if (error instanceof ClipboardError) return error;
       return new ClipboardError({ operation: 'read', reason: String(error) });
-    }
+    });
   };
 
   return {
@@ -197,12 +191,7 @@ export function createTestClipboard(): Clipboard {
   let buffer = '';
 
   const write = async (text: string): Promise<ClipboardError | void> => {
-    try {
-      buffer = text;
-      return undefined;
-    } catch (e: unknown) {
-      return new ClipboardError({ operation: 'write', reason: String(e) });
-    }
+    buffer = text;
   };
 
   const read = async (): Promise<ClipboardError | string> => {
