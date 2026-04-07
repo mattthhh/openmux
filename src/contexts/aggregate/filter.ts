@@ -30,9 +30,6 @@ export function filterPtysByActivity(ptys: PtyInfo[], showInactive: boolean): Pt
   return showInactive ? ptys : filterActivePtys(ptys);
 }
 
-/** @deprecated Use filterPtysByActivity instead. */
-export const getBasePtys = filterPtysByActivity;
-
 export function filterPtys(ptys: PtyInfo[], query: string): PtyInfo[] | FilterOperationError {
   const trimmedQuery = query.trim();
   if (!trimmedQuery) return ptys;

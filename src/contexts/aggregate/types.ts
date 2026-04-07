@@ -1,6 +1,8 @@
 /**
- * Re-export of aggregate view types from the consolidated location.
- * @deprecated Import from '../aggregate-view-types' directly for new code.
+ * Aggregate view type barrel.
+ *
+ * Most new code imports directly from '../aggregate-view-types', but the
+ * aggregate submodules keep this shorter path for readability.
  */
 
 export * from '../aggregate-view-types';

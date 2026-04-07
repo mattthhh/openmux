@@ -4,6 +4,10 @@
  * Uses a single global stdout-activity subscription instead of per-PTY unified
  * update subscriptions. This keeps background PTY activity cheap while still
  * letting the aggregate view shimmer for hidden PTYs.
+ *
+ * When ownership can be resolved, activity is mirrored onto the stable saved-row
+ * id for that pane (`saved:<sessionId>:<paneId>`). That lets unloaded or saved
+ * rows keep their shimmer state without loading every PTY in the background.
  */
 
 import { createRenderEffect, createMemo, onCleanup, type Accessor } from 'solid-js';

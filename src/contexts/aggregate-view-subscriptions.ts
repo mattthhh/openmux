@@ -1,5 +1,8 @@
 /**
- * Aggregate view subscription and refresh compatibility layer.
+ * Aggregate view subscription and refresh barrel.
+ *
+ * The aggregate internals are split into focused modules, but the context layer
+ * still imports them through this shared surface to keep the wiring readable.
  */
 
 import type { SetStoreFunction } from 'solid-js/store';

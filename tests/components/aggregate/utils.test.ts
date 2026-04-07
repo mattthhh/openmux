@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'bun:test';
 
 import type { FlattenedTreeItem, PtyInfo } from '../../../src/contexts/aggregate-view-types';
-import { resolveAggregatePreviewPtyId } from '../../../src/components/aggregate/utils';
+import {
+  resolveAggregatePreviewPtyId,
+  resolveAggregatePtyOwnership,
+} from '../../../src/components/aggregate/utils';
 import { createWorkspaceWithPanes } from '../../contexts/layout-reducer/fixtures';
 
 const createPty = (overrides: Partial<PtyInfo> = {}): PtyInfo => ({
@@ -94,5 +97,59 @@ describe('resolveAggregatePreviewPtyId', () => {
         workspaces: { 1: workspace },
       })
     ).toBeNull();
+  });
+});
+
+describe('resolveAggregatePtyOwnership', () => {
+  it('prefers tracked ownership and derives workspace from the current layout', () => {
+    const workspace = createWorkspaceWithPanes(2, { id: 'pane-2', ptyId: 'pty-live' }, []);
+
+    expect(
+      resolveAggregatePtyOwnership({
+        ptyId: 'pty-live',
+        workspaces: { 2: workspace },
+        activeSessionId: 'session-active',
+        trackedOwner: { sessionId: 'session-tracked', paneId: 'pane-2' },
+        aggregateOwner: { sessionId: 'session-aggregate', paneId: 'pane-9' },
+      })
+    ).toEqual({
+      sessionId: 'session-tracked',
+      paneId: 'pane-2',
+      workspaceId: 2,
+    });
+  });
+
+  it('falls back to aggregate-local ownership when the PTY is not tracked live', () => {
+    expect(
+      resolveAggregatePtyOwnership({
+        ptyId: 'pty-live',
+        workspaces: {},
+        activeSessionId: 'session-active',
+        trackedOwner: null,
+        aggregateOwner: { sessionId: 'session-aggregate', paneId: 'pane-9' },
+      })
+    ).toEqual({
+      sessionId: 'session-aggregate',
+      paneId: 'pane-9',
+      workspaceId: undefined,
+    });
+  });
+
+  it('uses the active session plus live layout location as the final fallback', () => {
+    const workspace = createWorkspaceWithPanes(3, { id: 'pane-3', ptyId: 'pty-layout' }, []);
+
+    expect(
+      resolveAggregatePtyOwnership({
+        ptyId: 'pty-layout',
+        workspaces: { 3: workspace },
+        activeSessionId: 'session-active',
+        trackedOwner: null,
+        aggregateOwner: null,
+      })
+    ).toEqual({
+      sessionId: 'session-active',
+      paneId: 'pane-3',
+      workspaceId: 3,
+    });
   });
 });

@@ -227,7 +227,7 @@ export interface AggregateViewFilterSlice {
   matchedPtys: PtyInfo[];
   /** Map from ptyId to index in allPtys for O(1) lookup */
   allPtysIndex: Map<string, number>;
-  /** @deprecated Legacy matched array index retained while callers migrate to direct lookups. */
+  /** Cached matched-list index used by tree selection and title/activity updates. */
   matchedPtysIndex: Map<string, number>;
 }
 
@@ -251,7 +251,7 @@ export interface AggregateViewTreeSlice {
   flattenedTreeIndex: Map<string, number>;
   /** Expanded session IDs (collapsed sessions hide their PTYs) */
   expandedSessionIds: Set<string>;
-  /** @deprecated Legacy nested pane-order map retained while refresh/subscription code migrates. */
+  /** Per-session pane ordering kept alongside the flattened index for tests and tree helpers. */
   sessionPaneOrders: Map<string, Map<string, number>>;
   /** Aggregate-list ordering per session, stored as a flattened pane-order index. */
   sessionPaneOrderIndex: SessionPaneOrderIndex;

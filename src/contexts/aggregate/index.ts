@@ -15,7 +15,6 @@ export {
   isActivePty,
   filterActivePtys,
   filterPtysByActivity,
-  getBasePtys,
   filterPtys,
   buildPtyIndex,
   groupPtysBySession,

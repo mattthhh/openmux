@@ -1,15 +1,9 @@
 /**
- * AggregateView - fullscreen overlay for viewing PTYs across all workspaces.
- * Thin composition root (<100 lines) that delegates to controller components.
+ * AggregateView - fullscreen overlay for browsing panes across sessions.
  *
- * Controllers:
- * - AggregateKeyboardController: keyboard, vim mode, prefix keys
- * - AggregateMouseController: mouse, drag-drop, selection
- * - AggregateStateManager: session loading, pane creation effects
- *
- * Modes:
- * - List mode: Navigate PTY list (arrow keys; vim mode adds j/k), Enter to enter preview mode
- * - Preview mode: Interact with the terminal, Prefix+Esc to return to list
+ * This file is the composition root for the overlay. Preview resolution,
+ * activity tracking, keyboard routing, and async state transitions live in
+ * dedicated hooks and controllers so the aggregate semantics stay consistent.
  */
 
 import { Show, createEffect, createMemo, createSignal } from 'solid-js';
@@ -47,20 +41,12 @@ import {
   PlaceholderRow,
 } from './aggregate';
 import { ListPaneProvider } from '../contexts/ListPaneContext';
-import {
-  useVimMode,
-  useEmulatorCache,
-  useActivitySubscriptions,
-  useSessionDrag,
-} from './aggregate/hooks';
+import { useVimMode, useAggregatePreviewSupport, useSessionDrag } from './aggregate/hooks';
 import {
   AggregateKeyboardController,
   AggregateMouseController,
   AggregateStateManager,
 } from './aggregate/controllers';
-import { isSavedAggregatePtyId } from '../contexts/aggregate/rows';
-import { getAggregateSessionForPty } from '../effect/bridge/aggregate/cache/session-pty-cache';
-import { resolveAggregatePreviewPtyId, resolveAggregatePtyOwnership } from './aggregate/utils';
 
 interface AggregateViewProps {
   width: number;
@@ -87,22 +73,31 @@ export function AggregateView(props: AggregateViewProps) {
   const search = useSearch();
   const colors = useOverlayColors();
 
-  const getPreviewableSelectedPtyId = () =>
-    resolveAggregatePreviewPtyId({
-      selectedPtyId: aggregate.state.selectedPtyId,
-      selectedIndex: aggregate.state.selectedIndex,
-      flattenedTree: aggregate.state.flattenedTree,
-      activeSessionId: session.state.activeSessionId,
-      workspaces: layout.state.workspaces,
-    });
-
   // Hooks
   const vim = useVimMode({ isAggregateVisible: () => aggregate.state.showAggregateView });
-  const emulatorCache = useEmulatorCache({
+  const {
+    getPreviewableSelectedPtyId,
+    getAggregateEmulatorSync,
+    getAggregateTerminalStateSync,
+    isAggregateMouseTrackingEnabled,
+  } = useAggregatePreviewSupport({
     isActive: () => aggregate.state.showAggregateView,
-    getSelectedPtyId: getPreviewableSelectedPtyId,
+    getSelectedPtyId: () => aggregate.state.selectedPtyId,
+    getSelectedIndex: () => aggregate.state.selectedIndex,
+    getFlattenedTree: () => aggregate.state.flattenedTree,
+    getTrackedPtys: () => aggregate.state.matchedPtys,
+    getActiveSessionId: () => session.state.activeSessionId,
+    getWorkspaces: () => layout.state.workspaces,
+    findSessionForPty: terminal.findSessionForPty,
+    getEmulatorSync: terminal.getEmulatorSync,
+    getTerminalStateSync: terminal.getTerminalStateSync,
+    isMouseTrackingEnabled: terminal.isMouseTrackingEnabled,
   });
   const sessionDrag = useSessionDrag();
+
+  createEffect(() => {
+    props.onVimModeChange?.(vim.mode());
+  });
 
   // Local UI state
   const [prefixActive, setPrefixActive] = createSignal(false);
@@ -129,10 +124,7 @@ export function AggregateView(props: AggregateViewProps) {
     if (!aggregate.state.previewMode || !ptyId) return;
     selection.clearAllSelections();
     keyboard.enterCopyMode();
-    copyMode.enterCopyMode(
-      ptyId,
-      (id) => emulatorCache.get(id)?.getTerminalState() ?? terminal.getTerminalStateSync(id)
-    );
+    copyMode.enterCopyMode(ptyId, (id) => getAggregateTerminalStateSync(id));
   };
 
   const handleCopyModeKeys = createCopyModeKeyHandler({
@@ -175,20 +167,6 @@ export function AggregateView(props: AggregateViewProps) {
     })
   );
 
-  // Activity tracking for shimmer
-  const activity = useActivitySubscriptions({
-    isActive: () => aggregate.state.showAggregateView,
-    getTrackedPtys: () => aggregate.state.matchedPtys,
-    resolvePtyOwnership: (ptyId) =>
-      resolveAggregatePtyOwnership({
-        ptyId,
-        workspaces: layout.state.workspaces,
-        activeSessionId: session.state.activeSessionId,
-        trackedOwner: terminal.findSessionForPty(ptyId),
-        aggregateOwner: getAggregateSessionForPty(ptyId),
-      }),
-  });
-
   // Helper to get item at mouse position
   const getItemAtListMouse = (event: { y: number }) => {
     const viewport = listViewport();
@@ -216,29 +194,9 @@ export function AggregateView(props: AggregateViewProps) {
     return aggregate.state.selectedIndex;
   });
 
-  // Emulator helpers
-  const getAggregateEmulatorSync = (ptyId: string) => {
-    if (isSavedAggregatePtyId(ptyId)) {
-      return null;
-    }
-    return emulatorCache.get(ptyId) ?? terminal.getEmulatorSync(ptyId);
-  };
-  const getAggregateTerminalStateSync = (ptyId: string) => {
-    if (isSavedAggregatePtyId(ptyId)) {
-      return null;
-    }
-    return (
-      getAggregateEmulatorSync(ptyId)?.getTerminalState() ?? terminal.getTerminalStateSync(ptyId)
-    );
-  };
-  const isAggregateMouseTrackingEnabled = (ptyId: string) => {
-    if (isSavedAggregatePtyId(ptyId)) {
-      return false;
-    }
-    return (
-      getAggregateEmulatorSync(ptyId)?.isMouseTrackingEnabled() ??
-      terminal.isMouseTrackingEnabled(ptyId)
-    );
+  const isPreviewCopyModeActive = () => {
+    const previewPtyId = getPreviewableSelectedPtyId();
+    return aggregate.state.previewMode && !!previewPtyId && copyMode.isActive(previewPtyId);
   };
 
   // Controllers
@@ -300,10 +258,7 @@ export function AggregateView(props: AggregateViewProps) {
     getFilterQuery: () => aggregate.state.filterQuery,
     getSearchState: () => search.searchState,
     getInSearchMode: () => inSearchMode(),
-    getCopyModeActive: () => {
-      const previewPtyId = getPreviewableSelectedPtyId();
-      return aggregate.state.previewMode && !!previewPtyId && copyMode.isActive(previewPtyId);
-    },
+    getCopyModeActive: isPreviewCopyModeActive,
     getPrefixActive: prefixActive,
     getKeybindings: () => config.keybindings(),
     getMatchedCount: () => aggregate.state.flattenedTree.length,
@@ -371,20 +326,17 @@ export function AggregateView(props: AggregateViewProps) {
   });
 
   // Footer text
-  const hintsText = () => {
-    const previewPtyId = getPreviewableSelectedPtyId();
-
-    return getHintsText(
+  const hintsText = () =>
+    getHintsText(
       inSearchMode(),
       aggregate.state.previewMode,
       aggregate.state.previewZoomed,
-      aggregate.state.previewMode && !!previewPtyId && copyMode.isActive(previewPtyId),
+      isPreviewCopyModeActive(),
       config.keybindings(),
       aggregate.state.showInactive,
       vim.isEnabled(),
       vim.mode()
     );
-  };
   const filterText = () => getFilterText(aggregate.state.filterQuery);
   const footerWidths = () => calculateFooterWidths(props.width, filterText(), hintsText());
   const hostBgColor = () => {
@@ -462,11 +414,7 @@ export function AggregateView(props: AggregateViewProps) {
             innerHeight={layoutDims().previewInnerHeight}
             isPreviewMode={aggregate.state.previewMode}
             isZoomed={aggregate.state.previewZoomed}
-            isCopyModeActive={
-              aggregate.state.previewMode &&
-              !!aggregate.state.selectedPtyId &&
-              copyMode.isActive(aggregate.state.selectedPtyId)
-            }
+            isCopyModeActive={isPreviewCopyModeActive()}
             selectedPtyId={getPreviewableSelectedPtyId()}
             offsetX={layoutDims().listPaneWidth + 1}
             offsetY={1}

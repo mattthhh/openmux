@@ -1,419 +1,169 @@
 # Aggregate Views Architecture
 
-> Browse and filter terminals across all workspaces in a unified view.
+> Browse panes across sessions without materializing every PTY in the background.
 
-## Current Implementation
+## Current Model
 
-The aggregate view is a fullscreen overlay that provides a simple, efficient way to browse PTYs:
+The aggregate view is a fullscreen overlay with two jobs:
 
-### Features
+1. show a stable cross-session list of panes
+2. let the user preview or jump into the selected pane quickly
 
-- **Card-style PTY list** - Shows directory name, foreground process, and git branch
-- **Interactive terminal preview** - Full terminal rendering with keyboard and mouse support
-- **Jump to PTY** - Press Tab to jump directly to a PTY's workspace and pane (works across sessions!)
-- **Cross-session navigation** - Jump to terminals in other sessions - the session switches automatically
-- **Simple text filtering** - Filter PTYs by typing (matches process, cwd, git branch)
-- **Direct buffer rendering** - 60fps performance using the same approach as normal panes
+The key design choice is that the aggregate list is **snapshot-first**.
 
-### Usage
+### Source of truth
 
-1. Press `Alt+g` or `Ctrl+b g` to open the aggregate view
-2. Navigate the PTY list with `j/k` or arrow keys
-3. Type to filter by process name, directory, or git branch
-4. Press `Enter` to enter interactive mode (control the terminal)
-5. Press `Tab` to jump to the PTY's workspace and pane (closes aggregate view)
-   - If the PTY is in another session, the session switches automatically
-6. Press `Prefix+Esc` (Ctrl+b then Esc) to return to list mode
-7. Press `Esc` to close the aggregate view
+- **Active session**: current in-memory layout state
+- **Other sessions**: persisted session workspace snapshots on disk
+- **Live PTY metadata**: an overlay on top of those snapshots
 
-### Architecture
+That means the aggregate list is anchored to session workspaces, not to a global scan of live PTYs.
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                     AggregateView.tsx                       │
-│  ┌─────────────────┐  ┌──────────────────────────────────┐  │
-│  │  PTY List       │  │  InteractivePreview              │  │
-│  │  (PtyCard)      │  │  (direct buffer rendering)       │  │
-│  │                 │  │                                  │  │
-│  │  > proj (node)  │  │  Terminal content at 60fps       │  │
-│  │    main         │  │  with full input support         │  │
-│  │                 │  │                                  │  │
-│  │    proj (zsh)   │  │                                  │  │
-│  │    main         │  │                                  │  │
-│  └─────────────────┘  └──────────────────────────────────┘  │
-│  Filter: node_              Prefix+Esc: back to list        │
-└─────────────────────────────────────────────────────────────┘
-```
+## Why snapshot-first?
 
-### Key Components
+Earlier versions leaned too hard on global live PTY discovery. That made the aggregate list look dynamic, but it also caused subtle correctness bugs:
 
-- **AggregateViewContext** - React context with reducer for state management
-- **AggregateView** - Main overlay component with two-pane layout
-- **InteractivePreview** - Terminal renderer using `renderAfter` for performance
-- **listAllPtysWithMetadata()** - Bridge function to query PTY service
+- PTYs bleeding between sessions
+- ghost rows for panes that did not exist in any visible workspace
+- wrong git metadata following the wrong row
+- unloaded sessions materializing PTYs in the background
+- unstable selection and preview behavior during fast switching
 
-### Design Decisions
+The current model prefers correctness and stable identity:
 
-1. **Simple filtering over complex queries** - Text search is intuitive and covers most use cases
-2. **On-demand refresh** - PTY list is fetched when view opens, not streamed in real-time
-3. **Prefix+Esc for exit** - Allows terminal programs to use plain Esc without conflict
-4. **Defunct PTY filtering** - Automatically excludes dead/zombie processes from the list
+- `sessionId + paneId` is the durable row identity
+- live PTYs replace saved rows when available
+- unloaded sessions stay unloaded until the user actually switches to them
 
----
+## High-level flow
 
-## Future Possibilities
-
-The sections below describe potential enhancements that could be built on top of the current foundation.
-
-## Original Problem Statement
-
-openmux organizes terminals hierarchically:
-
-```
-Session → Workspaces (1-9) → Panes (main + stack)
+```text
+Persisted session snapshots + active in-memory layout
+                    │
+                    ▼
+          Aggregate snapshot refresh
+                    │
+                    ▼
+      Stable rows keyed by sessionId + paneId
+                    │
+     ┌──────────────┼──────────────┐
+     ▼              ▼              ▼
+ live metadata   optimistic UI   activity overlay
+   overlay        placeholders    (shimmer)
 ```
 
-Users can only view terminals within the **active session and workspace**. There's no way to:
+## Important behaviors
 
-- See all instances of a specific command across sessions
-- Monitor multiple long-running processes in one view
-- Create ad-hoc groupings independent of session structure
+### 1. No background PTY materialization
 
-## Advanced: Real-time Aggregate View Layer
+Browsing unloaded sessions must not create hidden PTYs.
 
-A **virtual workspace** that queries terminals across all sessions based on filters:
+Aggregate selection can show:
 
-```
-┌──────────────────────────────────────────────────────────────┐
-│                 Virtual Workspace: "Claude Code"             │
-│  Filter: command contains "claude" OR title contains "claude"│
-├──────────────────────────────────────────────────────────────┤
-│  ┌──────────────┐  ┌───────────────────────────────────────┐ │
-│  │ Matched PTYs │  │                                       │ │
-│  │              │  │   Selected Terminal Output            │ │
-│  │ ● session-a  │  │                                       │ │
-│  │   ws1:pty3   │  │   $ claude "help me fix this bug"     │ │
-│  │              │  │                                       │ │
-│  │ ○ session-b  │  │   I'll help you fix the bug. Let me   │ │
-│  │   ws2:pty1   │  │   first examine the code...           │ │
-│  │              │  │                                       │ │
-│  │ ○ session-b  │  │                                       │ │
-│  │   ws4:pty2   │  │                                       │ │
-│  │              │  │                                       │ │
-│  │ ○ session-c  │  │                                       │ │
-│  │   ws1:pty1   │  │                                       │ │
-│  └──────────────┘  └───────────────────────────────────────┘ │
-└──────────────────────────────────────────────────────────────┘
+- saved rows from persisted workspaces
+- optimistic `...` placeholders for in-flight pane creation
+- live PTYs for the active or resumed session
+
+But it must **not** wake up an unloaded session just because the cursor moved over it.
+
+### 2. Preview resolves saved rows back to the live PTY
+
+A selected row may still be represented by a saved id such as:
+
+```text
+saved:<sessionId>:<paneId>
 ```
 
-## Use Cases
+When that session becomes active, preview logic resolves the row back through the live workspace layout to find the real PTY for that pane. This keeps preview rendering, keyboard input, focus tracking, and copy/search mode aligned with the same live target.
 
-### 1. Monitor All Claude Instances
+### 3. Optimistic UI is layered on top of snapshots
 
-```typescript
-const filter = {
-  type: 'or',
-  conditions: [
-    { field: 'command', contains: 'claude' },
-    { field: 'title', contains: 'claude' },
-  ]
-}
-```
+The aggregate view still keeps the responsive behavior we want:
 
-### 2. Watch All Build Processes
+- queued `...` placeholders appear immediately for new panes
+- saved rows are claimed by the first matching live PTY for the pane
+- closing a pane removes the row immediately
+- pane ordering survives refreshes instead of being rebuilt from scratch every time
 
-```typescript
-const filter = {
-  type: 'or',
-  conditions: [
-    { field: 'command', matches: /npm run (build|dev|start)/ },
-    { field: 'command', contains: 'cargo build' },
-    { field: 'command', contains: 'make' },
-  ]
-}
-```
+The important part is that this optimism is a thin layer on top of stable session-workspace data.
 
-### 3. Session Overview
+### 4. Activity and shimmer are tracked by pane identity
 
-```typescript
-// All terminals in a specific session (cross-workspace)
-const filter = {
-  type: 'equals',
-  field: 'sessionId',
-  value: 'session-abc'
-}
-```
+Shimmer is now a hybrid overlay:
 
-### 4. Recent Activity
+- we subscribe once to cheap global PTY activity events
+- live activity is mirrored onto the stable saved-row id for the owning `sessionId + paneId`
+- saved rows can keep shimmering across session boundaries without loading every PTY
 
-```typescript
-// Terminals with output in last 5 minutes
-const filter = {
-  type: 'recentActivity',
-  within: { minutes: 5 }
-}
-```
+This keeps activity visible in the aggregate list while avoiding the bugs that came from globally hydrating every background PTY.
 
-## Architecture
+## Session switching behavior
 
-### Data Flow
+Aggregate-driven session switches are:
 
-```
-┌───────────────────────────────────────────────────────────┐
-│                      Aggregate View                       │
-│                                                           │
-│  ┌─────────────────────────────────────────────────────┐  │
-│  │              AggregateQuery Service                 │  │
-│  │                                                     │  │
-│  │  filter: FilterExpression                           │  │
-│  │  results: Stream<AggregatedPty[]>                   │  │
-│  └─────────────────────────────────────────────────────┘  │
-│                           │                               │
-│              ┌────────────┴────────────┐                  │
-│              ▼                         ▼                  │
-│  ┌─────────────────────┐   ┌─────────────────────┐        │
-│  │   ShimClient        │   │   ShimClient        │        │
-│  │   (session-a)       │   │   (session-b)       │        │
-│  └─────────────────────┘   └─────────────────────┘        │
-│              │                         │                  │
-│              ▼                         ▼                  │
-│  ┌─────────────────────┐   ┌─────────────────────┐        │
-│  │   Shim Process      │   │   Shim Process      │        │
-│  │   PTYs + Emulators  │   │   PTYs + Emulators  │        │
-│  └─────────────────────┘   └─────────────────────┘        │
-└───────────────────────────────────────────────────────────┘
-```
+- **serialized**
+- **latest-wins**
+- targeted to the selected pane's workspace when known
 
-### Stream Composition
+That prevents older async switches from racing and restoring the wrong session after the user has already moved on.
 
-The aggregate view is fundamentally **stream composition**—merging PTY outputs from multiple sources:
+## Main modules
 
-```typescript
-import { Effect, Stream } from "effect"
+### UI
 
-const aggregatedStream = Effect.gen(function* () {
-  const shim = yield* ShimClient
-  const sessions = yield* shim.listConnectedSessions()
+- `src/components/AggregateView.tsx`
+  - composition root for the overlay
+- `src/components/aggregate/ListPane.tsx`
+  - session + pane tree rendering
+- `src/components/aggregate/PreviewPane.tsx`
+  - preview container and border state
+- `src/components/aggregate/InteractivePreview.tsx`
+  - live terminal preview
 
-  // Query all PTYs across all sessions (parallel)
-  const allPtys = yield* Effect.forEach(
-    sessions,
-    (s) => shim.getPtys(s.id).pipe(
-      Effect.map(ptys => ptys.map(p => ({ sessionId: s.id, ...p })))
-    ),
-    { concurrency: 'unbounded' }
-  ).pipe(Effect.map(arrays => arrays.flat()))
+### Preview and interaction helpers
 
-  // Apply filter
-  const matchingPtys = allPtys.filter(pty => matchesFilter(pty, filter))
+- `src/components/aggregate/hooks/useAggregatePreviewSupport.ts`
+  - shared preview PTY resolution, emulator lookup, and activity subscription wiring
+- `src/components/aggregate/keyboard/preview.ts`
+  - preview input routing
+- `src/components/aggregate/utils.ts`
+  - pane lookup, preview resolution, and ownership resolution helpers
 
-  // Merge output streams from all matching PTYs
-  return Stream.mergeAll(
-    matchingPtys.map(p =>
-      shim.subscribeOutput(p.sessionId, p.ptyId).pipe(
-        Stream.map(output => ({ ...p, output }))
-      )
-    ),
-    { concurrency: 'unbounded' }
-  )
-})
-```
+### Aggregate state
 
-## Why Effect?
+- `src/contexts/AggregateViewContext.tsx`
+  - context wiring and refresh/subscription setup
+- `src/contexts/aggregate/refresh.ts`
+  - snapshot rebuild and live metadata overlay
+- `src/contexts/aggregate/subscriptions.ts`
+  - lifecycle/title/activity-driven updates
+- `src/contexts/aggregate/session.ts`
+  - selection preservation and tree recomputation
+- `src/contexts/aggregate/rows.ts`
+  - saved/pending row identities and pane-key dedupe helpers
 
-This is where Effect's primitives genuinely reduce complexity:
+## Invariants worth protecting
 
-### Stream Merging
+When changing aggregate behavior, keep these rules intact:
 
-```typescript
-// Effect: declarative
-Stream.mergeAll(streams, { concurrency: 'unbounded' })
+1. **Session workspaces are the source of truth**
+2. **`sessionId + paneId` is the stable row identity**
+3. **Do not materialize PTYs just by browsing unloaded sessions**
+4. **Preview/input/focus must all resolve through the same live PTY target**
+5. **Optimistic placeholders must never duplicate a claimed live pane**
+6. **Wrong metadata is worse than blank metadata**
 
-// Vanilla: manual event aggregation
-const merged = new EventEmitter()
-streams.forEach(s => s.on('data', d => merged.emit('data', d)))
-// + cleanup tracking, error handling, backpressure...
-```
+## Testing focus
 
-### Dynamic Subscriptions
+The most important regressions to cover are:
 
-When a new PTY spawns that matches the filter, it should appear automatically:
+- fast cross-session navigation (`opt+j/k`)
+- saved-row → live-row replacement preserving selection and preview
+- background activity updating shimmer on saved rows
+- switching to a previewed PTY and typing immediately
+- pane creation placeholders being claimed instead of duplicated
+- deleted PTYs not reviving during refresh
 
-```typescript
-const dynamicAggregation = Stream.flatMap(
-  ptyLifecycleStream,
-  (event) => {
-    if (event._tag === 'created' && matchesFilter(event.pty, filter)) {
-      return shim.subscribeOutput(event.sessionId, event.ptyId)
-    }
-    return Stream.empty
-  }
-)
-```
+## Future possibilities
 
-### Parallel Queries with Concurrency Control
-
-```typescript
-// Query all sessions, max 5 concurrent connections
-yield* Effect.forEach(
-  sessions,
-  (s) => shim.connect(s.id),
-  { concurrency: 5 }
-)
-```
-
-### Resource Cleanup
-
-```typescript
-// Scoped cleanup: when view closes, all subscriptions cleaned up
-const view = Effect.scoped(
-  Effect.gen(function* () {
-    const subscriptions = yield* setupAggregateSubscriptions()
-    yield* Effect.addFinalizer(() => cleanupAll(subscriptions))
-    return yield* renderView()
-  })
-)
-```
-
-## Filter Schema
-
-```typescript
-import { Schema } from "effect"
-
-const FilterCondition = Schema.Union(
-  Schema.Struct({
-    _tag: Schema.Literal("contains"),
-    field: Schema.Literal("command", "title", "cwd"),
-    value: Schema.String,
-  }),
-  Schema.Struct({
-    _tag: Schema.Literal("matches"),
-    field: Schema.Literal("command", "title", "cwd"),
-    pattern: Schema.String, // regex
-  }),
-  Schema.Struct({
-    _tag: Schema.Literal("equals"),
-    field: Schema.Literal("sessionId", "workspaceId", "ptyId"),
-    value: Schema.String,
-  }),
-  Schema.Struct({
-    _tag: Schema.Literal("recentActivity"),
-    withinSeconds: Schema.Int,
-  }),
-)
-
-const FilterExpression: Schema.Schema<FilterExpression> = Schema.suspend(() =>
-  Schema.Union(
-    FilterCondition,
-    Schema.Struct({
-      _tag: Schema.Literal("and"),
-      conditions: Schema.Array(FilterExpression),
-    }),
-    Schema.Struct({
-      _tag: Schema.Literal("or"),
-      conditions: Schema.Array(FilterExpression),
-    }),
-    Schema.Struct({
-      _tag: Schema.Literal("not"),
-      condition: FilterExpression,
-    }),
-  )
-)
-```
-
-## Effect Service
-
-```typescript
-class AggregateQuery extends Context.Tag("@openmux/AggregateQuery")<
-  AggregateQuery,
-  {
-    // Execute a one-time query
-    query: (filter: FilterExpression) => Effect<AggregatedPty[]>
-
-    // Subscribe to matching PTYs (dynamic updates)
-    subscribe: (filter: FilterExpression) => Stream<AggregateEvent>
-
-    // Get merged output stream for matching PTYs
-    mergedOutput: (filter: FilterExpression) => Stream<PtyOutput>
-  }
->() {}
-
-type AggregateEvent =
-  | { _tag: 'added'; pty: AggregatedPty }
-  | { _tag: 'removed'; ptyId: PtyId }
-  | { _tag: 'updated'; pty: AggregatedPty }
-
-type AggregatedPty = {
-  sessionId: SessionId
-  sessionName: string
-  workspaceId: WorkspaceId
-  ptyId: PtyId
-  command?: string
-  title?: string
-  cwd: string
-  lastActivity: number
-}
-```
-
-## React Integration
-
-```typescript
-// Custom hook for aggregate views
-function useAggregateView(filter: FilterExpression) {
-  const [ptys, setPtys] = useState<AggregatedPty[]>([])
-  const [selectedPty, setSelectedPty] = useState<PtyId | null>(null)
-
-  useEffect(() => {
-    const subscription = runStream(
-      AggregateQuery.subscribe(filter),
-      (event) => {
-        if (event._tag === 'added') {
-          setPtys(prev => [...prev, event.pty])
-        } else if (event._tag === 'removed') {
-          setPtys(prev => prev.filter(p => p.ptyId !== event.ptyId))
-        }
-      }
-    )
-    return () => subscription.unsubscribe()
-  }, [filter])
-
-  return { ptys, selectedPty, setSelectedPty }
-}
-```
-
-## Relationship to Background Sessions
-
-Aggregate views **depend on** the background sessions architecture:
-
-1. **Multiple sessions must be alive** to aggregate across them
-2. **Shim protocol** provides the PTY lifecycle events (`created`, `exit`)
-3. **Socket connections** allow subscribing to output from any session
-
-The shim protocol should be designed with aggregation in mind—emitting events that the `AggregateQuery` service can consume.
-
-## Future Extensions
-
-### Saved Views
-
-```typescript
-// Persist filter configurations
-const savedViews = [
-  { name: "Claude Instances", filter: { ... } },
-  { name: "Build Processes", filter: { ... } },
-]
-```
-
-### Cross-Machine Aggregation
-
-```typescript
-// Connect to remote openmux instances
-const remoteShim = yield* ShimClient.connectRemote("ssh://server/socket")
-```
-
-### View Layouts
-
-```typescript
-// Grid view: show multiple terminals simultaneously
-// Timeline view: show output chronologically across PTYs
-// Split view: compare two filtered sets side-by-side
-```
+There is still room to build richer aggregate queries later, but those features should preserve the same invariants above. New filtering or grouping features should compose with the snapshot-first row model rather than replacing it with a live-PTY-global-source model again.

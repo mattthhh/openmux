@@ -1,5 +1,8 @@
 /**
- * Aggregate view helper compatibility layer.
+ * Aggregate view helper barrel.
+ *
+ * The aggregate modules are split by concern, but many callers still want a
+ * single import surface for tree, selection, filtering, and session helpers.
  */
 
 export { TREE_GLYPHS } from './aggregate-view-types';
@@ -9,7 +12,6 @@ export {
   isActivePty,
   filterActivePtys,
   filterPtysByActivity,
-  getBasePtys,
   filterPtys,
   buildPtyIndex,
   groupPtysBySession,
