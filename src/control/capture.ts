@@ -71,8 +71,8 @@ function renderTextLineTrimmed(cells: TerminalCell[]): string {
 }
 
 /**
- * Render cells as plain text
- * @deprecated Use renderTextLine() or renderTextLineTrimmed() for explicit intent
+ * Render cells as plain text while preserving the old trim flag signature.
+ * Prefer renderTextLine() or renderTextLineTrimmed() at new call sites.
  */
 function renderTextLineWithTrim(cells: TerminalCell[], trimTrailing: boolean): string {
   return trimTrailing ? renderTextLineTrimmed(cells) : renderTextLine(cells);
@@ -173,8 +173,8 @@ function renderAnsiLineInternal(cells: TerminalCell[], lastContentIndex: number)
 }
 
 /**
- * Render cells as ANSI text
- * @deprecated Use renderAnsiLine() or renderAnsiLineTrimmed() for explicit intent
+ * Render cells as ANSI text while preserving the old trim flag signature.
+ * Prefer renderAnsiLine() or renderAnsiLineTrimmed() at new call sites.
  */
 function renderAnsiLineWithTrim(cells: TerminalCell[], trimTrailing: boolean): string {
   return trimTrailing ? renderAnsiLineTrimmed(cells) : renderAnsiLine(cells);

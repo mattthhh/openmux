@@ -160,8 +160,10 @@ export async function listAllPtysWithMetadataWithService(
 }
 
 /**
- * Deprecated singleton-backed wrappers kept temporarily while aggregate view
- * consumers finish migrating to explicit dependency passing.
+ * Singleton-backed convenience wrappers for app/runtime callers.
+ *
+ * The lower-level helpers above take explicit services, while these exports keep
+ * the bridge ergonomic for UI code that already runs inside the initialized runtime.
  */
 export async function getPtyMetadata(
   ptyId: string,
