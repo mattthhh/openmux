@@ -136,6 +136,10 @@ const createHarness = () => {
     ['pane-1', 0],
     ['pane-2', 1],
   ]);
+  let currentSessionPtys = [
+    { ptyId: 'pty-1', paneId: 'pane-1', workspaceId: 1, title: 'one', cwd: '/tmp' },
+    { ptyId: 'pty-2', paneId: 'pane-2', workspaceId: 1, title: 'two', cwd: '/tmp' },
+  ];
 
   const resolvePtyOwnership = (ptyId: string) => ownershipByPtyId.get(ptyId) ?? null;
   const getCurrentSessionHints = () => ({
@@ -144,10 +148,7 @@ const createHarness = () => {
     focusedPaneId: 'pane-1',
   });
   const getCurrentSessionPaneOrder = () => currentSessionPaneOrder;
-  const getCurrentSessionPtys = () => [
-    { ptyId: 'pty-1', paneId: 'pane-1', workspaceId: 1, title: 'one', cwd: '/tmp' },
-    { ptyId: 'pty-2', paneId: 'pane-2', workspaceId: 1, title: 'two', cwd: '/tmp' },
-  ];
+  const getCurrentSessionPtys = () => currentSessionPtys;
 
   const refreshers = createAggregateViewRefreshers(
     state,
@@ -173,6 +174,17 @@ const createHarness = () => {
     lifecycleHandlers,
     setCurrentSessionPaneOrder: (next: Map<string, number>) => {
       currentSessionPaneOrder = next;
+    },
+    setCurrentSessionPtys: (
+      next: Array<{
+        ptyId: string;
+        paneId: string;
+        workspaceId: number;
+        title?: string;
+        cwd?: string;
+      }>
+    ) => {
+      currentSessionPtys = next;
     },
   };
 };
@@ -523,6 +535,66 @@ describe('aggregate insertion ordering', () => {
     await refreshers.refreshPtys();
 
     expect(getVisiblePtyIds(state)).toEqual(['pty-1', 'pty-new', 'pty-2']);
+  });
+
+  it('keeps the created PTY adjacent after optimistic keepalive expires', async () => {
+    vi.useFakeTimers();
+
+    try {
+      const {
+        state,
+        setState,
+        refreshers,
+        lifecycleHandlers,
+        setCurrentSessionPaneOrder,
+        setCurrentSessionPtys,
+      } = createHarness();
+
+      await refreshers.initialLoad();
+
+      setState(
+        produce((s) => {
+          s.pendingPaneCreations = [
+            {
+              id: 'pending-1',
+              sessionId: 'session-1',
+              insertAfterPtyId: 'pty-1',
+              insertAfterPaneId: 'pane-1',
+              pendingPtyId: 'pty-new',
+              pendingPaneId: 'pane-3',
+            },
+          ];
+        })
+      );
+
+      await lifecycleHandlers.handlePtyCreated('pty-new');
+      expect(getVisiblePtyIds(state)).toEqual(['pty-1', 'pty-new', 'pty-2']);
+
+      vi.advanceTimersByTime(5000);
+      await Promise.resolve();
+
+      expect(state.recentlyAddedPtyIds.has('pty-new')).toBe(false);
+
+      setCurrentSessionPaneOrder(
+        new Map([
+          ['pane-1', 0],
+          ['pane-2', 1],
+          ['pane-3', 2],
+        ])
+      );
+      setCurrentSessionPtys([
+        { ptyId: 'pty-1', paneId: 'pane-1', workspaceId: 1, title: 'one', cwd: '/tmp' },
+        { ptyId: 'pty-new', paneId: 'pane-3', workspaceId: 1, title: 'new', cwd: '/tmp' },
+        { ptyId: 'pty-2', paneId: 'pane-2', workspaceId: 1, title: 'two', cwd: '/tmp' },
+      ]);
+
+      await refreshers.refreshPtys();
+
+      expect(getSessionPaneOrder(state.sessionPaneOrders, 'session-1').get('pane-3')).toBe(0.5);
+      expect(getVisiblePtyIds(state)).toEqual(['pty-1', 'pty-new', 'pty-2']);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('preserves adjacency for overlapping pane creations in the same session', async () => {

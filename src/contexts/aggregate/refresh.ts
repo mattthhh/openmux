@@ -22,7 +22,12 @@ import { getGitDiffStats, getGitInfo } from '../../effect/services/pty/helpers';
 import { buildPtyIndex } from './filter';
 import { applyGitMetadataSnapshot } from './git';
 import { ptyMetadataToInfo } from './pty-info';
-import { getSessionPaneOrderKey, setSessionPaneOrder } from './pane-order';
+import {
+  getSessionPaneOrder,
+  getSessionPaneOrderKey,
+  mergePaneOrder,
+  setSessionPaneOrder,
+} from './pane-order';
 import {
   RefreshGuard,
   type CurrentSessionHints,
@@ -533,10 +538,16 @@ export function createAggregateViewRefreshers(
         s.loadingSessionIds.clear();
         s.loadAttemptedSessionIds.clear();
 
-        s.sessionPaneOrders = new Map(snapshot.sessionPaneOrders);
+        s.sessionPaneOrders = new Map();
         s.sessionPaneOrderIndex.clear();
         for (const [sessionId, paneOrder] of snapshot.sessionPaneOrders) {
-          setSessionPaneOrder(s.sessionPaneOrderIndex, sessionId, paneOrder);
+          const existingOrder = getSessionPaneOrder(previousPaneOrderIndex, sessionId);
+          const mergedPaneOrder = mergePaneOrder(
+            existingOrder.size > 0 ? existingOrder : undefined,
+            paneOrder
+          );
+          s.sessionPaneOrders.set(sessionId, mergedPaneOrder);
+          setSessionPaneOrder(s.sessionPaneOrderIndex, sessionId, mergedPaneOrder);
         }
 
         for (const pty of optimisticPtys) {

@@ -348,50 +348,47 @@ export function TerminalProvider(props: TerminalProviderProps) {
   ): Promise<{ mapping: Map<string, string>; missingPaneIds: string[] } | undefined> => {
     const shimMapping = await getSessionPtyMapping(sessionId);
     const missingPaneIds = new Set(shimMapping?.stalePaneIds ?? []);
-    const savedMapping = shimMapping?.mapping ?? sessionPtyMap.get(sessionId);
-    if (!savedMapping || (savedMapping.size === 0 && missingPaneIds.size === 0)) {
+    const baseSavedMapping = shimMapping?.mapping ?? sessionPtyMap.get(sessionId);
+    if (!baseSavedMapping || (baseSavedMapping.size === 0 && missingPaneIds.size === 0)) {
       return undefined;
     }
 
-    // Resubscribe to all PTYs in parallel for faster session switching
-    const subscriptionPromises = Array.from(savedMapping.entries()).map(async ([paneId, ptyId]) => {
-      try {
-        // Subscribe to PTY with unified caches
-        const unsub = await subscribeToPtyWithCaches(
-          ptyId,
-          paneId,
-          ptyCaches,
-          ptyLifecycleHandlers.handlePtyExit,
-          { cacheScrollState: shouldCacheScrollState }
-        );
+    const savedMapping = new Map(baseSavedMapping);
+    sessionPtyMap.set(sessionId, new Map(savedMapping));
 
-        return { paneId, ptyId, unsub, success: true };
-      } catch {
-        // PTY may have exited while suspended
-        return { paneId, ptyId, unsub: null, success: false };
-      }
-    });
-
-    const results = await Promise.all(subscriptionPromises);
-
-    // Apply results after all subscriptions complete
-    for (const result of results) {
-      if (result.success && result.unsub) {
-        // Store unsubscribe function
-        unsubscribeFns.set(result.ptyId, result.unsub);
-
-        // Restore pty→pane mapping
-        ptyToPaneMap.set(result.ptyId, result.paneId);
-        ptyToSessionMap.set(result.ptyId, { sessionId, paneId: result.paneId });
-      } else {
-        // PTY exited while suspended - remove from mapping
-        savedMapping.delete(result.paneId);
-        missingPaneIds.add(result.paneId);
-      }
+    // Restore the pane/session ownership synchronously so layout loading can proceed
+    // immediately. Subscription/cache hydration happens in the background.
+    for (const [paneId, ptyId] of savedMapping) {
+      ptyToPaneMap.set(ptyId, paneId);
+      ptyToSessionMap.set(ptyId, { sessionId, paneId });
     }
 
-    if (shimMapping) {
-      sessionPtyMap.set(sessionId, new Map(savedMapping));
+    for (const [paneId, ptyId] of savedMapping) {
+      void subscribeToPtyWithCaches(ptyId, paneId, ptyCaches, ptyLifecycleHandlers.handlePtyExit, {
+        cacheScrollState: shouldCacheScrollState,
+      })
+        .then((unsub) => {
+          const currentPtyId = sessionPtyMap.get(sessionId)?.get(paneId);
+          const currentOwner = ptyToSessionMap.get(ptyId);
+          if (
+            currentPtyId !== ptyId ||
+            !currentOwner ||
+            currentOwner.sessionId !== sessionId ||
+            currentOwner.paneId !== paneId
+          ) {
+            unsub();
+            return;
+          }
+
+          const previousUnsub = unsubscribeFns.get(ptyId);
+          if (previousUnsub) {
+            previousUnsub();
+          }
+          unsubscribeFns.set(ptyId, unsub);
+        })
+        .catch((error) => {
+          console.warn(`[TerminalContext] Failed to resume PTY ${ptyId}:`, error);
+        });
     }
 
     return { mapping: savedMapping, missingPaneIds: Array.from(missingPaneIds) };

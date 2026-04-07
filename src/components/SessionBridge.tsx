@@ -17,6 +17,7 @@ import { pruneMissingPanes } from './session-bridge-utils';
 import { deferMacrotask } from '../core/scheduling';
 import {
   clearPtyTracking,
+  setActiveSessionIdForShim,
   setSessionCwdMap,
   clearSessionCwdMap,
   setSessionCommandMap,
@@ -120,6 +121,11 @@ export function SessionBridge(props: SessionBridgeProps) {
     options?: { allowPrune?: boolean }
   ) => {
     const allowPrune = options?.allowPrune ?? true;
+
+    // Make the target session visible to PTY creation before the reactive
+    // SessionContext state catches up. This prevents restored or auto-created
+    // panes from being registered against the previous session during a switch.
+    setActiveSessionIdForShim(sessionId);
 
     // Try to resume PTYs for this session (if we've visited it before)
     const resumeResult = await resumeSession(sessionId);

@@ -187,6 +187,44 @@ describe('Selection Persistence - current tree behavior', () => {
     expect(state.selectedIndex).toBe(state.flattenedTreeIndex.get('pty-2'));
   });
 
+  it('keeps selection on the same pane when a saved row is replaced by a live PTY', () => {
+    const sessionA = createMockSession('session-a', 'A');
+    const savedPty = createMockPty({
+      ptyId: 'saved:session-a:pane-1',
+      sessionId: 'session-a',
+      paneId: 'pane-1',
+      title: 'saved-shell',
+    });
+    const { state, setState } = createAggregateState({
+      sessions: [sessionA],
+      ptys: [savedPty],
+      selectedPtyId: savedPty.ptyId,
+    });
+
+    const livePty = createMockPty({
+      ptyId: 'pty-live',
+      sessionId: 'session-a',
+      paneId: 'pane-1',
+      title: 'live-shell',
+    });
+
+    setState(
+      produce((s) => {
+        s.allPtys = [livePty];
+        s.allPtysIndex = buildPtyIndex(s.allPtys);
+        s.matchedPtys = [livePty];
+        s.matchedPtysIndex = buildPtyIndex(s.matchedPtys);
+        s.sessionPaneOrders = paneOrders(s.allPtys);
+        recomputeMatches(s);
+        recomputeTree(s);
+      })
+    );
+
+    expect(state.selectedPtyId).toBe('pty-live');
+    expect(state.selectedSessionId).toBe('session-a');
+    expect(state.flattenedTree[state.selectedIndex]?.node.type).toBe('pty');
+  });
+
   it('keeps the cursor in place by selecting the next PTY after removal', () => {
     const sessions = [createMockSession('session-a', 'A')];
     const ptys = [
@@ -293,7 +331,7 @@ describe('Selection Persistence - current tree behavior', () => {
     expect(state.previewZoomed).toBe(false);
   });
 
-  it('falls back to the session header when the selected PTY is filtered out', () => {
+  it('moves to the remaining PTY when the selected PTY is filtered out', () => {
     const sessions = [createMockSession('session-a', 'A')];
     const ptys = [
       createMockPty({ ptyId: 'pty-1', sessionId: 'session-a', foregroundProcess: 'nvim' }),
@@ -315,9 +353,9 @@ describe('Selection Persistence - current tree behavior', () => {
 
     actions.setFilterQuery('bash');
 
-    expect(state.selectedPtyId).toBeNull();
+    expect(state.selectedPtyId).toBe('pty-2');
     expect(state.selectedSessionId).toBe('session-a');
-    expect(state.flattenedTree[state.selectedIndex]?.node.type).toBe('session');
+    expect(state.flattenedTree[state.selectedIndex]?.node.type).toBe('pty');
     expect(state.previewMode).toBe(false);
     expect(state.previewZoomed).toBe(false);
   });

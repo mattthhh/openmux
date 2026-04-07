@@ -167,23 +167,28 @@ export function createSessionOperations(params: SessionOperationsParams) {
 
     if (data instanceof SessionNotFoundError || data instanceof SessionCorruptedError) {
       console.error('Failed to load session data:', data.message);
-      // Load failure - keep layout consistent by clearing to an empty session
+      // Load failure - keep layout consistent by clearing to an empty session.
+      // Only publish the new active session after layout/PTY restoration finishes,
+      // otherwise aggregate view can observe the new session id with the old layout.
       const fallbackSession = state.sessions.find((session) => session.id === id);
+      await onSessionLoad({}, 1, new Map(), new Map(), id, { allowPrune: false });
       if (fallbackSession) {
         dispatch({ type: 'SET_ACTIVE_SESSION', id, session: fallbackSession });
       }
-      await onSessionLoad({}, 1, new Map(), new Map(), id, { allowPrune: false });
-    } else {
-      dispatch({
-        type: 'SET_ACTIVE_SESSION',
-        id,
-        session: { ...data.metadata, lastSwitchedAt: Date.now() },
-      });
-      // IMPORTANT: Await onSessionLoad to ensure CWD map is set before switching completes
-      await onSessionLoad(data.workspaces, data.activeWorkspaceId, data.cwdMap, new Map(), id, {
-        allowPrune: true,
-      });
+      refreshSessionsInBackground();
+      return;
     }
+
+    // IMPORTANT: Await onSessionLoad before publishing the active session change so
+    // aggregate view never sees a mismatched session id and previous layout snapshot.
+    await onSessionLoad(data.workspaces, data.activeWorkspaceId, data.cwdMap, new Map(), id, {
+      allowPrune: true,
+    });
+    dispatch({
+      type: 'SET_ACTIVE_SESSION',
+      id,
+      session: { ...data.metadata, lastSwitchedAt: Date.now() },
+    });
 
     refreshSessionsInBackground();
   };

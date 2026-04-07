@@ -91,6 +91,8 @@ export function recomputeTree(state: AggregateViewState): void {
   const previousSelectedType = previousSelectedItem?.node.type;
   const previousSelectedSessionId =
     state.selectedSessionId ?? getSessionIdForItem(previousSelectedItem);
+  const previousSelectedPaneId =
+    previousSelectedItem?.node.type === 'pty' ? previousSelectedItem.node.ptyInfo.paneId : null;
   const previousSessionIds = new Set(
     state.treeRoot
       .filter((node): node is SessionTreeNode => node.type === 'session')
@@ -138,6 +140,25 @@ export function recomputeTree(state: AggregateViewState): void {
   }
 
   if (previousSelectedSessionId) {
+    if (previousSelectedPaneId) {
+      const matchingPaneIndex = state.flattenedTree.findIndex(
+        (item) =>
+          item.node.type === 'pty' &&
+          item.node.ptyInfo.sessionId === previousSelectedSessionId &&
+          item.node.ptyInfo.paneId === previousSelectedPaneId
+      );
+
+      if (matchingPaneIndex !== -1) {
+        const matchingPaneItem = state.flattenedTree[matchingPaneIndex];
+        if (matchingPaneItem?.node.type === 'pty') {
+          state.selectedIndex = matchingPaneIndex;
+          state.selectedSessionId = previousSelectedSessionId;
+          state.selectedPtyId = matchingPaneItem.node.ptyInfo.ptyId;
+          return;
+        }
+      }
+    }
+
     if (previousSelectedType === 'placeholder') {
       const sameRowItem = state.flattenedTree[previousSelectedIndex];
       if (
@@ -158,6 +179,7 @@ export function recomputeTree(state: AggregateViewState): void {
       if (sessionId !== previousSelectedSessionId) return false;
       if (previousSelectedType === 'placeholder') return item.node.type === 'placeholder';
       if (previousSelectedType === 'session') return item.node.type === 'session';
+      if (previousSelectedType === 'pty') return item.node.type === 'pty';
       return item.node.type !== 'spacer';
     });
 

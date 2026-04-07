@@ -327,4 +327,63 @@ describe('createSessionOperations', () => {
       { allowPrune: true }
     );
   });
+
+  it('waits to publish the active session until after session load completes', async () => {
+    const sessionA = createMetadata('session-a');
+    const sessionB = createMetadata('session-b');
+    const state = createState({
+      sessions: [sessionA, sessionB],
+      activeSessionId: sessionA.id,
+      activeSession: sessionA,
+    });
+
+    const dispatch = vi.fn();
+    let resolveSessionLoad!: () => void;
+    const onSessionLoad = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveSessionLoad = resolve;
+        })
+    );
+
+    const ops = createSessionOperations({
+      getState: () => state,
+      dispatch,
+      getCwd: vi.fn().mockResolvedValue('/tmp'),
+      getWorkspaces: () => ({}),
+      getActiveWorkspaceId: () => 1 as WorkspaceId,
+      shouldPersistSession: () => false,
+      onSessionLoad,
+      onBeforeSwitch: vi.fn().mockResolvedValue(undefined),
+      onDeleteSession: vi.fn(),
+      refreshSessions: vi.fn().mockResolvedValue(undefined),
+    });
+
+    (switchToSession as any).mockResolvedValue(undefined);
+    (loadSessionData as any).mockResolvedValue({
+      metadata: sessionB,
+      workspaces: {} as Workspaces,
+      activeWorkspaceId: 1 as WorkspaceId,
+      cwdMap: new Map<string, string>(),
+    });
+
+    const switchPromise = ops.switchSession(sessionB.id);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(onSessionLoad).toHaveBeenCalledTimes(1);
+    expect(
+      dispatch.mock.calls.some(
+        ([action]) => action.type === 'SET_ACTIVE_SESSION' && action.id === sessionB.id
+      )
+    ).toBe(false);
+
+    resolveSessionLoad();
+    await switchPromise;
+
+    expect(
+      dispatch.mock.calls.some(
+        ([action]) => action.type === 'SET_ACTIVE_SESSION' && action.id === sessionB.id
+      )
+    ).toBe(true);
+  });
 });

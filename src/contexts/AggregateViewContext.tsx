@@ -98,7 +98,7 @@ export function AggregateViewProvider(props: AggregateViewProviderProps) {
 
   const getCurrentSessionPaneOrder = () => {
     const sessionId = session.state.activeSessionId;
-    if (!sessionId) return null;
+    if (!sessionId || session.state.switching) return null;
 
     const paneIds: string[] = [];
     for (const workspace of Object.values(layout.state.workspaces)) {
@@ -152,6 +152,14 @@ export function AggregateViewProvider(props: AggregateViewProviderProps) {
           collectPtys(n.first);
           collectPtys(n.second);
         } else if (n.id && n.ptyId && terminal.isPtyActive(n.ptyId)) {
+          const trackedSession = terminal.findSessionForPty(n.ptyId);
+          if (trackedSession && trackedSession.sessionId !== sessionId) {
+            return;
+          }
+          if (!trackedSession && session.state.switching) {
+            return;
+          }
+
           ptys.push({
             ptyId: n.ptyId,
             paneId: n.id,
@@ -267,6 +275,7 @@ export function AggregateViewProvider(props: AggregateViewProviderProps) {
   createEffect(() => {
     if (!state.showAggregateView) return;
 
+    const switching = session.state.switching;
     const activeSessionId = session.state.activeSessionId;
     const sessionSignature = session.state.sessions
       .map(
@@ -277,6 +286,7 @@ export function AggregateViewProvider(props: AggregateViewProviderProps) {
 
     void activeSessionId;
     void sessionSignature;
+    if (switching) return;
     void refreshPtys();
   });
 
