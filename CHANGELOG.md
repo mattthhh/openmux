@@ -2,6 +2,94 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.67](https://github.com/monotykamary/openmux/compare/v0.3.66...v0.3.67) (2026-04-07)
+
+
+### Features
+
+* **pty:** native foreground process change detection for real-time aggregate view updates ([d5fa33f](https://github.com/monotykamary/openmux/commit/d5fa33f4f628974e2a39062bfd4bfa5763647beb))
+
+
+### Bug Fixes
+
+* **aggregate:** avoid optimistic claim races during pane bursts ([664a964](https://github.com/monotykamary/openmux/commit/664a964b0325ee0b65d5549491acfc2ffc11c548))
+* **aggregate:** debounce switching and retain row state ([d0589b3](https://github.com/monotykamary/openmux/commit/d0589b35e3b55e10eb924a7c3dfb525510cd631d))
+* **aggregate:** keep large pane bursts adjacent ([2bc11c8](https://github.com/monotykamary/openmux/commit/2bc11c82ec43f9b2cef9a034566ff3620ac04350))
+* **aggregate:** load PTYs from all workspaces in on-demand loader ([e76353f](https://github.com/monotykamary/openmux/commit/e76353f327b6e1e925d7d27177d69ed2eafd38fe))
+* **aggregate:** prefer explicit session mappings during PTY resolution ([1b8563a](https://github.com/monotykamary/openmux/commit/1b8563a4429e851fdffa80b09289a6abbc64dd1b))
+* **aggregate:** queue placeholders and tighten metadata refresh ([a7e3e87](https://github.com/monotykamary/openmux/commit/a7e3e87c58625bfc318e44fd699537d891eead11))
+* **aggregate:** remove switch debounce and resolve live preview ([9a94ebc](https://github.com/monotykamary/openmux/commit/9a94ebcedc70eb98fb6e3a6ef0cf820c34c536b4))
+* **aggregate:** restore cross-session preview input and speed switches ([0310df6](https://github.com/monotykamary/openmux/commit/0310df6f691a9c07fff0214c570ad48a1325f84e))
+* **aggregate:** restore reactive list pane state ([3c0d171](https://github.com/monotykamary/openmux/commit/3c0d17113729542a05967aa10ecaa131ee568172))
+* **aggregate:** stabilize list state and restore optimistic updates ([78f1168](https://github.com/monotykamary/openmux/commit/78f116853895c633ffc5e51c3063383f9373cb3b))
+* **aggregate:** stop materializing unloaded sessions in background ([5b874db](https://github.com/monotykamary/openmux/commit/5b874dbd9385b91d8147698f3c08e2c326b69c37))
+* **aggregate:** track shimmer across sessions and unblock input ([6232eae](https://github.com/monotykamary/openmux/commit/6232eaedbacae432c7ca78b1bf6d0f7e9639caf0))
+* **bridge:** add missing error log for PTY creation failures in lazy-load ([5ff7e3f](https://github.com/monotykamary/openmux/commit/5ff7e3f2afcd17c69e02034f871639c28b8f4cab))
+* **clipboard:** add Wayland clipboard support with wl-clipboard ([92a9fa0](https://github.com/monotykamary/openmux/commit/92a9fa0fa8d9da9bf0d7a1cdeb250418577e1d98)), closes [#14](https://github.com/monotykamary/openmux/issues/14)
+* **runtime:** stabilize startup for async PTYs and TTY stdin ([f97af58](https://github.com/monotykamary/openmux/commit/f97af5819af7e6ca6823258ec96dfd974971b17a))
+* **services:** correct PTY service selection logic ([86c37ab](https://github.com/monotykamary/openmux/commit/86c37ab7eeef17e5aab15dae67f952df159eee7f))
+* **session:** avoid structuredClone in background saves ([084a639](https://github.com/monotykamary/openmux/commit/084a6394d069d13607be3ba1e91ed6bc1fffe89d))
+* **session:** cut switch latency and auto-switch aggregate sessions ([35853c5](https://github.com/monotykamary/openmux/commit/35853c56a12d541ae3992f0428917a32badbd197))
+* **session:** keep aggregate auto-switch and remove picker shortcut ([cc12fd2](https://github.com/monotykamary/openmux/commit/cc12fd2f07b81ccc975afd7ca1eeaeedc0c033de))
+* **session:** repair zsh cwd percent encoding and saved paths ([8944779](https://github.com/monotykamary/openmux/commit/8944779d83d3eb4e37fa039cd35f56a318ece537))
+* **session:** serialize aggregate switches and target workspaces ([952069b](https://github.com/monotykamary/openmux/commit/952069b6e1ef188c470bc05b10b60c9a14f5ce5f))
+* **session:** stabilize aggregate switching and selection ([f9d45d9](https://github.com/monotykamary/openmux/commit/f9d45d99a6e74a27cefa420a25e65ea2385f1144))
+* **shim:** restore PTY bootstrap and metadata wiring ([c725174](https://github.com/monotykamary/openmux/commit/c725174c5694e21667a7c7faf988c5ce22a52a21))
+* **stdin:** preserve setRawMode binding to prevent fd error ([cae2f8d](https://github.com/monotykamary/openmux/commit/cae2f8da0aac6b12a0891c77e55631ad651128df))
+
+
+### Tests
+
+* add regression tests for runtime fixes ([7fbde3f](https://github.com/monotykamary/openmux/commit/7fbde3f4b245e881f50f1e352fe4ce6ceae7d801))
+* fix test regressions from refactoring ([6c20fa5](https://github.com/monotykamary/openmux/commit/6c20fa5c70d2737b1545e32913748641cac0da0b))
+
+
+### Documentation
+
+* add architecture docs and test coverage ([bceb05d](https://github.com/monotykamary/openmux/commit/bceb05d8ae13cbbdd1cfc084cda32a93fcb17ad3))
+* remove stale deprecated markers from helper shims ([9d223b3](https://github.com/monotykamary/openmux/commit/9d223b3f191ba1093e5ca5bde3cbafebcf4bbb47))
+* update background sessions documentation ([b6168f5](https://github.com/monotykamary/openmux/commit/b6168f5413e7d7772acedba585ffa6acbf16c734))
+
+
+### Performance
+
+* **pty:** speed up detach with live cwd tracking ([fb186bd](https://github.com/monotykamary/openmux/commit/fb186bdd1c42967889f767fdb93587e7470fe2cb))
+
+
+### Styling
+
+* **lint:** resolve all ESLint warnings ([f6b4345](https://github.com/monotykamary/openmux/commit/f6b4345bb31d07017f6ce3cb8a12bc78dd373953))
+
+
+### Build System
+
+* **knip:** remove ignore patterns to detect more dead code ([e973d66](https://github.com/monotykamary/openmux/commit/e973d66212af51dd72377ad24765b66d8307d7e2))
+* **knip:** setup dead code detection ([e0e52d5](https://github.com/monotykamary/openmux/commit/e0e52d5e64cdd7bf10a91ff0ca58f794eb216a5b))
+
+
+### Refactoring
+
+* **aggregate:** rebuild from session workspace snapshots ([6598a23](https://github.com/monotykamary/openmux/commit/6598a23612ddccaa1d0a521f776905f0aefce782))
+* **aggregate:** remove vestigial bootstrapPtys and unexport test helpers ([7e0a97b](https://github.com/monotykamary/openmux/commit/7e0a97bcda6ca3da9407dd6dcd32f58730ecc29e))
+* **components:** reduce props and decompose AggregateView ([829d0ee](https://github.com/monotykamary/openmux/commit/829d0ee735b1329731cd9f16b87f16d9960465f9))
+* **contexts:** decompose state and fix naming ([cee951f](https://github.com/monotykamary/openmux/commit/cee951fc4849e84fd11acf8decc9ac514b26e680))
+* **core:** deduplicate tree traversals and simplify operations ([a993f5d](https://github.com/monotykamary/openmux/commit/a993f5d994e65265e8a9c3d574d0d45a1034f999))
+* **deadcode:** clean up 45 ESLint warnings and unused code ([3f36d0a](https://github.com/monotykamary/openmux/commit/3f36d0aac7f12116d6967fb5bebaf7788f950142))
+* **deadcode:** remove 56 unused exports and types ([3dc7985](https://github.com/monotykamary/openmux/commit/3dc79852746099ad1af44f2fe14df74725cc38d0))
+* **deadcode:** remove empty current-session.ts file ([62b44ee](https://github.com/monotykamary/openmux/commit/62b44ee95a7f4161b325c19937d2b709abd48f18))
+* **deadcode:** remove remaining 14 unused exports and 4 types ([62938c7](https://github.com/monotykamary/openmux/commit/62938c77f78c2a94beca79b80d66766bb5b7dcc6))
+* **deadcode:** remove unused barrel files and utilities ([d7a382e](https://github.com/monotykamary/openmux/commit/d7a382e9a28ac45f99ee5e7909b87ce3cf575bb0))
+* **deadcode:** remove unused exports and types via swarm ([4c7f803](https://github.com/monotykamary/openmux/commit/4c7f80336cca7b94062a56c7ae50de0909b934f7))
+* **deadcode:** remove unused interface files and configure knip ([7bf8d7f](https://github.com/monotykamary/openmux/commit/7bf8d7fd964508679c58dc6295fa0f00fcd07122))
+* **deadcode:** remove unused PaneId type ([7d6dbc5](https://github.com/monotykamary/openmux/commit/7d6dbc533c3f3cf196d1dbd6b45bec08fe052ea0))
+* **effect:** consolidate services and bridge modules ([f820d0c](https://github.com/monotykamary/openmux/commit/f820d0c1d702b6d8eecf04cc916cea71460fcb30))
+* eliminate any types and as unknown casts across codebase ([fe7d905](https://github.com/monotykamary/openmux/commit/fe7d905f917214b123daa4d9485b1e1ac4fe7617))
+* **errors:** errore-ify error handling patterns ([2ff9650](https://github.com/monotykamary/openmux/commit/2ff9650ffe2b169a462b1e7243a4b78979b0fb01))
+* prune aggregate dead code and split key encoder ([513212d](https://github.com/monotykamary/openmux/commit/513212dbca387f2caf43fbed35fd6a19e5380e11))
+* **shim:** consolidate RPC and simplify state management ([9968a99](https://github.com/monotykamary/openmux/commit/9968a99172717e8d8f585069c766ff063b60cd21))
+* **shim:** harden PTY handler contracts ([faf9775](https://github.com/monotykamary/openmux/commit/faf9775a6bf26abef15daae0a51d9eb875cb8666))
+* **terminal:** extract Kitty interface and split broker ([2efe8c7](https://github.com/monotykamary/openmux/commit/2efe8c739b15e29da8c9eafdc7a7a38027d8928e))
+
 ### [0.3.66](https://github.com/monotykamary/openmux/compare/v0.3.65...v0.3.66) (2026-04-05)
 
 
