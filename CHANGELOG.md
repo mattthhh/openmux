@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.68](https://github.com/monotykamary/openmux/compare/v0.3.67...v0.3.68) (2026-04-07)
+
+
+### Refactoring
+
+* **errore:** flatten try-catch patterns in Clipboard service ([3611ae7](https://github.com/monotykamary/openmux/commit/3611ae7554fe14dece8e25789ec0102bbdc9e995))
+
+
+### CI/CD
+
+* install zsh on ubuntu runner for shell integration tests ([5044bf2](https://github.com/monotykamary/openmux/commit/5044bf211062bb9715051baedf768736a2c57a0a))
+
 ### [0.3.67](https://github.com/monotykamary/openmux/compare/v0.3.66...v0.3.67) (2026-04-07)
 
 
