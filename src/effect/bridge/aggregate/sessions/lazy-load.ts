@@ -53,19 +53,18 @@ function collectPaneRecords(
   result.push({ paneId: pane.id, cwd: pane.cwd });
 }
 
-function getActiveWorkspacePaneRecords(
+function getAllWorkspacePaneRecords(
   session: SerializedSession
 ): Array<{ paneId: string; cwd: string }> {
-  const workspace = session.workspaces.find(
-    (candidate) => candidate.id === session.activeWorkspaceId
-  );
-  if (!workspace) return [];
-
   const result: Array<{ paneId: string; cwd: string }> = [];
-  collectPaneRecords(workspace.mainPane, result);
-  for (const pane of workspace.stackPanes) {
-    collectPaneRecords(pane, result);
+
+  for (const workspace of session.workspaces) {
+    collectPaneRecords(workspace.mainPane, result);
+    for (const pane of workspace.stackPanes) {
+      collectPaneRecords(pane, result);
+    }
   }
+
   return result;
 }
 
@@ -238,7 +237,7 @@ export async function loadSessionPtysOnDemandWithService(
   const createIfMissing = options?.createIfMissing ?? true;
 
   if (createIfMissing && (ptys?.length ?? 0) === 0) {
-    const paneRecords = getActiveWorkspacePaneRecords(sessionResult);
+    const paneRecords = getAllWorkspacePaneRecords(sessionResult);
     const existingMapping = await getStoredSessionPtyMapping(sessionId);
     const nextMapping = new Map<string, string>(existingMapping?.mapping ?? []);
 

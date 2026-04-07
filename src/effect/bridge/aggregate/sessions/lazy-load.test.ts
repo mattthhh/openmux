@@ -146,6 +146,108 @@ describe('loadSessionPtysOnDemand (litmus)', () => {
     expect(result.ptys[0]?.ptyId).toBe('pty-created');
   });
 
+  it('should create PTYs for all workspaces, not just the active workspace', async () => {
+    const createSpy = mock(async () => 'pty-created');
+    const registerSpy = mock(async () => {});
+
+    mock.module('../../services-instance', () => ({
+      hasServices: () => true,
+      getPtyService: () => ({ create: createSpy }),
+      getSessionManager: () => ({
+        loadSession: async () => ({
+          id: 'session-1',
+          name: 'Session 1',
+          activeWorkspaceId: 1, // Workspace 1 is active
+          workspaces: [
+            {
+              id: 1,
+              layoutMode: 'stacked',
+              focusedPaneId: 'pane-1',
+              mainPane: { id: 'pane-1', cwd: '/workspace1', title: 'shell1' },
+              stackPanes: [],
+              activeStackIndex: 0,
+            },
+            {
+              id: 2,
+              layoutMode: 'stacked',
+              focusedPaneId: 'pane-2',
+              mainPane: { id: 'pane-2', cwd: '/workspace2', title: 'shell2' },
+              stackPanes: [{ id: 'pane-3', cwd: '/workspace2/stack', title: 'shell3' }],
+              activeStackIndex: 0,
+            },
+            {
+              id: 3,
+              layoutMode: 'stacked',
+              focusedPaneId: 'pane-4',
+              mainPane: { id: 'pane-4', cwd: '/workspace3', title: 'shell4' },
+              stackPanes: [],
+              activeStackIndex: 0,
+            },
+          ],
+          cwdMap: new Map([
+            ['pane-1', '/workspace1'],
+            ['pane-2', '/workspace2'],
+            ['pane-3', '/workspace2/stack'],
+            ['pane-4', '/workspace3'],
+          ]),
+          paneToPtyMap: new Map(),
+        }),
+      }),
+    }));
+
+    mock.module('../../shim-bridge', () => ({
+      getSessionPtyMapping: async () => undefined,
+      registerPtyPane: registerSpy,
+    }));
+
+    mock.module('../metadata/fetch', () => ({
+      batchFetchPtyMetadata: async function* (_pty: unknown, ids: Iterable<string>) {
+        for (const id of ids) {
+          yield {
+            ptyId: String(id),
+            cwd: '/any',
+            foregroundProcess: 'bash',
+            shell: '/bin/bash',
+            title: 'shell',
+            workspaceId: 1,
+            paneId: undefined,
+            gitBranch: undefined,
+            gitDiffStats: undefined,
+            gitDirty: false,
+            gitStaged: 0,
+            gitUnstaged: 0,
+            gitUntracked: 0,
+            gitConflicted: 0,
+            gitAhead: undefined,
+            gitBehind: undefined,
+            gitStashCount: undefined,
+            gitState: undefined,
+            gitDetached: false,
+            gitRepoKey: undefined,
+          };
+        }
+      },
+    }));
+
+    const { loadSessionPtysOnDemand } = await import('./lazy-load.ts?litmus-all-workspaces');
+    const result = await loadSessionPtysOnDemand('session-1');
+
+    expect(result instanceof Error).toBe(false);
+    if (result instanceof Error) return;
+
+    // Should create PTYs for all 4 panes across all 3 workspaces, not just workspace 1
+    expect(createSpy).toHaveBeenCalledTimes(4);
+    expect(registerSpy).toHaveBeenCalledTimes(4);
+    expect(result.ptys).toHaveLength(4);
+
+    // Verify PTYs were created for non-active workspaces too
+    const calls = createSpy.mock.calls;
+    const cwdArgs = calls.map((call) => call[0]?.cwd);
+    expect(cwdArgs).toContain('/workspace2'); // Workspace 2 main pane
+    expect(cwdArgs).toContain('/workspace2/stack'); // Workspace 2 stack pane
+    expect(cwdArgs).toContain('/workspace3'); // Workspace 3 main pane
+  });
+
   it('should keep shim mappings authoritative over stale aggregate-local mappings', async () => {
     aggregateSessionMappings.set('session-1', new Map([['pane-1', 'pty-stale']]));
 
