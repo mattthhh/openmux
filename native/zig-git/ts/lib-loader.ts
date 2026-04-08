@@ -2,9 +2,9 @@
  * Library loader for zig-git
  */
 
-import { dlopen, FFIType } from "bun:ffi";
-import { join, dirname, basename } from "path";
-import { existsSync } from "fs";
+import { dlopen, FFIType } from 'bun:ffi';
+import { join, dirname, basename } from 'path';
+import { existsSync } from 'fs';
 
 function resolveLibPath(): string {
   const env = process.env.ZIG_GIT_LIB;
@@ -13,29 +13,30 @@ function resolveLibPath(): string {
   const platform = process.platform;
   const arch = process.arch;
 
-  const ext = platform === "darwin" ? "dylib" : platform === "win32" ? "dll" : "so";
+  const ext = platform === 'darwin' ? 'dylib' : platform === 'win32' ? 'dll' : 'so';
   const filenames =
-    platform === "darwin"
-      ? arch === "arm64"
-        ? ["libzig_git_arm64.dylib", "libzig_git.dylib"]
-        : ["libzig_git.dylib"]
-      : platform === "win32"
-        ? ["zig_git.dll"]
-        : arch === "arm64"
-          ? ["libzig_git_arm64.so", "libzig_git.so"]
-          : ["libzig_git.so"];
+    platform === 'darwin'
+      ? arch === 'arm64'
+        ? ['libzig_git_arm64.dylib', 'libzig_git.dylib']
+        : ['libzig_git.dylib']
+      : platform === 'win32'
+        ? ['zig_git.dll']
+        : arch === 'arm64'
+          ? ['libzig_git_arm64.so', 'libzig_git.so']
+          : ['libzig_git.so'];
 
   const execDir = dirname(process.execPath);
 
   const base = Bun.fileURLToPath(import.meta.url);
   const fileDir = dirname(base);
   const dirName = basename(fileDir);
-  const here = dirName === "ts" || dirName === "src" || dirName === "dist" ? dirname(fileDir) : fileDir;
+  const here =
+    dirName === 'ts' || dirName === 'src' || dirName === 'dist' ? dirname(fileDir) : fileDir;
 
   const basePaths = [
     execDir,
-    join(here, "zig-out", "lib"),
-    join(process.cwd(), "native", "zig-git", "zig-out", "lib"),
+    join(here, 'zig-out', 'lib'),
+    join(process.cwd(), 'native', 'zig-git', 'zig-out', 'lib'),
   ];
 
   const candidates: string[] = [];
@@ -51,7 +52,7 @@ function resolveLibPath(): string {
   }
 
   throw new Error(
-    `libzig_git shared library not found.\nChecked:\n  - ZIG_GIT_LIB=${env ?? "<unset>"}\n  - ${candidates.join("\n  - ")}\n\nSet ZIG_GIT_LIB or ensure one of these paths contains the file.`
+    `libzig_git shared library not found.\nChecked:\n  - ZIG_GIT_LIB=${env ?? '<unset>'}\n  - ${candidates.join('\n  - ')}\n\nSet ZIG_GIT_LIB or ensure one of these paths contains the file.`
   );
 }
 
@@ -92,6 +93,9 @@ export const lib = dlopen(libPath, {
       FFIType.pointer,
       FFIType.pointer,
       FFIType.pointer,
+      FFIType.pointer,
+      FFIType.pointer,
+      FFIType.i32,
     ],
     returns: FFIType.i32,
   },
@@ -121,6 +125,9 @@ export const lib = dlopen(libPath, {
       FFIType.pointer,
       FFIType.pointer,
       FFIType.pointer,
+      FFIType.pointer,
+      FFIType.pointer,
+      FFIType.i32,
     ],
     returns: FFIType.i32,
   },
