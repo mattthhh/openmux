@@ -174,6 +174,8 @@ function getEmptyGitFields(): Pick<
   | 'gitState'
   | 'gitDetached'
   | 'gitRepoKey'
+  | 'gitIsWorktree'
+  | 'gitCommonDir'
 > {
   return {
     gitBranch: undefined,
@@ -189,6 +191,8 @@ function getEmptyGitFields(): Pick<
     gitState: undefined,
     gitDetached: false,
     gitRepoKey: undefined,
+    gitIsWorktree: false,
+    gitCommonDir: null,
   };
 }
 

@@ -2,7 +2,7 @@
  * zig-git: Minimal libgit2 bindings for Bun.
  */
 
-import { lib } from "./lib-loader";
+import { lib } from './lib-loader';
 
 export interface NativeGitInfo {
   branch: string | null;
@@ -12,19 +12,19 @@ export interface NativeGitInfo {
 }
 
 export type GitRepoState =
-  | "none"
-  | "merge"
-  | "revert"
-  | "revert-seq"
-  | "cherry-pick"
-  | "cherry-pick-seq"
-  | "bisect"
-  | "rebase"
-  | "rebase-interactive"
-  | "rebase-merge"
-  | "apply-mailbox"
-  | "apply-mailbox-or-rebase"
-  | "unknown";
+  | 'none'
+  | 'merge'
+  | 'revert'
+  | 'revert-seq'
+  | 'cherry-pick'
+  | 'cherry-pick-seq'
+  | 'bisect'
+  | 'rebase'
+  | 'rebase-interactive'
+  | 'rebase-merge'
+  | 'apply-mailbox'
+  | 'apply-mailbox-or-rebase'
+  | 'unknown';
 
 export interface GitRepoStatus extends NativeGitInfo {
   staged: number;
@@ -36,6 +36,8 @@ export interface GitRepoStatus extends NativeGitInfo {
   stashCount: number | null;
   state: GitRepoState;
   detached: boolean;
+  isWorktree: boolean;
+  commonDir: string | null;
 }
 
 export interface GitDiffStats {
@@ -54,7 +56,7 @@ const initResult = lib.symbols.omx_git_init();
 const isInitialized = initResult >= 0;
 
 if (isInitialized) {
-  process.on("exit", () => {
+  process.on('exit', () => {
     lib.symbols.omx_git_shutdown();
   });
 }
@@ -63,7 +65,7 @@ function readCString(buffer: Buffer): string | null {
   const end = buffer.indexOf(0);
   const sliceEnd = end === -1 ? buffer.length : end;
   if (sliceEnd === 0) return null;
-  return buffer.toString("utf8", 0, sliceEnd);
+  return buffer.toString('utf8', 0, sliceEnd);
 }
 
 function normalizeCount(value: number): number | null {
@@ -73,36 +75,36 @@ function normalizeCount(value: number): number | null {
 function mapRepoState(value: number): GitRepoState {
   switch (value) {
     case 0:
-      return "none";
+      return 'none';
     case 1:
-      return "merge";
+      return 'merge';
     case 2:
-      return "revert";
+      return 'revert';
     case 3:
-      return "revert-seq";
+      return 'revert-seq';
     case 4:
-      return "cherry-pick";
+      return 'cherry-pick';
     case 5:
-      return "cherry-pick-seq";
+      return 'cherry-pick-seq';
     case 6:
-      return "bisect";
+      return 'bisect';
     case 7:
-      return "rebase";
+      return 'rebase';
     case 8:
-      return "rebase-interactive";
+      return 'rebase-interactive';
     case 9:
-      return "rebase-merge";
+      return 'rebase-merge';
     case 10:
-      return "apply-mailbox";
+      return 'apply-mailbox';
     case 11:
-      return "apply-mailbox-or-rebase";
+      return 'apply-mailbox-or-rebase';
     default:
-      return "unknown";
+      return 'unknown';
   }
 }
 
 export function getRepoInfo(cwd: string): NativeGitInfo | null {
-  const cwdBuf = Buffer.from(`${cwd}\0`, "utf8");
+  const cwdBuf = Buffer.from(`${cwd}\0`, 'utf8');
   const branchBuf = Buffer.alloc(BRANCH_BUF_SIZE);
   const gitdirBuf = Buffer.alloc(PATH_BUF_SIZE);
   const workdirBuf = Buffer.alloc(PATH_BUF_SIZE);
@@ -130,7 +132,7 @@ export function getRepoInfo(cwd: string): NativeGitInfo | null {
 }
 
 export function getRepoStatus(cwd: string): GitRepoStatus | null {
-  const cwdBuf = Buffer.from(`${cwd}\0`, "utf8");
+  const cwdBuf = Buffer.from(`${cwd}\0`, 'utf8');
   const branchBuf = Buffer.alloc(BRANCH_BUF_SIZE);
   const gitdirBuf = Buffer.alloc(PATH_BUF_SIZE);
   const workdirBuf = Buffer.alloc(PATH_BUF_SIZE);
@@ -144,6 +146,8 @@ export function getRepoStatus(cwd: string): GitRepoStatus | null {
   const stashBuf = Buffer.alloc(4);
   const stateBuf = Buffer.alloc(4);
   const detachedBuf = Buffer.alloc(1);
+  const isWorktreeBuf = Buffer.alloc(1);
+  const commondirBuf = Buffer.alloc(PATH_BUF_SIZE);
 
   const result = lib.symbols.omx_git_repo_status(
     cwdBuf,
@@ -162,7 +166,10 @@ export function getRepoStatus(cwd: string): GitRepoStatus | null {
     behindBuf,
     stashBuf,
     stateBuf,
-    detachedBuf
+    detachedBuf,
+    isWorktreeBuf,
+    commondirBuf,
+    commondirBuf.length
   );
 
   if (result !== 0) return null;
@@ -181,6 +188,8 @@ export function getRepoStatus(cwd: string): GitRepoStatus | null {
     stashCount: normalizeCount(stashBuf.readInt32LE(0)),
     state: mapRepoState(stateBuf.readInt32LE(0)),
     detached: detachedBuf[0] === 1,
+    isWorktree: isWorktreeBuf[0] === 1,
+    commonDir: readCString(commondirBuf),
   };
 }
 
@@ -189,7 +198,7 @@ export function getRepoStatusAsync(
   options: { pollIntervalMs?: number } = {}
 ): Promise<GitRepoStatus | null> {
   const pollIntervalMs = options.pollIntervalMs ?? 10;
-  const cwdBuf = Buffer.from(`${cwd}\0`, "utf8");
+  const cwdBuf = Buffer.from(`${cwd}\0`, 'utf8');
 
   return new Promise((resolve) => {
     const branchBuf = Buffer.alloc(BRANCH_BUF_SIZE);
@@ -205,6 +214,8 @@ export function getRepoStatusAsync(
     const stashBuf = Buffer.alloc(4);
     const stateBuf = Buffer.alloc(4);
     const detachedBuf = Buffer.alloc(1);
+    const isWorktreeBuf = Buffer.alloc(1);
+    const commondirBuf = Buffer.alloc(PATH_BUF_SIZE);
 
     const poll = (requestId: number) => {
       const status = lib.symbols.omx_git_status_poll(
@@ -224,7 +235,10 @@ export function getRepoStatusAsync(
         behindBuf,
         stashBuf,
         stateBuf,
-        detachedBuf
+        detachedBuf,
+        isWorktreeBuf,
+        commondirBuf,
+        commondirBuf.length
       );
 
       if (status === STATUS_PENDING) {
@@ -251,6 +265,8 @@ export function getRepoStatusAsync(
         stashCount: normalizeCount(stashBuf.readInt32LE(0)),
         state: mapRepoState(stateBuf.readInt32LE(0)),
         detached: detachedBuf[0] === 1,
+        isWorktree: isWorktreeBuf[0] === 1,
+        commonDir: readCString(commondirBuf),
       });
     };
 
@@ -272,7 +288,7 @@ export function getDiffStatsAsync(
   options: { pollIntervalMs?: number } = {}
 ): Promise<GitDiffStats | null> {
   const pollIntervalMs = options.pollIntervalMs ?? 10;
-  const cwdBuf = Buffer.from(`${cwd}\0`, "utf8");
+  const cwdBuf = Buffer.from(`${cwd}\0`, 'utf8');
   const requestId = lib.symbols.omx_git_diff_stats_async(cwdBuf);
   if (requestId < 0) return Promise.resolve(null);
 

@@ -42,6 +42,8 @@ function createPty(overrides: Partial<PtyInfo> = {}): PtyInfo {
     gitState: undefined,
     gitDetached: false,
     gitRepoKey: '/repo',
+    gitIsWorktree: false,
+    gitCommonDir: null,
     foregroundProcess: 'bash',
     shell: '/bin/bash',
     title: 'bash',

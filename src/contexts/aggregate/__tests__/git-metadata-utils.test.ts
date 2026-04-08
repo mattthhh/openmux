@@ -42,6 +42,8 @@ function createPty(overrides: Partial<PtyInfo> = {}): PtyInfo {
     gitState: undefined,
     gitDetached: false,
     gitRepoKey: '/repo',
+    gitIsWorktree: false,
+    gitCommonDir: null,
     foregroundProcess: 'nvim',
     shell: '/bin/zsh',
     title: 'editor',
@@ -72,6 +74,8 @@ describe('aggregate git metadata helpers', () => {
           gitState: undefined,
           gitDetached: false,
           gitRepoKey: undefined,
+          gitIsWorktree: false,
+          gitCommonDir: null,
         })
       )
     ).toBe(false);
@@ -93,6 +97,8 @@ describe('aggregate git metadata helpers', () => {
       gitState: undefined,
       gitDetached: false,
       gitRepoKey: undefined,
+      gitIsWorktree: false,
+      gitCommonDir: null,
       foregroundProcess: 'bash',
       title: 'shell',
     });
@@ -123,6 +129,8 @@ describe('aggregate git metadata helpers', () => {
       gitState: undefined,
       gitDetached: false,
       gitRepoKey: undefined,
+      gitIsWorktree: false,
+      gitCommonDir: null,
     });
 
     const merged = mergePtyInfoPreservingGitMetadata(existing, next);
@@ -153,6 +161,8 @@ describe('aggregate git metadata helpers', () => {
       stashCount: 0,
       state: undefined,
       detached: false,
+      isWorktree: false,
+      commonDir: null,
       diffStats: { added: 22, removed: 8, binary: 0 },
       lastUpdated: Date.now(),
     });
@@ -190,6 +200,8 @@ describe('aggregate git metadata helpers', () => {
         gitState: undefined,
         gitDetached: false,
         gitRepoKey: undefined,
+        gitIsWorktree: false,
+        gitCommonDir: null,
         foregroundProcess: 'bash',
         shell: '/bin/zsh',
         title: undefined,

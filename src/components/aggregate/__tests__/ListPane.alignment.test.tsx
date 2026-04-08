@@ -30,6 +30,8 @@ function createMockPtyInfo(overrides: Partial<PtyInfo> = {}): PtyInfo {
     gitState: undefined,
     gitDetached: false,
     gitRepoKey: undefined,
+    gitIsWorktree: false,
+    gitCommonDir: null,
     foregroundProcess: undefined,
     shell: 'bash',
     title: undefined,

@@ -29,6 +29,8 @@ describe('buildSessionTreeNodes (litmus)', () => {
     gitState: undefined,
     gitDetached: false,
     gitRepoKey: undefined,
+    gitIsWorktree: false,
+    gitCommonDir: null,
     foregroundProcess: 'bash',
     shell: '/bin/bash',
     title: undefined,

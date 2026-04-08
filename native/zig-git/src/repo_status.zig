@@ -20,6 +20,8 @@ pub const RepoStatus = struct {
     stash_count: c_int = constants.STATUS_UNKNOWN,
     state: c_int = 0,
     detached: u8 = 0,
+    is_worktree: u8 = 0,
+    commondir: [constants.MAX_CWD_LEN]u8 = undefined,
 };
 
 pub fn clearBuffer(buf: [*]u8, len: usize) void {
@@ -230,6 +232,8 @@ pub fn clearRepoStatus(out: *RepoStatus) void {
     out.stash_count = constants.STATUS_UNKNOWN;
     out.state = 0;
     out.detached = 0;
+    out.is_worktree = 0;
+    clearBuffer(&out.commondir, out.commondir.len);
 }
 
 pub fn fillRepoStatus(repo: *c.git_repository, out: *RepoStatus) void {
@@ -245,6 +249,13 @@ pub fn fillRepoStatus(repo: *c.git_repository, out: *RepoStatus) void {
     const workdir = c.git_repository_workdir(repo);
     if (workdir != null) {
         copyCString(&out.workdir, out.workdir.len, std.mem.span(workdir));
+    }
+
+    out.is_worktree = if (c.git_repository_is_worktree(repo) == 1) 1 else 0;
+
+    const commondir = c.git_repository_commondir(repo);
+    if (commondir != null) {
+        copyCString(&out.commondir, out.commondir.len, std.mem.span(commondir));
     }
 
     computeStatusCounts(repo, out);

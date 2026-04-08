@@ -20,6 +20,8 @@ export interface GitRepoMetadata {
   stashCount: number | undefined;
   state: GitInfo['state'] | undefined;
   detached: boolean;
+  isWorktree: boolean;
+  commonDir: string | null;
   diffStats: GitDiffStats | undefined;
   lastUpdated: number;
 }
@@ -154,6 +156,8 @@ export class GitMetadataCache {
         stashCount: group.gitInfo.stashCount,
         state: group.gitInfo.state,
         detached: group.gitInfo.detached,
+        isWorktree: group.gitInfo.isWorktree,
+        commonDir: group.gitInfo.commonDir,
         diffStats: options.skipDiffStats
           ? cloneDiffStats(existing?.diffStats)
           : cloneDiffStats(diffStatsByRepo.get(repoKey)),

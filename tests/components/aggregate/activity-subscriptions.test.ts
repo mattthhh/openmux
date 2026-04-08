@@ -26,6 +26,8 @@ const createPty = (ptyId: string): PtyInfo => ({
   gitState: undefined,
   gitDetached: false,
   gitRepoKey: undefined,
+  gitIsWorktree: false,
+  gitCommonDir: null,
   foregroundProcess: 'htop',
   shell: 'zsh',
   title: 'htop',

@@ -26,6 +26,8 @@ const createPty = (overrides: Partial<PtyInfo> = {}): PtyInfo => ({
   gitState: undefined,
   gitDetached: false,
   gitRepoKey: undefined,
+  gitIsWorktree: false,
+  gitCommonDir: null,
   foregroundProcess: 'nvim',
   shell: 'zsh',
   title: 'nvim',

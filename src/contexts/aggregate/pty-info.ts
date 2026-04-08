@@ -27,6 +27,8 @@ export interface EnrichedPtyMetadataLike {
   gitState: GitInfo['state'] | undefined;
   gitDetached: boolean;
   gitRepoKey: string | undefined;
+  gitIsWorktree: boolean;
+  gitCommonDir: string | null;
   foregroundProcess: string | undefined;
   shell: string | undefined;
   title: string | undefined;
@@ -54,6 +56,8 @@ export function ptyMetadataToInfo(metadata: EnrichedPtyMetadataLike, existing?: 
     gitState: metadata.gitState,
     gitDetached: metadata.gitDetached,
     gitRepoKey: metadata.gitRepoKey,
+    gitIsWorktree: metadata.gitIsWorktree,
+    gitCommonDir: metadata.gitCommonDir,
     foregroundProcess: metadata.foregroundProcess,
     shell: metadata.shell,
     title: metadata.title ?? existing?.title,

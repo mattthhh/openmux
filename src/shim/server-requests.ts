@@ -138,6 +138,8 @@ async function getPtyMetadata(
         state: gitInfoWithDiff.state,
         detached: gitInfoWithDiff.detached,
         repoKey: gitInfoWithDiff.repoKey,
+        isWorktree: gitInfoWithDiff.isWorktree,
+        commonDir: gitInfoWithDiff.commonDir,
       }
     : undefined;
   const gitDiffStats = gitInfoWithDiff?.diffStats;

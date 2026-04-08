@@ -20,6 +20,8 @@ export interface GitMetadataFields {
   gitState: GitInfo['state'] | undefined;
   gitDetached: boolean;
   gitRepoKey: string | undefined;
+  gitIsWorktree: boolean;
+  gitCommonDir: string | null;
 }
 
 export function extractGitMetadata(metadata: GitRepoMetadata | undefined): GitMetadataFields {
@@ -38,6 +40,8 @@ export function extractGitMetadata(metadata: GitRepoMetadata | undefined): GitMe
       gitState: undefined,
       gitDetached: false,
       gitRepoKey: undefined,
+      gitIsWorktree: false,
+      gitCommonDir: null,
     };
   }
 
@@ -54,6 +58,8 @@ export function extractGitMetadata(metadata: GitRepoMetadata | undefined): GitMe
     gitState: metadata.state,
     gitDetached: metadata.detached,
     gitRepoKey: metadata.repoKey,
+    gitIsWorktree: metadata.isWorktree,
+    gitCommonDir: metadata.commonDir,
     gitDiffStats: metadata.diffStats ? { ...metadata.diffStats } : undefined,
   };
 }
@@ -95,7 +101,9 @@ export function hasGitMetadata(pty: PtyInfo): boolean {
     pty.gitStashCount !== undefined ||
     pty.gitState !== undefined ||
     pty.gitDetached ||
-    pty.gitRepoKey !== undefined
+    pty.gitRepoKey !== undefined ||
+    pty.gitIsWorktree ||
+    pty.gitCommonDir !== null
   );
 }
 
@@ -132,6 +140,8 @@ export function mergePtyInfoPreservingGitMetadata(
     gitState: existing.gitState,
     gitDetached: existing.gitDetached,
     gitRepoKey: existing.gitRepoKey,
+    gitIsWorktree: existing.gitIsWorktree,
+    gitCommonDir: existing.gitCommonDir,
   };
 }
 
@@ -155,6 +165,8 @@ export function didPtyInfoChange(prev: PtyInfo, next: PtyInfo): boolean {
     prev.gitState !== next.gitState ||
     prev.gitDetached !== next.gitDetached ||
     prev.gitRepoKey !== next.gitRepoKey ||
+    prev.gitIsWorktree !== next.gitIsWorktree ||
+    prev.gitCommonDir !== next.gitCommonDir ||
     !areGitDiffStatsEqual(prev.gitDiffStats, next.gitDiffStats)
   );
 }

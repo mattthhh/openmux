@@ -19,6 +19,8 @@ function createMockPty(overrides: Partial<PtyInfo> = {}): PtyInfo {
     gitState: undefined,
     gitDetached: false,
     gitRepoKey: '/home/user/project',
+    gitIsWorktree: false,
+    gitCommonDir: null,
     foregroundProcess: 'nvim',
     shell: '/bin/zsh',
     title: 'editor',

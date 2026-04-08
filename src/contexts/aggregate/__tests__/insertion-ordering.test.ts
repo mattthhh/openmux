@@ -257,6 +257,8 @@ describe('aggregate insertion ordering', () => {
         gitState: undefined,
         gitDetached: false,
         gitRepoKey: undefined,
+        gitIsWorktree: false,
+        gitCommonDir: null,
       };
     });
     vi.mocked(listAllPtysWithMetadata).mockResolvedValue([
@@ -281,6 +283,8 @@ describe('aggregate insertion ordering', () => {
         gitState: undefined,
         gitDetached: false,
         gitRepoKey: undefined,
+        gitIsWorktree: false,
+        gitCommonDir: null,
       },
       {
         ptyId: 'pty-2',
@@ -303,6 +307,8 @@ describe('aggregate insertion ordering', () => {
         gitState: undefined,
         gitDetached: false,
         gitRepoKey: undefined,
+        gitIsWorktree: false,
+        gitCommonDir: null,
       },
       {
         ptyId: 'pty-new',
@@ -325,6 +331,8 @@ describe('aggregate insertion ordering', () => {
         gitState: undefined,
         gitDetached: false,
         gitRepoKey: undefined,
+        gitIsWorktree: false,
+        gitCommonDir: null,
       },
     ]);
   });
@@ -383,6 +391,8 @@ describe('aggregate insertion ordering', () => {
       gitState: undefined,
       gitDetached: false,
       gitRepoKey: undefined,
+      gitIsWorktree: false,
+      gitCommonDir: null,
     });
 
     await createPromise;
@@ -420,6 +430,8 @@ describe('aggregate insertion ordering', () => {
         gitState: undefined,
         gitDetached: false,
         gitRepoKey: undefined,
+        gitIsWorktree: false,
+        gitCommonDir: null,
       },
       {
         ptyId: 'pty-2',
@@ -442,6 +454,8 @@ describe('aggregate insertion ordering', () => {
         gitState: undefined,
         gitDetached: false,
         gitRepoKey: undefined,
+        gitIsWorktree: false,
+        gitCommonDir: null,
       },
     ]);
 
@@ -492,6 +506,8 @@ describe('aggregate insertion ordering', () => {
       gitState: undefined,
       gitDetached: false,
       gitRepoKey: undefined,
+      gitIsWorktree: false,
+      gitCommonDir: null,
     });
 
     await createPromise;
@@ -528,6 +544,8 @@ describe('aggregate insertion ordering', () => {
           gitState: undefined,
           gitDetached: false,
           gitRepoKey: undefined,
+          gitIsWorktree: false,
+          gitCommonDir: null,
         });
         s.allPtysIndex = new Map(s.allPtys.map((pty, index) => [pty.ptyId, index] as const));
         s.matchedPtys = s.allPtys;
@@ -689,6 +707,8 @@ describe('aggregate insertion ordering', () => {
           gitState: undefined,
           gitDetached: false,
           gitRepoKey: undefined,
+          gitIsWorktree: false,
+          gitCommonDir: null,
         };
       }
 
@@ -714,6 +734,8 @@ describe('aggregate insertion ordering', () => {
           gitState: undefined,
           gitDetached: false,
           gitRepoKey: undefined,
+          gitIsWorktree: false,
+          gitCommonDir: null,
         };
       }
 
@@ -787,6 +809,8 @@ describe('aggregate insertion ordering', () => {
         gitState: undefined,
         gitDetached: false,
         gitRepoKey: undefined,
+        gitIsWorktree: false,
+        gitCommonDir: null,
       };
     });
 
@@ -816,6 +840,8 @@ describe('aggregate insertion ordering', () => {
       gitState: undefined,
       gitDetached: false,
       gitRepoKey: undefined,
+      gitIsWorktree: false,
+      gitCommonDir: null,
     }));
 
     setState(
@@ -956,6 +982,8 @@ describe('aggregate insertion ordering', () => {
           gitState: undefined,
           gitDetached: false,
           gitRepoKey: '/wrong-repo',
+          gitIsWorktree: false,
+          gitCommonDir: null,
         });
         s.allPtysIndex = new Map(s.allPtys.map((pty, index) => [pty.ptyId, index] as const));
         s.pendingPaneCreations = [
@@ -981,6 +1009,8 @@ describe('aggregate insertion ordering', () => {
       paneId: 'pane-3',
       gitBranch: undefined,
       gitRepoKey: undefined,
+      gitIsWorktree: false,
+      gitCommonDir: null,
       gitDiffStats: undefined,
     });
 
@@ -1005,6 +1035,8 @@ describe('aggregate insertion ordering', () => {
       gitState: undefined,
       gitDetached: false,
       gitRepoKey: undefined,
+      gitIsWorktree: false,
+      gitCommonDir: null,
     });
     await createPromise;
   });

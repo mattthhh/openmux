@@ -129,6 +129,8 @@ describe('loadSessionPtysOnDemand (litmus)', () => {
             gitState: undefined,
             gitDetached: false,
             gitRepoKey: undefined,
+            gitIsWorktree: false,
+            gitCommonDir: null,
           };
         }
       },
@@ -224,6 +226,8 @@ describe('loadSessionPtysOnDemand (litmus)', () => {
             gitState: undefined,
             gitDetached: false,
             gitRepoKey: undefined,
+            gitIsWorktree: false,
+            gitCommonDir: null,
           };
         }
       },
@@ -304,6 +308,8 @@ describe('loadSessionPtysOnDemand (litmus)', () => {
             gitState: undefined,
             gitDetached: false,
             gitRepoKey: undefined,
+            gitIsWorktree: false,
+            gitCommonDir: null,
           };
         }
       },

@@ -404,6 +404,8 @@ export async function getGitInfo(ptyId: string): Promise<GitInfo | undefined> {
     state: info.state ?? undefined,
     detached: Boolean(info.detached),
     repoKey: info.repoKey,
+    isWorktree: Boolean(info.isWorktree),
+    commonDir: info.commonDir ?? null,
   };
 }
 

@@ -87,6 +87,8 @@ describe('PTY destruction race condition', () => {
     gitState: undefined,
     gitDetached: false,
     gitRepoKey: undefined,
+    gitIsWorktree: false,
+    gitCommonDir: null,
     foregroundProcess: 'bash',
     shell: '/bin/bash',
     title: 'bash',
@@ -219,6 +221,8 @@ describe('PTY destruction race condition', () => {
         gitState: undefined,
         gitDetached: false,
         gitRepoKey: undefined,
+        gitIsWorktree: false,
+        gitCommonDir: null,
       },
     ]);
     vi.mocked(getAggregateSessionPtyMapping).mockResolvedValue({
@@ -333,6 +337,8 @@ describe('PTY destruction race condition', () => {
         gitState: undefined,
         gitDetached: false,
         gitRepoKey: undefined,
+        gitIsWorktree: false,
+        gitCommonDir: null,
       },
     ]);
     vi.mocked(getAggregateSessionPtyMapping).mockResolvedValue(undefined);
@@ -434,6 +440,8 @@ describe('PTY destruction race condition', () => {
         gitState: undefined,
         gitDetached: false,
         gitRepoKey: undefined,
+        gitIsWorktree: false,
+        gitCommonDir: null,
       },
     ]);
     vi.mocked(getAggregateSessionPtyMapping).mockResolvedValue({
@@ -573,6 +581,8 @@ describe('PTY destruction race condition', () => {
       gitState: undefined,
       gitDetached: false,
       gitRepoKey: undefined,
+      gitIsWorktree: false,
+      gitCommonDir: null,
       foregroundProcess: undefined,
       shell: undefined,
       title: '...', // Placeholder loading indicator
@@ -626,6 +636,8 @@ describe('PTY destruction race condition', () => {
       gitState: undefined,
       gitDetached: false,
       gitRepoKey: undefined,
+      gitIsWorktree: false,
+      gitCommonDir: null,
       foregroundProcess: 'bash',
       shell: '/bin/bash',
       title: 'shell', // Partial creation may leave this title

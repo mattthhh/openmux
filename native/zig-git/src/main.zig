@@ -48,6 +48,9 @@ pub export fn omx_git_repo_status(
     stash_out: *c_int,
     state_out: *c_int,
     detached_out: *u8,
+    is_worktree_out: *u8,
+    commondir_buf: [*]u8,
+    commondir_len: c_int,
 ) c_int {
     return api.omx_git_repo_status(
         cwd,
@@ -67,6 +70,9 @@ pub export fn omx_git_repo_status(
         stash_out,
         state_out,
         detached_out,
+        is_worktree_out,
+        commondir_buf,
+        commondir_len,
     );
 }
 
@@ -105,6 +111,9 @@ pub export fn omx_git_status_poll(
     stash_out: *c_int,
     state_out: *c_int,
     detached_out: *u8,
+    is_worktree_out: *u8,
+    commondir_buf: [*]u8,
+    commondir_len: c_int,
 ) c_int {
     return api.omx_git_status_poll(
         request_id,
@@ -124,6 +133,9 @@ pub export fn omx_git_status_poll(
         stash_out,
         state_out,
         detached_out,
+        is_worktree_out,
+        commondir_buf,
+        commondir_len,
     );
 }
 

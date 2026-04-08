@@ -69,6 +69,9 @@ pub fn omx_git_repo_status(
     stash_out: *c_int,
     state_out: *c_int,
     detached_out: *u8,
+    is_worktree_out: *u8,
+    commondir_buf: [*]u8,
+    commondir_len: c_int,
 ) c_int {
     var status = repo_status.RepoStatus{};
     repo_status.clearRepoStatus(&status);
@@ -86,6 +89,8 @@ pub fn omx_git_repo_status(
         stash_out.* = constants.STATUS_UNKNOWN;
         state_out.* = 0;
         detached_out.* = 0;
+        is_worktree_out.* = 0;
+        if (commondir_len > 0) repo_status.clearBuffer(commondir_buf, @intCast(commondir_len));
         return constants.ERROR;
     }
 
@@ -109,6 +114,10 @@ pub fn omx_git_repo_status(
     stash_out.* = status.stash_count;
     state_out.* = status.state;
     detached_out.* = status.detached;
+    is_worktree_out.* = status.is_worktree;
+    if (commondir_len > 0) {
+        repo_status.copyCString(commondir_buf, @intCast(commondir_len), status.commondir[0..]);
+    }
     return 0;
 }
 
@@ -207,6 +216,9 @@ pub fn omx_git_status_poll(
     stash_out: *c_int,
     state_out: *c_int,
     detached_out: *u8,
+    is_worktree_out: *u8,
+    commondir_buf: [*]u8,
+    commondir_len: c_int,
 ) c_int {
     if (request_id < 0) return constants.STATUS_ERROR;
 
@@ -236,6 +248,10 @@ pub fn omx_git_status_poll(
             stash_out.* = req.status.stash_count;
             state_out.* = req.status.state;
             detached_out.* = req.status.detached;
+            is_worktree_out.* = req.status.is_worktree;
+            if (commondir_len > 0) {
+                repo_status.copyCString(commondir_buf, @intCast(commondir_len), req.status.commondir[0..]);
+            }
 
             async_status.freeStatusRequest(@intCast(request_id));
             return 0;

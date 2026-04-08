@@ -30,6 +30,8 @@ export interface PtyMetadata {
   gitState: GitInfo['state'] | undefined;
   gitDetached: boolean;
   gitRepoKey: string | undefined;
+  gitIsWorktree: boolean;
+  gitCommonDir: string | null;
   foregroundProcess: string | undefined;
   shell: string | undefined;
   title: string | undefined;

@@ -38,6 +38,8 @@ export interface GitInfo {
   state: GitRepoState | undefined;
   detached: boolean;
   repoKey: string;
+  isWorktree: boolean;
+  commonDir: string | null;
   diffStats?: GitDiffStats;
 }
 
@@ -60,6 +62,8 @@ interface RepoEntry {
   key: string;
   gitDir: string;
   workDir: string | null;
+  isWorktree: boolean;
+  commonDir: string | null;
   branch: string | undefined;
   dirty: boolean;
   staged: number;
@@ -80,6 +84,7 @@ interface RepoEntry {
   infoInFlight?: Promise<RepoEntry | null>;
   gitWatcher?: ReturnType<typeof watch>;
   workWatcher?: ReturnType<typeof watch>;
+  commonWatcher?: ReturnType<typeof watch>;
 }
 
 const repoCache = new Map<string, RepoEntry>();
@@ -134,6 +139,7 @@ export function disposeGitHelpers(): void {
   for (const [, entry] of repoCache) {
     entry.gitWatcher?.close();
     entry.workWatcher?.close();
+    entry.commonWatcher?.close();
   }
   repoCache.clear();
   cwdToRepoKey.clear();
@@ -195,6 +201,22 @@ function ensureWorkdirWatcher(entry: RepoEntry) {
   }
 }
 
+function ensureCommonWatcher(entry: RepoEntry) {
+  if (!entry.isWorktree || !entry.commonDir || entry.commonWatcher) return;
+  try {
+    const recursive = process.platform === 'darwin' || process.platform === 'win32';
+    entry.commonWatcher = watch(entry.commonDir, { recursive }, () => {
+      markStale(entry);
+    });
+    entry.commonWatcher.on('error', () => {
+      entry.commonWatcher?.close();
+      entry.commonWatcher = undefined;
+    });
+  } catch {
+    entry.commonWatcher = undefined;
+  }
+}
+
 async function refreshRepoInfo(cwd: string, existingKey?: string): Promise<RepoEntry | null> {
   const existingEntry = existingKey ? repoCache.get(existingKey) : undefined;
   if (existingEntry?.infoInFlight) {
@@ -216,6 +238,7 @@ async function refreshRepoInfo(cwd: string, existingKey?: string): Promise<RepoE
         const oldEntry = repoCache.get(existingKey);
         oldEntry?.gitWatcher?.close();
         oldEntry?.workWatcher?.close();
+        oldEntry?.commonWatcher?.close();
         repoCache.delete(existingKey);
       }
       cwdToRepoKey.delete(cwd);
@@ -226,12 +249,15 @@ async function refreshRepoInfo(cwd: string, existingKey?: string): Promise<RepoE
     if (!gitDir) return null;
 
     const workDir = normalizeRepoPath(info.workDir);
+    const commonDir = normalizeRepoPath(info.commonDir);
+    const isWorktree = info.isWorktree;
     const key = workDir ?? gitDir;
 
     if (existingKey && existingKey !== key) {
       const oldEntry = repoCache.get(existingKey);
       oldEntry?.gitWatcher?.close();
       oldEntry?.workWatcher?.close();
+      oldEntry?.commonWatcher?.close();
       repoCache.delete(existingKey);
     }
 
@@ -247,6 +273,8 @@ async function refreshRepoInfo(cwd: string, existingKey?: string): Promise<RepoE
         key,
         gitDir,
         workDir,
+        isWorktree,
+        commonDir,
         branch: info.branch ?? undefined,
         dirty: info.dirty,
         staged: info.staged,
@@ -266,6 +294,8 @@ async function refreshRepoInfo(cwd: string, existingKey?: string): Promise<RepoE
     } else {
       entry.gitDir = gitDir;
       entry.workDir = workDir;
+      entry.isWorktree = isWorktree;
+      entry.commonDir = commonDir;
       entry.branch = info.branch ?? undefined;
       entry.dirty = info.dirty;
       entry.staged = info.staged;
@@ -285,6 +315,7 @@ async function refreshRepoInfo(cwd: string, existingKey?: string): Promise<RepoE
     cwdToRepoKey.set(cwd, key);
     ensureGitWatcher(entry);
     ensureWorkdirWatcher(entry);
+    ensureCommonWatcher(entry);
     scheduleCleanup();
     return entry;
   })();
@@ -358,6 +389,8 @@ export async function getGitInfo(
     state: entryResult.state,
     detached: entryResult.detached,
     repoKey: entryResult.key,
+    isWorktree: entryResult.isWorktree,
+    commonDir: entryResult.commonDir,
     diffStats,
   };
 }

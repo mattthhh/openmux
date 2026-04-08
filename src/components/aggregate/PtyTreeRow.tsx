@@ -118,6 +118,11 @@ function getProcessDisplayName(pty: PtyInfo): string | null {
 function buildGitMetadata(pty: PtyInfo): string {
   const parts: string[] = [];
 
+  // Worktree indicator
+  if (pty.gitIsWorktree) {
+    parts.push('⌁');
+  }
+
   // Detached HEAD indicator
   if (pty.gitDetached) {
     parts.push('@');

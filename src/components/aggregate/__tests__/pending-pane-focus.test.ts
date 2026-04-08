@@ -21,6 +21,8 @@ const createPty = (overrides: Partial<PtyInfo> = {}): PtyInfo => ({
   gitState: undefined,
   gitDetached: false,
   gitRepoKey: undefined,
+  gitIsWorktree: false,
+  gitCommonDir: null,
   foregroundProcess: 'zsh',
   shell: '/bin/zsh',
   title: 'shell',
@@ -31,7 +33,9 @@ const createPty = (overrides: Partial<PtyInfo> = {}): PtyInfo => ({
   ...overrides,
 });
 
-const createPending = (overrides: Partial<PendingAggregatePaneFocus> = {}): PendingAggregatePaneFocus => ({
+const createPending = (
+  overrides: Partial<PendingAggregatePaneFocus> = {}
+): PendingAggregatePaneFocus => ({
   sessionId: 'session-1',
   paneId: 'pane-1',
   ...overrides,
