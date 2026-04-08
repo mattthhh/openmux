@@ -1,4 +1,5 @@
 import type { AggregateViewState, PendingPaneCreation, PtyInfo } from './types';
+import { hasGitMetadata } from './git';
 
 const AGGREGATE_SAVED_PTY_PREFIX = 'saved:';
 const AGGREGATE_PENDING_PTY_PREFIX = 'pending:';
@@ -43,9 +44,38 @@ function mergeDuplicatePtys(existing: PtyInfo, candidate: PtyInfo): PtyInfo {
   const preferred = preferCandidate ? candidate : existing;
   const fallback = preferCandidate ? existing : candidate;
 
+  // Preserve git metadata from the fallback when the preferred pty doesn't have it.
+  // This prevents a visible flicker where git metadata clears then redraws when
+  // a live pty (with empty git fields) replaces a saved pty (with cached git data)
+  // during dedupeAggregatePtysByPane.
+  const preferredHasGit = hasGitMetadata(preferred);
+  const fallbackHasGit = hasGitMetadata(fallback);
+  const shouldPreserveFallbackGit = !preferredHasGit && fallbackHasGit;
+
+  const gitFields = shouldPreserveFallbackGit
+    ? {
+        gitBranch: fallback.gitBranch,
+        gitDiffStats: fallback.gitDiffStats,
+        gitDirty: fallback.gitDirty,
+        gitStaged: fallback.gitStaged,
+        gitUnstaged: fallback.gitUnstaged,
+        gitUntracked: fallback.gitUntracked,
+        gitConflicted: fallback.gitConflicted,
+        gitAhead: fallback.gitAhead,
+        gitBehind: fallback.gitBehind,
+        gitStashCount: fallback.gitStashCount,
+        gitState: fallback.gitState,
+        gitDetached: fallback.gitDetached,
+        gitRepoKey: fallback.gitRepoKey,
+        gitIsWorktree: fallback.gitIsWorktree,
+        gitCommonDir: fallback.gitCommonDir,
+      }
+    : {};
+
   return {
     ...fallback,
     ...preferred,
+    ...gitFields,
     cwd: preferred.cwd || fallback.cwd,
     foregroundProcess: preferred.foregroundProcess ?? fallback.foregroundProcess,
     shell: preferred.shell ?? fallback.shell,

@@ -156,8 +156,20 @@ export function findPendingPaneCreationForLifecycle(
     }
   }
 
-  // Do not guess based on insertion order alone. PTY lifecycle events can arrive
-  // before createPaneWithPTY reports the pane/PTY ids, so claiming the earliest
-  // unresolved insertion can attach a live PTY to the wrong optimistic row.
+  // When the PTY lifecycle event fires before createPaneWithPTY's onCreated
+  // callback sets pendingPtyId/pendingPaneId, we can still match unclaimed
+  // insertions for the same session that haven't been assigned a PTY yet.
+  // This prevents the pane from being sorted to the bottom due to a missing
+  // sortOrderHint.
+  if (params.ptyId && params.sessionId) {
+    const unclaimedInsertions = sessionInsertions.filter(
+      (insertion) => insertion.pendingPtyId === null
+    );
+
+    if (unclaimedInsertions.length === 1) {
+      return unclaimedInsertions[0] ?? null;
+    }
+  }
+
   return null;
 }

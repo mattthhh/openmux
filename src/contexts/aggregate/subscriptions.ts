@@ -287,7 +287,6 @@ export function createLifecycleHandlers(
             clonePtyStdoutActivity(existingPanePty.ptyId, ptyId);
             s.allPtys[existingPaneIndex] = {
               ...existingPanePty,
-              ...getEmptyGitFields(),
               ptyId,
               paneId: claimedPaneId,
               sessionId: claimedSessionId,
@@ -347,7 +346,6 @@ export function createLifecycleHandlers(
         });
         s.allPtys[placeholderIndex] = {
           ...s.allPtys[placeholderIndex],
-          ...getEmptyGitFields(),
           sessionId: ownership.sessionId,
           sessionMetadata,
           workspaceId: s.allPtys[placeholderIndex].workspaceId ?? ownership.workspaceId,
@@ -391,7 +389,6 @@ export function createLifecycleHandlers(
           if (index !== undefined) {
             s.allPtys[index] = {
               ...s.allPtys[index],
-              ...getEmptyGitFields(),
               sessionId: ownership.sessionId,
               sessionMetadata,
               title: metadataResult instanceof Error ? 'error' : 'shell',
@@ -446,6 +443,33 @@ export function createLifecycleHandlers(
         const nextPty: PtyInfo = {
           ...newPty,
           sortOrderHint: existingPty?.sortOrderHint,
+          // Preserve git metadata from the placeholder to prevent flicker.
+          // The placeholder may have inherited git metadata from a saved-row
+          // that was replaced during insertPlaceholderRow. If the hydrated
+          // metadata doesn't have git data (e.g. cache miss), the preserved
+          // metadata is kept as a visual placeholder until the next refresh.
+          ...(newPty.gitBranch === undefined && existingPty?.gitBranch !== undefined
+            ? {
+                gitBranch: existingPty.gitBranch,
+                gitDiffStats:
+                  newPty.gitDiffStats === undefined
+                    ? existingPty.gitDiffStats
+                    : newPty.gitDiffStats,
+                gitDirty: existingPty.gitDirty,
+                gitStaged: existingPty.gitStaged,
+                gitUnstaged: existingPty.gitUnstaged,
+                gitUntracked: existingPty.gitUntracked,
+                gitConflicted: existingPty.gitConflicted,
+                gitAhead: existingPty.gitAhead,
+                gitBehind: existingPty.gitBehind,
+                gitStashCount: existingPty.gitStashCount,
+                gitState: existingPty.gitState,
+                gitDetached: existingPty.gitDetached,
+                gitRepoKey: existingPty.gitRepoKey,
+                gitIsWorktree: existingPty.gitIsWorktree,
+                gitCommonDir: existingPty.gitCommonDir,
+              }
+            : {}),
         };
 
         if (existingIndex !== undefined) {

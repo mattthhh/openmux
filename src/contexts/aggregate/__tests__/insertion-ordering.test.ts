@@ -943,7 +943,7 @@ describe('aggregate insertion ordering', () => {
     ]);
   });
 
-  it('clears stale git metadata while a saved row is being claimed by a live PTY', async () => {
+  it('preserves git metadata from saved row during live PTY transition, then updates on hydration', async () => {
     const { state, setState, refreshers, lifecycleHandlers } = createHarness();
     const metadataDeferred = createDeferred<Awaited<ReturnType<typeof getPtyMetadata>>>();
 
@@ -1005,15 +1005,17 @@ describe('aggregate insertion ordering', () => {
     const createPromise = lifecycleHandlers.handlePtyCreated('pty-new');
     await Promise.resolve();
 
+    // Intermediate state: git metadata from the saved row is preserved
+    // to prevent visual flicker (clear-then-redraw)
     expect(state.allPtys.find((pty) => pty.ptyId === 'pty-new')).toMatchObject({
       paneId: 'pane-3',
-      gitBranch: undefined,
-      gitRepoKey: undefined,
-      gitIsWorktree: false,
-      gitCommonDir: null,
-      gitDiffStats: undefined,
+      // Git metadata preserved from saved-row as a visual placeholder
+      gitBranch: 'wrong-branch',
+      gitRepoKey: '/wrong-repo',
+      gitDiffStats: { added: 9, removed: 3, binary: 0 },
     });
 
+    // Hydration updates with live PTY metadata, which replaces the stale data
     metadataDeferred.resolve({
       ptyId: 'pty-new',
       cwd: '/tmp',
@@ -1022,23 +1024,31 @@ describe('aggregate insertion ordering', () => {
       title: 'new',
       workspaceId: 1,
       paneId: 'pane-3',
-      gitBranch: undefined,
-      gitDiffStats: undefined,
+      gitBranch: 'correct-branch',
+      gitDiffStats: { added: 1, removed: 0, binary: 0 },
       gitDirty: false,
       gitStaged: 0,
       gitUnstaged: 0,
       gitUntracked: 0,
       gitConflicted: 0,
-      gitAhead: undefined,
-      gitBehind: undefined,
-      gitStashCount: undefined,
+      gitAhead: 0,
+      gitBehind: 0,
+      gitStashCount: 0,
       gitState: undefined,
       gitDetached: false,
-      gitRepoKey: undefined,
+      gitRepoKey: '/correct-repo',
       gitIsWorktree: false,
       gitCommonDir: null,
     });
     await createPromise;
+
+    // Final state: live PTY metadata replaces the stale saved-row data
+    expect(state.allPtys.find((pty) => pty.ptyId === 'pty-new')).toMatchObject({
+      paneId: 'pane-3',
+      gitBranch: 'correct-branch',
+      gitRepoKey: '/correct-repo',
+      gitDiffStats: { added: 1, removed: 0, binary: 0 },
+    });
   });
 
   it('does not re-add tombstoned PTYs during initial load', async () => {
