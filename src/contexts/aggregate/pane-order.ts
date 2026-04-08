@@ -36,19 +36,6 @@ export function getSessionPaneOrder(
   return paneOrder;
 }
 
-export function hasSessionPaneOrder(
-  sessionPaneOrderIndex: SessionPaneOrderIndex,
-  sessionId: string
-): boolean {
-  const prefix = getSessionPaneOrderPrefix(sessionId);
-  for (const key of sessionPaneOrderIndex.keys()) {
-    if (key.startsWith(prefix)) {
-      return true;
-    }
-  }
-  return false;
-}
-
 export function deleteSessionPaneOrder(
   sessionPaneOrderIndex: SessionPaneOrderIndex,
   sessionId: string

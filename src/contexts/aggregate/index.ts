@@ -101,7 +101,6 @@ export {
 export {
   getSessionPaneOrderKey,
   getSessionPaneOrder,
-  hasSessionPaneOrder,
   deleteSessionPaneOrder,
   setSessionPaneOrder,
   mergePaneOrder,

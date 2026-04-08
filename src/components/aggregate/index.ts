@@ -41,7 +41,6 @@ export { PreviewPane, type PreviewPaneProps, type PreviewMouseHandlers } from '.
 export {
   AggregateKeyboardController,
   AggregateMouseController,
-  AggregateStateManager,
   type AggregateKeyboardControllerProps,
   type AggregateKeyboardControllerAPI,
   type AggregateMouseControllerProps,
