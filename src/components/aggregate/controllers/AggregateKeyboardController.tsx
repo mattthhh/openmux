@@ -33,6 +33,11 @@ export interface AggregateKeyboardControllerProps {
   onRequestKillPty?: (ptyId: string) => void;
   onToggleCommandPalette?: () => void;
   onToggleConsole?: () => void;
+  /** State manager overrides for jump/new pane operations */
+  stateManagerOverrides?: {
+    handleJumpToPty: () => Promise<boolean>;
+    handleNewPaneInSession: () => Promise<void>;
+  };
 }
 
 /** Public API exposed by the controller for use by AggregateView rendering */
@@ -196,8 +201,9 @@ export function AggregateKeyboardController(props: AggregateKeyboardControllerPr
     handleEnterSearch,
     handleEnterCopyMode,
     handleCopyModeKeys,
-    handleJumpToPty: () => Promise.resolve(false), // overridden by stateManager
-    handleNewPaneInSession: () => Promise.resolve(), // overridden by stateManager
+    handleJumpToPty: props.stateManagerOverrides?.handleJumpToPty ?? (() => Promise.resolve(false)),
+    handleNewPaneInSession:
+      props.stateManagerOverrides?.handleNewPaneInSession ?? (() => Promise.resolve()),
     handleListEnter,
     onToggleSessionPicker: session.togglePicker,
     onToggleCommandPalette: props.onToggleCommandPalette,

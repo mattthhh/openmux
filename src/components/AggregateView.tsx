@@ -37,7 +37,11 @@ import {
 } from './aggregate';
 import { ListPaneProvider } from '../contexts/ListPaneContext';
 import { useSessionDrag } from './aggregate/hooks';
-import { AggregateKeyboardController, AggregateMouseController } from './aggregate/controllers';
+import {
+  AggregateKeyboardController,
+  AggregateMouseController,
+  AggregateStateManager,
+} from './aggregate/controllers';
 
 interface AggregateViewProps {
   width: number;
@@ -63,6 +67,9 @@ export function AggregateView(props: AggregateViewProps) {
   // Hooks
   const sessionDrag = useSessionDrag();
 
+  // State manager (handles autoswitch, pane creation, and jump effects)
+  const stateManager = AggregateStateManager();
+
   // Controllers (keyboard controller owns vim, preview support, prefix/copy mode state)
   const kbCtrl = AggregateKeyboardController({
     isActive: () => aggregate.state.showAggregateView,
@@ -71,6 +78,10 @@ export function AggregateView(props: AggregateViewProps) {
     onRequestKillPty: props.onRequestKillPty,
     onToggleCommandPalette: props.onToggleCommandPalette,
     onToggleConsole: props.onToggleConsole,
+    stateManagerOverrides: {
+      handleJumpToPty: stateManager.handleJumpToPty,
+      handleNewPaneInSession: stateManager.handleNewPaneInSession,
+    },
   });
 
   createEffect(() => {
