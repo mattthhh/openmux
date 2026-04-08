@@ -251,8 +251,6 @@ export interface AggregateViewTreeSlice {
   flattenedTreeIndex: Map<string, number>;
   /** Expanded session IDs (collapsed sessions hide their PTYs) */
   expandedSessionIds: Set<string>;
-  /** Per-session pane ordering kept alongside the flattened index for tests and tree helpers. */
-  sessionPaneOrders: Map<string, Map<string, number>>;
   /** Aggregate-list ordering per session, stored as a flattened pane-order index. */
   sessionPaneOrderIndex: SessionPaneOrderIndex;
   /** Persisted manual session ordering for aggregate view */
@@ -334,7 +332,7 @@ export function createAggregateViewTreeSlice(): AggregateViewTreeSlice {
     flattenedTree: [],
     flattenedTreeIndex: new Map(),
     expandedSessionIds: new Set(),
-    sessionPaneOrders: new Map(),
+
     sessionPaneOrderIndex: new Map(),
     manualSessionOrder: [],
     pendingPaneCreations: [],

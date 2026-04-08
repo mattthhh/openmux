@@ -8,6 +8,7 @@ import {
   recomputeMatches,
   recomputeTree,
 } from '../../../src/contexts/aggregate-view-helpers';
+import { getSessionPaneOrderKey } from '../../../src/contexts/aggregate/pane-order';
 import { createAggregateViewActions } from '../../../src/contexts/aggregate-view-actions';
 
 const PERF_THRESHOLD_MS = 100;
@@ -52,12 +53,14 @@ function createMockPty(
   };
 }
 
-function paneOrders(ptys: PtyInfo[]) {
-  const result = new Map<string, Map<string, number>>();
+function buildPaneOrderIndex(ptys: PtyInfo[]): Map<string, number> {
+  const result = new Map<string, number>();
+  const sessionPaneCounts = new Map<string, number>();
   for (const pty of ptys) {
-    const order = result.get(pty.sessionId) ?? new Map<string, number>();
-    order.set(pty.paneId ?? pty.ptyId, order.size);
-    result.set(pty.sessionId, order);
+    const paneId = pty.paneId ?? pty.ptyId;
+    const count = sessionPaneCounts.get(pty.sessionId) ?? 0;
+    result.set(getSessionPaneOrderKey(pty.sessionId, paneId), count);
+    sessionPaneCounts.set(pty.sessionId, count + 1);
   }
   return result;
 }
@@ -90,7 +93,7 @@ function seedState(
             },
       ])
     ),
-    sessionPaneOrders: paneOrders(ptys),
+    sessionPaneOrderIndex: buildPaneOrderIndex(ptys),
   });
 
   setState(
@@ -174,7 +177,7 @@ describe('Smoke Tests - Aggregate View current behavior', () => {
       produce((s) => {
         s.allPtys.push(createMockPty({ ptyId: 'pty-new', sessionId: 'session-a' }));
         s.allPtysIndex = buildPtyIndex(s.allPtys);
-        s.sessionPaneOrders = paneOrders(s.allPtys);
+        s.sessionPaneOrderIndex = buildPaneOrderIndex(s.allPtys);
         recomputeMatches(s);
         recomputeTree(s);
       })
@@ -223,7 +226,7 @@ describe('Smoke Tests - Aggregate View current behavior', () => {
       produce((s) => {
         s.allPtys.push(createMockPty({ ptyId: 'pty-d', sessionId: 'session-a', paneId: 'pane-d' }));
         s.allPtysIndex = buildPtyIndex(s.allPtys);
-        s.sessionPaneOrders = paneOrders(s.allPtys);
+        s.sessionPaneOrderIndex = buildPaneOrderIndex(s.allPtys);
         recomputeMatches(s);
         recomputeTree(s);
       })

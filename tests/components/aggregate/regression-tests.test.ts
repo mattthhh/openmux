@@ -9,6 +9,7 @@ import {
   recomputeMatches,
   recomputeTree,
 } from '../../../src/contexts/aggregate-view-helpers';
+import { getSessionPaneOrderKey } from '../../../src/contexts/aggregate/pane-order';
 import { createAggregateViewActions } from '../../../src/contexts/aggregate-view-actions';
 
 const BASELINE_PERF = {
@@ -27,7 +28,9 @@ function createMockSession(id: string, name = id): SessionMetadata {
   };
 }
 
-function createMockPty(overrides: Partial<PtyInfo> & { ptyId: string; sessionId: string }): PtyInfo {
+function createMockPty(
+  overrides: Partial<PtyInfo> & { ptyId: string; sessionId: string }
+): PtyInfo {
   return {
     ptyId: overrides.ptyId,
     cwd: `/home/user/project-${overrides.ptyId}`,
@@ -55,12 +58,14 @@ function createMockPty(overrides: Partial<PtyInfo> & { ptyId: string; sessionId:
   };
 }
 
-function paneOrders(ptys: PtyInfo[]): Map<string, Map<string, number>> {
-  const result = new Map<string, Map<string, number>>();
+function buildPaneOrderIndex(ptys: PtyInfo[]): Map<string, number> {
+  const result = new Map<string, number>();
+  const sessionPaneCounts = new Map<string, number>();
   for (const pty of ptys) {
-    const order = result.get(pty.sessionId) ?? new Map<string, number>();
-    order.set(pty.paneId ?? pty.ptyId, order.size);
-    result.set(pty.sessionId, order);
+    const paneId = pty.paneId ?? pty.ptyId;
+    const count = sessionPaneCounts.get(pty.sessionId) ?? 0;
+    result.set(getSessionPaneOrderKey(pty.sessionId, paneId), count);
+    sessionPaneCounts.set(pty.sessionId, count + 1);
   }
   return result;
 }
@@ -79,9 +84,15 @@ function seedState(
     matchedPtysIndex: buildPtyIndex(ptys),
     expandedSessionIds: new Set(sessions.map((session) => session.id)),
     sessionLoadStates: new Map(
-      sessions.map((session) => [session.id, { status: 'loaded' as const, paneCount: ptys.filter((pty) => pty.sessionId === session.id).length }])
+      sessions.map((session) => [
+        session.id,
+        {
+          status: 'loaded' as const,
+          paneCount: ptys.filter((pty) => pty.sessionId === session.id).length,
+        },
+      ])
     ),
-    sessionPaneOrders: paneOrders(ptys),
+    sessionPaneOrderIndex: buildPaneOrderIndex(ptys),
     manualSessionOrder: options.manualOrder ?? [],
   });
 
@@ -89,7 +100,7 @@ function seedState(
     produce((s) => {
       s.selectedPtyId = options.selectedPtyId ?? null;
       s.selectedSessionId = options.selectedPtyId
-        ? ptys.find((pty) => pty.ptyId === options.selectedPtyId)?.sessionId ?? null
+        ? (ptys.find((pty) => pty.ptyId === options.selectedPtyId)?.sessionId ?? null)
         : null;
       recomputeMatches(s);
       recomputeTree(s);
@@ -117,9 +128,24 @@ function measureTime<T>(fn: () => T): { result: T; elapsedMs: number } {
 describe('Regression Tests - Aggregate view current behavior', () => {
   it('maintains OR semantics in filterPtys', () => {
     const ptys = [
-      createMockPty({ ptyId: 'pty-1', sessionId: 'session-a', foregroundProcess: 'nvim', cwd: '/project/a' }),
-      createMockPty({ ptyId: 'pty-2', sessionId: 'session-a', foregroundProcess: 'bash', cwd: '/project/b' }),
-      createMockPty({ ptyId: 'pty-3', sessionId: 'session-b', foregroundProcess: 'node', cwd: '/project/c' }),
+      createMockPty({
+        ptyId: 'pty-1',
+        sessionId: 'session-a',
+        foregroundProcess: 'nvim',
+        cwd: '/project/a',
+      }),
+      createMockPty({
+        ptyId: 'pty-2',
+        sessionId: 'session-a',
+        foregroundProcess: 'bash',
+        cwd: '/project/b',
+      }),
+      createMockPty({
+        ptyId: 'pty-3',
+        sessionId: 'session-b',
+        foregroundProcess: 'node',
+        cwd: '/project/c',
+      }),
     ];
 
     expect(filterPtys(ptys, 'nvim').map((pty) => pty.ptyId)).toEqual(['pty-1']);
@@ -196,7 +222,9 @@ describe('Regression Tests - Aggregate view current behavior', () => {
   });
 
   it('keeps filter performance within the expected tolerance', () => {
-    const sessions = Array.from({ length: 50 }, (_, index) => createMockSession(`session-${index}`));
+    const sessions = Array.from({ length: 50 }, (_, index) =>
+      createMockSession(`session-${index}`)
+    );
     const ptys = sessions.flatMap((session, sessionIndex) =>
       Array.from({ length: 4 }, (_, index) =>
         createMockPty({
@@ -218,7 +246,9 @@ describe('Regression Tests - Aggregate view current behavior', () => {
   });
 
   it('keeps tree navigation performance within tolerance', () => {
-    const sessions = Array.from({ length: 50 }, (_, index) => createMockSession(`session-${index}`));
+    const sessions = Array.from({ length: 50 }, (_, index) =>
+      createMockSession(`session-${index}`)
+    );
     const ptys = sessions.flatMap((session, sessionIndex) =>
       Array.from({ length: 4 }, (_, index) =>
         createMockPty({ ptyId: `pty-${sessionIndex}-${index}`, sessionId: session.id })
@@ -259,7 +289,7 @@ describe('Regression Tests - Aggregate view current behavior', () => {
       allSessions: new Map([[sessions[0].id, sessions[0]]]),
       expandedSessionIds: new Set(['session-a']),
       sessionLoadStates: new Map([['session-a', { status: 'loaded' as const, paneCount: 0 }]]),
-      sessionPaneOrders: new Map(),
+      sessionPaneOrderIndex: new Map(),
     });
 
     for (let index = 0; index < 20; index++) {
@@ -267,7 +297,7 @@ describe('Regression Tests - Aggregate view current behavior', () => {
         produce((s) => {
           s.allPtys.push(createMockPty({ ptyId: `pty-${index}`, sessionId: 'session-a' }));
           s.allPtysIndex = buildPtyIndex(s.allPtys);
-          s.sessionPaneOrders = paneOrders(s.allPtys);
+          s.sessionPaneOrderIndex = buildPaneOrderIndex(s.allPtys);
           recomputeMatches(s);
           recomputeTree(s);
         })

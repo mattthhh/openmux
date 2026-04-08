@@ -8,7 +8,7 @@ import { buildSessionPaneOrderFromAggregateState } from './pane-order';
 type PendingInsertionCollectionState = Pick<AggregateViewState, 'pendingPaneCreations'>;
 type PendingInsertionOrderState = Pick<
   AggregateViewState,
-  'allPtys' | 'sessionPaneOrders' | 'sessionPaneOrderIndex' | 'pendingPaneCreations'
+  'allPtys' | 'sessionPaneOrderIndex' | 'pendingPaneCreations'
 >;
 
 export function setPendingPaneCreations(

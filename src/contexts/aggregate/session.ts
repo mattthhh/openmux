@@ -110,7 +110,6 @@ export function recomputeTree(state: AggregateViewState): void {
     ptysBySession,
     state.expandedSessionIds,
     state.sessionLoadStates,
-    state.sessionPaneOrders,
     state.sessionPaneOrderIndex
   );
 

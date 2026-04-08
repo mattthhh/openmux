@@ -8,6 +8,11 @@ import {
   recomputeMatches,
   recomputeTree,
 } from '../../../src/contexts/aggregate-view-helpers';
+import {
+  deleteSessionPaneOrder,
+  getSessionPaneOrderKey,
+  setSessionPaneOrder,
+} from '../../../src/contexts/aggregate/pane-order';
 import { createAggregateViewActions } from '../../../src/contexts/aggregate-view-actions';
 
 function createMockSession(id: string, name = id): SessionMetadata {
@@ -50,20 +55,16 @@ function createMockPty(
   };
 }
 
-function paneOrders(ptys: PtyInfo[]): Map<string, Map<string, number>> {
-  const bySession = new Map<string, PtyInfo[]>();
+function buildPaneOrderIndex(ptys: PtyInfo[]): Map<string, number> {
+  const result = new Map<string, number>();
+  const sessionPaneCounts = new Map<string, number>();
   for (const pty of ptys) {
-    const existing = bySession.get(pty.sessionId) ?? [];
-    existing.push(pty);
-    bySession.set(pty.sessionId, existing);
+    const paneId = pty.paneId ?? pty.ptyId;
+    const count = sessionPaneCounts.get(pty.sessionId) ?? 0;
+    result.set(getSessionPaneOrderKey(pty.sessionId, paneId), count);
+    sessionPaneCounts.set(pty.sessionId, count + 1);
   }
-
-  return new Map(
-    [...bySession.entries()].map(([sessionId, sessionPtys]) => [
-      sessionId,
-      new Map(sessionPtys.map((pty, index) => [pty.paneId ?? pty.ptyId, index] as const)),
-    ])
-  );
+  return result;
 }
 
 function loadStates(sessions: SessionMetadata[], ptys: PtyInfo[], unloadedIds: string[] = []) {
@@ -102,7 +103,7 @@ function createAggregateState(params: {
     matchedPtysIndex: buildPtyIndex(ptys),
     expandedSessionIds: new Set(sessions.map((session) => session.id)),
     sessionLoadStates: loadStates(sessions, ptys, unloadedSessionIds),
-    sessionPaneOrders: paneOrders(ptys),
+    sessionPaneOrderIndex: buildPaneOrderIndex(ptys),
   });
 
   setState(
@@ -148,7 +149,7 @@ describe('Selection Persistence - current tree behavior', () => {
         s.allPtys = [...s.allPtys, pty2];
         s.allPtysIndex = buildPtyIndex(s.allPtys);
         s.sessionLoadStates.set(sessionB.id, { status: 'loaded', paneCount: 1 });
-        s.sessionPaneOrders = paneOrders(s.allPtys);
+        s.sessionPaneOrderIndex = buildPaneOrderIndex(s.allPtys);
         recomputeMatches(s);
         recomputeTree(s);
       })
@@ -176,7 +177,7 @@ describe('Selection Persistence - current tree behavior', () => {
         s.allPtys = s.allPtys.filter((pty) => pty.sessionId !== 'session-a');
         s.allPtysIndex = buildPtyIndex(s.allPtys);
         s.sessionLoadStates.delete('session-a');
-        s.sessionPaneOrders.delete('session-a');
+        deleteSessionPaneOrder(s.sessionPaneOrderIndex, 'session-a');
         s.expandedSessionIds.delete('session-a');
         recomputeMatches(s);
         recomputeTree(s);
@@ -221,7 +222,7 @@ describe('Selection Persistence - current tree behavior', () => {
         s.allPtysIndex = buildPtyIndex(s.allPtys);
         s.matchedPtys = [livePty];
         s.matchedPtysIndex = buildPtyIndex(s.matchedPtys);
-        s.sessionPaneOrders = paneOrders(s.allPtys);
+        s.sessionPaneOrderIndex = buildPaneOrderIndex(s.allPtys);
         recomputeMatches(s);
         recomputeTree(s);
       })
@@ -327,7 +328,7 @@ describe('Selection Persistence - current tree behavior', () => {
         s.previewZoomed = true;
         s.allPtys = [];
         s.allPtysIndex = new Map();
-        s.sessionPaneOrders = new Map();
+        s.sessionPaneOrderIndex = new Map();
         recomputeMatches(s);
         recomputeTree(s);
       })

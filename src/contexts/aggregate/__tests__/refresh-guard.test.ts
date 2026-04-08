@@ -19,14 +19,6 @@ describe('RefreshGuard', () => {
     expect(state.refreshInProgress).toBe(false);
   });
 
-  it('works with subset refresh flag', async () => {
-    const state = createRefreshState();
-    const guard = new RefreshGuard(state, 'subsetRefreshInProgress');
-    expect(state.subsetRefreshInProgress).toBe(true);
-    await guard[Symbol.asyncDispose]();
-    expect(state.subsetRefreshInProgress).toBe(false);
-  });
-
   it('works with await using pattern', async () => {
     const state = createRefreshState();
     {
@@ -35,22 +27,6 @@ describe('RefreshGuard', () => {
       expect(state.refreshInProgress).toBe(true);
     }
     expect(state.refreshInProgress).toBe(false);
-  });
-
-  it('handles multiple guards on same state', async () => {
-    const state = createRefreshState();
-    const guard1 = new RefreshGuard(state, 'refreshInProgress');
-    const guard2 = new RefreshGuard(state, 'subsetRefreshInProgress');
-
-    expect(state.refreshInProgress).toBe(true);
-    expect(state.subsetRefreshInProgress).toBe(true);
-
-    await guard1[Symbol.asyncDispose]();
-    expect(state.refreshInProgress).toBe(false);
-    expect(state.subsetRefreshInProgress).toBe(true);
-
-    await guard2[Symbol.asyncDispose]();
-    expect(state.subsetRefreshInProgress).toBe(false);
   });
 
   it('resets flag even if created when already true', async () => {

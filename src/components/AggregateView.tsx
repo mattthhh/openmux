@@ -201,35 +201,7 @@ export function AggregateView(props: AggregateViewProps) {
   };
 
   // Controllers
-  const stateManager = AggregateStateManager({
-    isActive: () => aggregate.state.showAggregateView,
-    state: aggregate.state,
-    selectedPtyId: () => aggregate.state.selectedPtyId,
-    selectedSessionId: () => aggregate.state.selectedSessionId,
-    previewMode: () => aggregate.state.previewMode,
-    selectedIndex: () => aggregate.state.selectedIndex,
-    flattenedTree: () => aggregate.state.flattenedTree,
-    expandedSessionIds: () => aggregate.state.expandedSessionIds,
-    filterQuery: () => aggregate.state.filterQuery,
-    pendingPaneCreations: () => aggregate.state.pendingPaneCreations,
-    aggregateState: () => ({
-      allPtys: aggregate.state.allPtys,
-      sessionPaneOrders: aggregate.state.sessionPaneOrders,
-      sessionPaneOrderIndex: aggregate.state.sessionPaneOrderIndex,
-      pendingPaneCreations: aggregate.state.pendingPaneCreations,
-    }),
-    loadAttemptedSessionIds: () => aggregate.state.loadAttemptedSessionIds,
-    loadSessionPtys: aggregate.loadSessionPtys,
-    setFilterQuery: aggregate.setFilterQuery,
-    toggleSessionExpanded: aggregate.toggleSessionExpanded,
-    selectPty: aggregate.selectPty,
-    upsertPendingPaneCreation: aggregate.upsertPendingPaneCreation,
-    removePendingPaneCreation: aggregate.removePendingPaneCreation,
-    clearPendingPaneCreations: aggregate.clearPendingPaneCreations,
-    closeAggregateView: aggregate.closeAggregateView,
-    exitAggregateMode: keyboard.exitAggregateMode,
-    enterAggregateMode: keyboard.enterAggregateMode,
-  });
+  const stateManager = AggregateStateManager();
 
   const mouseHandlers = AggregateMouseController({
     isActive: () => aggregate.state.showAggregateView,

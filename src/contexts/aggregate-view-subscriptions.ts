@@ -80,7 +80,6 @@ export async function setupSubscriptions(
   subscriptions: SubscriptionManager,
   subscriptionsEpoch: { value: number },
   refreshPtys: () => Promise<void>,
-  refreshPtysSubset: (ptyIds: string[]) => Promise<void>,
   handleTitleChange: (event: { ptyId: string; title: string }) => void,
   handleProcessChange: (event: { ptyId: string; processName: string }) => void,
   lifecycleHandlers: {
@@ -92,7 +91,6 @@ export async function setupSubscriptions(
     subscriptions,
     subscriptionsEpoch,
     refreshPtys,
-    refreshPtysSubset,
     handleTitleChange,
     handleProcessChange,
     lifecycleHandlers,

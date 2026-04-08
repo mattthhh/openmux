@@ -1,6 +1,8 @@
 /**
- * AggregateStateManager - Handles session loading, pane creation, and auto-focus effects
- * Encapsulates all async state management side effects for AggregateView
+ * AggregateStateManager - Handles session loading, pane creation, and auto-focus effects.
+ *
+ * Reads state directly from contexts instead of receiving individual props.
+ * This component must be rendered inside the AggregateViewContext provider tree.
  */
 
 import { createEffect, onCleanup, createSignal } from 'solid-js';
@@ -10,79 +12,38 @@ import { useSession } from '../../../contexts/SessionContext';
 import { useTerminal } from '../../../contexts/TerminalContext';
 import { useKeyboard } from '../../../contexts/KeyboardContext';
 import { useCopyMode } from '../../../contexts/copy-mode';
+import { useAggregateView } from '../../../contexts/AggregateViewContext';
 import { collectPanes } from '../../../core/layout-tree';
 import type { Workspace, WorkspaceId } from '../../../core/types';
-import type {
-  PendingPaneCreation,
-  FlattenedTreeItem,
-  AggregateViewState,
-} from '../../../contexts/aggregate-view-types';
+import type { PendingPaneCreation } from '../../../contexts/aggregate-view-types';
 import type { PendingAggregatePaneFocus } from '../pending-pane-focus';
 import { getNextPendingPaneCreationOrder } from '../../../contexts/aggregate-view-pending-insertions';
 import { resolvePendingAggregatePaneFocus } from '../pending-pane-focus';
 import { findPtyLocation, findPaneLocation } from '../utils';
 
-export interface AggregateStateManagerProps {
-  /** Whether aggregate view is active */
-  isActive: () => boolean;
-  /** Current aggregate view state from context */
-  state: AggregateViewState;
-  /** Selected PTY ID getter */
-  selectedPtyId: () => string | null;
-  /** Selected session ID getter */
-  selectedSessionId: () => string | null;
-  /** Whether in preview mode */
-  previewMode: () => boolean;
-  /** Current selected index */
-  selectedIndex: () => number;
-  /** Flattened tree items */
-  flattenedTree: () => FlattenedTreeItem[];
-  /** Currently expanded session IDs */
-  expandedSessionIds: () => Set<string>;
-  /** Current filter query */
-  filterQuery: () => string;
-  /** Pending pane creations (array in state) */
-  pendingPaneCreations: () => PendingPaneCreation[];
-  /** Full aggregate state for order calculations */
-  aggregateState: () => Pick<
-    AggregateViewState,
-    'allPtys' | 'sessionPaneOrders' | 'sessionPaneOrderIndex' | 'pendingPaneCreations'
-  >;
-  /** Session IDs that have been attempted to load */
-  loadAttemptedSessionIds: () => Set<string>;
-  /** Load PTYs for a session */
-  loadSessionPtys: (sessionId: string) => void;
-  /** Set filter query */
-  setFilterQuery: (query: string) => void;
-  /** Toggle session expansion */
-  toggleSessionExpanded: (sessionId: string) => void;
-  /** Select a PTY */
-  selectPty: (ptyId: string) => void;
-  /** Add/update pending pane creation */
-  upsertPendingPaneCreation: (creation: PendingPaneCreation) => void;
-  /** Remove pending pane creation */
-  removePendingPaneCreation: (id: string) => void;
-  /** Clear all pending pane creations */
-  clearPendingPaneCreations: () => void;
-  /** Close aggregate view */
-  closeAggregateView: () => void;
-  /** Exit aggregate keyboard mode */
-  exitAggregateMode: () => void;
-  /** Enter aggregate keyboard mode */
-  enterAggregateMode: () => void;
-}
-
 /**
  * Controller component that manages all async state effects for AggregateView.
- * Handles session auto-loading, pending pane focus resolution, and pane creation.
+ * Reads from contexts directly — no prop drilling.
  * Returns an object with methods that can be passed to keyboard controller.
  */
-export function AggregateStateManager(props: AggregateStateManagerProps) {
+export function AggregateStateManager() {
+  const aggregate = useAggregateView();
   const layout = useLayout();
   const session = useSession();
   const terminal = useTerminal();
   const keyboard = useKeyboard();
   const copyMode = useCopyMode();
+
+  // Derived getters from aggregate context
+  const isActive = () => aggregate.state.showAggregateView;
+  const selectedPtyId = () => aggregate.state.selectedPtyId;
+  const selectedSessionId = () => aggregate.state.selectedSessionId;
+  const previewMode = () => aggregate.state.previewMode;
+  const selectedIndex = () => aggregate.state.selectedIndex;
+  const flattenedTree = () => aggregate.state.flattenedTree;
+  const expandedSessionIds = () => aggregate.state.expandedSessionIds;
+  const filterQuery = () => aggregate.state.filterQuery;
+  const pendingPaneCreations = () => aggregate.state.pendingPaneCreations;
 
   const { state: layoutState, switchWorkspace, focusPane, setLayoutMode } = layout;
   const { state: sessionState, switchSession } = session;
@@ -178,11 +139,11 @@ export function AggregateStateManager(props: AggregateStateManagerProps) {
   // Copy mode tracking effects
   createEffect(() => {
     if (
-      props.isActive() &&
-      props.previewMode() &&
+      isActive() &&
+      previewMode() &&
       keyboardState.mode === 'copy' &&
-      props.selectedPtyId() &&
-      copyMode.isActive(props.selectedPtyId()!)
+      selectedPtyId() &&
+      copyMode.isActive(selectedPtyId()!)
     ) {
       setAggregateCopyModeActive(true);
     }
@@ -193,10 +154,7 @@ export function AggregateStateManager(props: AggregateStateManagerProps) {
 
     const activeCopyPtyId = copyMode.getActivePtyId();
     const shouldKeepCopyMode =
-      props.isActive() &&
-      props.previewMode() &&
-      !!activeCopyPtyId &&
-      activeCopyPtyId === props.selectedPtyId();
+      isActive() && previewMode() && !!activeCopyPtyId && activeCopyPtyId === selectedPtyId();
 
     if (shouldKeepCopyMode) return;
 
@@ -205,7 +163,7 @@ export function AggregateStateManager(props: AggregateStateManagerProps) {
     setAggregateCopyModeActive(false);
     if (keyboardState.mode === 'copy') {
       keyboard.exitCopyMode();
-      if (props.isActive()) {
+      if (isActive()) {
         enterAggregateMode();
       }
     }
@@ -213,50 +171,50 @@ export function AggregateStateManager(props: AggregateStateManagerProps) {
 
   // Resolve pending pane focus (for newly created panes)
   createEffect(() => {
-    if (!props.isActive()) {
+    if (!isActive()) {
       setPendingPaneFocus(null);
-      props.clearPendingPaneCreations();
+      aggregate.clearPendingPaneCreations();
       return;
     }
 
     const resolution = resolvePendingAggregatePaneFocus({
       pending: pendingPaneFocus(),
-      allPtys: props.state.allPtys,
-      flattenedTreeIndex: props.state.flattenedTreeIndex,
-      expandedSessionIds: props.expandedSessionIds(),
-      filterQuery: props.filterQuery(),
+      allPtys: aggregate.state.allPtys,
+      flattenedTreeIndex: aggregate.state.flattenedTreeIndex,
+      expandedSessionIds: expandedSessionIds(),
+      filterQuery: filterQuery(),
     });
 
     if (resolution.type === 'wait') return;
 
     if (resolution.type === 'clear-filter') {
-      if (props.filterQuery()) {
-        props.setFilterQuery('');
+      if (filterQuery()) {
+        aggregate.setFilterQuery('');
       }
       return;
     }
 
     if (resolution.type === 'expand-session') {
-      props.toggleSessionExpanded(resolution.sessionId);
+      aggregate.toggleSessionExpanded(resolution.sessionId);
       return;
     }
 
-    props.selectPty(resolution.ptyId);
+    aggregate.selectPty(resolution.ptyId);
     setPendingPaneFocus(null);
   });
 
   createEffect(() => {
-    if (!props.isActive()) return;
+    if (!isActive()) return;
     if (sessionState.switching) return;
-    if (props.pendingPaneCreations().length > 0) return;
+    if (pendingPaneCreations().length > 0) return;
     if (pendingPaneFocus()) return;
 
-    const selectedItem = props.flattenedTree()[props.selectedIndex()];
+    const selectedItem = flattenedTree()[selectedIndex()];
     if (selectedItem?.node.type !== 'pty') return;
 
-    const selectedSessionId = selectedItem.node.ptyInfo.sessionId;
-    if (!selectedSessionId) return;
-    if (selectedSessionId === sessionState.activeSessionId) return;
+    const itemSessionId = selectedItem.node.ptyInfo.sessionId;
+    if (!itemSessionId) return;
+    if (itemSessionId === sessionState.activeSessionId) return;
 
     const targetWorkspaceId = toWorkspaceId(selectedItem.node.ptyInfo.workspaceId);
     const targetPaneId = selectedItem.node.ptyInfo.paneId;
@@ -264,9 +222,9 @@ export function AggregateStateManager(props: AggregateStateManagerProps) {
     let cancelled = false;
 
     void (async () => {
-      const sessionData = await loadSessionData(selectedSessionId);
+      const sessionData = await loadSessionData(itemSessionId);
       if (cancelled) return;
-      await switchToSessionWithData(selectedSessionId, sessionData, {
+      await switchToSessionWithData(itemSessionId, sessionData, {
         workspaceId: targetWorkspaceId,
         paneId: targetPaneId ?? undefined,
       });
@@ -280,19 +238,19 @@ export function AggregateStateManager(props: AggregateStateManagerProps) {
   // Cleanup
   onCleanup(() => {
     setPendingPaneFocus(null);
-    props.clearPendingPaneCreations();
+    aggregate.clearPendingPaneCreations();
   });
 
   // Public API for jump to PTY
   const handleJumpToPty = async (): Promise<boolean> => {
-    const selectedPtyId = props.selectedPtyId();
-    const selectedSessionId = props.selectedSessionId();
+    const currentPtyId = selectedPtyId();
+    const currentSessionId = selectedSessionId();
 
-    if (selectedPtyId) {
-      const location = findPtyLocation(selectedPtyId, layoutState.workspaces);
+    if (currentPtyId) {
+      const location = findPtyLocation(currentPtyId, layoutState.workspaces);
       if (location) {
-        props.closeAggregateView();
-        props.exitAggregateMode();
+        aggregate.closeAggregateView();
+        keyboard.exitAggregateMode();
         if (layoutState.activeWorkspaceId !== location.workspaceId) {
           switchWorkspace(location.workspaceId);
         }
@@ -300,7 +258,7 @@ export function AggregateStateManager(props: AggregateStateManagerProps) {
         return true;
       }
 
-      const sessionLocation = findSessionForPty(selectedPtyId);
+      const sessionLocation = findSessionForPty(currentPtyId);
       if (sessionLocation && sessionLocation.sessionId !== sessionState.activeSessionId) {
         const sessionData = await loadSessionData(sessionLocation.sessionId);
         if (sessionData instanceof Error) {
@@ -310,8 +268,8 @@ export function AggregateStateManager(props: AggregateStateManagerProps) {
 
         const nextLocation = findPaneLocation(sessionLocation.paneId, sessionData.workspaces);
 
-        props.closeAggregateView();
-        props.exitAggregateMode();
+        aggregate.closeAggregateView();
+        keyboard.exitAggregateMode();
         const switched = await switchToSessionWithData(sessionLocation.sessionId, sessionData);
         if (!switched) {
           return false;
@@ -332,13 +290,13 @@ export function AggregateStateManager(props: AggregateStateManagerProps) {
       }
     }
 
-    if (!selectedSessionId) return false;
+    if (!currentSessionId) return false;
 
-    if (selectedSessionId === sessionState.activeSessionId) {
+    if (currentSessionId === sessionState.activeSessionId) {
       const workspaceId = layoutState.activeWorkspaceId;
       const paneId = getPreferredPaneIdForWorkspace(layoutState.workspaces[workspaceId]);
-      props.closeAggregateView();
-      props.exitAggregateMode();
+      aggregate.closeAggregateView();
+      keyboard.exitAggregateMode();
       if (paneId) {
         switchWorkspace(workspaceId);
         focusPane(paneId);
@@ -347,7 +305,7 @@ export function AggregateStateManager(props: AggregateStateManagerProps) {
     }
 
     // Load session and jump to it
-    const sessionData = await loadSessionData(selectedSessionId);
+    const sessionData = await loadSessionData(currentSessionId);
     if (sessionData instanceof Error) {
       console.error('Failed to load session:', sessionData.message);
       return false;
@@ -356,9 +314,9 @@ export function AggregateStateManager(props: AggregateStateManagerProps) {
     const workspaceId = sessionData.activeWorkspaceId;
     const paneId = getPreferredPaneIdForWorkspace(sessionData.workspaces[workspaceId]);
 
-    props.closeAggregateView();
-    props.exitAggregateMode();
-    const switched = await switchToSessionWithData(selectedSessionId, sessionData);
+    aggregate.closeAggregateView();
+    keyboard.exitAggregateMode();
+    const switched = await switchToSessionWithData(currentSessionId, sessionData);
     if (!switched) {
       return false;
     }
@@ -371,18 +329,18 @@ export function AggregateStateManager(props: AggregateStateManagerProps) {
 
   // Public API for new pane in session
   const handleNewPaneInSession = async (): Promise<void> => {
-    const selectedSessionId = props.selectedSessionId();
-    const selectedPtyId = props.selectedPtyId();
+    const currentSessionId = selectedSessionId();
+    const currentPtyId = selectedPtyId();
 
-    if (!selectedSessionId && !selectedPtyId) return;
+    if (!currentSessionId && !currentPtyId) return;
 
-    const selectedPty = selectedPtyId
-      ? (props.state.allPtys[props.state.allPtysIndex.get(selectedPtyId) ?? -1] ?? null)
+    const selectedPty = currentPtyId
+      ? (aggregate.state.allPtys[aggregate.state.allPtysIndex.get(currentPtyId) ?? -1] ?? null)
       : null;
 
     const targetSessionId =
-      selectedSessionId ??
-      findSessionForPty(selectedPtyId!)?.sessionId ??
+      currentSessionId ??
+      findSessionForPty(currentPtyId!)?.sessionId ??
       sessionState.activeSessionId;
     if (!targetSessionId) return;
 
@@ -390,16 +348,23 @@ export function AggregateStateManager(props: AggregateStateManagerProps) {
     const pendingInsertion: PendingPaneCreation = {
       id: pendingInsertionId,
       sessionId: targetSessionId,
-      insertAfterPtyId: selectedPtyId,
+      insertAfterPtyId: currentPtyId,
       insertAfterPaneId: selectedPty?.paneId ?? null,
       pendingPtyId: null,
       pendingPaneId: null,
-      sortOrderHint: getNextPendingPaneCreationOrder(props.aggregateState(), {
-        sessionId: targetSessionId,
-        insertAfterPaneId: selectedPty?.paneId ?? null,
-      }),
+      sortOrderHint: getNextPendingPaneCreationOrder(
+        {
+          allPtys: aggregate.state.allPtys,
+          sessionPaneOrderIndex: aggregate.state.sessionPaneOrderIndex,
+          pendingPaneCreations: aggregate.state.pendingPaneCreations,
+        },
+        {
+          sessionId: targetSessionId,
+          insertAfterPaneId: selectedPty?.paneId ?? null,
+        }
+      ),
     };
-    props.upsertPendingPaneCreation(pendingInsertion);
+    aggregate.upsertPendingPaneCreation(pendingInsertion);
 
     setPendingPaneFocus(null);
 
@@ -407,10 +372,10 @@ export function AggregateStateManager(props: AggregateStateManagerProps) {
     let targetCwd: string | undefined;
 
     // Get CWD from selected PTY if available
-    if (selectedPtyId) {
-      targetCwd = await getSessionCwd(selectedPtyId).catch((e) => {
+    if (currentPtyId) {
+      targetCwd = await getSessionCwd(currentPtyId).catch((e) => {
         console.warn(
-          `[AggregateStateManager] Failed to get CWD for selected PTY ${selectedPtyId}:`,
+          `[AggregateStateManager] Failed to get CWD for selected PTY ${currentPtyId}:`,
           e
         );
         return undefined;
@@ -445,8 +410,8 @@ export function AggregateStateManager(props: AggregateStateManagerProps) {
         }
       }
 
-      if (selectedPtyId) {
-        const location = findPtyLocation(selectedPtyId, layoutState.workspaces);
+      if (currentPtyId) {
+        const location = findPtyLocation(currentPtyId, layoutState.workspaces);
         if (location) {
           targetWorkspaceId = location.workspaceId;
         }
@@ -455,7 +420,7 @@ export function AggregateStateManager(props: AggregateStateManagerProps) {
       // Other session - load and switch
       const sessionData = await loadSessionData(targetSessionId);
       if (sessionData instanceof Error) {
-        props.removePendingPaneCreation(pendingInsertionId);
+        aggregate.removePendingPaneCreation(pendingInsertionId);
         console.error('Failed to load session:', sessionData.message);
         return;
       }
@@ -471,7 +436,7 @@ export function AggregateStateManager(props: AggregateStateManagerProps) {
 
       const switched = await switchToSessionWithData(targetSessionId, sessionData);
       if (!switched) {
-        props.removePendingPaneCreation(pendingInsertionId);
+        aggregate.removePendingPaneCreation(pendingInsertionId);
         return;
       }
     }
@@ -480,7 +445,7 @@ export function AggregateStateManager(props: AggregateStateManagerProps) {
     setLayoutMode('stacked');
     const createdPane = await createPaneWithPTY(targetCwd, 'shell', {
       onCreated: (created) => {
-        props.upsertPendingPaneCreation({
+        aggregate.upsertPendingPaneCreation({
           ...pendingInsertion,
           pendingPtyId: created.ptyId,
           pendingPaneId: created.paneId,
@@ -488,12 +453,12 @@ export function AggregateStateManager(props: AggregateStateManagerProps) {
       },
     });
     if (!createdPane) {
-      props.removePendingPaneCreation(pendingInsertionId);
+      aggregate.removePendingPaneCreation(pendingInsertionId);
       console.error('Failed to create pane in aggregate view');
       return;
     }
 
-    props.upsertPendingPaneCreation({
+    aggregate.upsertPendingPaneCreation({
       ...pendingInsertion,
       pendingPtyId: createdPane.ptyId,
       pendingPaneId: createdPane.paneId,

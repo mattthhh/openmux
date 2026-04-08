@@ -1,24 +1,20 @@
 import { describe, expect, it } from 'bun:test';
 
 import { getNextPendingPaneCreationOrder } from '../pending';
+import { getSessionPaneOrderKey } from '../pane-order';
 import type { AggregateViewState, PendingPaneCreation } from '../types';
 
 function createState(): Pick<
   AggregateViewState,
-  'allPtys' | 'sessionPaneOrders' | 'sessionPaneOrderIndex' | 'pendingPaneCreations'
+  'allPtys' | 'sessionPaneOrderIndex' | 'pendingPaneCreations'
 > {
+  const sessionPaneOrderIndex = new Map<string, number>();
+  sessionPaneOrderIndex.set(getSessionPaneOrderKey('session-1', 'pane-1'), 0);
+  sessionPaneOrderIndex.set(getSessionPaneOrderKey('session-1', 'pane-2'), 1);
+
   return {
     allPtys: [],
-    sessionPaneOrders: new Map([
-      [
-        'session-1',
-        new Map([
-          ['pane-1', 0],
-          ['pane-2', 1],
-        ]),
-      ],
-    ]),
-    sessionPaneOrderIndex: new Map(),
+    sessionPaneOrderIndex,
     pendingPaneCreations: [],
   };
 }

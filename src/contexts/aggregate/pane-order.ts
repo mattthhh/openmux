@@ -1,16 +1,14 @@
 /**
  * Session pane ordering helpers for aggregate view.
  *
- * State stores pane ordering in a flattened index keyed by sessionId + paneId.
- * These helpers expose session-scoped reads/writes so callers do not need to
- * care about the flattened representation.
+ * Pane ordering is stored in a single flattened index keyed by
+ * `sessionId\0paneId`. These helpers expose session-scoped reads/writes
+ * so callers do not need to care about the flattened representation.
  */
 
 import type { AggregateViewState } from './types';
 
 export type SessionPaneOrderIndex = AggregateViewState['sessionPaneOrderIndex'];
-export type LegacySessionPaneOrders = AggregateViewState['sessionPaneOrders'];
-export type SessionPaneOrderSource = SessionPaneOrderIndex | LegacySessionPaneOrders;
 
 const SESSION_PANE_ORDER_SEPARATOR = '\u0000';
 
@@ -23,18 +21,13 @@ function getSessionPaneOrderPrefix(sessionId: string): string {
 }
 
 export function getSessionPaneOrder(
-  sessionPaneOrders: SessionPaneOrderSource,
+  sessionPaneOrderIndex: SessionPaneOrderIndex,
   sessionId: string
 ): Map<string, number> {
-  const legacyPaneOrder = sessionPaneOrders.get(sessionId);
-  if (legacyPaneOrder instanceof Map) {
-    return new Map(legacyPaneOrder);
-  }
-
   const prefix = getSessionPaneOrderPrefix(sessionId);
   const paneOrder = new Map<string, number>();
 
-  for (const [key, order] of sessionPaneOrders) {
+  for (const [key, order] of sessionPaneOrderIndex) {
     if (!key.startsWith(prefix)) continue;
     if (typeof order !== 'number') continue;
     paneOrder.set(key.slice(prefix.length), order);
@@ -44,16 +37,11 @@ export function getSessionPaneOrder(
 }
 
 export function hasSessionPaneOrder(
-  sessionPaneOrders: SessionPaneOrderSource,
+  sessionPaneOrderIndex: SessionPaneOrderIndex,
   sessionId: string
 ): boolean {
-  const legacyPaneOrder = sessionPaneOrders.get(sessionId);
-  if (legacyPaneOrder instanceof Map) {
-    return legacyPaneOrder.size > 0;
-  }
-
   const prefix = getSessionPaneOrderPrefix(sessionId);
-  for (const key of sessionPaneOrders.keys()) {
+  for (const key of sessionPaneOrderIndex.keys()) {
     if (key.startsWith(prefix)) {
       return true;
     }
@@ -62,25 +50,25 @@ export function hasSessionPaneOrder(
 }
 
 export function deleteSessionPaneOrder(
-  sessionPaneOrders: SessionPaneOrderIndex,
+  sessionPaneOrderIndex: SessionPaneOrderIndex,
   sessionId: string
 ): void {
   const prefix = getSessionPaneOrderPrefix(sessionId);
-  for (const key of [...sessionPaneOrders.keys()]) {
+  for (const key of [...sessionPaneOrderIndex.keys()]) {
     if (key.startsWith(prefix)) {
-      sessionPaneOrders.delete(key);
+      sessionPaneOrderIndex.delete(key);
     }
   }
 }
 
 export function setSessionPaneOrder(
-  sessionPaneOrders: SessionPaneOrderIndex,
+  sessionPaneOrderIndex: SessionPaneOrderIndex,
   sessionId: string,
   paneOrder: Map<string, number>
 ): void {
-  deleteSessionPaneOrder(sessionPaneOrders, sessionId);
+  deleteSessionPaneOrder(sessionPaneOrderIndex, sessionId);
   for (const [paneId, order] of paneOrder) {
-    sessionPaneOrders.set(getSessionPaneOrderKey(sessionId, paneId), order);
+    sessionPaneOrderIndex.set(getSessionPaneOrderKey(sessionId, paneId), order);
   }
 }
 
@@ -119,17 +107,12 @@ export function mergePaneOrder(
 }
 
 export function buildSessionPaneOrderFromAggregateState(
-  state: Pick<AggregateViewState, 'allPtys' | 'sessionPaneOrders' | 'sessionPaneOrderIndex'>,
+  state: Pick<AggregateViewState, 'allPtys' | 'sessionPaneOrderIndex'>,
   sessionId: string
 ): Map<string, number> {
   const flattenedOrder = getSessionPaneOrder(state.sessionPaneOrderIndex, sessionId);
   if (flattenedOrder.size > 0) {
     return flattenedOrder;
-  }
-
-  const legacyOrder = getSessionPaneOrder(state.sessionPaneOrders, sessionId);
-  if (legacyOrder.size > 0) {
-    return legacyOrder;
   }
 
   const sessionPaneIds = state.allPtys

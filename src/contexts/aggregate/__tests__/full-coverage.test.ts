@@ -75,7 +75,6 @@ const createMockState = (overrides: Partial<AggregateViewState> = {}): Aggregate
   expandedSessionIds: new Set(),
   selectedSessionId: null,
   sessionLoadStates: new Map(),
-  sessionPaneOrders: new Map(),
   sessionPaneOrderIndex: new Map(),
   manualSessionOrder: [],
   loadingSessionIds: new Set(),

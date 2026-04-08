@@ -37,7 +37,6 @@ export {
   AggregateStateManager,
   type AggregateKeyboardControllerProps,
   type AggregateMouseControllerProps,
-  type AggregateStateManagerProps,
 } from './controllers';
 
 // Hooks

@@ -13,8 +13,8 @@ vi.mock('../../../effect/services/pty/helpers', () => ({
   subscribeToGitRepoChanges: subscribeToGitRepoChangesMock,
 }));
 
-import { createGitRepoChangeRefresh } from '../../aggregate-view-subscriptions';
-import { buildPtyIndex } from '../../aggregate-view-helpers';
+import { createGitRepoChangeRefresh } from '../subscriptions';
+import { buildPtyIndex } from '../filter';
 import { initialState, type AggregateViewState, type PtyInfo } from '../../aggregate-view-types';
 import type { SessionMetadata } from '../../../effect/models';
 
@@ -58,7 +58,7 @@ describe('createGitRepoChangeRefresh', () => {
     vi.clearAllMocks();
   });
 
-  it('refreshes all PTYs belonging to the changed repo', async () => {
+  it('triggers a full refresh when a repo matching aggregate PTYs changes', async () => {
     let onGitRepoChange:
       | ((event: { repoKey: string; gitDir: string; workDir: string | null }) => void)
       | undefined;
@@ -78,13 +78,13 @@ describe('createGitRepoChangeRefresh', () => {
       allPtys: ptys,
       allPtysIndex: buildPtyIndex(ptys),
     });
-    const refreshPtysSubset = vi.fn(async () => {});
+    const refreshPtys = vi.fn(async () => {});
 
-    const unsubscribe = createGitRepoChangeRefresh(state, { value: 1 }, 1, refreshPtysSubset);
+    const unsubscribe = createGitRepoChangeRefresh(state, { value: 1 }, 1, refreshPtys);
 
     onGitRepoChange?.({ repoKey: '/repo', gitDir: '/repo/.git', workDir: '/repo' });
 
-    expect(refreshPtysSubset).toHaveBeenCalledWith(['pty-1', 'pty-2']);
+    expect(refreshPtys).toHaveBeenCalled();
     unsubscribe();
   });
 
@@ -104,14 +104,14 @@ describe('createGitRepoChangeRefresh', () => {
       allPtys: ptys,
       allPtysIndex: buildPtyIndex(ptys),
     });
-    const refreshPtysSubset = vi.fn(async () => {});
+    const refreshPtys = vi.fn(async () => {});
     const subscriptionsEpoch = { value: 2 };
 
-    const unsubscribe = createGitRepoChangeRefresh(state, subscriptionsEpoch, 1, refreshPtysSubset);
+    const unsubscribe = createGitRepoChangeRefresh(state, subscriptionsEpoch, 1, refreshPtys);
 
     onGitRepoChange?.({ repoKey: '/repo', gitDir: '/repo/.git', workDir: '/repo' });
 
-    expect(refreshPtysSubset).not.toHaveBeenCalled();
+    expect(refreshPtys).not.toHaveBeenCalled();
     unsubscribe();
   });
 });

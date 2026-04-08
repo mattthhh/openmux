@@ -53,12 +53,10 @@ export interface SubscriptionManager {
 
 export interface RefreshState {
   refreshInProgress: boolean;
-  subsetRefreshInProgress: boolean;
   pendingFullRefresh: boolean;
-  pendingSubsetPtyIds: Set<string>;
 }
 
-export type RefreshFlagKey = 'refreshInProgress' | 'subsetRefreshInProgress';
+export type RefreshFlagKey = 'refreshInProgress';
 
 export interface PtyOwnership {
   sessionId: string;
@@ -96,7 +94,6 @@ export interface SubscriptionSetupDeps {
   subscriptions: SubscriptionManager;
   subscriptionsEpoch: { value: number };
   refreshPtys: () => Promise<void>;
-  refreshPtysSubset: (ptyIds: string[]) => Promise<void>;
   handleTitleChange: TitleChangeHandler;
   handleProcessChange: (event: ProcessChangeEvent) => void;
   lifecycleHandlers: LifecycleHandlers;
@@ -115,9 +112,7 @@ export function createSubscriptionManager(): SubscriptionManager {
 export function createRefreshState(): RefreshState {
   return {
     refreshInProgress: false,
-    subsetRefreshInProgress: false,
     pendingFullRefresh: false,
-    pendingSubsetPtyIds: new Set(),
   };
 }
 
@@ -140,14 +135,14 @@ export interface LifecycleHandlerDeps {
 }
 
 function buildSessionPaneOrderFromState(
-  state: Pick<AggregateViewState, 'allPtys' | 'sessionPaneOrders' | 'sessionPaneOrderIndex'>,
+  state: Pick<AggregateViewState, 'allPtys' | 'sessionPaneOrderIndex'>,
   sessionId: string
 ): Map<string, number> {
   return buildSessionPaneOrderFromAggregateState(state, sessionId);
 }
 
 function getPendingInsertionOrder(
-  state: Pick<AggregateViewState, 'allPtys' | 'sessionPaneOrders' | 'sessionPaneOrderIndex'>,
+  state: Pick<AggregateViewState, 'allPtys' | 'sessionPaneOrderIndex'>,
   insertion: PendingPaneCreation
 ): number {
   if (insertion.sortOrderHint !== undefined) {
@@ -241,14 +236,12 @@ export function createLifecycleHandlers(
     );
   };
 
-  const handlePtyCreated = async (ptyId: string, retryCount = 0): Promise<void> => {
-    const initialOwnership = resolvePtyOwnership(ptyId);
-
-    if (state.deletedPtyIds.has(ptyId) && retryCount === 0) {
-      setTimeout(() => void handlePtyCreated(ptyId, retryCount), 100);
-      return;
-    }
-
+  /**
+   * Phase 1: Insert an optimistic placeholder row for a newly created PTY.
+   * Either replaces an existing saved-row for the same pane, or pushes
+   * a new `...` placeholder. Also claims matching pending insertions.
+   */
+  const insertPlaceholderRow = (ptyId: string, ownership: PtyOwnership | null): void => {
     setState(
       produce((s) => {
         if (s.deletedPtyIds.has(ptyId)) {
@@ -257,14 +250,14 @@ export function createLifecycleHandlers(
 
         s.pendingPtyIds.add(ptyId);
 
-        if (retryCount === 0 && !s.allPtysIndex.has(ptyId)) {
+        if (!s.allPtysIndex.has(ptyId)) {
           const pendingInsertion = findMatchingPendingInsertion(s, {
             ptyId,
-            sessionId: initialOwnership?.sessionId,
-            paneId: initialOwnership?.paneId,
+            sessionId: ownership?.sessionId,
+            paneId: ownership?.paneId,
           });
-          const claimedSessionId = pendingInsertion?.sessionId ?? initialOwnership?.sessionId;
-          const claimedPaneId = pendingInsertion?.pendingPaneId ?? initialOwnership?.paneId;
+          const claimedSessionId = pendingInsertion?.sessionId ?? ownership?.sessionId;
+          const claimedPaneId = pendingInsertion?.pendingPaneId ?? ownership?.paneId;
 
           if (pendingInsertion) {
             pendingInsertion.pendingPtyId = ptyId;
@@ -295,7 +288,7 @@ export function createLifecycleHandlers(
               paneId: claimedPaneId,
               sessionId: claimedSessionId,
               sessionMetadata: s.allSessions.get(claimedSessionId),
-              workspaceId: existingPanePty.workspaceId ?? initialOwnership?.workspaceId,
+              workspaceId: existingPanePty.workspaceId ?? ownership?.workspaceId,
               sortOrderHint: sortOrderHint ?? existingPanePty.sortOrderHint,
             };
             s.allPtysIndex = buildPtyIndex(s.allPtys);
@@ -312,7 +305,7 @@ export function createLifecycleHandlers(
             foregroundProcess: undefined,
             shell: 'shell',
             title: '...',
-            workspaceId: initialOwnership?.workspaceId,
+            workspaceId: ownership?.workspaceId,
             paneId: claimedPaneId,
             sessionId: claimedSessionId,
             sessionMetadata: s.allSessions.get(claimedSessionId),
@@ -327,49 +320,15 @@ export function createLifecycleHandlers(
         }
       })
     );
+  };
 
-    const ownership = initialOwnership ?? resolvePtyOwnership(ptyId);
-
-    if (!ownership) {
-      if (retryCount < 5) {
-        const delay = Math.min(50 * Math.pow(2, retryCount), 500);
-        setTimeout(() => void handlePtyCreated(ptyId, retryCount + 1), delay);
-        return;
-      }
-      setState(
-        produce((s) => {
-          s.pendingPtyIds.delete(ptyId);
-          const index = s.allPtysIndex.get(ptyId);
-          if (index !== undefined && s.allPtys[index]?.title === '...') {
-            s.allPtys[index] = { ...s.allPtys[index], title: 'error' };
-            recomputeMatches(s);
-            recomputeTree(s);
-          }
-        })
-      );
-      return;
-    }
-
+  /**
+   * Phase 2: Stamp ownership metadata onto an existing placeholder row.
+   * Fills in sessionId, sessionMetadata, workspaceId, paneId, and
+   * pending-insertion sort order now that ownership is resolved.
+   */
+  const stampOwnershipOnPlaceholder = (ptyId: string, ownership: PtyOwnership): void => {
     const sessionMetadata = getSessionMetadata(ownership.sessionId);
-    if (!sessionMetadata) {
-      if (retryCount < 5) {
-        const delay = Math.min(50 * Math.pow(2, retryCount), 500);
-        setTimeout(() => void handlePtyCreated(ptyId, retryCount + 1), delay);
-        return;
-      }
-      setState(
-        produce((s) => {
-          s.pendingPtyIds.delete(ptyId);
-          removeMatchingPendingInsertions(s, {
-            ptyId,
-            sessionId: ownership.sessionId,
-            paneId: ownership.paneId,
-          });
-        })
-      );
-      return;
-    }
-
     setState(
       produce((s) => {
         const placeholderIndex = s.allPtysIndex.get(ptyId);
@@ -397,6 +356,15 @@ export function createLifecycleHandlers(
         recomputeTree(s);
       })
     );
+  };
+
+  /**
+   * Phase 3: Hydrate a placeholder row with live PTY metadata and git data.
+   * Replaces the `...` title with the real cwd, title, process, etc.
+   * If the PTY was deleted or un-pending in the meantime, removes the row.
+   */
+  const hydratePlaceholderRow = async (ptyId: string, ownership: PtyOwnership): Promise<void> => {
+    const sessionMetadata = getSessionMetadata(ownership.sessionId);
 
     const metadataResult = await getPtyMetadata(ptyId, { skipGitDiffStats: true }).catch(
       (cause) =>
@@ -501,7 +469,6 @@ export function createLifecycleHandlers(
           const newOrder = getPendingInsertionOrder(s, pendingInsertion);
 
           sessionPaneOrder.set(nextPty.paneId, newOrder);
-          s.sessionPaneOrders.set(ownership.sessionId, new Map(sessionPaneOrder));
           setSessionPaneOrder(s.sessionPaneOrderIndex, ownership.sessionId, sessionPaneOrder);
           const nextIndex = s.allPtysIndex.get(ptyId);
           if (nextIndex !== undefined && s.allPtys[nextIndex]) {
@@ -546,6 +513,69 @@ export function createLifecycleHandlers(
         recomputeTree(s);
       })
     );
+  };
+
+  const MAX_OWNERSHIP_RETRIES = 5;
+  const MAX_SESSION_METADATA_RETRIES = 5;
+
+  const handlePtyCreated = async (ptyId: string, retryCount = 0): Promise<void> => {
+    if (state.deletedPtyIds.has(ptyId) && retryCount === 0) {
+      setTimeout(() => void handlePtyCreated(ptyId, retryCount), 100);
+      return;
+    }
+
+    const ownership = resolvePtyOwnership(ptyId);
+
+    // Phase 1: insert optimistic placeholder
+    insertPlaceholderRow(ptyId, ownership);
+
+    // Phase 2: resolve ownership
+    const resolvedOwnership = ownership ?? resolvePtyOwnership(ptyId);
+    if (!resolvedOwnership) {
+      if (retryCount < MAX_OWNERSHIP_RETRIES) {
+        const delay = Math.min(50 * Math.pow(2, retryCount), 500);
+        setTimeout(() => void handlePtyCreated(ptyId, retryCount + 1), delay);
+        return;
+      }
+      setState(
+        produce((s) => {
+          s.pendingPtyIds.delete(ptyId);
+          const index = s.allPtysIndex.get(ptyId);
+          if (index !== undefined && s.allPtys[index]?.title === '...') {
+            s.allPtys[index] = { ...s.allPtys[index], title: 'error' };
+            recomputeMatches(s);
+            recomputeTree(s);
+          }
+        })
+      );
+      return;
+    }
+
+    const sessionMetadata = getSessionMetadata(resolvedOwnership.sessionId);
+    if (!sessionMetadata) {
+      if (retryCount < MAX_SESSION_METADATA_RETRIES) {
+        const delay = Math.min(50 * Math.pow(2, retryCount), 500);
+        setTimeout(() => void handlePtyCreated(ptyId, retryCount + 1), delay);
+        return;
+      }
+      setState(
+        produce((s) => {
+          s.pendingPtyIds.delete(ptyId);
+          removeMatchingPendingInsertions(s, {
+            ptyId,
+            sessionId: resolvedOwnership.sessionId,
+            paneId: resolvedOwnership.paneId,
+          });
+        })
+      );
+      return;
+    }
+
+    // Phase 2b: stamp ownership metadata onto the placeholder
+    stampOwnershipOnPlaceholder(ptyId, resolvedOwnership);
+
+    // Phase 3: hydrate with live metadata
+    await hydratePlaceholderRow(ptyId, resolvedOwnership);
   };
 
   const handlePtyDestroyed = (ptyId: string): void => {
@@ -737,13 +767,9 @@ export async function setupSubscriptions(
   state: AggregateViewState,
   deps: SubscriptionSetupDeps
 ): Promise<void> {
-  const {
-    subscriptions,
-    subscriptionsEpoch,
-    refreshPtysSubset,
-    handleTitleChange,
-    lifecycleHandlers,
-  } = deps;
+  const { subscriptions, subscriptionsEpoch, handleTitleChange, lifecycleHandlers } = deps;
+
+  const refreshPtys = deps.refreshPtys;
 
   const epoch = ++subscriptionsEpoch.value;
 
@@ -796,12 +822,7 @@ export async function setupSubscriptions(
   }
   subscriptions.processChange = processChangeUnsub;
 
-  const gitChangeUnsub = createGitRepoChangeRefresh(
-    state,
-    subscriptionsEpoch,
-    epoch,
-    refreshPtysSubset
-  );
+  const gitChangeUnsub = createGitRepoChangeRefresh(state, subscriptionsEpoch, epoch, refreshPtys);
   if (epoch !== subscriptionsEpoch.value || !state.showAggregateView) {
     gitChangeUnsub();
     return;
@@ -812,12 +833,7 @@ export async function setupSubscriptions(
     return;
   }
 
-  const activityUnsub = createActivityBasedRefresh(
-    state,
-    subscriptionsEpoch,
-    epoch,
-    refreshPtysSubset
-  );
+  const activityUnsub = createActivityBasedRefresh(state, subscriptionsEpoch, epoch, refreshPtys);
   if (epoch !== subscriptionsEpoch.value || !state.showAggregateView) {
     activityUnsub();
     return;
@@ -829,7 +845,7 @@ export function createGitRepoChangeRefresh(
   state: AggregateViewState,
   subscriptionsEpoch: { value: number },
   epoch: number,
-  refreshPtysSubset: (ptyIds: string[]) => Promise<void>
+  refreshPtys: () => Promise<void>
 ): () => void {
   return subscribeToGitRepoChanges((event) => {
     if (!state.showAggregateView || subscriptionsEpoch.value !== epoch) {
@@ -844,7 +860,7 @@ export function createGitRepoChangeRefresh(
       return;
     }
 
-    void refreshPtysSubset(affectedPtyIds);
+    void refreshPtys();
   });
 }
 
@@ -852,23 +868,18 @@ export function createActivityBasedRefresh(
   state: AggregateViewState,
   subscriptionsEpoch: { value: number },
   epoch: number,
-  refreshPtysSubset: (ptyIds: string[]) => Promise<void>
+  refreshPtys: () => Promise<void>
 ): () => void {
-  const pendingPtyIds = new Set<string>();
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
   const debounceMs = 500;
 
   const flushPending = async (): Promise<void> => {
     debounceTimer = null;
 
-    if (!state.showAggregateView || pendingPtyIds.size === 0) return;
-
-    const ptyIdsToRefresh = Array.from(pendingPtyIds);
-    pendingPtyIds.clear();
-
+    if (!state.showAggregateView) return;
     if (subscriptionsEpoch.value !== epoch) return;
 
-    await refreshPtysSubset(ptyIdsToRefresh);
+    await refreshPtys();
   };
 
   const scheduleFlush = (): void => {
@@ -883,10 +894,7 @@ export function createActivityBasedRefresh(
   );
 
   const activityUnsub = runStream(
-    tap(activityStream, (event) => {
-      if (!state.allPtysIndex.has(event.ptyId)) return;
-
-      pendingPtyIds.add(event.ptyId);
+    tap(activityStream, () => {
       scheduleFlush();
     }),
     { label: 'aggregate-view-activity-refresh' }
@@ -897,7 +905,6 @@ export function createActivityBasedRefresh(
       clearTimeout(debounceTimer);
       debounceTimer = null;
     }
-    pendingPtyIds.clear();
     activityUnsub();
   };
 }

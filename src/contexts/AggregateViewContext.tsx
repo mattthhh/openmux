@@ -157,7 +157,7 @@ export function AggregateViewProvider(props: AggregateViewProviderProps) {
     return ptys;
   };
 
-  const { refreshPtys, refreshPtysSubset, initialLoad } = createAggregateViewRefreshers(
+  const { refreshPtys, initialLoad } = createAggregateViewRefreshers(
     state,
     setState,
     refreshState,
@@ -231,7 +231,6 @@ export function AggregateViewProvider(props: AggregateViewProviderProps) {
               subscriptions,
               subscriptionsEpoch,
               refreshPtys,
-              refreshPtysSubset,
               handleTitleChange,
               handleProcessChange,
               lifecycleHandlers

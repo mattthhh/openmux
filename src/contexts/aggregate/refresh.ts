@@ -44,7 +44,6 @@ export { ptyMetadataToInfo } from './pty-info';
 
 export interface RefreshersResult {
   refreshPtys: () => Promise<void>;
-  refreshPtysSubset: (ptyIds: string[]) => Promise<void>;
   initialLoad: () => Promise<void | Error>;
 }
 
@@ -241,6 +240,9 @@ export function createAggregateViewRefreshers(
       const sessionDetailsById = new Map(sessionDetailsEntries);
 
       const sessionLoadStates = new Map<string, SessionLoadState>();
+      // Build per-session pane ordering directly into the flat index representation.
+      // The snapshot carries Map<sessionId, Map<paneId, number>> for clarity but only
+      // the flat index is written to state.
       const sessionPaneOrders = new Map<string, Map<string, number>>();
       const provisionalPtys: PtyInfo[] = [];
       const previousPanePtyByKey = new Map<string, PtyInfo>();
@@ -458,7 +460,6 @@ export function createAggregateViewRefreshers(
         s.loadingSessionIds.clear();
         s.loadAttemptedSessionIds.clear();
 
-        s.sessionPaneOrders = new Map();
         s.sessionPaneOrderIndex.clear();
         for (const [sessionId, paneOrder] of snapshot.sessionPaneOrders) {
           const existingOrder = getSessionPaneOrder(previousPaneOrderIndex, sessionId);
@@ -466,7 +467,6 @@ export function createAggregateViewRefreshers(
             existingOrder.size > 0 ? existingOrder : undefined,
             paneOrder
           );
-          s.sessionPaneOrders.set(sessionId, mergedPaneOrder);
           setSessionPaneOrder(s.sessionPaneOrderIndex, sessionId, mergedPaneOrder);
         }
 
@@ -508,12 +508,9 @@ export function createAggregateViewRefreshers(
         }
 
         for (const [sessionId, paneOrder] of optimisticPaneOrders) {
-          const sessionPaneOrder = s.sessionPaneOrders.get(sessionId) ?? new Map<string, number>();
-          for (const [paneId, order] of paneOrder) {
-            sessionPaneOrder.set(paneId, order);
-          }
-          s.sessionPaneOrders.set(sessionId, sessionPaneOrder);
-          setSessionPaneOrder(s.sessionPaneOrderIndex, sessionId, sessionPaneOrder);
+          const existingOrder = getSessionPaneOrder(s.sessionPaneOrderIndex, sessionId);
+          const mergedOrder = new Map([...existingOrder, ...paneOrder]);
+          setSessionPaneOrder(s.sessionPaneOrderIndex, sessionId, mergedOrder);
         }
 
         s.allPtys = dedupeAggregatePtysByPane([...mergedSnapshotPtys, ...carriedOptimisticPtys]);
@@ -565,14 +562,8 @@ export function createAggregateViewRefreshers(
     return refreshPtysOnce(false);
   };
 
-  const refreshPtysSubset = async (_ptyIds: string[]) => {
-    // Simplicity over clever partial mutation: rebuild the stable snapshot.
-    await refreshPtys();
-  };
-
   return {
     refreshPtys,
-    refreshPtysSubset,
     initialLoad,
   };
 }

@@ -127,9 +127,7 @@ describe('PTY destruction race condition', () => {
 
     const refreshState = {
       refreshInProgress: false,
-      subsetRefreshInProgress: false,
       pendingFullRefresh: false,
-      pendingSubsetPtyIds: new Set<string>(),
     };
 
     // Mock PTY ownership resolution

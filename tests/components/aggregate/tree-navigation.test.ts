@@ -8,6 +8,7 @@ import {
   recomputeMatches,
   recomputeTree,
 } from '../../../src/contexts/aggregate-view-helpers';
+import { getSessionPaneOrderKey } from '../../../src/contexts/aggregate/pane-order';
 import { createAggregateViewActions } from '../../../src/contexts/aggregate-view-actions';
 
 function createMockSession(id: string, name = id): SessionMetadata {
@@ -20,7 +21,9 @@ function createMockSession(id: string, name = id): SessionMetadata {
   };
 }
 
-function createMockPty(overrides: Partial<PtyInfo> & { ptyId: string; sessionId: string }): PtyInfo {
+function createMockPty(
+  overrides: Partial<PtyInfo> & { ptyId: string; sessionId: string }
+): PtyInfo {
   return {
     ptyId: overrides.ptyId,
     cwd: '/home/user/project',
@@ -48,12 +51,14 @@ function createMockPty(overrides: Partial<PtyInfo> & { ptyId: string; sessionId:
   };
 }
 
-function paneOrders(ptys: PtyInfo[]) {
-  const result = new Map<string, Map<string, number>>();
+function buildPaneOrderIndex(ptys: PtyInfo[]) {
+  const result = new Map<string, number>();
+  const sessionPaneCounts = new Map<string, number>();
   for (const pty of ptys) {
-    const order = result.get(pty.sessionId) ?? new Map<string, number>();
-    order.set(pty.paneId ?? pty.ptyId, order.size);
-    result.set(pty.sessionId, order);
+    const paneId = pty.paneId ?? pty.ptyId;
+    const count = sessionPaneCounts.get(pty.sessionId) ?? 0;
+    result.set(getSessionPaneOrderKey(pty.sessionId, paneId), count);
+    sessionPaneCounts.set(pty.sessionId, count + 1);
   }
   return result;
 }
@@ -61,7 +66,12 @@ function paneOrders(ptys: PtyInfo[]) {
 function seedState(
   sessions: SessionMetadata[],
   ptys: PtyInfo[],
-  options: { selectedPtyId?: string; selectedSessionId?: string; unloadedSessionIds?: string[]; manualOrder?: string[] } = {}
+  options: {
+    selectedPtyId?: string;
+    selectedSessionId?: string;
+    unloadedSessionIds?: string[];
+    manualOrder?: string[];
+  } = {}
 ) {
   const unloaded = new Set(options.unloadedSessionIds ?? []);
   const [state, setState] = createStore<AggregateViewState>({
@@ -76,18 +86,28 @@ function seedState(
       sessions.map((session) => [
         session.id,
         unloaded.has(session.id)
-          ? { status: 'unloaded' as const, paneCount: ptys.filter((pty) => pty.sessionId === session.id).length }
-          : { status: 'loaded' as const, paneCount: ptys.filter((pty) => pty.sessionId === session.id).length },
+          ? {
+              status: 'unloaded' as const,
+              paneCount: ptys.filter((pty) => pty.sessionId === session.id).length,
+            }
+          : {
+              status: 'loaded' as const,
+              paneCount: ptys.filter((pty) => pty.sessionId === session.id).length,
+            },
       ])
     ),
-    sessionPaneOrders: paneOrders(ptys),
+    sessionPaneOrderIndex: buildPaneOrderIndex(ptys),
     manualSessionOrder: options.manualOrder ?? [],
   });
 
   setState(
     produce((s) => {
       s.selectedPtyId = options.selectedPtyId ?? null;
-      s.selectedSessionId = options.selectedSessionId ?? (options.selectedPtyId ? ptys.find((pty) => pty.ptyId === options.selectedPtyId)?.sessionId ?? null : null);
+      s.selectedSessionId =
+        options.selectedSessionId ??
+        (options.selectedPtyId
+          ? (ptys.find((pty) => pty.ptyId === options.selectedPtyId)?.sessionId ?? null)
+          : null);
       recomputeMatches(s);
       recomputeTree(s);
     })
@@ -215,7 +235,11 @@ describe('Tree Navigation - current visual order', () => {
 
     actions.toggleSessionExpanded('session-a');
 
-    expect(state.flattenedTree.some((item) => item.node.type === 'pty' && item.node.ptyInfo.ptyId === 'pty-1')).toBe(false);
+    expect(
+      state.flattenedTree.some(
+        (item) => item.node.type === 'pty' && item.node.ptyInfo.ptyId === 'pty-1'
+      )
+    ).toBe(false);
     expect(state.flattenedTree[state.selectedIndex]?.node.type).toBe('session');
 
     actions.navigateDown();

@@ -103,7 +103,6 @@ const createFreshState = (): AggregateViewState => ({
   flattenedTreeIndex: new Map(),
   expandedSessionIds: new Set(),
   sessionLoadStates: new Map(),
-  sessionPaneOrders: new Map(),
   sessionPaneOrderIndex: new Map(),
   manualSessionOrder: [],
   loadingSessionIds: new Set(),
@@ -119,9 +118,7 @@ const createHarness = () => {
 
   const refreshState = {
     refreshInProgress: false,
-    subsetRefreshInProgress: false,
     pendingFullRefresh: false,
-    pendingSubsetPtyIds: new Set<string>(),
   };
 
   const ownershipByPtyId = new Map([
@@ -565,7 +562,7 @@ describe('aggregate insertion ordering', () => {
 
     await refreshers.initialLoad();
 
-    expect(getSessionPaneOrder(state.sessionPaneOrders, 'session-1')).toEqual(
+    expect(getSessionPaneOrder(state.sessionPaneOrderIndex, 'session-1')).toEqual(
       new Map([
         ['pane-1', 0],
         ['pane-2', 1],
@@ -590,7 +587,7 @@ describe('aggregate insertion ordering', () => {
     await lifecycleHandlers.handlePtyCreated('pty-new');
 
     expect(getMetadataMock).toHaveBeenCalledWith('/tmp');
-    expect(getSessionPaneOrder(state.sessionPaneOrders, 'session-1').get('pane-3')).toBe(0.5);
+    expect(getSessionPaneOrder(state.sessionPaneOrderIndex, 'session-1').get('pane-3')).toBe(0.5);
     expect(getVisiblePtyIds(state)).toEqual(['pty-1', 'pty-new', 'pty-2']);
 
     setCurrentSessionPaneOrder(
@@ -659,7 +656,7 @@ describe('aggregate insertion ordering', () => {
 
       await refreshers.refreshPtys();
 
-      expect(getSessionPaneOrder(state.sessionPaneOrders, 'session-1').get('pane-3')).toBe(0.5);
+      expect(getSessionPaneOrder(state.sessionPaneOrderIndex, 'session-1').get('pane-3')).toBe(0.5);
       expect(getVisiblePtyIds(state)).toEqual(['pty-1', 'pty-new', 'pty-2']);
     } finally {
       vi.useRealTimers();
@@ -753,8 +750,8 @@ describe('aggregate insertion ordering', () => {
     await lifecycleHandlers.handlePtyCreated('pty-new-2');
     await lifecycleHandlers.handlePtyCreated('pty-new');
 
-    expect(getSessionPaneOrder(state.sessionPaneOrders, 'session-1').get('pane-3')).toBe(0.5);
-    expect(getSessionPaneOrder(state.sessionPaneOrders, 'session-1').get('pane-4')).toBe(0.75);
+    expect(getSessionPaneOrder(state.sessionPaneOrderIndex, 'session-1').get('pane-3')).toBe(0.5);
+    expect(getSessionPaneOrder(state.sessionPaneOrderIndex, 'session-1').get('pane-4')).toBe(0.75);
     expect(getVisiblePtyIds(state)).toEqual(['pty-1', 'pty-new', 'pty-new-2', 'pty-2']);
     expect(state.pendingPaneCreations).toEqual([]);
   });
@@ -1028,9 +1025,7 @@ describe('aggregate insertion ordering', () => {
 
     const refreshState = {
       refreshInProgress: false,
-      subsetRefreshInProgress: false,
       pendingFullRefresh: false,
-      pendingSubsetPtyIds: new Set<string>(),
     };
 
     const refreshersWithDeletedQuickPty = createAggregateViewRefreshers(

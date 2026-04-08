@@ -252,9 +252,7 @@ describe('aggregate view git metadata preservation', () => {
     const [state, setState] = createStore<AggregateViewState>(createAggregateState(existingPtys));
     const refreshState = {
       refreshInProgress: false,
-      subsetRefreshInProgress: false,
       pendingFullRefresh: false,
-      pendingSubsetPtyIds: new Set<string>(),
     };
 
     const { refreshPtys } = createAggregateViewRefreshers(
@@ -397,9 +395,7 @@ describe('aggregate view git metadata preservation', () => {
     const [state, setState] = createStore<AggregateViewState>(createAggregateState(existingPtys));
     const refreshState = {
       refreshInProgress: false,
-      subsetRefreshInProgress: false,
       pendingFullRefresh: false,
-      pendingSubsetPtyIds: new Set<string>(),
     };
 
     const { refreshPtys } = createAggregateViewRefreshers(
@@ -500,12 +496,10 @@ describe('aggregate view git metadata preservation', () => {
     );
     const refreshState = {
       refreshInProgress: false,
-      subsetRefreshInProgress: false,
       pendingFullRefresh: false,
-      pendingSubsetPtyIds: new Set<string>(),
     };
 
-    const { refreshPtysSubset } = createAggregateViewRefreshers(
+    const { refreshPtys } = createAggregateViewRefreshers(
       state,
       setState,
       refreshState,
@@ -522,7 +516,7 @@ describe('aggregate view git metadata preservation', () => {
         ])
     );
 
-    await refreshPtysSubset(['pty-1', 'pty-2']);
+    await refreshPtys();
 
     expect(getMetadataBatch).toHaveBeenCalledWith(['/repo'], { forceRefresh: true });
     expect(state.allPtys.find((pty) => pty.ptyId === 'pty-1')).toMatchObject({
@@ -542,9 +536,7 @@ describe('aggregate view git metadata preservation', () => {
     const [state, setState] = createStore<AggregateViewState>(createAggregateState(existingPty));
     const refreshState = {
       refreshInProgress: false,
-      subsetRefreshInProgress: false,
       pendingFullRefresh: false,
-      pendingSubsetPtyIds: new Set<string>(),
     };
 
     const { refreshPtys } = createAggregateViewRefreshers(
