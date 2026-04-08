@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.71](https://github.com/monotykamary/openmux/compare/v0.3.70...v0.3.71) (2026-04-08)
+
+
+### Bug Fixes
+
+* **aggregate:** prevent git metadata flicker and pane misplacement on creation ([9c5098c](https://github.com/monotykamary/openmux/commit/9c5098cc95d4f0118621b828609a940f6167c76b))
+* **aggregate:** stamp sortOrderHint into sessionPaneOrderIndex to prevent bottom-sorting ([c9408a1](https://github.com/monotykamary/openmux/commit/c9408a131961d715889bd567465ab5294acc67c4))
+
 ### [0.3.70](https://github.com/monotykamary/openmux/compare/v0.3.69...v0.3.70) (2026-04-08)
 
 
