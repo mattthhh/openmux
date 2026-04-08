@@ -6,22 +6,16 @@
  * dedicated hooks and controllers so the aggregate semantics stay consistent.
  */
 
-import { Show, createEffect, createMemo, createSignal } from 'solid-js';
+import { Show, createEffect, createMemo } from 'solid-js';
 import type { MouseEvent as OpentuiMouseEvent } from '@opentui/core';
 import { useAggregateView } from '../contexts/AggregateViewContext';
-import { useLayout } from '../contexts/LayoutContext';
 import { useSession } from '../contexts/SessionContext';
 import { useTerminal } from '../contexts/TerminalContext';
-import { useKeyboard } from '../contexts/KeyboardContext';
 import { useConfig } from '../contexts/ConfigContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useSelection } from '../contexts/SelectionContext';
-import { useSearch } from '../contexts/SearchContext';
-import { useCopyMode } from '../contexts/copy-mode';
 import { getHostBackgroundColor } from '../effect/bridge';
 import { useOverlayColors } from './overlay-colors';
-import { createCopyModeKeyHandler } from './app/copy-mode-keyboard';
-import { createCopyModeVimState } from './app/copy-mode-vim';
 import {
   calculateAggregateListViewport,
   getAggregateListScrollOffsetForSelection,
@@ -42,12 +36,8 @@ import {
   PlaceholderRow,
 } from './aggregate';
 import { ListPaneProvider } from '../contexts/ListPaneContext';
-import { useVimMode, useAggregatePreviewSupport, useSessionDrag } from './aggregate/hooks';
-import {
-  AggregateKeyboardController,
-  AggregateMouseController,
-  AggregateStateManager,
-} from './aggregate/controllers';
+import { useSessionDrag } from './aggregate/hooks';
+import { AggregateKeyboardController, AggregateMouseController } from './aggregate/controllers';
 
 interface AggregateViewProps {
   width: number;
@@ -63,93 +53,29 @@ interface AggregateViewProps {
 export function AggregateView(props: AggregateViewProps) {
   // Contexts
   const aggregate = useAggregateView();
-  const layout = useLayout();
   const session = useSession();
   const terminal = useTerminal();
-  const keyboard = useKeyboard();
   const config = useConfig();
   const theme = useTheme();
   const selection = useSelection();
-  const copyMode = useCopyMode();
-  const search = useSearch();
   const colors = useOverlayColors();
 
   // Hooks
-  const vim = useVimMode({ isAggregateVisible: () => aggregate.state.showAggregateView });
-  const {
-    getPreviewableSelectedPtyId,
-    getAggregateEmulatorSync,
-    getAggregateTerminalStateSync,
-    isAggregateMouseTrackingEnabled,
-  } = useAggregatePreviewSupport({
-    isActive: () => aggregate.state.showAggregateView,
-    getSelectedPtyId: () => aggregate.state.selectedPtyId,
-    getSelectedIndex: () => aggregate.state.selectedIndex,
-    getFlattenedTree: () => aggregate.state.flattenedTree,
-    getTrackedPtys: () => aggregate.state.matchedPtys,
-    getActiveSessionId: () => session.state.activeSessionId,
-    getWorkspaces: () => layout.state.workspaces,
-    findSessionForPty: terminal.findSessionForPty,
-    getEmulatorSync: terminal.getEmulatorSync,
-    getTerminalStateSync: terminal.getTerminalStateSync,
-    isMouseTrackingEnabled: terminal.isMouseTrackingEnabled,
-  });
   const sessionDrag = useSessionDrag();
 
+  // Controllers (keyboard controller owns vim, preview support, prefix/copy mode state)
+  const kbCtrl = AggregateKeyboardController({
+    isActive: () => aggregate.state.showAggregateView,
+    onRequestQuit: props.onRequestQuit,
+    onDetach: props.onDetach,
+    onRequestKillPty: props.onRequestKillPty,
+    onToggleCommandPalette: props.onToggleCommandPalette,
+    onToggleConsole: props.onToggleConsole,
+  });
+
   createEffect(() => {
-    props.onVimModeChange?.(vim.mode());
+    props.onVimModeChange?.(kbCtrl.vimMode());
   });
-
-  // Local UI state
-  const [prefixActive, setPrefixActive] = createSignal(false);
-  const [inSearchMode, setInSearchMode] = createSignal(false);
-  let prefixTimeout: ReturnType<typeof setTimeout> | null = null;
-
-  // Copy mode helpers
-  const copyModeVimState = createCopyModeVimState({
-    config,
-    isCopyModeActive: () => aggregate.state.showAggregateView && keyboard.state.mode === 'copy',
-  });
-
-  const handleEnterSearch = async () => {
-    const ptyId = getPreviewableSelectedPtyId();
-    if (!ptyId) return;
-    selection.clearAllSelections();
-    await search.enterSearchMode(ptyId);
-    keyboard.enterSearchMode();
-    setInSearchMode(true);
-  };
-
-  const handleEnterCopyMode = () => {
-    const ptyId = getPreviewableSelectedPtyId();
-    if (!aggregate.state.previewMode || !ptyId) return;
-    selection.clearAllSelections();
-    keyboard.enterCopyMode();
-    copyMode.enterCopyMode(ptyId, (id) => getAggregateTerminalStateSync(id));
-  };
-
-  const handleCopyModeKeys = createCopyModeKeyHandler({
-    copyMode,
-    exitCopyMode: () => {
-      copyMode.exitCopyMode();
-      if (keyboard.state.mode === 'copy') {
-        keyboard.exitCopyMode();
-        if (aggregate.state.showAggregateView) keyboard.enterAggregateMode();
-      }
-    },
-    getVimHandler: copyModeVimState.getCopyVimHandler,
-  });
-
-  // Prefix timeout helpers
-  const clearPrefixTimeout = () => {
-    if (prefixTimeout) {
-      clearTimeout(prefixTimeout);
-      prefixTimeout = null;
-    }
-  };
-  const startPrefixTimeout = () => {
-    prefixTimeout = setTimeout(() => setPrefixActive(false), config.keybindings().prefixTimeoutMs);
-  };
 
   // Layout calculations
   const layoutDims = createMemo(() =>
@@ -195,22 +121,14 @@ export function AggregateView(props: AggregateViewProps) {
     return aggregate.state.selectedIndex;
   });
 
-  const isPreviewCopyModeActive = () => {
-    const previewPtyId = getPreviewableSelectedPtyId();
-    return aggregate.state.previewMode && !!previewPtyId && copyMode.isActive(previewPtyId);
-  };
-
-  // Controllers
-  const stateManager = AggregateStateManager();
-
   const mouseHandlers = AggregateMouseController({
     isActive: () => aggregate.state.showAggregateView,
     getPreviewMode: () => aggregate.state.previewMode,
-    getSelectedPtyId: getPreviewableSelectedPtyId,
+    getSelectedPtyId: kbCtrl.getPreviewableSelectedPtyId,
     getListPaneWidth: () => layoutDims().listPaneWidth,
     getPreviewInnerWidth: () => layoutDims().previewInnerWidth,
     getPreviewInnerHeight: () => layoutDims().previewInnerHeight,
-    isMouseTrackingEnabled: isAggregateMouseTrackingEnabled,
+    isMouseTrackingEnabled: kbCtrl.isAggregateMouseTrackingEnabled,
     getScrollState: terminal.getScrollState,
     scrollTerminal: terminal.scrollTerminal,
     setScrollOffset: terminal.setScrollOffset,
@@ -219,96 +137,21 @@ export function AggregateView(props: AggregateViewProps) {
     completeSelection: selection.completeSelection,
     clearSelection: selection.clearSelection,
     getSelection: selection.getSelection,
-    getEmulatorSync: getAggregateEmulatorSync,
-    getTerminalStateSync: getAggregateTerminalStateSync,
-  });
-
-  // Keyboard deps
-  const keyboardDeps = {
-    getPreviewMode: () => aggregate.state.previewMode,
-    getSelectedPtyId: () => aggregate.state.selectedPtyId,
-    getPreviewPtyId: getPreviewableSelectedPtyId,
-    getFilterQuery: () => aggregate.state.filterQuery,
-    getSearchState: () => search.searchState,
-    getInSearchMode: () => inSearchMode(),
-    getCopyModeActive: isPreviewCopyModeActive,
-    getPrefixActive: prefixActive,
-    getKeybindings: () => config.keybindings(),
-    getMatchedCount: () => aggregate.state.flattenedTree.length,
-    getVimEnabled: vim.isEnabled,
-    getVimMode: vim.mode,
-    setVimMode: vim.setMode,
-    getSearchVimMode: () => search.vimMode,
-    setSearchVimMode: search.setVimMode,
-    getVimHandlers: vim.getHandlers,
-    getEmulatorSync: getAggregateEmulatorSync,
-    setFilterQuery: aggregate.setFilterQuery,
-    toggleShowInactive: aggregate.toggleShowInactive,
-    setInSearchMode,
-    setPrefixActive,
-    setSelectedIndex: aggregate.setSelectedIndex,
-    closeAggregateView: aggregate.closeAggregateView,
-    navigateUp: aggregate.navigateUp,
-    navigateDown: aggregate.navigateDown,
-    navigateToPrevPty: aggregate.navigateToPrevPty,
-    navigateToNextPty: aggregate.navigateToNextPty,
-    enterPreviewMode: aggregate.enterPreviewMode,
-    exitPreviewMode: aggregate.exitPreviewMode,
-    togglePreviewZoom: aggregate.togglePreviewZoom,
-    exitAggregateMode: keyboard.exitAggregateMode,
-    exitSearchMode: search.exitSearchMode,
-    setSearchQuery: search.setSearchQuery,
-    nextMatch: search.nextMatch,
-    prevMatch: search.prevMatch,
-    handleEnterSearch,
-    handleEnterCopyMode,
-    handleCopyModeKeys,
-    handleJumpToPty: stateManager.handleJumpToPty,
-    handleNewPaneInSession: stateManager.handleNewPaneInSession,
-    handleListEnter: () => {
-      const item = aggregate.state.flattenedTree[aggregate.state.selectedIndex];
-      if (!item) return true;
-      if (item.node.type === 'pty') {
-        aggregate.enterPreviewMode();
-        return true;
-      }
-      if (item.node.type === 'session' && item.node.loadState.status === 'loaded') {
-        aggregate.toggleSessionExpanded(item.node.session.id);
-        return true;
-      }
-      return true;
-    },
-    onToggleSessionPicker: session.togglePicker,
-    onToggleCommandPalette: props.onToggleCommandPalette,
-    onToggleConsole: props.onToggleConsole,
-    onRequestQuit: props.onRequestQuit,
-    onDetach: props.onDetach,
-    onRequestKillPty: props.onRequestKillPty,
-    onPaste: () => terminal.pasteToFocused(),
-    clearPrefixTimeout,
-    startPrefixTimeout,
-    scrollListUp: aggregate.scrollListUp,
-    scrollListDown: aggregate.scrollListDown,
-    setListScrollOffset: aggregate.setListScrollOffset,
-  };
-
-  // Effects
-  AggregateKeyboardController({
-    ...keyboardDeps,
-    isActive: () => aggregate.state.showAggregateView,
+    getEmulatorSync: kbCtrl.getAggregateEmulatorSync,
+    getTerminalStateSync: kbCtrl.getAggregateTerminalStateSync,
   });
 
   // Footer text
   const hintsText = () =>
     getHintsText(
-      inSearchMode(),
+      kbCtrl.inSearchMode(),
       aggregate.state.previewMode,
       aggregate.state.previewZoomed,
-      isPreviewCopyModeActive(),
+      kbCtrl.isPreviewCopyModeActive(),
       config.keybindings(),
       aggregate.state.showInactive,
-      vim.isEnabled(),
-      vim.mode()
+      kbCtrl.vimEnabled(),
+      kbCtrl.vimMode()
     );
   const filterText = () => getFilterText(aggregate.state.filterQuery);
   const footerWidths = () => calculateFooterWidths(props.width, filterText(), hintsText());
@@ -384,8 +227,8 @@ export function AggregateView(props: AggregateViewProps) {
             innerHeight={layoutDims().previewInnerHeight}
             isPreviewMode={aggregate.state.previewMode}
             isZoomed={aggregate.state.previewZoomed}
-            isCopyModeActive={isPreviewCopyModeActive()}
-            selectedPtyId={getPreviewableSelectedPtyId()}
+            isCopyModeActive={kbCtrl.isPreviewCopyModeActive()}
+            selectedPtyId={kbCtrl.getPreviewableSelectedPtyId()}
             offsetX={layoutDims().listPaneWidth + 1}
             offsetY={1}
             mouseHandlers={mouseHandlers}

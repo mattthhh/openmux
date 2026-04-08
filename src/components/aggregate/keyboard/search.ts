@@ -1,9 +1,9 @@
 import type { KeyboardEvent } from '../../../effect/bridge';
 import { eventToCombo, matchKeybinding } from '../../../core/keybindings';
-import type { AggregateKeyboardDeps } from './types';
+import type { SearchDeps } from './types';
 import { isBareEscape } from './helpers';
 
-export function createAggregateSearchHandler(deps: AggregateKeyboardDeps) {
+export function createAggregateSearchHandler(deps: SearchDeps) {
   const handleSearchAction = (action: string | null): boolean => {
     if (!action) return false;
 
@@ -49,7 +49,8 @@ export function createAggregateSearchHandler(deps: AggregateKeyboardDeps) {
     }
 
     const searchCharCode = event.sequence?.charCodeAt(0) ?? 0;
-    const isPrintable = event.sequence?.length === 1 && searchCharCode >= 32 && searchCharCode < 127;
+    const isPrintable =
+      event.sequence?.length === 1 && searchCharCode >= 32 && searchCharCode < 127;
     if (isPrintable && !event.ctrl && !event.alt && !event.meta) {
       deps.setSearchQuery(currentSearchState.query + event.sequence);
       return true;
@@ -101,7 +102,8 @@ export function createAggregateSearchHandler(deps: AggregateKeyboardDeps) {
     if (handleSearchAction(result.action)) return true;
 
     const isBackspace = event.key === 'backspace';
-    const shouldMatchBindings = !isBackspace && (event.ctrl || event.alt || event.meta || event.key.length > 1);
+    const shouldMatchBindings =
+      !isBackspace && (event.ctrl || event.alt || event.meta || event.key.length > 1);
     if (shouldMatchBindings && !isBareEscape(event)) {
       const fallbackAction = matchKeybinding(keybindings.aggregate.search, keyEvent);
       if (handleSearchAction(fallbackAction)) return true;

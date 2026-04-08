@@ -3,9 +3,9 @@ import type { KeyboardEvent } from '../../../effect/bridge';
 import { encodeKeyForEmulator } from '../../../terminal/key-encoder';
 import { matchKeybinding } from '../../../core/keybindings';
 import { isSavedAggregatePtyId } from '../../../contexts/aggregate/rows';
-import type { AggregateKeyboardDeps } from './types';
+import type { PreviewDeps } from './types';
 
-export function createAggregatePreviewHandler(deps: AggregateKeyboardDeps) {
+export function createAggregatePreviewHandler(deps: PreviewDeps) {
   const forwardToPreviewPty = (event: KeyboardEvent): boolean => {
     const selectedPtyId = deps.getPreviewPtyId();
     if (selectedPtyId && !isSavedAggregatePtyId(selectedPtyId)) {

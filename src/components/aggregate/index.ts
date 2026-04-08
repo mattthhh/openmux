@@ -4,7 +4,14 @@
 
 export { InteractivePreview } from './InteractivePreview';
 export { findPtyLocation, findPaneLocation } from './utils';
-export { createAggregateKeyboardHandler, type AggregateKeyboardDeps } from './keyboard-handlers';
+export {
+  createAggregateKeyboardHandler,
+  type AggregateKeyboardDeps,
+  type ListDeps,
+  type SearchDeps,
+  type PreviewDeps,
+  type GlobalDeps,
+} from './keyboard-handlers';
 export { createAggregateMouseHandlers, type MouseHandlerDeps } from './mouse-handlers';
 export {
   borderStyleMap,
@@ -36,6 +43,7 @@ export {
   AggregateMouseController,
   AggregateStateManager,
   type AggregateKeyboardControllerProps,
+  type AggregateKeyboardControllerAPI,
   type AggregateMouseControllerProps,
 } from './controllers';
 

@@ -8,9 +8,10 @@ import { eventToCombo, matchKeybinding } from '../../core/keybindings';
 import { createAggregateListHandler } from './keyboard/list';
 import { createAggregatePreviewHandler } from './keyboard/preview';
 import { createAggregateSearchHandler } from './keyboard/search';
-import type { AggregateKeyboardDeps } from './keyboard/types';
+import type { AggregateKeyboardDeps, ListDeps, SearchDeps, PreviewDeps } from './keyboard/types';
 
 export type { AggregateKeyboardDeps } from './keyboard/types';
+export type { ListDeps, SearchDeps, PreviewDeps, GlobalDeps } from './keyboard/types';
 
 /**
  * Creates keyboard handler for AggregateView
@@ -39,9 +40,61 @@ export function createAggregateKeyboardHandler(deps: AggregateKeyboardDeps) {
     onPaste,
   } = deps;
 
-  const { handleSearchModeKeys } = createAggregateSearchHandler(deps);
-  const { handlePreviewModeKeys } = createAggregatePreviewHandler(deps);
-  const { handleListModeKeys } = createAggregateListHandler(deps);
+  const listDeps: ListDeps = {
+    getKeybindings: deps.getKeybindings,
+    getVimEnabled: deps.getVimEnabled,
+    getVimMode: deps.getVimMode,
+    setVimMode: deps.setVimMode,
+    getVimHandlers: deps.getVimHandlers,
+    getFilterQuery: deps.getFilterQuery,
+    setFilterQuery: deps.setFilterQuery,
+    getMatchedCount: deps.getMatchedCount,
+    toggleShowInactive: deps.toggleShowInactive,
+    getSelectedPtyId: deps.getSelectedPtyId,
+    navigateUp: deps.navigateUp,
+    navigateDown: deps.navigateDown,
+    scrollListUp: deps.scrollListUp,
+    scrollListDown: deps.scrollListDown,
+    setSelectedIndex: deps.setSelectedIndex,
+    setListScrollOffset: deps.setListScrollOffset,
+    handleListEnter: deps.handleListEnter,
+    handleJumpToPty: deps.handleJumpToPty,
+    handleNewPaneInSession: deps.handleNewPaneInSession,
+    closeAggregateView: deps.closeAggregateView,
+    exitAggregateMode: deps.exitAggregateMode,
+    onRequestKillPty: deps.onRequestKillPty,
+  };
+
+  const searchDeps: SearchDeps = {
+    getKeybindings: deps.getKeybindings,
+    getVimEnabled: deps.getVimEnabled,
+    getSearchVimMode: deps.getSearchVimMode,
+    setSearchVimMode: deps.setSearchVimMode,
+    getVimHandlers: deps.getVimHandlers,
+    getSearchState: deps.getSearchState,
+    exitSearchMode: deps.exitSearchMode,
+    setInSearchMode: deps.setInSearchMode,
+    setSearchQuery: deps.setSearchQuery,
+    nextMatch: deps.nextMatch,
+    prevMatch: deps.prevMatch,
+  };
+
+  const previewDeps: PreviewDeps = {
+    getPreviewPtyId: deps.getPreviewPtyId,
+    getEmulatorSync: deps.getEmulatorSync,
+    getKeybindings: deps.getKeybindings,
+    handleEnterSearch: deps.handleEnterSearch,
+    handleEnterCopyMode: deps.handleEnterCopyMode,
+    exitPreviewMode: deps.exitPreviewMode,
+    navigateToNextPty: deps.navigateToNextPty,
+    navigateToPrevPty: deps.navigateToPrevPty,
+    handleNewPaneInSession: deps.handleNewPaneInSession,
+    onRequestKillPty: deps.onRequestKillPty,
+  };
+
+  const { handleSearchModeKeys } = createAggregateSearchHandler(searchDeps);
+  const { handlePreviewModeKeys } = createAggregatePreviewHandler(previewDeps);
+  const { handleListModeKeys } = createAggregateListHandler(listDeps);
 
   /**
    * Main keyboard handler for AggregateView

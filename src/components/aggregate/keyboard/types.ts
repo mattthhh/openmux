@@ -8,69 +8,107 @@ export type VimSequenceHandler = {
   reset: () => void;
 };
 
-export interface AggregateKeyboardDeps {
-  getPreviewMode: () => boolean;
-  getSelectedPtyId: () => string | null;
-  getPreviewPtyId: () => string | null;
+export type VimHandlers = {
+  list: VimSequenceHandler;
+  preview: VimSequenceHandler;
+  search: VimSequenceHandler;
+};
+
+/** Dependencies for the list-mode keyboard handler */
+export interface ListDeps {
+  getKeybindings: () => ResolvedKeybindings;
+  getVimEnabled: () => boolean;
+  getVimMode: () => VimInputMode;
+  setVimMode: (mode: VimInputMode) => void;
+  getVimHandlers: () => VimHandlers;
+
   getFilterQuery: () => string;
+  setFilterQuery: (query: string) => void;
+  getMatchedCount: () => number;
+  toggleShowInactive: () => void;
+  getSelectedPtyId: () => string | null;
+
+  navigateUp: () => void;
+  navigateDown: () => void;
+  scrollListUp?: (amount?: number) => void;
+  scrollListDown?: (amount?: number) => void;
+  setSelectedIndex: (index: number) => void;
+  setListScrollOffset?: (offset: number) => void;
+
+  handleListEnter: () => boolean;
+  handleJumpToPty: () => Promise<boolean>;
+  handleNewPaneInSession: () => Promise<void>;
+
+  closeAggregateView: () => void;
+  exitAggregateMode: () => void;
+  onRequestKillPty?: (ptyId: string) => void;
+}
+
+/** Dependencies for the search-mode keyboard handler */
+export interface SearchDeps {
+  getKeybindings: () => ResolvedKeybindings;
+  getVimEnabled: () => boolean;
+  getSearchVimMode: () => VimInputMode;
+  setSearchVimMode: (mode: VimInputMode) => void;
+  getVimHandlers: () => VimHandlers;
+
   getSearchState: () => { query: string } | null;
+  exitSearchMode: (cancel: boolean) => void;
+  setInSearchMode: (value: boolean) => void;
+  setSearchQuery: (query: string) => void;
+  nextMatch: () => void;
+  prevMatch: () => void;
+}
+
+/** Dependencies for the preview-mode keyboard handler */
+export interface PreviewDeps {
+  getPreviewPtyId: () => string | null;
+  getEmulatorSync: (ptyId: string) => ITerminalEmulator | null;
+  getKeybindings: () => ResolvedKeybindings;
+
+  handleEnterSearch: () => Promise<void>;
+  handleEnterCopyMode: () => void;
+  exitPreviewMode: () => void;
+  navigateToNextPty: () => void;
+  navigateToPrevPty: () => void;
+  handleNewPaneInSession: () => Promise<void>;
+  onRequestKillPty?: (ptyId: string) => void;
+}
+
+/** Dependencies for the global orchestrator (prefix, mode routing, copy mode) */
+export interface GlobalDeps {
+  getPreviewMode: () => boolean;
   getInSearchMode: () => boolean;
   getCopyModeActive: () => boolean;
   getPrefixActive: () => boolean;
   getKeybindings: () => ResolvedKeybindings;
-  getMatchedCount: () => number;
-  getVimEnabled: () => boolean;
-  getVimMode: () => VimInputMode;
-  setVimMode: (mode: VimInputMode) => void;
-  getSearchVimMode: () => VimInputMode;
-  setSearchVimMode: (mode: VimInputMode) => void;
-  getVimHandlers: () => {
-    list: VimSequenceHandler;
-    preview: VimSequenceHandler;
-    search: VimSequenceHandler;
-  };
-  getEmulatorSync: (ptyId: string) => ITerminalEmulator | null;
 
-  setFilterQuery: (query: string) => void;
-  toggleShowInactive: () => void;
-  setInSearchMode: (value: boolean) => void;
   setPrefixActive: (value: boolean) => void;
-  setSelectedIndex: (index: number) => void;
+  clearPrefixTimeout: () => void;
+  startPrefixTimeout: () => void;
 
   closeAggregateView: () => void;
-  navigateUp: () => void;
-  navigateDown: () => void;
-  navigateToPrevPty: () => void;
-  navigateToNextPty: () => void;
-  enterPreviewMode: () => void;
+  exitAggregateMode: () => void;
   exitPreviewMode: () => void;
   togglePreviewZoom: () => void;
 
-  exitAggregateMode: () => void;
-
-  exitSearchMode: (cancel: boolean) => void;
-  setSearchQuery: (query: string) => void;
-  nextMatch: () => void;
-  prevMatch: () => void;
   handleEnterSearch: () => Promise<void>;
   handleEnterCopyMode: () => void;
   handleCopyModeKeys: (event: KeyboardEvent) => boolean;
 
-  handleJumpToPty: () => Promise<boolean>;
-  handleNewPaneInSession: () => Promise<void>;
-  handleListEnter: () => boolean;
-  onToggleSessionPicker?: () => void;
-  onToggleCommandPalette?: () => void;
-  onToggleConsole?: () => void;
-
   onRequestQuit?: () => void;
   onDetach?: () => void;
-  onRequestKillPty?: (ptyId: string) => void;
+  onToggleCommandPalette?: () => void;
+  onToggleConsole?: () => void;
   onPaste?: () => void;
+}
 
-  clearPrefixTimeout: () => void;
-  startPrefixTimeout: () => void;
-  scrollListUp?: (amount?: number) => void;
-  scrollListDown?: (amount?: number) => void;
-  setListScrollOffset?: (offset: number) => void;
+/**
+ * AggregateKeyboardDeps is the union of all sub-handler deps.
+ * Kept for backward compatibility with tests that construct a single deps object.
+ */
+export interface AggregateKeyboardDeps extends ListDeps, SearchDeps, PreviewDeps, GlobalDeps {
+  getSelectedPtyId: () => string | null;
+  enterPreviewMode: () => void;
+  onToggleSessionPicker?: () => void;
 }

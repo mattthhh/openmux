@@ -1,9 +1,9 @@
 import type { KeyboardEvent } from '../../../effect/bridge';
 import { eventToCombo, matchKeybinding } from '../../../core/keybindings';
-import type { AggregateKeyboardDeps } from './types';
+import type { ListDeps } from './types';
 import { isBareEscape } from './helpers';
 
-export function createAggregateListHandler(deps: AggregateKeyboardDeps) {
+export function createAggregateListHandler(deps: ListDeps) {
   const handleListAction = (action: string | null): boolean => {
     switch (action) {
       case 'aggregate.list.down':
@@ -106,7 +106,8 @@ export function createAggregateListHandler(deps: AggregateKeyboardDeps) {
     if (handleListAction(result.action)) return true;
 
     const isBackspace = event.key === 'backspace';
-    const shouldMatchBindings = !isBackspace && (event.ctrl || event.alt || event.meta || event.key.length > 1);
+    const shouldMatchBindings =
+      !isBackspace && (event.ctrl || event.alt || event.meta || event.key.length > 1);
     if (shouldMatchBindings && !isBareEscape(event)) {
       const fallbackAction = matchKeybinding(keybindings.aggregate.list, keyEvent);
       if (handleListAction(fallbackAction)) return true;
