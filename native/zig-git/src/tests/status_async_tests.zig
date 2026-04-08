@@ -38,6 +38,8 @@ test "status async reports branch after commit" {
     var stash: c_int = constants.STATUS_UNKNOWN;
     var state: c_int = 0;
     var detached: u8 = 0;
+    var is_worktree: u8 = 0;
+    var commondir_buf: [constants.MAX_CWD_LEN]u8 = undefined;
 
     var status: c_int = constants.STATUS_PENDING;
     while (status == constants.STATUS_PENDING) {
@@ -59,6 +61,9 @@ test "status async reports branch after commit" {
             &stash,
             &state,
             &detached,
+            &is_worktree,
+            &commondir_buf,
+            @as(c_int, @intCast(commondir_buf.len)),
         );
         if (status == constants.STATUS_PENDING) {
             std.Thread.sleep(1 * std.time.ns_per_ms);

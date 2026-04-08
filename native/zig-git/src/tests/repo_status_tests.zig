@@ -32,6 +32,8 @@ test "repo status counts untracked changes" {
     var stash: c_int = constants.STATUS_UNKNOWN;
     var state: c_int = 0;
     var detached: u8 = 0;
+    var is_worktree: u8 = 0;
+    var commondir_buf: [constants.MAX_CWD_LEN]u8 = undefined;
 
     const repo_path_z = try allocator.dupeZ(u8, repo_path);
     defer allocator.free(repo_path_z);
@@ -54,6 +56,9 @@ test "repo status counts untracked changes" {
         &stash,
         &state,
         &detached,
+        &is_worktree,
+        &commondir_buf,
+        @as(c_int, @intCast(commondir_buf.len)),
     );
 
     try std.testing.expectEqual(@as(c_int, 0), rc);
