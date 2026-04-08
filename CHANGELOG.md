@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.69](https://github.com/monotykamary/openmux/compare/v0.3.68...v0.3.69) (2026-04-08)
+
+
+### Features
+
+* **git:** detect worktrees via libgit2 and propagate isWorktree/commonDir ([273485b](https://github.com/monotykamary/openmux/commit/273485bb6c46eae787dbe96475296e610bb3c47f))
+
+
+### Bug Fixes
+
+* **git:** add isWorktree/commonDir params to zig test calls ([590f490](https://github.com/monotykamary/openmux/commit/590f490649a55198db1384fd11fd393619685f8e))
+* **zig-git:** add missing isWorktree/commonDir FFI parameters to lib-loader ([4910429](https://github.com/monotykamary/openmux/commit/4910429637bba612de748ad672b085ab9b45b9af))
+
+
+### Refactoring
+
+* **aggregate:** fix dual pane-order, fake subset refresh, handlePtyCreated, prop drilling ([3faf001](https://github.com/monotykamary/openmux/commit/3faf00110358a786e092ef7e010b622c091041c1))
+* **aggregate:** remove unused dead code ([9b26f38](https://github.com/monotykamary/openmux/commit/9b26f38897752178e798a6a01f85c8ae70789a4b))
+* **aggregate:** split keyboard deps, eliminate controller prop drilling ([a206a58](https://github.com/monotykamary/openmux/commit/a206a58f012b0a1426c22da78ad752a1fabe4abe))
+
 ### [0.3.68](https://github.com/monotykamary/openmux/compare/v0.3.67...v0.3.68) (2026-04-07)
 
 
