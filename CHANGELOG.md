@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.70](https://github.com/monotykamary/openmux/compare/v0.3.69...v0.3.70) (2026-04-08)
+
+
+### Bug Fixes
+
+* **aggregate:** restore AggregateStateManager to fix autoswitch and option+n keybinding ([978d6c1](https://github.com/monotykamary/openmux/commit/978d6c1c6278ad56c0d5e49039cfc25f35d07208))
+
 ### [0.3.69](https://github.com/monotykamary/openmux/compare/v0.3.68...v0.3.69) (2026-04-08)
 
 
