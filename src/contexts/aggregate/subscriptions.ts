@@ -35,7 +35,12 @@ import {
 } from './pending';
 import { ptyMetadataToInfo } from './pty-info';
 import { clearPreviewState } from './selection';
-import { buildSessionPaneOrderFromAggregateState, setSessionPaneOrder } from './pane-order';
+import {
+  buildSessionPaneOrderFromAggregateState,
+  getSessionPaneOrder,
+  getSessionPaneOrderKey,
+  setSessionPaneOrder,
+} from './pane-order';
 import {
   dedupeAggregatePtysByPane,
   findAggregatePtyIndexByPane,
@@ -139,6 +144,21 @@ function buildSessionPaneOrderFromState(
   sessionId: string
 ): Map<string, number> {
   return buildSessionPaneOrderFromAggregateState(state, sessionId);
+}
+
+/** Stamp the pending insertion's sortOrderHint into the sessionPaneOrderIndex.
+ *  Ensures sortPtysForSession uses the correct (adjacent) position for newly
+ *  created panes, instead of the layout-tree traversal order which appends
+ *  them at the end of the session. */
+function stampSortOrderHintIntoPaneIndex(
+  state: Pick<AggregateViewState, 'sessionPaneOrderIndex'>,
+  sessionId: string,
+  paneId: string,
+  sortOrderHint: number
+): void {
+  const sessionPaneOrder = getSessionPaneOrder(state.sessionPaneOrderIndex, sessionId);
+  sessionPaneOrder.set(paneId, sortOrderHint);
+  setSessionPaneOrder(state.sessionPaneOrderIndex, sessionId, sessionPaneOrder);
 }
 
 function getPendingInsertionOrder(
@@ -275,7 +295,13 @@ export function createLifecycleHandlers(
           }
 
           const sortOrderHint = pendingInsertion
-            ? getPendingInsertionOrder(s, pendingInsertion)
+            ? (pendingInsertion.sortOrderHint ??
+              (claimedPaneId
+                ? s.sessionPaneOrderIndex.get(
+                    getSessionPaneOrderKey(claimedSessionId, claimedPaneId)
+                  )
+                : undefined) ??
+              getPendingInsertionOrder(s, pendingInsertion))
             : undefined;
           const existingPaneIndex = findAggregatePtyIndexByPane(
             s.allPtys,
@@ -285,6 +311,14 @@ export function createLifecycleHandlers(
           if (existingPaneIndex !== -1 && s.allPtys[existingPaneIndex]) {
             const existingPanePty = s.allPtys[existingPaneIndex];
             clonePtyStdoutActivity(existingPanePty.ptyId, ptyId);
+
+            // Stamp the pending insertion's sortOrderHint into the session pane order
+            // index so that sortPtysForSession uses the correct (adjacent) position
+            // instead of the layout-tree traversal order which puts new panes at the end.
+            if (claimedPaneId && sortOrderHint !== undefined) {
+              stampSortOrderHintIntoPaneIndex(s, claimedSessionId, claimedPaneId, sortOrderHint);
+            }
+
             s.allPtys[existingPaneIndex] = {
               ...existingPanePty,
               ptyId,
@@ -313,6 +347,12 @@ export function createLifecycleHandlers(
             sessionId: claimedSessionId,
             sessionMetadata: s.allSessions.get(claimedSessionId),
           };
+
+          // Stamp the pending insertion's sortOrderHint into the session pane order
+          // index so that sortPtysForSession uses the correct (adjacent) position.
+          if (claimedPaneId && sortOrderHint !== undefined) {
+            stampSortOrderHintIntoPaneIndex(s, claimedSessionId, claimedPaneId, sortOrderHint);
+          }
 
           const newIndex = s.allPtys.length;
           s.allPtys.push(placeholderPty);
@@ -344,15 +384,30 @@ export function createLifecycleHandlers(
           sessionId: ownership.sessionId,
           paneId: ownership.paneId,
         });
+        const sortOrderHint = pendingInsertion
+          ? (pendingInsertion.sortOrderHint ??
+            (ownership.paneId
+              ? s.sessionPaneOrderIndex.get(
+                  getSessionPaneOrderKey(ownership.sessionId, ownership.paneId)
+                )
+              : undefined) ??
+            getPendingInsertionOrder(s, pendingInsertion))
+          : s.allPtys[placeholderIndex].sortOrderHint;
+        const resolvedPaneId = s.allPtys[placeholderIndex].paneId ?? ownership.paneId;
+
+        // Stamp the sortOrderHint into the sessionPaneOrderIndex so that
+        // sortPtysForSession uses the correct (adjacent) position for the pane.
+        if (resolvedPaneId && sortOrderHint !== undefined) {
+          stampSortOrderHintIntoPaneIndex(s, ownership.sessionId, resolvedPaneId, sortOrderHint);
+        }
+
         s.allPtys[placeholderIndex] = {
           ...s.allPtys[placeholderIndex],
           sessionId: ownership.sessionId,
           sessionMetadata,
           workspaceId: s.allPtys[placeholderIndex].workspaceId ?? ownership.workspaceId,
-          paneId: s.allPtys[placeholderIndex].paneId ?? ownership.paneId,
-          sortOrderHint: pendingInsertion
-            ? getPendingInsertionOrder(s, pendingInsertion)
-            : s.allPtys[placeholderIndex].sortOrderHint,
+          paneId: resolvedPaneId,
+          sortOrderHint,
         };
         recomputeMatches(s);
         recomputeTree(s);
@@ -493,9 +548,19 @@ export function createLifecycleHandlers(
           paneId: nextPty.paneId,
         });
         if (pendingInsertion && nextPty.paneId) {
-          const sessionPaneOrder = buildSessionPaneOrderFromState(s, ownership.sessionId);
-          const newOrder = getPendingInsertionOrder(s, pendingInsertion);
+          const existingPaneOrder = s.sessionPaneOrderIndex.get(
+            getSessionPaneOrderKey(ownership.sessionId, nextPty.paneId)
+          );
+          // Use the explicit sortOrderHint if set, or the existing pane order
+          // if it was already stamped by Phase 1/2. Avoid recomputing via
+          // getInsertedPaneOrder which would produce a wrong midpoint when
+          // the pane is already in the sessionPaneOrderIndex.
+          const newOrder =
+            pendingInsertion.sortOrderHint ??
+            existingPaneOrder ??
+            getPendingInsertionOrder(s, pendingInsertion);
 
+          const sessionPaneOrder = buildSessionPaneOrderFromState(s, ownership.sessionId);
           sessionPaneOrder.set(nextPty.paneId, newOrder);
           setSessionPaneOrder(s.sessionPaneOrderIndex, ownership.sessionId, sessionPaneOrder);
           const nextIndex = s.allPtysIndex.get(ptyId);

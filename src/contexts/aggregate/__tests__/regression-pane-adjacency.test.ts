@@ -414,4 +414,60 @@ describe('regression: new pane adjacent positioning in aggregate view', () => {
       expect(paneIds[paneIds.length - 1]).not.toBe('pane-3');
     }
   });
+
+  it('stamps sortOrderHint into sessionPaneOrderIndex when getCurrentSessionPaneOrder puts new pane at the end', async () => {
+    const {
+      state,
+      setState,
+      refreshers,
+      lifecycleHandlers,
+      setCurrentSessionPaneOrder,
+      setCurrentSessionPtys,
+    } = createHarness();
+
+    await refreshers.initialLoad();
+
+    setState(
+      produce((s) => {
+        s.pendingPaneCreations = [
+          {
+            id: 'pending-1',
+            sessionId: 'session-1',
+            insertAfterPtyId: 'pty-1',
+            insertAfterPaneId: 'pane-1',
+            pendingPtyId: 'pty-new',
+            pendingPaneId: 'pane-3',
+            sortOrderHint: 0.5,
+          },
+        ];
+      })
+    );
+
+    await lifecycleHandlers.handlePtyCreated('pty-new');
+
+    // The pane should be between pane-1 and pane-2
+    expect(getVisiblePaneIds(state)).toEqual(['pane-1', 'pane-3', 'pane-2']);
+
+    // Simulate the layout reporting pane-3 at the END of the pane order
+    // (this is what getCurrentSessionPaneOrder does for newly created panes)
+    setCurrentSessionPaneOrder(
+      new Map([
+        ['pane-1', 0],
+        ['pane-2', 1],
+        ['pane-3', 2], // end position — wrong!
+      ])
+    );
+    setCurrentSessionPtys([
+      { ptyId: 'pty-1', paneId: 'pane-1', workspaceId: 1, title: 'one', cwd: '/tmp' },
+      { ptyId: 'pty-2', paneId: 'pane-2', workspaceId: 1, title: 'two', cwd: '/tmp' },
+      { ptyId: 'pty-new', paneId: 'pane-3', workspaceId: 1, title: 'new', cwd: '/tmp' },
+    ]);
+
+    await refreshers.refreshPtys();
+
+    // After refresh, the pane should STILL be between pane-1 and pane-2,
+    // not at the bottom. The sortOrderHint (0.5) should override the
+    // layout-tree order (2) via the sessionPaneOrderIndex stamping.
+    expect(getVisiblePaneIds(state)).toEqual(['pane-1', 'pane-3', 'pane-2']);
+  });
 });

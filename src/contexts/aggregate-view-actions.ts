@@ -18,6 +18,11 @@ import {
 } from './aggregate-view-pending-insertions';
 import { mergePtyInfoPreservingGitMetadata } from './aggregate/git';
 import {
+  getSessionPaneOrder,
+  getSessionPaneOrderKey,
+  setSessionPaneOrder,
+} from './aggregate/pane-order';
+import {
   loadSessionPtysOnDemand as loadSessionPtysOnDemandLegacy,
   type AggregateService,
   type PtyMetadata,
@@ -636,6 +641,25 @@ export function createAggregateViewActions(params: AggregateViewActionsParams) {
     setState(
       produce((s) => {
         upsertPendingPaneCreation(s, insertion);
+
+        // Stamp the pending insertion's sortOrderHint into the session pane order
+        // index so that sortPtysForSession uses the correct (adjacent) position
+        // instead of the layout-tree traversal order which puts new panes at the end.
+        if (insertion.pendingPaneId && insertion.sortOrderHint !== undefined) {
+          const key = getSessionPaneOrderKey(insertion.sessionId, insertion.pendingPaneId);
+          const existingOrder = s.sessionPaneOrderIndex.get(key);
+          // Only override if the sortOrderHint is different from what the layout
+          // traversal assigned (which is typically an end-of-list index).
+          if (existingOrder !== insertion.sortOrderHint) {
+            const sessionPaneOrder = getSessionPaneOrder(
+              s.sessionPaneOrderIndex,
+              insertion.sessionId
+            );
+            sessionPaneOrder.set(insertion.pendingPaneId, insertion.sortOrderHint);
+            setSessionPaneOrder(s.sessionPaneOrderIndex, insertion.sessionId, sessionPaneOrder);
+          }
+        }
+
         recomputeMatches(s);
         recomputeTree(s);
       })
