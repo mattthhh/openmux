@@ -3,8 +3,9 @@
  */
 import type { TerminalState } from '../../../core/types';
 import type { ITerminalEmulator } from '../../../terminal/emulator-interface';
-import { PtyNotFoundError } from '../../errors';
+import { PtyNotFoundError, PtyOperationError } from '../../errors';
 import type { PtyId, Cols, Rows } from '../../types';
+import * as errore from 'errore';
 import type { PtySession } from '../../models';
 import type { InternalPtySession } from './types';
 import type { PtyState } from './state';
@@ -30,11 +31,17 @@ function getShellProcessName(session: InternalPtySession): string | null {
 }
 
 function getForegroundProcessName(session: InternalPtySession): string | null {
-  try {
-    return normalizeProcessName(session.pty.getForegroundProcessName());
-  } catch {
-    return null;
-  }
+  const result = errore.try<string, PtyOperationError>({
+    try: () => normalizeProcessName(session.pty.getForegroundProcessName()) ?? '',
+    catch: (cause: unknown) =>
+      new PtyOperationError({
+        operation: 'get-foreground-process',
+        reason: cause instanceof Error ? cause.message : String(cause),
+        cause,
+      }),
+  });
+  if (result instanceof PtyOperationError) return null;
+  return result || null;
 }
 
 export interface OperationsDeps {
@@ -154,14 +161,18 @@ export function createOperations(deps: OperationsDeps) {
     session.lastResizeTime = Date.now();
 
     // Check if DECSET 2048 (in-band resize notifications) is enabled
-    try {
-      const inBandResizeEnabled = session.emulator.getMode(2048);
-      if (inBandResizeEnabled) {
-        const resizeNotification = `\x1b[48;${rows};${cols};${session.pixelHeight};${session.pixelWidth}t`;
-        session.pty.write(resizeNotification);
-      }
-    } catch {
-      // Ignore mode query errors
+    const modeResult = errore.try<boolean | null, PtyOperationError>({
+      try: () => session.emulator.getMode(2048),
+      catch: (cause: unknown) =>
+        new PtyOperationError({
+          operation: 'get-mode-2048',
+          reason: cause instanceof Error ? cause.message : String(cause),
+          cause,
+        }),
+    });
+    if (!(modeResult instanceof PtyOperationError) && modeResult) {
+      const resizeNotification = `\x1b[48;${rows};${cols};${session.pixelHeight};${session.pixelWidth}t`;
+      session.pty.write(resizeNotification);
     }
 
     // Note: Emulator.resize() now defers prepareUpdate to ensure native reflow completes

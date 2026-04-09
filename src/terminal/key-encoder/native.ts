@@ -3,6 +3,8 @@ import type { Pointer } from 'bun:ffi';
 import type { KeyboardEvent } from '../../core/keyboard-event';
 import { ghostty } from '../ghostty-vt/ffi';
 import type { KeyEncoderOptions } from './types';
+import * as errore from 'errore';
+import { NativeKeyError } from '../../effect/errors';
 
 const GHOSTTY_SUCCESS = 0;
 const GHOSTTY_OUT_OF_MEMORY = -1;
@@ -362,19 +364,25 @@ function getSharedEncoder(): GhosttyKeyEncoder | null {
     return sharedEncoder;
   }
 
-  try {
-    sharedEncoder = new GhosttyKeyEncoder();
-    return sharedEncoder;
-  } catch (error) {
+  const result = errore.try({
+    try: () => new GhosttyKeyEncoder(),
+    catch: (cause: unknown) =>
+      new NativeKeyError({
+        operation: 'create-encoder',
+        reason: cause instanceof Error ? cause.message : String(cause),
+        cause,
+      }),
+  });
+  if (result instanceof NativeKeyError) {
     sharedEncoderUnavailable = true;
     if (!didWarnSharedEncoderFallback) {
       didWarnSharedEncoderFallback = true;
-      console.warn(
-        `[key-encoder] Falling back to JS input encoding: ${error instanceof Error ? error.message : String(error)}`
-      );
+      console.warn(`[key-encoder] Falling back to JS input encoding: ${result.message}`);
     }
     return null;
   }
+  sharedEncoder = result;
+  return sharedEncoder;
 }
 
 export function encodeNativeKey(event: KeyboardEvent, options: KeyEncoderOptions): string | null {

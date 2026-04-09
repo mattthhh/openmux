@@ -1,6 +1,8 @@
 import type { TerminalQuery } from './types';
 import { tracePtyEvent } from '../pty-trace';
 import { KNOWN_CAPABILITIES, KNOWN_MODES, DEFAULT_PALETTE } from './constants';
+import * as errore from 'errore';
+import { QueryPassthroughError } from '../../effect/errors';
 import {
   hexToString,
   generateCprResponse,
@@ -29,14 +31,16 @@ export type QueryHandlerContext = {
   colorsGetter: (() => { foreground: number; background: number }) | null;
   modeGetter: ((mode: number) => boolean | null) | null;
   paletteGetter: ((index: number) => number | null) | null;
-  sizeGetter: (() => {
-    cols: number;
-    rows: number;
-    pixelWidth: number;
-    pixelHeight: number;
-    cellWidth: number;
-    cellHeight: number;
-  }) | null;
+  sizeGetter:
+    | (() => {
+        cols: number;
+        rows: number;
+        pixelWidth: number;
+        pixelHeight: number;
+        cellWidth: number;
+        cellHeight: number;
+      })
+    | null;
   kittyKeyboardFlags: number;
   kittyKeyboardFlagsGetter: (() => number) | null;
   terminalVersion: string;
@@ -59,10 +63,10 @@ export function handleTerminalQuery(query: TerminalQuery, context: QueryHandlerC
   } else if (query.type === 'status') {
     context.write(generateStatusOkResponse());
   } else if (query.type === 'osc-fg') {
-    const colors = context.colorsGetter?.() ?? { foreground: 0xFFFFFF, background: 0x000000 };
-    const r = (colors.foreground >> 16) & 0xFF;
-    const g = (colors.foreground >> 8) & 0xFF;
-    const b = colors.foreground & 0xFF;
+    const colors = context.colorsGetter?.() ?? { foreground: 0xffffff, background: 0x000000 };
+    const r = (colors.foreground >> 16) & 0xff;
+    const g = (colors.foreground >> 8) & 0xff;
+    const b = colors.foreground & 0xff;
     context.write(generateOscFgResponse(r, g, b));
   } else if (query.type === 'da1') {
     context.write(generateDa1Response());
@@ -105,72 +109,86 @@ export function handleTerminalQuery(query: TerminalQuery, context: QueryHandlerC
       : context.kittyKeyboardFlags;
     context.write(generateKittyKeyboardResponse(flags));
   } else if (query.type === 'osc-bg') {
-    const colors = context.colorsGetter?.() ?? { foreground: 0xFFFFFF, background: 0x000000 };
-    const r = (colors.background >> 16) & 0xFF;
-    const g = (colors.background >> 8) & 0xFF;
-    const b = colors.background & 0xFF;
+    const colors = context.colorsGetter?.() ?? { foreground: 0xffffff, background: 0x000000 };
+    const r = (colors.background >> 16) & 0xff;
+    const g = (colors.background >> 8) & 0xff;
+    const b = colors.background & 0xff;
     context.write(generateOscBgResponse(r, g, b));
   } else if (query.type === 'osc-cursor') {
-    const r = (context.cursorColor >> 16) & 0xFF;
-    const g = (context.cursorColor >> 8) & 0xFF;
-    const b = context.cursorColor & 0xFF;
+    const r = (context.cursorColor >> 16) & 0xff;
+    const g = (context.cursorColor >> 8) & 0xff;
+    const b = context.cursorColor & 0xff;
     context.write(generateOscCursorResponse(r, g, b));
   } else if (query.type === 'osc-palette') {
     const index = query.colorIndex ?? 0;
     let color: number;
     if (context.paletteGetter) {
       const customColor = context.paletteGetter(index);
-      color = customColor ?? (DEFAULT_PALETTE[index] ?? 0);
+      color = customColor ?? DEFAULT_PALETTE[index] ?? 0;
     } else {
       color = DEFAULT_PALETTE[index] ?? 0;
     }
-    const r = (color >> 16) & 0xFF;
-    const g = (color >> 8) & 0xFF;
-    const b = color & 0xFF;
+    const r = (color >> 16) & 0xff;
+    const g = (color >> 8) & 0xff;
+    const b = color & 0xff;
     context.write(generateOscPaletteResponse(index, r, g, b));
   } else if (query.type === 'xtwinops') {
     const winop = query.winop ?? 18;
     tracePtyEvent('xtwinops-start', { winop });
-    try {
-      if (context.sizeGetter) {
-        const size = context.sizeGetter();
-        tracePtyEvent('xtwinops-size', {
-          winop,
-          cols: size.cols,
-          rows: size.rows,
-          pixelWidth: size.pixelWidth,
-          pixelHeight: size.pixelHeight,
-          cellWidth: size.cellWidth,
-          cellHeight: size.cellHeight,
-        });
-        let height: number, width: number;
-        switch (winop) {
-          case 14:
-            height = size.pixelHeight;
-            width = size.pixelWidth;
-            break;
-          case 16:
-            height = size.cellHeight;
-            width = size.cellWidth;
-            break;
-          case 18:
-          default:
-            height = size.rows;
-            width = size.cols;
-            break;
+    const result = errore.try({
+      try: () => {
+        if (context.sizeGetter) {
+          const size = context.sizeGetter();
+          tracePtyEvent('xtwinops-size', {
+            winop,
+            cols: size.cols,
+            rows: size.rows,
+            pixelWidth: size.pixelWidth,
+            pixelHeight: size.pixelHeight,
+            cellWidth: size.cellWidth,
+            cellHeight: size.cellHeight,
+          });
+          let height: number, width: number;
+          switch (winop) {
+            case 14:
+              height = size.pixelHeight;
+              width = size.pixelWidth;
+              break;
+            case 16:
+              height = size.cellHeight;
+              width = size.cellWidth;
+              break;
+            case 18:
+            default:
+              height = size.rows;
+              width = size.cols;
+              break;
+          }
+          const response = generateXtwinopsResponse(winop, height, width);
+          tracePtyEvent('xtwinops-response', { winop, height, width, len: response.length });
+          context.write(response);
+          tracePtyEvent('xtwinops-response-written', { winop, len: response.length });
+        } else {
+          const response = generateXtwinopsResponse(winop, 24, 80);
+          tracePtyEvent('xtwinops-response', {
+            winop,
+            height: 24,
+            width: 80,
+            len: response.length,
+          });
+          context.write(response);
+          tracePtyEvent('xtwinops-response-written', { winop, len: response.length });
         }
-        const response = generateXtwinopsResponse(winop, height, width);
-        tracePtyEvent('xtwinops-response', { winop, height, width, len: response.length });
-        context.write(response);
-        tracePtyEvent('xtwinops-response-written', { winop, len: response.length });
-      } else {
-        const response = generateXtwinopsResponse(winop, 24, 80);
-        tracePtyEvent('xtwinops-response', { winop, height: 24, width: 80, len: response.length });
-        context.write(response);
-        tracePtyEvent('xtwinops-response-written', { winop, len: response.length });
-      }
-    } catch (err) {
-      tracePtyEvent('xtwinops-error', { winop, error: err });
+      },
+      catch: (cause: unknown) =>
+        new QueryPassthroughError({
+          operation: 'xtwinops',
+          reason: cause instanceof Error ? cause.message : String(cause),
+          cause,
+        }),
+    });
+    if (result instanceof QueryPassthroughError) {
+      tracePtyEvent('xtwinops-error', { winop, error: result.message, cause: result.cause });
     }
   } else if (query.type === 'osc-clipboard') {
     const selection = query.clipboardSelection ?? 'c';

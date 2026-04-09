@@ -86,6 +86,14 @@ describe('createSession', () => {
       getTerminalState: vi.fn(),
       dispose: vi.fn(),
       getTitle: vi.fn(() => ''),
+      isAlternateScreen: vi.fn(() => false),
+      isDisposed: false,
+      getScrollbackLength: vi.fn(() => 100),
+      trimScrollback: vi.fn(),
+      getScrollbackLine: vi.fn(() => null),
+      getKittyGraphicsPlacements: vi.fn(() => []),
+      getKittyKeyboardFlags: vi.fn(() => 0),
+      getCursorKeyMode: vi.fn(() => 'normal'),
     };
 
     mockCreateGhosttyVTEmulator.mockReturnValue(emulator);
@@ -153,6 +161,14 @@ describe('createSession', () => {
       getTerminalState: vi.fn(),
       dispose: vi.fn(),
       getTitle: vi.fn(() => ''),
+      isAlternateScreen: vi.fn(() => false),
+      isDisposed: false,
+      getScrollbackLength: vi.fn(() => 100),
+      trimScrollback: vi.fn(),
+      getScrollbackLine: vi.fn(() => null),
+      getKittyGraphicsPlacements: vi.fn(() => []),
+      getKittyKeyboardFlags: vi.fn(() => 0),
+      getCursorKeyMode: vi.fn(() => 'normal'),
     };
 
     mockCreateGhosttyVTEmulator.mockReturnValue(emulator);
@@ -225,6 +241,14 @@ describe('createSession', () => {
       getTerminalState: vi.fn(),
       dispose: vi.fn(),
       getTitle: vi.fn(() => ''),
+      isAlternateScreen: vi.fn(() => false),
+      isDisposed: false,
+      getScrollbackLength: vi.fn(() => 100),
+      trimScrollback: vi.fn(),
+      getScrollbackLine: vi.fn(() => null),
+      getKittyGraphicsPlacements: vi.fn(() => []),
+      getKittyKeyboardFlags: vi.fn(() => 0),
+      getCursorKeyMode: vi.fn(() => 'normal'),
     };
 
     mockCreateGhosttyVTEmulator.mockReturnValue(emulator);

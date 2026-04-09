@@ -6,6 +6,7 @@
 import type { ITerminalEmulator } from './emulator-interface';
 import type { KeyboardEvent } from '../core/keyboard-event';
 import { ValidationError } from '../effect/errors';
+import * as errore from 'errore';
 
 import { DEFAULT_FALLBACK_OPTIONS, encodeKeyFallback } from './key-encoder/fallback';
 import { encodeNativeKey } from './key-encoder/native';
@@ -23,11 +24,12 @@ function isEscPrefixedLinefeed(event: KeyboardEvent): boolean {
 }
 
 function getModeSafe(emulator: ITerminalEmulator, mode: number): boolean | ValidationError {
-  try {
-    return emulator.getMode(mode);
-  } catch (cause) {
-    return new ValidationError({ reason: String(cause) });
-  }
+  const result = errore.try({
+    try: () => emulator.getMode(mode),
+    catch: (cause: unknown) =>
+      new ValidationError({ reason: cause instanceof Error ? cause.message : String(cause) }),
+  });
+  return result instanceof Error ? result : result;
 }
 
 function getEncoderOptions(emulator: ITerminalEmulator): KeyEncoderOptions {

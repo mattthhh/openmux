@@ -9,6 +9,8 @@ import { unpackRow, CELL_SIZE } from '../cell-serialization';
 import type { TerminalCell } from '../../core/types';
 import type { ScrollbackCache } from '../emulator-utils/scrollback-cache';
 import type { ArchiveChunk, ChunkLocation } from './types';
+import * as errore from 'errore';
+import { ChunkParseError } from '../../effect/errors';
 
 /**
  * Creates a new chunk with the given dimensions.
@@ -106,20 +108,32 @@ export function readChunkRange(
   let bytesRead = 0;
   let fd: number | null = null;
 
-  try {
-    fd = fs.openSync(chunk.path, 'r');
-    bytesRead = fs.readSync(fd, buffer, 0, totalBytes, offsetBytes);
-  } catch {
-    return [];
-  } finally {
-    if (fd !== null) {
-      try {
-        fs.closeSync(fd);
-      } catch {
-        // Ignore close errors
-      }
+  const readResult = errore.try<number | null, ChunkParseError>({
+    try: () => {
+      fd = fs.openSync(chunk.path, 'r');
+      return fs.readSync(fd, buffer, 0, totalBytes, offsetBytes);
+    },
+    catch: (cause: unknown) =>
+      new ChunkParseError({
+        operation: 'read-chunk',
+        reason: cause instanceof Error ? cause.message : String(cause),
+        cause,
+      }),
+  });
+  if (fd !== null) {
+    try {
+      fs.closeSync(fd);
+    } catch {
+      // Ignore close errors
     }
   }
+  if (readResult instanceof ChunkParseError) {
+    return [];
+  }
+  if (readResult === null) {
+    return [];
+  }
+  bytesRead = readResult;
 
   if (bytesRead < rowBytes) return [];
 

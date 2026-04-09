@@ -37,6 +37,8 @@ import { parseTerminalQueries } from './parser';
 import { tracePtyEvent } from '../pty-trace';
 import { findIncompleteSequenceStart, stripKittyResponses } from './utils';
 import { handleTerminalQuery } from './query-handlers';
+import * as errore from 'errore';
+import { QueryPassthroughError } from '../../effect/errors';
 
 const ESC = '\x1b';
 const APC_C1 = '\x9f';
@@ -50,19 +52,21 @@ export class TerminalQueryPassthrough {
   private colorsGetter: (() => { foreground: number; background: number }) | null = null;
   private modeGetter: ((mode: number) => boolean | null) | null = null;
   private paletteGetter: ((index: number) => number | null) | null = null;
-  private sizeGetter: (() => {
-    cols: number;
-    rows: number;
-    pixelWidth: number;
-    pixelHeight: number;
-    cellWidth: number;
-    cellHeight: number;
-  }) | null = null;
+  private sizeGetter:
+    | (() => {
+        cols: number;
+        rows: number;
+        pixelWidth: number;
+        pixelHeight: number;
+        cellWidth: number;
+        cellHeight: number;
+      })
+    | null = null;
   private kittyKeyboardFlags: number = 0;
   private kittyKeyboardFlagsGetter: (() => number) | null = null;
   private kittySequenceHandler: ((sequence: string) => string) | null = null;
   private terminalVersion: string = '0.1.0';
-  private cursorColor: number = 0xFFFFFF;
+  private cursorColor: number = 0xffffff;
   private pendingInput: string = '';
   private readonly pendingLimit = 8192;
   private kittyPartialBuffer = '';
@@ -141,14 +145,16 @@ export class TerminalQueryPassthrough {
   /**
    * Set the size getter function (called to get terminal dimensions for XTWINOPS)
    */
-  setSizeGetter(getter: () => {
-    cols: number;
-    rows: number;
-    pixelWidth: number;
-    pixelHeight: number;
-    cellWidth: number;
-    cellHeight: number;
-  }): void {
+  setSizeGetter(
+    getter: () => {
+      cols: number;
+      rows: number;
+      pixelWidth: number;
+      pixelHeight: number;
+      cellWidth: number;
+      cellHeight: number;
+    }
+  ): void {
     this.sizeGetter = getter;
   }
 
@@ -187,7 +193,9 @@ export class TerminalQueryPassthrough {
         output += this.processQueriesChunk(input.slice(cursor, start));
       }
 
-      const prefixLen = input.startsWith(KITTY_APC_PREFIX, start) ? KITTY_APC_PREFIX.length : KITTY_APC_C1_PREFIX.length;
+      const prefixLen = input.startsWith(KITTY_APC_PREFIX, start)
+        ? KITTY_APC_PREFIX.length
+        : KITTY_APC_C1_PREFIX.length;
       const end = this.findKittyEnd(input, start + prefixLen);
       if (end === -1) {
         const partial = input.slice(start);
@@ -222,12 +230,24 @@ export class TerminalQueryPassthrough {
     this.ptyWriter = (response: string) => {
       responses.push(response);
     };
-    try {
-      const text = this.process(data);
-      return { text, responses };
-    } finally {
-      this.ptyWriter = originalWriter;
+    const result = errore.try({
+      try: () => {
+        const text = this.process(data);
+        return { text, responses };
+      },
+      catch: (cause: unknown) =>
+        new QueryPassthroughError({
+          operation: 'process-with-responses',
+          reason: cause instanceof Error ? cause.message : String(cause),
+          cause,
+        }),
+    });
+    this.ptyWriter = originalWriter;
+    if (result instanceof QueryPassthroughError) {
+      console.warn('[query-passthrough] Process failed:', result.message, result.cause);
+      return { text: data, responses: [] };
     }
+    return result;
   }
 
   /**

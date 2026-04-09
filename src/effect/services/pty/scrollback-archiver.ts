@@ -11,6 +11,8 @@ import type { ArchivePlacement, ScrollbackArchive } from '../../../terminal/scro
 import { HOT_SCROLLBACK_LIMIT } from '../../../terminal/scrollback-config';
 import { tracePtyEvent } from '../../../terminal/pty-trace';
 import { deferMacrotask } from '../../../core/scheduling';
+import * as errore from 'errore';
+import { ArchiverError } from '../../errors';
 
 const ARCHIVE_BATCH_LINES = 512;
 const MAX_BATCHES_PER_RUN = 4;
@@ -193,13 +195,22 @@ export class ScrollbackArchiver {
 
     this.running = true;
     const startedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
-    try {
-      const result = await drainScrollbackOverflow({
-        scrollbackArchive: this.session.scrollbackArchive,
-        liveEmulator: this.liveEmulator,
-      });
-      const durationMs =
-        (typeof performance !== 'undefined' ? performance.now() : Date.now()) - startedAt;
+    const result = await errore.tryAsync({
+      try: () =>
+        drainScrollbackOverflow({
+          scrollbackArchive: this.session.scrollbackArchive,
+          liveEmulator: this.liveEmulator,
+        }),
+      catch: (cause: unknown) =>
+        new ArchiverError({
+          operation: 'drain-scrollback',
+          reason: cause instanceof Error ? cause.message : String(cause),
+          cause,
+        }),
+    });
+    const durationMs =
+      (typeof performance !== 'undefined' ? performance.now() : Date.now()) - startedAt;
+    if (!(result instanceof ArchiverError)) {
       if (result.linesArchived > 0 || durationMs >= 8) {
         tracePtyEvent('scrollback-archiver-run', {
           ptyId: this.session.id,
@@ -215,14 +226,15 @@ export class ScrollbackArchiver {
       if (result.remainingOverflow > 0) {
         this.pending = true;
       }
-    } catch {
-      // Best-effort: ignore archive errors to avoid blocking PTY flow.
-    } finally {
-      this.running = false;
-      if (this.pending) {
-        this.pending = false;
-        this.schedule();
-      }
+    }
+    if (result instanceof ArchiverError) {
+      // Best-effort: log archive errors but don't block PTY flow (rule #20)
+      console.warn('[scrollback-archiver]', result.message, result.cause);
+    }
+    this.running = false;
+    if (this.pending) {
+      this.pending = false;
+      this.schedule();
     }
   }
 }

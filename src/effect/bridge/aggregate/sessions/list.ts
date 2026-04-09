@@ -9,6 +9,7 @@ import type { SessionWithPtys, ListSessionsWithPtysOptions, PtyMetadata } from '
 import { sessionPtyCache, asPtyId } from '../cache/session-pty-cache';
 import { batchFetchPtyMetadata } from '../metadata/fetch';
 import type { SessionMetadata } from '../../../models';
+import { PtyMetadataError } from '../../../errors';
 
 /**
  * PTY metadata with session context attached.
@@ -107,8 +108,14 @@ export async function listSessionsWithPtysWithService(
               };
               ptys.push(metadataWithSession);
             }
-          } catch (e) {
-            console.warn(`Failed to fetch PTYs for session ${session.id}:`, e);
+          } catch (cause: unknown) {
+            const error = new PtyMetadataError({
+              operation: 'batch-fetch-metadata',
+              ptyId: session.id,
+              reason: cause instanceof Error ? cause.message : String(cause),
+              cause,
+            });
+            console.warn(`Failed to fetch PTYs for session ${session.id}:`, error.message);
           }
         })();
 
@@ -156,10 +163,16 @@ export async function listSessionsWithPtysWithService(
             activeSessionPtyIds.map((id) => asPtyId(id)),
             true
           );
-        } catch (e) {
+        } catch (cause: unknown) {
+          const error = new PtyMetadataError({
+            operation: 'batch-fetch-active-session',
+            ptyId: session.id,
+            reason: cause instanceof Error ? cause.message : String(cause),
+            cause,
+          });
           console.warn(
             `[listSessionsWithPtys] Failed to load PTYs for active session ${session.id}:`,
-            e
+            error.message
           );
         }
       })();

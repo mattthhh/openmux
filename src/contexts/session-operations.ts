@@ -21,8 +21,14 @@ import {
   loadSessionData,
   switchToSession,
 } from '../effect/bridge';
-import { SessionStorageError, SessionNotFoundError, SessionCorruptedError } from '../effect/errors';
+import {
+  SessionStorageError,
+  SessionNotFoundError,
+  SessionCorruptedError,
+  SessionOpError,
+} from '../effect/errors';
 import { ResourceStack } from '../effect/resources.js';
+import * as errore from 'errore';
 
 /** AsyncDisposable guard for switching state */
 class SwitchingGuard implements AsyncDisposable {
@@ -279,14 +285,23 @@ export function createSessionOperations(params: SessionOperationsParams) {
 
     await previousSwitch;
 
-    try {
-      if (switchToken !== latestSwitchToken) {
-        return;
-      }
-
-      await switchSessionInternal(id, options, switchToken);
-    } finally {
-      releaseQueue();
+    const switchResult = await errore.tryAsync<void, SessionOpError>({
+      try: async () => {
+        if (switchToken !== latestSwitchToken) {
+          return;
+        }
+        await switchSessionInternal(id, options, switchToken);
+      },
+      catch: (cause: unknown) =>
+        new SessionOpError({
+          operation: 'switch-session',
+          reason: cause instanceof Error ? cause.message : String(cause),
+          cause,
+        }),
+    });
+    releaseQueue();
+    if (switchResult instanceof SessionOpError) {
+      console.warn('[session-operations] Switch failed:', switchResult.message, switchResult.cause);
     }
   };
 

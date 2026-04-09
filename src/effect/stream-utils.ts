@@ -3,6 +3,9 @@
  * Replaces Effect Stream with native TypeScript async iterables.
  */
 
+import * as errore from 'errore';
+import { StreamError } from './errors';
+
 export interface RunStreamOptions {
   label?: string;
   onError?: (cause: unknown) => void;
@@ -20,27 +23,44 @@ export function runStream<T>(
   let iterator: AsyncIterator<T> | null = null;
 
   const run = async () => {
-    try {
-      iterator = iterable[Symbol.asyncIterator]();
-      while (isRunning) {
-        const result = await iterator.next();
-        if (result.done) break;
+    iterator = iterable[Symbol.asyncIterator]();
+
+    let streamError: StreamError | null = null;
+
+    while (isRunning) {
+      const result = await errore.tryAsync<IteratorResult<T>, StreamError>({
+        try: () => iterator!.next(),
+        catch: (cause: unknown) =>
+          new StreamError({
+            operation: 'iterator-next',
+            reason: cause instanceof Error ? cause.message : String(cause),
+            cause,
+          }),
+      });
+
+      if (result instanceof StreamError) {
+        streamError = result;
+        break;
       }
-    } catch (error) {
+      if (result.done) break;
+    }
+
+    // Handle error via callback or log (rule #20)
+    if (streamError) {
       if (options.onError) {
-        options.onError(error);
+        options.onError(streamError);
       } else {
         const label = options.label ? ` (${options.label})` : '';
-        console.warn(`[openmux] stream error${label}:`, error);
+        console.warn(`[openmux] stream error${label}:`, streamError);
       }
-    } finally {
-      // Ensure iterator is cleaned up
-      if (iterator && typeof iterator.return === 'function') {
-        try {
-          await iterator.return();
-        } catch {
-          // Ignore cleanup errors
-        }
+    }
+
+    // Ensure iterator is cleaned up
+    if (iterator && typeof iterator.return === 'function') {
+      try {
+        await iterator.return();
+      } catch {
+        // Ignore cleanup errors
       }
     }
   };

@@ -8,6 +8,7 @@ import { deferMacrotask } from '../../../core/scheduling';
 import { tracePtyChunk, tracePtyEvent } from '../../../terminal/pty-trace';
 import { copyToClipboard } from '../../bridge/clipboard-bridge';
 import * as errore from 'errore';
+import { DataHandlerError } from '../../errors';
 
 /** Base64 decode error for clipboard operations */
 class ClipboardDecodeError extends errore.createTaggedError({
@@ -76,11 +77,17 @@ function normalizeProcessName(value: string | null | undefined): string | null {
 function resolveFocusTrackingOwnerProcess(session: InternalPtySession): string | null {
   const pty = session.pty as PtyWithForegroundProcess;
   if (typeof pty.getForegroundProcessName !== 'function') return null;
-  try {
-    return normalizeProcessName(pty.getForegroundProcessName());
-  } catch {
-    return null;
-  }
+  const result = errore.try<string, DataHandlerError>({
+    try: () => normalizeProcessName(pty.getForegroundProcessName!()) ?? '',
+    catch: (cause: unknown) =>
+      new DataHandlerError({
+        operation: 'resolve-focus-tracking',
+        reason: cause instanceof Error ? cause.message : String(cause),
+        cause,
+      }),
+  });
+  if (result instanceof DataHandlerError) return null;
+  return result || null;
 }
 
 function hasScrollbackEraseSequence(text: string, regex: RegExp): boolean {
@@ -160,20 +167,20 @@ function processClipboardResponses(responses: string[], ptyId: string): string[]
       if (base64Data.length === 0) continue;
 
       // Decode base64 and copy to clipboard
-      let decoded: string;
-      try {
-        decoded = Buffer.from(base64Data, 'base64').toString('utf-8');
-      } catch (err: unknown) {
-        const error = new ClipboardDecodeError({
-          reason: err instanceof Error ? err.message : String(err),
-        });
+      const decoded = errore.try({
+        try: () => Buffer.from(base64Data, 'base64').toString('utf-8'),
+        catch: (err: unknown) =>
+          new ClipboardDecodeError({
+            reason: err instanceof Error ? err.message : String(err),
+          }),
+      });
+      if (decoded instanceof Error) {
         tracePtyEvent('clipboard-decode-error', {
           ptyId,
-          error: error.message,
+          error: decoded.message,
         });
         continue;
       }
-
       if (decoded.length === 0) continue;
 
       copyToClipboard(decoded).catch((err: unknown) => {

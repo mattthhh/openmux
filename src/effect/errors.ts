@@ -243,3 +243,93 @@ export class PtyMetadataError extends errore.createTaggedError({
   name: 'PtyMetadataError',
   message: 'PTY metadata $operation failed for $ptyId: $reason',
 }) {}
+
+/**
+ * Use when PTY data handler operations (clipboard copy, sync parsing) fail.
+ * This is for the data processing pipeline, not PTY lifecycle errors.
+ */
+export class DataHandlerError extends errore.createTaggedError({
+  name: 'DataHandlerError',
+  message: 'Data handler $operation failed: $reason',
+}) {}
+
+/**
+ * Use when PTY subscription setup/teardown fails in the subscription manager.
+ * Distinct from TerminalSubscriptionError which is for the unified terminal layer.
+ */
+export class SubscriptionError extends errore.createTaggedError({
+  name: 'SubscriptionError',
+  message: 'Subscription $operation failed: $reason',
+}) {}
+
+/**
+ * Use when scrollback archiver operations (persist, rotate, cache) fail.
+ * Wrap lower-level filesystem errors in `cause`.
+ */
+export class ArchiverError extends errore.createTaggedError({
+  name: 'ArchiverError',
+  message: 'Scrollback archiver $operation failed: $reason',
+}) {}
+
+/**
+ * Use when PTY service operations (resize, write, kill) fail.
+ * This is for the operations layer, not spawn/lifecycle errors.
+ */
+export class PtyOperationError extends errore.createTaggedError({
+  name: 'PtyOperationError',
+  message: 'PTY operation $operation failed: $reason',
+}) {}
+
+/**
+ * Use when PTY query setup (title, cwd detection) fails.
+ * This is for the initial query configuration, not ongoing queries.
+ */
+export class QuerySetupError extends errore.createTaggedError({
+  name: 'QuerySetupError',
+  message: 'Query setup $operation failed: $reason',
+}) {}
+
+/**
+ * Use when scrollback chunk parsing or serialization fails.
+ * This is for the chunks module's internal parsing operations.
+ */
+export class ChunkParseError extends errore.createTaggedError({
+  name: 'ChunkParseError',
+  message: 'Chunk parse $operation failed: $reason',
+}) {}
+
+/**
+ * Use when stream utility operations (async iterable handling) fail.
+ * This is for the stream-utils module's pipeline operations.
+ */
+export class StreamError extends errore.createTaggedError({
+  name: 'StreamError',
+  message: 'Stream $operation failed: $reason',
+}) {}
+
+/**
+ * Use when native key encoder operations fail.
+ * This is for the native key encoder's FFI operations.
+ */
+export class NativeKeyError extends errore.createTaggedError({
+  name: 'NativeKeyError',
+  message: 'Native key encoder $operation failed: $reason',
+}) {}
+
+/**
+ * Use when session operations (create, update, delete) fail.
+ * This is for the session-operations context, not storage errors.
+ */
+export class SessionOpError extends errore.createTaggedError({
+  name: 'SessionOpError',
+  message: 'Session operation $operation failed: $reason',
+}) {}
+
+/**
+ * Use when terminal query passthrough operations fail.
+ * This is for the query passthrough handlers and registry.
+ */
+export class QueryPassthroughError extends errore.createTaggedError({
+  name: 'QueryPassthroughError',
+  message: 'Query passthrough $operation failed: $reason',
+}) {}

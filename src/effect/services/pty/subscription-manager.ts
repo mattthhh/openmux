@@ -7,23 +7,26 @@
  * - Synchronous notifications (for non-Effect contexts)
  */
 
+import * as errore from 'errore';
+import { SubscriptionError } from '../../errors';
+
 /** Branded subscription ID for type safety */
-export type SubscriptionId = string & { readonly _tag: "SubscriptionId" }
+export type SubscriptionId = string & { readonly _tag: 'SubscriptionId' };
 
 export const makeSubscriptionId = (): SubscriptionId =>
-  `sub_${Date.now()}_${Math.random().toString(36).slice(2)}` as SubscriptionId
+  `sub_${Date.now()}_${Math.random().toString(36).slice(2)}` as SubscriptionId;
 
 export interface Subscription<T> {
-  readonly id: SubscriptionId
-  readonly callback: (value: T) => void
-  readonly createdAt: number
+  readonly id: SubscriptionId;
+  readonly callback: (value: T) => void;
+  readonly createdAt: number;
 }
 
 export interface SubscriptionRegistry<T> {
-  subscribe: (callback: (value: T) => void) => (() => void)
-  notify: (value: T) => void
-  notifySync: (value: T) => void
-  getSubscriberCount: () => number
+  subscribe: (callback: (value: T) => void) => () => void;
+  notify: (value: T) => void;
+  notifySync: (value: T) => void;
+  getSubscriberCount: () => number;
 }
 
 /**
@@ -35,7 +38,7 @@ export interface SubscriptionRegistry<T> {
  */
 export function createSubscriptionRegistry<T>(): SubscriptionRegistry<T> {
   // Mutable map as source of truth - enables synchronous operations
-  const subscriptions = new Map<SubscriptionId, Subscription<T>>()
+  const subscriptions = new Map<SubscriptionId, Subscription<T>>();
 
   /**
    * Subscribe with manual cleanup function.
@@ -43,32 +46,39 @@ export function createSubscriptionRegistry<T>(): SubscriptionRegistry<T> {
    * The returned cleanup function is synchronous.
    */
   const subscribe = (callback: (value: T) => void): (() => void) => {
-    const id = makeSubscriptionId()
+    const id = makeSubscriptionId();
     const sub: Subscription<T> = {
       id,
       callback,
       createdAt: Date.now(),
-    }
-    subscriptions.set(id, sub)
+    };
+    subscriptions.set(id, sub);
 
     // Return SYNCHRONOUS cleanup function (for SolidJS onCleanup)
     return () => {
-      subscriptions.delete(id)
-    }
-  }
+      subscriptions.delete(id);
+    };
+  };
 
   /**
    * Notify all subscribers asynchronously (errors logged but don't affect others).
    */
   const notify = (value: T): void => {
     for (const sub of subscriptions.values()) {
-      try {
-        sub.callback(value)
-      } catch (error) {
-        console.warn("Subscription callback error:", error)
+      const result = errore.try({
+        try: () => sub.callback(value),
+        catch: (cause: unknown) =>
+          new SubscriptionError({
+            operation: 'notify-callback',
+            reason: cause instanceof Error ? cause.message : String(cause),
+            cause,
+          }),
+      });
+      if (result instanceof SubscriptionError) {
+        console.warn('Subscription callback error:', result);
       }
     }
-  }
+  };
 
   /**
    * Notify all subscribers synchronously (for non-Effect contexts).
@@ -76,23 +86,30 @@ export function createSubscriptionRegistry<T>(): SubscriptionRegistry<T> {
    */
   const notifySync = (value: T): void => {
     for (const sub of subscriptions.values()) {
-      try {
-        sub.callback(value)
-      } catch (error) {
-        console.warn("Subscription callback error:", error)
+      const result = errore.try({
+        try: () => sub.callback(value),
+        catch: (cause: unknown) =>
+          new SubscriptionError({
+            operation: 'notifySync-callback',
+            reason: cause instanceof Error ? cause.message : String(cause),
+            cause,
+          }),
+      });
+      if (result instanceof SubscriptionError) {
+        console.warn('Subscription callback error:', result);
       }
     }
-  }
+  };
 
   /**
    * Get current subscriber count (for debugging/monitoring).
    */
-  const getSubscriberCount = (): number => subscriptions.size
+  const getSubscriberCount = (): number => subscriptions.size;
 
   return {
     subscribe,
     notify,
     notifySync,
     getSubscriberCount,
-  }
+  };
 }
