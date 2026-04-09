@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.72](https://github.com/monotykamary/openmux/compare/v0.3.71...v0.3.72) (2026-04-09)
+
+
+### Refactoring
+
+* **error-handling:** errore-ify high and medium priority modules ([7f6f6cf](https://github.com/monotykamary/openmux/commit/7f6f6cfadfae5a954ca4ac45aee1bcf2417d94f3)), closes [#20](https://github.com/monotykamary/openmux/issues/20)
+
 ### [0.3.71](https://github.com/monotykamary/openmux/compare/v0.3.70...v0.3.71) (2026-04-08)
 
 
