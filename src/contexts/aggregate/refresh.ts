@@ -215,6 +215,10 @@ export function createAggregateViewRefreshers(
 
   const buildSnapshot = async (options: {
     forceGitRefresh: boolean;
+    /** Only load the active session (skip non-active session disk reads and git). */
+    activeSessionOnly?: boolean;
+    /** Skip git metadata hydration entirely (apply empty git fields). */
+    skipGitMetadata?: boolean;
   }): Promise<
     | {
         sessions: SessionMetadata[];
@@ -237,8 +241,12 @@ export function createAggregateViewRefreshers(
       );
       const activeSessionId = currentSessionHints.sessionId;
 
+      // When loading only the active session, defer non-active session disk reads.
+      const sessionsToLoad = options.activeSessionOnly
+        ? sessions.filter((s) => String(s.id) === activeSessionId)
+        : sessions;
       const sessionDetailsEntries = await Promise.all(
-        sessions.map(
+        sessionsToLoad.map(
           async (session) => [String(session.id), await loadSession(String(session.id))] as const
         )
       );
@@ -271,6 +279,16 @@ export function createAggregateViewRefreshers(
 
       for (const session of sessions) {
         const sessionId = String(session.id);
+
+        // When activeSessionOnly, mark non-active sessions as unloaded and skip.
+        // They will be hydrated by the subsequent full refreshPtys() call.
+        if (options.activeSessionOnly && sessionId !== activeSessionId) {
+          sessionLoadStates.set(sessionId, {
+            status: 'unloaded',
+          });
+          continue;
+        }
+
         const sessionDetails = sessionDetailsById.get(sessionId);
         const loadedSession =
           sessionDetails && !(sessionDetails instanceof Error) ? sessionDetails : null;
@@ -383,13 +401,20 @@ export function createAggregateViewRefreshers(
         });
       }
 
-      const cwds = [...new Set(provisionalPtys.map((pty) => pty.cwd).filter(Boolean))];
-      const gitMetadataMap = await gitCache.getMetadataBatch(cwds, {
-        forceRefresh: options.forceGitRefresh,
-      });
-      const ptys = provisionalPtys.map((pty) =>
-        applyGitMetadataSnapshot(pty, gitMetadataMap.get(pty.cwd))
-      );
+      // Skip git metadata hydration when requested (fast initial load).
+      // The subsequent full refreshPtys() will hydrate git data.
+      let ptys: PtyInfo[];
+      if (options.skipGitMetadata) {
+        ptys = provisionalPtys;
+      } else {
+        const cwds = [...new Set(provisionalPtys.map((pty) => pty.cwd).filter(Boolean))];
+        const gitMetadataMap = await gitCache.getMetadataBatch(cwds, {
+          forceRefresh: options.forceGitRefresh,
+        });
+        ptys = provisionalPtys.map((pty) =>
+          applyGitMetadataSnapshot(pty, gitMetadataMap.get(pty.cwd))
+        );
+      }
 
       return {
         sessions,
@@ -535,9 +560,13 @@ export function createAggregateViewRefreshers(
     );
   };
 
-  const refreshPtysOnce = async (forceGitRefresh: boolean): Promise<void | Error> => {
+  const refreshPtysOnce = async (options: {
+    forceGitRefresh: boolean;
+    activeSessionOnly?: boolean;
+    skipGitMetadata?: boolean;
+  }): Promise<void | Error> => {
     setState('isLoading', true);
-    const snapshot = await buildSnapshot({ forceGitRefresh });
+    const snapshot = await buildSnapshot(options);
     if (snapshot instanceof Error) {
       setState('isLoading', false);
       return snapshot;
@@ -558,7 +587,7 @@ export function createAggregateViewRefreshers(
       await using _guardRefresh = new RefreshGuard(refreshState, 'refreshInProgress');
       void _guardRefresh;
 
-      const result = await refreshPtysOnce(true);
+      const result = await refreshPtysOnce({ forceGitRefresh: true });
       if (result instanceof Error) {
         console.error('Failed to refresh aggregate PTYs:', result.message);
       }
@@ -566,7 +595,13 @@ export function createAggregateViewRefreshers(
   };
 
   const initialLoad = async (): Promise<void | Error> => {
-    return refreshPtysOnce(false);
+    // Fast path: load only the active session without git metadata.
+    // The full refreshPtys() call that follows will hydrate the rest.
+    return refreshPtysOnce({
+      forceGitRefresh: false,
+      activeSessionOnly: true,
+      skipGitMetadata: true,
+    });
   };
 
   const refreshPtysSubset = async (_ptyIds: string[]) => {

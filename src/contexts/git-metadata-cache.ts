@@ -97,10 +97,9 @@ export class GitMetadataCache {
       )
     );
 
-    const gitInfoEntries: Array<readonly [string, GitInfo | undefined]> = [];
-    for (const cwd of uniqueCwds) {
-      gitInfoEntries.push([cwd, await this.fetchGitInfo(cwd)] as const);
-    }
+    const gitInfoEntries = await Promise.all(
+      uniqueCwds.map(async (cwd) => [cwd, await this.fetchGitInfo(cwd)] as const)
+    );
 
     const repoGroups = new Map<
       string,
@@ -134,9 +133,14 @@ export class GitMetadataCache {
 
     const diffStatsByRepo = new Map<string, GitDiffStats | undefined>();
     if (!options.skipDiffStats) {
-      for (const group of repoGroups.values()) {
-        const diffStats = await this.fetchDiffStats(group.representativeCwd);
-        diffStatsByRepo.set(group.gitInfo.repoKey, diffStats);
+      const diffStatsEntries = await Promise.all(
+        [...repoGroups.values()].map(
+          async (group) =>
+            [group.gitInfo.repoKey, await this.fetchDiffStats(group.representativeCwd)] as const
+        )
+      );
+      for (const [repoKey, diffStats] of diffStatsEntries) {
+        diffStatsByRepo.set(repoKey, diffStats);
       }
     }
 

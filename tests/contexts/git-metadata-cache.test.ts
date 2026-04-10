@@ -108,16 +108,14 @@ describe('GitMetadataCache', () => {
       expect(metas[1]).not.toBe(metas[2]);
     });
 
-    it('should resolve repos sequentially to avoid underlying git-helper race conditions', async () => {
-      let activeFetches = 0;
+    it('should resolve repos in parallel while the underlying helpers deduplicate', async () => {
+      const callOrder: string[] = [];
       const cache = new GitMetadataCache({
         fetchGitInfo: async (cwd) => {
-          activeFetches += 1;
-          if (activeFetches > 1) {
-            throw new Error('fetchGitInfo must not run concurrently');
-          }
+          callOrder.push(`start:${cwd}`);
+          // Simulate async work — another fetch can start before this resolves
           await Promise.resolve();
-          activeFetches -= 1;
+          callOrder.push(`end:${cwd}`);
           return {
             ...mockGitInfo,
             repoKey: cwd,
@@ -130,6 +128,8 @@ describe('GitMetadataCache', () => {
 
       expect(results.get('/repo-a')?.repoKey).toBe('/repo-a');
       expect(results.get('/repo-b')?.repoKey).toBe('/repo-b');
+      // Both fetches should start before either ends (parallel, not sequential)
+      expect(callOrder).toEqual(['start:/repo-a', 'start:/repo-b', 'end:/repo-a', 'end:/repo-b']);
     });
 
     it('should handle mixed repos in batch', async () => {
