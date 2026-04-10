@@ -99,10 +99,6 @@ vi.mock('../../src/shim/client/state', () => ({
   }),
 }));
 
-// Connection mock removed - tests now use environment variable to avoid
-// connecting to the user's real openmux socket. See OPENMUX_SHIM_SOCKET_PATH
-// setup above which is applied before any shim modules are imported.
-
 let getPtyState: typeof import('../../src/shim/client/state').getPtyState;
 let handlePtyTitle: typeof import('../../src/shim/client/state').handlePtyTitle;
 let sendRequest: typeof import('../../src/shim/client/connection').sendRequest;
