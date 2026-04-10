@@ -69,6 +69,36 @@ mock.module('../src/effect/bridge/shim-bridge', () => ({
   waitForShimClient: async () => {},
 }));
 
+// Mock shim/client/connection to prevent any real socket connections during tests
+// This is critical - without this, tests could connect to the real shim socket and detach the user
+mock.module('../src/shim/client/connection', () => ({
+  sendRequest: async () => ({ header: { ok: true, result: {} }, payloads: [] }),
+  sendRequestDirect: async () => ({ header: { ok: true, result: {} }, payloads: [] }),
+  onShimDetached: () => () => {},
+  shutdownShim: async () => {},
+  waitForShim: async () => {},
+  // handlePtyNotification is a pure function - we implement it properly for tests that need it
+  handlePtyNotification: (params: any, deps: any) => {
+    const { notification, subtitle, ptyId, hostFocused, focusedPtyId, allowFocusedPaneOsc } =
+      params;
+    const isUnfocusedPane = Boolean(ptyId && focusedPtyId && ptyId !== focusedPtyId);
+    const shouldUseMacOs = hostFocused === true && (isUnfocusedPane || !allowFocusedPaneOsc);
+
+    if (shouldUseMacOs) {
+      const sent = deps.sendMacOsNotification({
+        title: notification.title,
+        subtitle,
+        body: notification.body,
+      });
+      if (sent) {
+        return;
+      }
+    }
+
+    deps.sendDesktopNotification({ notification, subtitle });
+  },
+}));
+
 // Note: We intentionally do NOT mock shim/client or shim/client/connection here.
 // Bun's module mocking doesn't properly handle namespace imports (`import * as X`)
 // when combined with test file-level mocks. Tests that need to mock these modules

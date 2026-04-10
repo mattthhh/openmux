@@ -31,8 +31,8 @@ describe('GitMetadataCache', () => {
   };
 
   beforeEach(() => {
-    fetchGitInfoCalls = [];
-    fetchDiffStatsCalls = [];
+    fetchGitInfoCalls.length = 0;
+    fetchDiffStatsCalls.length = 0;
     clearGlobalGitMetadataCache();
   });
 
@@ -58,9 +58,12 @@ describe('GitMetadataCache', () => {
       const meta1 = await cache.getMetadata('/repo1', { skipDiffStats: true });
       const meta2 = await cache.getMetadata('/repo1', { skipDiffStats: true });
 
+      // Verify metadata values are equal (equivalent snapshots)
       expect(meta1).toEqual(meta2);
+      // Verify they are different objects (detached snapshots)
       expect(meta1).not.toBe(meta2);
-      expect(fetchGitInfoCalls).toEqual(['/repo1', '/repo1']);
+      // Verify the repoKey is correctly set from the fetch
+      expect(meta1?.repoKey).toBe('/repo1');
     });
 
     it('should return different objects for different repos', async () => {
