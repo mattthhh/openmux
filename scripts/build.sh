@@ -171,11 +171,16 @@ sign_macos_artifacts() {
 
     local sign_identity="${OPENMUX_CODESIGN_ID:--}"
     local targets=(
-        "$DIST_DIR/$BINARY_NAME-bin"
         "$DIST_DIR/libzig_pty.$LIB_EXT"
         "$DIST_DIR/libzig_git.$LIB_EXT"
         "$DIST_DIR/$GHOSTTY_LIB_NAME"
     )
+
+    # Check binary exists
+    if [[ ! -f "$DIST_DIR/$BINARY_NAME-bin" ]]; then
+        echo "Error: codesign target not found at $DIST_DIR/$BINARY_NAME-bin"
+        exit 1
+    fi
 
     for target in "${targets[@]}"; do
         if [[ ! -f "$target" ]]; then
@@ -185,6 +190,9 @@ sign_macos_artifacts() {
     done
 
     echo "Ad-hoc signing macOS artifacts..."
+    # Remove any existing placeholder signature from the binary first (Bun adds an empty one)
+    codesign --remove-signature "$DIST_DIR/$BINARY_NAME-bin" 2>/dev/null || true
+    codesign --force --sign "$sign_identity" "$DIST_DIR/$BINARY_NAME-bin"
     codesign --force --sign "$sign_identity" "${targets[@]}"
 }
 
