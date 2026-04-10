@@ -3,10 +3,12 @@ import { join } from 'path';
 import { Buffer } from 'buffer';
 
 /** Directory where shim socket files are stored */
-export const SHIM_SOCKET_DIR = join(homedir(), '.config', 'openmux', 'sockets');
+export const SHIM_SOCKET_DIR =
+  process.env.OPENMUX_SHIM_SOCKET_DIR ?? join(homedir(), '.config', 'openmux', 'sockets');
 
 /** Path to the main shim Unix socket */
-export const SHIM_SOCKET_PATH = join(SHIM_SOCKET_DIR, 'openmux.sock');
+export const SHIM_SOCKET_PATH =
+  process.env.OPENMUX_SHIM_SOCKET_PATH ?? join(SHIM_SOCKET_DIR, 'openmux.sock');
 
 /** Frame header for shim protocol messages */
 export type ShimHeader = {
