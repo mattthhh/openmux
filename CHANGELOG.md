@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.75](https://github.com/monotykamary/openmux/compare/v0.3.74...v0.3.75) (2026-04-10)
+
+
+### Tests
+
+* **setup:** mock shim/client/connection to prevent test detaching user session ([0d9cd7c](https://github.com/monotykamary/openmux/commit/0d9cd7c5cdd89514cb31b253569e21d0a2f29302))
+
 ### [0.3.74](https://github.com/monotykamary/openmux/compare/v0.3.73...v0.3.74) (2026-04-10)
 
 ### [0.3.73](https://github.com/monotykamary/openmux/compare/v0.3.72...v0.3.73) (2026-04-09)
