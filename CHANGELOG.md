@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.76](https://github.com/monotykamary/openmux/compare/v0.3.75...v0.3.76) (2026-04-10)
+
+
+### Performance
+
+* **aggregate:** speed up initial view with parallel git fetches and deferred loading ([694a91a](https://github.com/monotykamary/openmux/commit/694a91a165061c43535c127a1ac56931b4af4b42))
+
 ### [0.3.75](https://github.com/monotykamary/openmux/compare/v0.3.74...v0.3.75) (2026-04-10)
 
 
