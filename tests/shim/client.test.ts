@@ -1,4 +1,11 @@
 import { beforeAll, beforeEach, describe, expect, test, vi } from 'bun:test';
+import { tmpdir } from 'os';
+import { join } from 'path';
+
+// Set up test-specific socket path BEFORE any shim modules are imported
+const testSocketDir = join(tmpdir(), `openmux-test-${Date.now()}`);
+process.env.OPENMUX_SHIM_SOCKET_DIR = testSocketDir;
+process.env.OPENMUX_SHIM_SOCKET_PATH = join(testSocketDir, 'test.sock');
 
 // Module-level mock state that can be cleared by resetAllPtyState
 const mockState = {
@@ -92,25 +99,21 @@ vi.mock('../../src/shim/client/state', () => ({
   }),
 }));
 
-vi.mock('../../src/shim/client/connection', () => ({
-  sendRequest: vi.fn(),
-  sendRequestDirect: vi.fn(),
-  ensureConnected: vi.fn(),
-  waitForShim: vi.fn(),
-  onShimDetached: vi.fn(() => () => {}),
-  shutdownShim: vi.fn(),
-  handlePtyNotification: vi.fn(),
-}));
+// Connection mock removed - tests now use environment variable to avoid
+// connecting to the user's real openmux socket. See OPENMUX_SHIM_SOCKET_PATH
+// setup above which is applied before any shim modules are imported.
 
 let getPtyState: typeof import('../../src/shim/client/state').getPtyState;
 let handlePtyTitle: typeof import('../../src/shim/client/state').handlePtyTitle;
 let sendRequest: typeof import('../../src/shim/client/connection').sendRequest;
+let connectionModule: typeof import('../../src/shim/client/connection');
 let shimClientNonce = 0;
 
 describe('shim client getTitle', () => {
   beforeAll(async () => {
     ({ getPtyState, handlePtyTitle } = await import('../../src/shim/client/state'));
-    ({ sendRequest } = await import('../../src/shim/client/connection'));
+    connectionModule = await import('../../src/shim/client/connection');
+    sendRequest = connectionModule.sendRequest;
   });
 
   beforeEach(() => {
@@ -121,18 +124,22 @@ describe('shim client getTitle', () => {
   test('returns cached non-empty titles without requesting', async () => {
     mockState.ptyStates.set('pty-1', { title: 'Opencode' });
 
+    // Spy on sendRequest to verify it's not called
+    const sendRequestSpy = vi.spyOn(connectionModule, 'sendRequest');
+
     const { getTitle } = await import(`../../src/shim/client.ts?title=${shimClientNonce++}`);
     const title = await getTitle('pty-1');
 
     expect(title).toBe('Opencode');
-    expect(sendRequest).not.toHaveBeenCalled();
-    expect(handlePtyTitle).not.toHaveBeenCalled();
+    expect(sendRequestSpy).not.toHaveBeenCalled();
     expect(getPtyState).toHaveBeenCalled();
   });
 
   test('refreshes empty cached titles from the shim', async () => {
     mockState.ptyStates.set('pty-2', { title: '' });
-    (sendRequest as any).mockResolvedValue({
+
+    // Mock the shim server response by spying and mocking the implementation
+    const sendRequestSpy = vi.spyOn(connectionModule, 'sendRequest').mockResolvedValue({
       header: { result: { title: 'shell' } },
       payloads: [],
     } as any);
@@ -141,13 +148,16 @@ describe('shim client getTitle', () => {
     const title = await getTitle('pty-2');
 
     expect(title).toBe('shell');
-    expect(sendRequest).toHaveBeenCalledWith('getTitle', { ptyId: 'pty-2' });
+    expect(sendRequestSpy).toHaveBeenCalledWith('getTitle', { ptyId: 'pty-2' });
     expect(handlePtyTitle).toHaveBeenCalledWith('pty-2', 'shell');
     expect(mockState.ptyStates.get('pty-2')?.title).toBe('shell');
+
+    sendRequestSpy.mockRestore();
   });
 
   test('requests title when no cache exists', async () => {
-    (sendRequest as any).mockResolvedValue({
+    // Mock the shim server response
+    const sendRequestSpy = vi.spyOn(connectionModule, 'sendRequest').mockResolvedValue({
       header: { result: { title: 'shell' } },
       payloads: [],
     } as any);
@@ -156,8 +166,10 @@ describe('shim client getTitle', () => {
     const title = await getTitle('pty-3');
 
     expect(title).toBe('shell');
-    expect(sendRequest).toHaveBeenCalledWith('getTitle', { ptyId: 'pty-3' });
+    expect(sendRequestSpy).toHaveBeenCalledWith('getTitle', { ptyId: 'pty-3' });
     expect(handlePtyTitle).toHaveBeenCalledWith('pty-3', 'shell');
     expect(mockState.ptyStates.get('pty-3')?.title).toBe('shell');
+
+    sendRequestSpy.mockRestore();
   });
 });
