@@ -77,20 +77,6 @@ type MetadataCacheEntry = {
 };
 const metadataCache = new Map<string, MetadataCacheEntry>();
 
-// In-flight metadata requests for deduplication
-const metadataRequests = new Map<string, Promise<ShimPtyMetadata> | null>();
-
-export function getPtyMetadataRequest(ptyId: string): Promise<ShimPtyMetadata> | undefined {
-  return metadataRequests.get(ptyId) ?? undefined;
-}
-
-export function setPtyMetadataRequest(
-  ptyId: string,
-  request: Promise<ShimPtyMetadata> | null
-): void {
-  metadataRequests.set(ptyId, request);
-}
-
 function clearPtySubscribers(ptyId: string): void {
   unifiedSubscribers.delete(ptyId);
   stateSubscribers.delete(ptyId);
@@ -584,7 +570,6 @@ export function resetAllPtyState(): void {
   emulatorCache.clear();
   kittyStates.clear();
   metadataCache.clear();
-  metadataRequests.clear();
 
   // Clear all Sets
   globalTitleSubscribers.clear();
