@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { beforeEach, describe, expect, test } from 'bun:test';
 import type { TerminalCell, TerminalState, UnifiedTerminalUpdate } from '../../src/core/types';
 import {
   deletePtyState,
@@ -21,6 +21,7 @@ import {
   subscribeToLifecycle,
   subscribeToTitle,
   subscribeUnified,
+  resetAllPtyState,
 } from '../../src/shim/client/state';
 import {
   KittyGraphicsCompression,
@@ -55,6 +56,10 @@ function makeState(char: string): TerminalState {
 }
 
 describe('shim client state', () => {
+  beforeEach(() => {
+    resetAllPtyState();
+  });
+
   test('applies full updates and notifies subscribers', () => {
     const ptyId = 'pty-full';
     const update: UnifiedTerminalUpdate = {
