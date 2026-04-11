@@ -2,6 +2,29 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.77](https://github.com/monotykamary/openmux/compare/v0.3.76...v0.3.77) (2026-04-11)
+
+
+### Features
+
+* **shim:** add OPENMUX_SHIM_SOCKET_PATH env var for test isolation ([26038cc](https://github.com/monotykamary/openmux/commit/26038cc992044696bf22b3514d455d78270bb225))
+
+
+### Bug Fixes
+
+* **build:** strip placeholder code signature before codesign on macOS ([02edd4f](https://github.com/monotykamary/openmux/commit/02edd4f91574533154ed2bca1e0c420ead933611))
+* **test:** replace vi.mock with vi.spyOn to prevent cross-file mock leak ([41184ac](https://github.com/monotykamary/openmux/commit/41184ac7327d7875d05d0a00dd5f66e8161bd6f0))
+
+
+### Tests
+
+* **shim:** remove connection mock and use env var for socket path ([2f27952](https://github.com/monotykamary/openmux/commit/2f27952ecbec0478b543cc702a1d02975f4f7860))
+
+
+### Refactoring
+
+* **shim:** remove unused metadata request cache ([3ab85b5](https://github.com/monotykamary/openmux/commit/3ab85b5a60051668c42c03d9b208cb385ab5900a))
+
 ### [0.3.76](https://github.com/monotykamary/openmux/compare/v0.3.75...v0.3.76) (2026-04-10)
 
 
