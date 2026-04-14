@@ -2,6 +2,8 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.81](https://github.com/monotykamary/openmux/compare/v0.3.80...v0.3.81) (2026-04-14)
+
 ### [0.3.80](https://github.com/monotykamary/openmux/compare/v0.3.79...v0.3.80) (2026-04-14)
 
 
