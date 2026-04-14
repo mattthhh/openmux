@@ -11,15 +11,7 @@ pub const DiffState = enum(u8) {
     complete,
     failed,
     cancelled,
-    consumed,
 };
-
-/// Layout: bits 0-7 = slot index, bits 8-30 = generation (23 bits).
-/// Generation prevents confused-deputy attacks when a slot is freed
-/// and reallocated while a stale request_id is still held by a caller.
-const SLOT_BITS: u32 = 8;
-const GEN_SHIFT: u32 = SLOT_BITS;
-const GEN_MASK: u32 = 0x7F_FFFF; // 23 bits — always produces a positive c_int
 
 pub const DiffRequest = struct {
     cwd: [constants.MAX_CWD_LEN]u8,
@@ -28,7 +20,6 @@ pub const DiffRequest = struct {
     added: std.atomic.Value(c_int),
     removed: std.atomic.Value(c_int),
     binary: std.atomic.Value(c_int),
-    generation: std.atomic.Value(u32),
 
     pub fn init() DiffRequest {
         return .{
@@ -38,7 +29,6 @@ pub const DiffRequest = struct {
             .added = std.atomic.Value(c_int).init(0),
             .removed = std.atomic.Value(c_int).init(0),
             .binary = std.atomic.Value(c_int).init(0),
-            .generation = std.atomic.Value(u32).init(0),
         };
     }
 };
@@ -88,10 +78,6 @@ pub fn deinitDiffThread() void {
         thread.join();
         diff_thread = null;
     }
-
-    // Drain any slots still in use (pending, cancelled, or unconsumed).
-    // This prevents slot leaks across init/shutdown cycles.
-    drainDiffRequests();
 }
 
 fn diffThreadLoop() void {
@@ -109,7 +95,7 @@ fn diffThreadLoop() void {
 
             const state = req.state.load(.acquire);
             if (state == .cancelled) {
-                freeDiffRequestSlot(@intCast(i));
+                freeDiffRequest(@intCast(i));
                 _ = diff_queue_count.fetchSub(1, .release);
                 continue;
             }
@@ -131,7 +117,7 @@ fn diffThreadLoop() void {
 
             if (req.state.cmpxchgStrong(.pending, new_state, .acq_rel, .acquire)) |old_state| {
                 if (old_state == .cancelled) {
-                    freeDiffRequestSlot(@intCast(i));
+                    freeDiffRequest(@intCast(i));
                 }
             }
 
@@ -249,61 +235,30 @@ fn computeDiffStats(
     return true;
 }
 
-/// Free all remaining used slots. Called after thread join during shutdown.
-pub fn drainDiffRequests() void {
-    for (&diff_request_used, 0..) |*used, i| {
-        if (used.load(.acquire)) {
-            freeDiffRequestSlot(@intCast(i));
-        }
-    }
-}
-
-/// Allocate a request slot and return an encoded request ID.
-/// The ID embeds a generation counter so stale IDs from freed slots
-/// are rejected by getDiffRequest.
-pub fn allocDiffRequest() ?c_int {
+pub fn allocDiffRequest() ?u32 {
     for (&diff_request_used, 0..) |*used, i| {
         if (!used.load(.acquire)) {
             if (used.cmpxchgStrong(false, true, .acq_rel, .acquire) == null) {
-                const old_gen = diff_requests[i].generation.fetchAdd(1, .acq_rel);
-                const gen = (old_gen + 1) & GEN_MASK;
-                const encoded_id: c_int = @intCast(@as(u32, @intCast(i)) | (gen << GEN_SHIFT));
-                return encoded_id;
+                return @intCast(i);
             }
         }
     }
     return null;
 }
 
-/// Free a request slot by raw slot index (internal use).
-pub fn freeDiffRequestSlot(slot: u32) void {
-    if (slot >= constants.MAX_DIFF_REQUESTS) return;
-    diff_request_used[slot].store(false, .release);
-    diff_requests[slot].state.store(.failed, .release);
-    diff_requests[slot].added.store(0, .release);
-    diff_requests[slot].removed.store(0, .release);
-    diff_requests[slot].binary.store(0, .release);
+pub fn freeDiffRequest(id: u32) void {
+    if (id >= constants.MAX_DIFF_REQUESTS) return;
+    diff_request_used[id].store(false, .release);
+    diff_requests[id].state.store(.failed, .release);
+    diff_requests[id].added.store(0, .release);
+    diff_requests[id].removed.store(0, .release);
+    diff_requests[id].binary.store(0, .release);
 }
 
-/// Backward-compatible alias: accepts an encoded request_id and extracts
-/// the slot index. Used by callers that have already validated via
-/// getDiffRequest.
-pub fn freeDiffRequest(encoded_id: c_int) void {
-    const slot: u32 = @as(u32, @intCast(encoded_id)) & ((@as(u32, 1) << SLOT_BITS) - 1);
-    freeDiffRequestSlot(slot);
-}
-
-/// Look up a request by encoded ID. Validates the generation counter
-/// to reject stale IDs from freed-and-reallocated slots.
-pub fn getDiffRequest(encoded_id: c_int) ?*DiffRequest {
-    if (encoded_id < 0) return null;
-    const id: u32 = @intCast(encoded_id);
-    const slot: u32 = id & ((@as(u32, 1) << SLOT_BITS) - 1);
-    const gen: u32 = (id >> GEN_SHIFT) & GEN_MASK;
-    if (slot >= constants.MAX_DIFF_REQUESTS) return null;
-    if (!diff_request_used[slot].load(.acquire)) return null;
-    if ((diff_requests[slot].generation.load(.acquire) & GEN_MASK) != gen) return null;
-    return &diff_requests[slot];
+pub fn getDiffRequest(id: u32) ?*DiffRequest {
+    if (id >= constants.MAX_DIFF_REQUESTS) return null;
+    if (!diff_request_used[id].load(.acquire)) return null;
+    return &diff_requests[id];
 }
 
 pub fn signalDiffQueue() void {

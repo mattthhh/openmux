@@ -8,20 +8,13 @@ pub const StatusState = enum(u8) {
     complete,
     failed,
     cancelled,
-    consumed,
 };
-
-/// Layout: bits 0-7 = slot index, bits 8-30 = generation (23 bits).
-const SLOT_BITS: u32 = 8;
-const GEN_SHIFT: u32 = SLOT_BITS;
-const GEN_MASK: u32 = 0x7F_FFFF;
 
 pub const StatusRequest = struct {
     cwd: [constants.MAX_CWD_LEN]u8,
     cwd_len: usize,
     state: std.atomic.Value(StatusState),
     status: repo_status.RepoStatus,
-    generation: std.atomic.Value(u32),
 
     pub fn init() StatusRequest {
         var status = repo_status.RepoStatus{};
@@ -31,7 +24,6 @@ pub const StatusRequest = struct {
             .cwd_len = 0,
             .state = std.atomic.Value(StatusState).init(.failed),
             .status = status,
-            .generation = std.atomic.Value(u32).init(0),
         };
     }
 };
@@ -81,9 +73,6 @@ pub fn deinitStatusThread() void {
         thread.join();
         status_thread = null;
     }
-
-    // Drain any slots still in use (pending, cancelled, or unconsumed).
-    drainStatusRequests();
 }
 
 fn statusThreadLoop() void {
@@ -101,7 +90,7 @@ fn statusThreadLoop() void {
 
             const state = req.state.load(.acquire);
             if (state == .cancelled) {
-                freeStatusRequestSlot(@intCast(i));
+                freeStatusRequest(@intCast(i));
                 _ = status_queue_count.fetchSub(1, .release);
                 continue;
             }
@@ -113,7 +102,7 @@ fn statusThreadLoop() void {
             const new_state: StatusState = if (ok) .complete else .failed;
 
             if (req.state.cmpxchgStrong(.pending, new_state, .acq_rel, .acquire)) |_| {
-                freeStatusRequestSlot(@intCast(i));
+                freeStatusRequest(@intCast(i));
             }
 
             _ = status_queue_count.fetchSub(1, .release);
@@ -121,57 +110,28 @@ fn statusThreadLoop() void {
     }
 }
 
-/// Free all remaining used slots. Called after thread join during shutdown.
-pub fn drainStatusRequests() void {
-    for (&status_request_used, 0..) |*used, i| {
-        if (used.load(.acquire)) {
-            freeStatusRequestSlot(@intCast(i));
-        }
-    }
-}
-
-/// Allocate a request slot and return an encoded request ID.
-pub fn allocStatusRequest() ?c_int {
+pub fn allocStatusRequest() ?u32 {
     for (&status_request_used, 0..) |*used, i| {
         if (!used.load(.acquire)) {
             if (used.cmpxchgStrong(false, true, .acq_rel, .acquire) == null) {
-                const old_gen = status_requests[i].generation.fetchAdd(1, .acq_rel);
-                const gen = (old_gen + 1) & GEN_MASK;
-                const encoded_id: c_int = @intCast(@as(u32, @intCast(i)) | (gen << GEN_SHIFT));
-                return encoded_id;
+                return @intCast(i);
             }
         }
     }
     return null;
 }
 
-/// Free a request slot by raw slot index (internal use).
-pub fn freeStatusRequestSlot(slot: u32) void {
-    if (slot >= constants.MAX_STATUS_REQUESTS) return;
-    status_request_used[slot].store(false, .release);
-    status_requests[slot].state.store(.failed, .release);
-    repo_status.clearRepoStatus(&status_requests[slot].status);
+pub fn freeStatusRequest(id: u32) void {
+    if (id >= constants.MAX_STATUS_REQUESTS) return;
+    status_request_used[id].store(false, .release);
+    status_requests[id].state.store(.failed, .release);
+    repo_status.clearRepoStatus(&status_requests[id].status);
 }
 
-/// Backward-compatible alias: accepts an encoded request_id and extracts
-/// the slot index. Used by callers that have already validated via
-/// getStatusRequest.
-pub fn freeStatusRequest(encoded_id: c_int) void {
-    const slot: u32 = @as(u32, @intCast(encoded_id)) & ((@as(u32, 1) << SLOT_BITS) - 1);
-    freeStatusRequestSlot(slot);
-}
-
-/// Look up a request by encoded ID. Validates the generation counter
-/// to reject stale IDs from freed-and-reallocated slots.
-pub fn getStatusRequest(encoded_id: c_int) ?*StatusRequest {
-    if (encoded_id < 0) return null;
-    const id: u32 = @intCast(encoded_id);
-    const slot: u32 = id & ((@as(u32, 1) << SLOT_BITS) - 1);
-    const gen: u32 = (id >> GEN_SHIFT) & GEN_MASK;
-    if (slot >= constants.MAX_STATUS_REQUESTS) return null;
-    if (!status_request_used[slot].load(.acquire)) return null;
-    if ((status_requests[slot].generation.load(.acquire) & GEN_MASK) != gen) return null;
-    return &status_requests[slot];
+pub fn getStatusRequest(id: u32) ?*StatusRequest {
+    if (id >= constants.MAX_STATUS_REQUESTS) return null;
+    if (!status_request_used[id].load(.acquire)) return null;
+    return &status_requests[id];
 }
 
 pub fn signalStatusQueue() void {

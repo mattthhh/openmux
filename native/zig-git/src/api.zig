@@ -142,7 +142,7 @@ pub fn omx_git_diff_stats_async(cwd: [*:0]const u8) c_int {
 
     async_diff.signalDiffQueue();
 
-    return req_id;
+    return @intCast(req_id);
 }
 
 pub fn omx_git_status_async(cwd: [*:0]const u8) c_int {
@@ -164,7 +164,7 @@ pub fn omx_git_status_async(cwd: [*:0]const u8) c_int {
 
     async_status.signalStatusQueue();
 
-    return req_id;
+    return @intCast(req_id);
 }
 
 pub fn omx_git_diff_stats_poll(
@@ -175,37 +175,26 @@ pub fn omx_git_diff_stats_poll(
 ) c_int {
     if (request_id < 0) return constants.DIFF_ERROR;
 
-    const req = async_diff.getDiffRequest(request_id) orelse return constants.DIFF_ERROR;
+    const req = async_diff.getDiffRequest(@intCast(request_id)) orelse return constants.DIFF_ERROR;
     const state = req.state.load(.acquire);
 
     switch (state) {
         .pending => return constants.DIFF_PENDING,
         .complete => {
-            // Atomically claim the result to prevent double-free with cancel.
-            if (req.state.cmpxchgStrong(.complete, .consumed, .acq_rel, .acquire)) |_| {
-                return constants.DIFF_ERROR; // Already consumed by cancel
-            }
             out_added.* = req.added.load(.acquire);
             out_removed.* = req.removed.load(.acquire);
             out_binary.* = req.binary.load(.acquire);
-            async_diff.freeDiffRequest(request_id);
+            async_diff.freeDiffRequest(@intCast(request_id));
             return 0;
         },
         .failed => {
-            if (req.state.cmpxchgStrong(.failed, .consumed, .acq_rel, .acquire)) |_| {
-                return constants.DIFF_ERROR;
-            }
-            async_diff.freeDiffRequest(request_id);
+            async_diff.freeDiffRequest(@intCast(request_id));
             return constants.DIFF_ERROR;
         },
         .cancelled => {
-            if (req.state.cmpxchgStrong(.cancelled, .consumed, .acq_rel, .acquire)) |_| {
-                return constants.DIFF_ERROR;
-            }
-            async_diff.freeDiffRequest(request_id);
+            async_diff.freeDiffRequest(@intCast(request_id));
             return constants.DIFF_ERROR;
         },
-        .consumed => return constants.DIFF_ERROR,
     }
 }
 
@@ -233,16 +222,12 @@ pub fn omx_git_status_poll(
 ) c_int {
     if (request_id < 0) return constants.STATUS_ERROR;
 
-    const req = async_status.getStatusRequest(request_id) orelse return constants.STATUS_ERROR;
+    const req = async_status.getStatusRequest(@intCast(request_id)) orelse return constants.STATUS_ERROR;
     const state = req.state.load(.acquire);
 
     switch (state) {
         .pending => return constants.STATUS_PENDING,
         .complete => {
-            // Atomically claim the result to prevent double-free with cancel.
-            if (req.state.cmpxchgStrong(.complete, .consumed, .acq_rel, .acquire)) |_| {
-                return constants.STATUS_ERROR; // Already consumed by cancel
-            }
             if (branch_len > 0) {
                 repo_status.copyCString(branch_buf, @intCast(branch_len), req.status.branch[0..]);
             }
@@ -268,67 +253,46 @@ pub fn omx_git_status_poll(
                 repo_status.copyCString(commondir_buf, @intCast(commondir_len), req.status.commondir[0..]);
             }
 
-            async_status.freeStatusRequest(request_id);
+            async_status.freeStatusRequest(@intCast(request_id));
             return 0;
         },
         .failed => {
-            if (req.state.cmpxchgStrong(.failed, .consumed, .acq_rel, .acquire)) |_| {
-                return constants.STATUS_ERROR;
-            }
-            async_status.freeStatusRequest(request_id);
+            async_status.freeStatusRequest(@intCast(request_id));
             return constants.STATUS_ERROR;
         },
         .cancelled => {
-            if (req.state.cmpxchgStrong(.cancelled, .consumed, .acq_rel, .acquire)) |_| {
-                return constants.STATUS_ERROR;
-            }
-            async_status.freeStatusRequest(request_id);
+            async_status.freeStatusRequest(@intCast(request_id));
             return constants.STATUS_ERROR;
         },
-        .consumed => return constants.STATUS_ERROR,
     }
 }
 
 pub fn omx_git_diff_stats_cancel(request_id: c_int) void {
     if (request_id < 0) return;
 
-    const req = async_diff.getDiffRequest(request_id) orelse return;
+    const req = async_diff.getDiffRequest(@intCast(request_id)) orelse return;
 
-    // Try to cancel a pending request — thread will free the slot.
-    if (req.state.cmpxchgStrong(.pending, .cancelled, .acq_rel, .acquire)) |_| {
-        // CAS failed — request is no longer pending. Atomically claim it
-        // to prevent double-free with a concurrent poll.
-        if (req.state.cmpxchgStrong(.complete, .consumed, .acq_rel, .acquire)) |_| {} else {
-            async_diff.freeDiffRequest(request_id);
-            return;
+    if (req.state.cmpxchgStrong(.pending, .cancelled, .acq_rel, .acquire)) |old_state| {
+        switch (old_state) {
+            .complete, .failed => {
+                async_diff.freeDiffRequest(@intCast(request_id));
+            },
+            .pending, .cancelled => {},
         }
-        if (req.state.cmpxchgStrong(.failed, .consumed, .acq_rel, .acquire)) |_| {} else {
-            async_diff.freeDiffRequest(request_id);
-            return;
-        }
-        // .cancelled or .consumed — someone else already claimed it.
     }
-    // CAS succeeded (pending → cancelled) — thread will free the slot.
 }
 
 pub fn omx_git_status_cancel(request_id: c_int) void {
     if (request_id < 0) return;
 
-    const req = async_status.getStatusRequest(request_id) orelse return;
+    const req = async_status.getStatusRequest(@intCast(request_id)) orelse return;
 
-    // Try to cancel a pending request — thread will free the slot.
-    if (req.state.cmpxchgStrong(.pending, .cancelled, .acq_rel, .acquire)) |_| {
-        // CAS failed — request is no longer pending. Atomically claim it
-        // to prevent double-free with a concurrent poll.
-        if (req.state.cmpxchgStrong(.complete, .consumed, .acq_rel, .acquire)) |_| {} else {
-            async_status.freeStatusRequest(request_id);
-            return;
+    if (req.state.cmpxchgStrong(.pending, .cancelled, .acq_rel, .acquire)) |old_state| {
+        switch (old_state) {
+            .complete, .failed => {
+                async_status.freeStatusRequest(@intCast(request_id));
+            },
+            .pending, .cancelled => {},
         }
-        if (req.state.cmpxchgStrong(.failed, .consumed, .acq_rel, .acquire)) |_| {} else {
-            async_status.freeStatusRequest(request_id);
-            return;
-        }
-        // .cancelled or .consumed — someone else already claimed it.
     }
-    // CAS succeeded (pending → cancelled) — thread will free the slot.
 }

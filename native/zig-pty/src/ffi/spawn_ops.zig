@@ -104,7 +104,7 @@ pub fn spawnAsync(
     // Signal the spawn thread
     async_spawn.signalSpawnQueue();
 
-    return req_id;
+    return @intCast(req_id);
 }
 
 /// Poll an async spawn request for completion.
@@ -115,32 +115,24 @@ pub fn spawnAsync(
 pub fn spawnPoll(request_id: c_int) c_int {
     if (request_id < 0) return constants.SPAWN_ERROR;
 
-    const req = async_spawn.getSpawnRequest(request_id) orelse return constants.SPAWN_ERROR;
+    const req = async_spawn.getSpawnRequest(@intCast(request_id)) orelse return constants.SPAWN_ERROR;
     const state = req.state.load(.acquire);
 
     switch (state) {
         .pending => return constants.SPAWN_PENDING,
         .complete => {
-            // Atomically claim the result to prevent double-free with cancel.
-            if (req.state.cmpxchgStrong(.complete, .consumed, .acq_rel, .acquire)) |_| {
-                return constants.SPAWN_ERROR; // Already consumed by cancel
-            }
             const handle = req.result_handle.load(.acquire);
-            async_spawn.freeSpawnRequest(request_id);
+            async_spawn.freeSpawnRequest(@intCast(request_id));
             return handle;
         },
         .failed => {
-            if (req.state.cmpxchgStrong(.failed, .consumed, .acq_rel, .acquire)) |_| {
-                return constants.SPAWN_ERROR;
-            }
-            async_spawn.freeSpawnRequest(request_id);
+            async_spawn.freeSpawnRequest(@intCast(request_id));
             return constants.SPAWN_ERROR;
         },
         .cancelled => {
             // Request was cancelled - treat as error
             return constants.SPAWN_ERROR;
         },
-        .consumed => return constants.SPAWN_ERROR,
     }
 }
 
@@ -150,27 +142,32 @@ pub fn spawnPoll(request_id: c_int) c_int {
 pub fn spawnCancel(request_id: c_int) void {
     if (request_id < 0) return;
 
-    const req = async_spawn.getSpawnRequest(request_id) orelse return;
+    const req = async_spawn.getSpawnRequest(@intCast(request_id)) orelse return;
 
     // Try to atomically transition from pending to cancelled.
-    if (req.state.cmpxchgStrong(.pending, .cancelled, .acq_rel, .acquire)) |_| {
-        // CAS failed — request is no longer pending. Atomically claim it
-        // to prevent double-free with a concurrent poll.
-        if (req.state.cmpxchgStrong(.complete, .consumed, .acq_rel, .acquire)) |_| {} else {
-            // Spawn completed - close the handle to avoid leaking
-            const handle = req.result_handle.load(.acquire);
-            if (handle > 0) {
-                handle_registry.removeHandle(@intCast(handle));
-            }
-            async_spawn.freeSpawnRequest(request_id);
-            return;
+    // This prevents the race where we free the slot while spawn thread is still using it.
+    if (req.state.cmpxchgStrong(.pending, .cancelled, .acq_rel, .acquire)) |old_state| {
+        // CAS failed - request already transitioned to complete/failed/cancelled.
+        // Handle based on what state it's in.
+        switch (old_state) {
+            .complete => {
+                // Spawn completed - close the handle to avoid leaking
+                const handle = req.result_handle.load(.acquire);
+                if (handle > 0) {
+                    handle_registry.removeHandle(@intCast(handle));
+                }
+                async_spawn.freeSpawnRequest(@intCast(request_id));
+            },
+            .failed => {
+                // Spawn failed - just free the slot
+                async_spawn.freeSpawnRequest(@intCast(request_id));
+            },
+            .cancelled => {
+                // Already cancelled - nothing to do
+            },
+            .pending => unreachable, // CAS would have succeeded
         }
-        if (req.state.cmpxchgStrong(.failed, .consumed, .acq_rel, .acquire)) |_| {} else {
-            async_spawn.freeSpawnRequest(request_id);
-            return;
-        }
-        // .cancelled or .consumed — someone else already claimed it.
     }
-    // CAS succeeded (pending → cancelled) — thread will free the slot.
-    // .cancelled or .consumed — someone else already claimed it.
+    // If CAS succeeded (pending -> cancelled), DON'T free the slot here.
+    // The spawn thread will free it after noticing the cancelled state.
 }
