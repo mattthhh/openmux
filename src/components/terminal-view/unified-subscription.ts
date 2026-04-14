@@ -171,6 +171,15 @@ export function setupUnifiedSubscription(deps: UnifiedSubscriptionDeps): void {
           });
           if (unsubResult instanceof Error) return;
 
+          // Guard: if the component was cleaned up while awaiting subscription setup,
+          // unsubscribe immediately to prevent a dangling subscription and stale
+          // attachVisibleEmulator call that would re-enable update notifications
+          // for the old PTY after cleanup has already run.
+          if (!mounted) {
+            unsubResult();
+            return;
+          }
+
           unsubscribe = unsubResult;
 
           // Now safe to enable updates - subscription is active and will catch immediate updates

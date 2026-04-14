@@ -6,6 +6,7 @@
 import { createPtySession, destroyPty, destroyAllPtys } from '../../effect/bridge';
 import { PtySpawnError, TerminalSubscriptionError } from '../../effect/errors';
 import { getActiveSessionIdForShim, registerPtyPane } from '../../effect/bridge';
+import { aggregateSessionMappings } from '../../effect/bridge/aggregate/cache/session-pty-cache';
 import {
   subscribeToPtyWithCaches,
   subscribeToPtyExit,
@@ -202,6 +203,16 @@ export function createPtyLifecycleHandlers(deps: PtyLifecycleDeps) {
       mapping.set(paneId, ptyId);
       sessionPtyMap.set(sessionId, mapping);
       ptyToSessionMap.set(ptyId, { sessionId, paneId });
+
+      // Synchronously update the aggregate-local session→PTY mapping so that
+      // resolveAggregatePtyOwnership can find this PTY via getAggregateSessionForPty
+      // BEFORE the lifecycle stream callback (handlePtyCreated) runs.
+      // Without this, the lifecycle event races ahead of the shim registration
+      // and the PTY gets attributed to the wrong session via the activeSessionId fallback.
+      const aggregateMapping = aggregateSessionMappings.get(sessionId) ?? new Map<string, string>();
+      aggregateMapping.set(paneId, ptyId);
+      aggregateSessionMappings.set(sessionId, aggregateMapping);
+
       registerPtyPane(sessionId, paneId, ptyId).catch((e) => {
         console.warn(`[pty-lifecycle] Failed to register PTY pane ${paneId} -> ${ptyId}:`, e);
       });
@@ -322,6 +333,16 @@ export function createPtyLifecycleHandlers(deps: PtyLifecycleDeps) {
       mapping.set(paneId, ptyId);
       sessionPtyMap.set(sessionId, mapping);
       ptyToSessionMap.set(ptyId, { sessionId, paneId });
+
+      // Synchronously update the aggregate-local session→PTY mapping so that
+      // resolveAggregatePtyOwnership can find this PTY via getAggregateSessionForPty
+      // BEFORE the lifecycle stream callback (handlePtyCreated) runs.
+      // Without this, the lifecycle event races ahead of the shim registration
+      // and the PTY gets attributed to the wrong session via the activeSessionId fallback.
+      const aggregateMapping = aggregateSessionMappings.get(sessionId) ?? new Map<string, string>();
+      aggregateMapping.set(paneId, ptyId);
+      aggregateSessionMappings.set(sessionId, aggregateMapping);
+
       registerPtyPane(sessionId, paneId, ptyId).catch((e) => {
         console.warn(`[pty-lifecycle] Failed to register PTY pane ${paneId} -> ${ptyId}:`, e);
       });
