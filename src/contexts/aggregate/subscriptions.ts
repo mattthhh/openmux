@@ -536,9 +536,27 @@ export function createLifecycleHandlers(
         if (existingIndex !== undefined) {
           s.allPtys[existingIndex] = nextPty;
         } else {
-          const newIndex = s.allPtys.length;
-          s.allPtys.push(nextPty);
-          s.allPtysIndex.set(ptyId, newIndex);
+          // The placeholder was replaced by applySnapshot (e.g., a saved: entry
+          // for the same pane was preferred by dedupeAggregatePtysByPane).
+          // Try to find the entry by pane key and update it instead of pushing
+          // a duplicate. This is a safety net — the pendingPtyIds cleanup in
+          // applySnapshot should prevent us from reaching this branch, but we
+          // guard against it anyway.
+          const paneKeyIndex = nextPty.paneId
+            ? findAggregatePtyIndexByPane(s.allPtys, ownership.sessionId, nextPty.paneId)
+            : -1;
+          if (paneKeyIndex !== -1 && s.allPtys[paneKeyIndex]) {
+            // Replace the saved: entry with the hydrated live entry
+            s.allPtys[paneKeyIndex] = {
+              ...s.allPtys[paneKeyIndex],
+              ...nextPty,
+              // Keep the existing sortOrderHint if the hydrated entry doesn't have one
+              sortOrderHint: nextPty.sortOrderHint ?? s.allPtys[paneKeyIndex].sortOrderHint,
+            };
+            s.allPtysIndex = buildPtyIndex(s.allPtys);
+          }
+          // Do NOT push a new entry — the PTY is already represented.
+          // The next refreshPtys() will update the entry with fresh metadata.
         }
 
         if (nextPty.paneId) {

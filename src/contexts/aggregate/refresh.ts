@@ -558,6 +558,25 @@ export function createAggregateViewRefreshers(
         s.allPtys = dedupeAggregatePtysByPane([...mergedSnapshotPtys, ...carriedOptimisticPtys]);
         s.allPtysIndex = buildPtyIndex(s.allPtys);
 
+        // Clean up pendingPtyIds and recentlyAddedPtyIds for PTYs that are
+        // no longer in allPtys. applySnapshot may replace a placeholder (real
+        // ptyId) with a snapshot entry (saved: ptyId) for the same pane via
+        // dedupeAggregatePtysByPane. The placeholder is gone from
+        // allPtys/allPtysIndex, but pendingPtyIds still references it. If not
+        // cleaned up, hydratePlaceholderRow finds the ptyId in pendingPtyIds
+        // but not in allPtysIndex, and pushes a DUPLICATE entry — the
+        // cold-start duplication bug.
+        for (const ptyId of s.pendingPtyIds) {
+          if (!s.allPtysIndex.has(ptyId)) {
+            s.pendingPtyIds.delete(ptyId);
+          }
+        }
+        for (const ptyId of s.recentlyAddedPtyIds) {
+          if (!s.allPtysIndex.has(ptyId)) {
+            s.recentlyAddedPtyIds.delete(ptyId);
+          }
+        }
+
         if (s.expandedSessionIds.size === 0) {
           for (const session of snapshot.sessions) {
             s.expandedSessionIds.add(session.id);
