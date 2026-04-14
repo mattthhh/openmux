@@ -264,103 +264,109 @@ export function createLifecycleHandlers(
    * Phase 1: Insert an optimistic placeholder row for a newly created PTY.
    * Either replaces an existing saved-row for the same pane, or pushes
    * a new `...` placeholder. Also claims matching pending insertions.
+   *
+   * IMPORTANT: This function requires a known sessionId. When ownership is
+   * null (lifecycle event arrived before createPTY set the mappings), the
+   * caller must NOT invoke this function — return early and let the next
+   * snapshot refresh populate the entry correctly instead.
    */
-  const insertPlaceholderRow = (ptyId: string, ownership: PtyOwnership | null): void => {
+  const insertPlaceholderRow = (ptyId: string, ownership: PtyOwnership): void => {
     setState(
       produce((s) => {
         if (s.deletedPtyIds.has(ptyId)) {
           return;
         }
 
+        // Skip if already tracked — avoids duplicates from concurrent
+        // lifecycle events + snapshot refreshes.
+        if (s.allPtysIndex.has(ptyId)) {
+          // Still mark as pending so applySnapshot preserves the entry
+          s.pendingPtyIds.add(ptyId);
+          return;
+        }
+
+        const pendingInsertion = findMatchingPendingInsertion(s, {
+          ptyId,
+          sessionId: ownership.sessionId,
+          paneId: ownership.paneId,
+        });
+        const claimedSessionId = pendingInsertion?.sessionId ?? ownership.sessionId;
+        const claimedPaneId = pendingInsertion?.pendingPaneId ?? ownership.paneId;
+
+        if (pendingInsertion) {
+          pendingInsertion.pendingPtyId = ptyId;
+          if (claimedPaneId && !pendingInsertion.pendingPaneId) {
+            pendingInsertion.pendingPaneId = claimedPaneId;
+          }
+        }
+
+        // Ownership is required — without a sessionId and paneId we cannot
+        // create a valid placeholder that deduplication can merge later.
+        if (!claimedSessionId || !claimedPaneId) {
+          return;
+        }
+
         s.pendingPtyIds.add(ptyId);
 
-        if (!s.allPtysIndex.has(ptyId)) {
-          const pendingInsertion = findMatchingPendingInsertion(s, {
-            ptyId,
-            sessionId: ownership?.sessionId,
-            paneId: ownership?.paneId,
-          });
-          const claimedSessionId = pendingInsertion?.sessionId ?? ownership?.sessionId;
-          const claimedPaneId = pendingInsertion?.pendingPaneId ?? ownership?.paneId;
+        const sortOrderHint = pendingInsertion
+          ? (pendingInsertion.sortOrderHint ??
+            (claimedPaneId
+              ? s.sessionPaneOrderIndex.get(getSessionPaneOrderKey(claimedSessionId, claimedPaneId))
+              : undefined) ??
+            getPendingInsertionOrder(s, pendingInsertion))
+          : undefined;
+        const existingPaneIndex = findAggregatePtyIndexByPane(
+          s.allPtys,
+          claimedSessionId,
+          claimedPaneId
+        );
+        if (existingPaneIndex !== -1 && s.allPtys[existingPaneIndex]) {
+          const existingPanePty = s.allPtys[existingPaneIndex];
+          clonePtyStdoutActivity(existingPanePty.ptyId, ptyId);
 
-          if (pendingInsertion) {
-            pendingInsertion.pendingPtyId = ptyId;
-            if (claimedPaneId && !pendingInsertion.pendingPaneId) {
-              pendingInsertion.pendingPaneId = claimedPaneId;
-            }
-          }
-
-          if (!claimedSessionId || !claimedPaneId) {
-            return;
-          }
-
-          const sortOrderHint = pendingInsertion
-            ? (pendingInsertion.sortOrderHint ??
-              (claimedPaneId
-                ? s.sessionPaneOrderIndex.get(
-                    getSessionPaneOrderKey(claimedSessionId, claimedPaneId)
-                  )
-                : undefined) ??
-              getPendingInsertionOrder(s, pendingInsertion))
-            : undefined;
-          const existingPaneIndex = findAggregatePtyIndexByPane(
-            s.allPtys,
-            claimedSessionId,
-            claimedPaneId
-          );
-          if (existingPaneIndex !== -1 && s.allPtys[existingPaneIndex]) {
-            const existingPanePty = s.allPtys[existingPaneIndex];
-            clonePtyStdoutActivity(existingPanePty.ptyId, ptyId);
-
-            // Stamp the pending insertion's sortOrderHint into the session pane order
-            // index so that sortPtysForSession uses the correct (adjacent) position
-            // instead of the layout-tree traversal order which puts new panes at the end.
-            if (claimedPaneId && sortOrderHint !== undefined) {
-              stampSortOrderHintIntoPaneIndex(s, claimedSessionId, claimedPaneId, sortOrderHint);
-            }
-
-            s.allPtys[existingPaneIndex] = {
-              ...existingPanePty,
-              ptyId,
-              paneId: claimedPaneId,
-              sessionId: claimedSessionId,
-              sessionMetadata: s.allSessions.get(claimedSessionId),
-              workspaceId: existingPanePty.workspaceId ?? ownership?.workspaceId,
-              sortOrderHint: sortOrderHint ?? existingPanePty.sortOrderHint,
-            };
-            s.allPtysIndex = buildPtyIndex(s.allPtys);
-            recomputeMatches(s);
-            recomputeTree(s);
-            return;
-          }
-
-          const placeholderPty: PtyInfo = {
-            ptyId,
-            sortOrderHint,
-            cwd: '',
-            ...getEmptyGitFields(),
-            foregroundProcess: undefined,
-            shell: 'shell',
-            title: '...',
-            workspaceId: ownership?.workspaceId,
-            paneId: claimedPaneId,
-            sessionId: claimedSessionId,
-            sessionMetadata: s.allSessions.get(claimedSessionId),
-          };
-
-          // Stamp the pending insertion's sortOrderHint into the session pane order
-          // index so that sortPtysForSession uses the correct (adjacent) position.
           if (claimedPaneId && sortOrderHint !== undefined) {
             stampSortOrderHintIntoPaneIndex(s, claimedSessionId, claimedPaneId, sortOrderHint);
           }
 
-          const newIndex = s.allPtys.length;
-          s.allPtys.push(placeholderPty);
-          s.allPtysIndex.set(ptyId, newIndex);
-
+          s.allPtys[existingPaneIndex] = {
+            ...existingPanePty,
+            ptyId,
+            paneId: claimedPaneId,
+            sessionId: claimedSessionId,
+            sessionMetadata: s.allSessions.get(claimedSessionId),
+            workspaceId: existingPanePty.workspaceId ?? ownership.workspaceId,
+            sortOrderHint: sortOrderHint ?? existingPanePty.sortOrderHint,
+          };
+          s.allPtysIndex = buildPtyIndex(s.allPtys);
           recomputeMatches(s);
           recomputeTree(s);
+          return;
         }
+
+        const placeholderPty: PtyInfo = {
+          ptyId,
+          sortOrderHint,
+          cwd: '',
+          ...getEmptyGitFields(),
+          foregroundProcess: undefined,
+          shell: 'shell',
+          title: '...',
+          workspaceId: ownership.workspaceId,
+          paneId: claimedPaneId,
+          sessionId: claimedSessionId,
+          sessionMetadata: s.allSessions.get(claimedSessionId),
+        };
+
+        if (claimedPaneId && sortOrderHint !== undefined) {
+          stampSortOrderHintIntoPaneIndex(s, claimedSessionId, claimedPaneId, sortOrderHint);
+        }
+
+        const newIndex = s.allPtys.length;
+        s.allPtys.push(placeholderPty);
+        s.allPtysIndex.set(ptyId, newIndex);
+
+        recomputeMatches(s);
+        recomputeTree(s);
       })
     );
   };
@@ -612,39 +618,40 @@ export function createLifecycleHandlers(
   const MAX_SESSION_METADATA_RETRIES = 5;
 
   const handlePtyCreated = async (ptyId: string, retryCount = 0): Promise<void> => {
-    if (state.deletedPtyIds.has(ptyId) && retryCount === 0) {
-      setTimeout(() => void handlePtyCreated(ptyId, retryCount), 100);
+    if (state.deletedPtyIds.has(ptyId)) {
       return;
     }
 
     const ownership = resolvePtyOwnership(ptyId);
 
-    // Phase 1: insert optimistic placeholder
-    insertPlaceholderRow(ptyId, ownership);
-
-    // Phase 2: resolve ownership
-    const resolvedOwnership = ownership ?? resolvePtyOwnership(ptyId);
-    if (!resolvedOwnership) {
+    // When ownership is unknown, do NOT create any placeholder row.
+    // The lifecycle event fires as a microtask BEFORE createPTY's
+    // continuation sets aggregateSessionMappings/ptyToSessionMap, so
+    // on the first call both trackedOwner and aggregateOwner are null.
+    // Creating a placeholder with wrong/missing sessionId produces
+    // entries that dedupeAggregatePtysByPane cannot merge, causing
+    // duplication. Instead, return and let the next snapshot refresh
+    // (refreshPtys) populate the entry correctly. The snapshot uses
+    // getCurrentSessionPtys which reads from the layout directly.
+    if (!ownership) {
+      // Only retry if we haven't exceeded the limit. The first retry
+      // uses queueMicrotask to run right after createPTY's continuation
+      // sets the mappings. Subsequent retries use exponential backoff.
       if (retryCount < MAX_OWNERSHIP_RETRIES) {
-        const delay = Math.min(50 * Math.pow(2, retryCount), 500);
-        setTimeout(() => void handlePtyCreated(ptyId, retryCount + 1), delay);
-        return;
+        if (retryCount === 0) {
+          queueMicrotask(() => void handlePtyCreated(ptyId, 1));
+        } else {
+          const delay = Math.min(50 * Math.pow(2, retryCount), 500);
+          setTimeout(() => void handlePtyCreated(ptyId, retryCount + 1), delay);
+        }
       }
-      setState(
-        produce((s) => {
-          s.pendingPtyIds.delete(ptyId);
-          const index = s.allPtysIndex.get(ptyId);
-          if (index !== undefined && s.allPtys[index]?.title === '...') {
-            s.allPtys[index] = { ...s.allPtys[index], title: 'error' };
-            recomputeMatches(s);
-            recomputeTree(s);
-          }
-        })
-      );
       return;
     }
 
-    const sessionMetadata = getSessionMetadata(resolvedOwnership.sessionId);
+    // Phase 1: insert optimistic placeholder (ownership is known)
+    insertPlaceholderRow(ptyId, ownership);
+
+    const sessionMetadata = getSessionMetadata(ownership.sessionId);
     if (!sessionMetadata) {
       if (retryCount < MAX_SESSION_METADATA_RETRIES) {
         const delay = Math.min(50 * Math.pow(2, retryCount), 500);
@@ -656,8 +663,8 @@ export function createLifecycleHandlers(
           s.pendingPtyIds.delete(ptyId);
           removeMatchingPendingInsertions(s, {
             ptyId,
-            sessionId: resolvedOwnership.sessionId,
-            paneId: resolvedOwnership.paneId,
+            sessionId: ownership.sessionId,
+            paneId: ownership.paneId,
           });
         })
       );
@@ -665,10 +672,10 @@ export function createLifecycleHandlers(
     }
 
     // Phase 2b: stamp ownership metadata onto the placeholder
-    stampOwnershipOnPlaceholder(ptyId, resolvedOwnership);
+    stampOwnershipOnPlaceholder(ptyId, ownership);
 
     // Phase 3: hydrate with live metadata
-    await hydratePlaceholderRow(ptyId, resolvedOwnership);
+    await hydratePlaceholderRow(ptyId, ownership);
   };
 
   const handlePtyDestroyed = (ptyId: string): void => {

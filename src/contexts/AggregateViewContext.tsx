@@ -33,6 +33,7 @@ import { createAggregateViewActions } from './aggregate-view-actions';
 import { recomputeTree } from './aggregate-view-helpers';
 import { useLayout } from './LayoutContext';
 import { useSession } from './SessionContext';
+import { getActiveSessionIdForShim } from '../effect/bridge/app-coordinator-bridge';
 import { useTerminal } from './TerminalContext';
 import { resolveAggregatePtyOwnership } from '../components/aggregate/utils';
 import { collectPanes } from '../core/layout-tree';
@@ -129,7 +130,12 @@ export function AggregateViewProvider(props: AggregateViewProviderProps) {
           collectPtys(n.second);
         } else if (n.id && n.ptyId && terminal.isPtyActive(n.ptyId)) {
           const trackedSession = terminal.findSessionForPty(n.ptyId);
-          if (trackedSession && trackedSession.sessionId !== sessionId) {
+          // During a session switch, session.state.activeSessionId hasn't been
+          // updated yet, but setActiveSessionIdForShim was already called.
+          // Use the shim-level session ID to avoid filtering out PTYs that
+          // belong to the new (switching-to) session.
+          const effectiveSessionId = getActiveSessionIdForShim() ?? sessionId;
+          if (trackedSession && trackedSession.sessionId !== effectiveSessionId) {
             return;
           }
           if (!trackedSession && session.state.switching) {

@@ -152,22 +152,50 @@ export function buildPendingAggregatePtys(
 export function dedupeAggregatePtysByPane(ptys: PtyInfo[]): PtyInfo[] {
   const deduped: PtyInfo[] = [];
   const indexByPaneKey = new Map<string, number>();
+  const indexByPtyId = new Map<string, number>();
 
   for (const pty of ptys) {
     const paneKey = getAggregatePaneKey(pty.sessionId, pty.paneId);
-    if (!paneKey) {
-      deduped.push(pty);
-      continue;
+
+    // First check dedupe by (sessionId, paneId) key — this is the primary
+    // deduplication strategy that merges saved: and live entries for the
+    // same pane.
+    if (paneKey) {
+      const existingPaneIndex = indexByPaneKey.get(paneKey);
+      if (existingPaneIndex !== undefined) {
+        deduped[existingPaneIndex] = mergeDuplicatePtys(deduped[existingPaneIndex], pty);
+        // Update ptyId index to point to the merged entry's preferred ptyId
+        const mergedPtyId = deduped[existingPaneIndex].ptyId;
+        if (mergedPtyId) {
+          indexByPtyId.set(mergedPtyId, existingPaneIndex);
+        }
+        continue;
+      }
     }
 
-    const existingIndex = indexByPaneKey.get(paneKey);
-    if (existingIndex === undefined) {
+    // Then check dedupe by ptyId — this catches entries where the same
+    // real ptyId appears with different or missing paneIds (e.g. loading
+    // placeholders that haven't been assigned a paneId yet). Only merge
+    // when the ptyId is a real (non-saved) ptyId, since multiple saved:
+    // entries can legitimately share a ptyId format.
+    if (pty.ptyId && !isSavedAggregatePtyId(pty.ptyId)) {
+      const existingPtyIdIndex = indexByPtyId.get(pty.ptyId);
+      if (existingPtyIdIndex !== undefined) {
+        deduped[existingPtyIdIndex] = mergeDuplicatePtys(deduped[existingPtyIdIndex], pty);
+        // Also register the pane key if this entry has one
+        if (paneKey) {
+          indexByPaneKey.set(paneKey, existingPtyIdIndex);
+        }
+        continue;
+      }
+      indexByPtyId.set(pty.ptyId, deduped.length);
+    }
+
+    // No duplicate found — add as new entry
+    if (paneKey) {
       indexByPaneKey.set(paneKey, deduped.length);
-      deduped.push(pty);
-      continue;
     }
-
-    deduped[existingIndex] = mergeDuplicatePtys(deduped[existingIndex], pty);
+    deduped.push(pty);
   }
 
   return deduped;

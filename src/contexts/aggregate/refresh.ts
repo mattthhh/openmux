@@ -451,6 +451,13 @@ export function createAggregateViewRefreshers(
         const optimisticById = new Map(optimisticPtys.map((pty) => [pty.ptyId, pty] as const));
         const snapshotPtys = snapshot.ptys.filter((pty) => !s.deletedPtyIds.has(pty.ptyId));
         const snapshotPtyIds = new Set(snapshotPtys.map((pty) => pty.ptyId));
+        const snapshotPaneKeys = new Set<string>();
+        for (const pty of snapshotPtys) {
+          const paneKey = getAggregatePaneKey(pty.sessionId, pty.paneId);
+          if (paneKey) {
+            snapshotPaneKeys.add(paneKey);
+          }
+        }
         const mergedSnapshotPtys = snapshotPtys.map((pty) => {
           const optimistic = optimisticById.get(pty.ptyId);
           if (!optimistic) {
@@ -466,12 +473,15 @@ export function createAggregateViewRefreshers(
                 : pty.title,
           };
         });
-        const carriedOptimisticPtys = s.allPtys.filter(
-          (pty) =>
+        const carriedOptimisticPtys = s.allPtys.filter((pty) => {
+          const paneKey = getAggregatePaneKey(pty.sessionId, pty.paneId);
+          return (
             !snapshotPtyIds.has(pty.ptyId) &&
+            !(paneKey && snapshotPaneKeys.has(paneKey)) &&
             (s.pendingPtyIds.has(pty.ptyId) || s.recentlyAddedPtyIds.has(pty.ptyId)) &&
             !s.deletedPtyIds.has(pty.ptyId)
-        );
+          );
+        });
 
         s.isLoading = false;
         s.allSessions.clear();
@@ -597,11 +607,26 @@ export function createAggregateViewRefreshers(
   const initialLoad = async (): Promise<void | Error> => {
     // Fast path: load only the active session without git metadata.
     // The full refreshPtys() call that follows will hydrate the rest.
-    return refreshPtysOnce({
-      forceGitRefresh: false,
-      activeSessionOnly: true,
-      skipGitMetadata: true,
-    });
+    // Go through the guard to prevent concurrent snapshot builds.
+    if (refreshState.refreshInProgress) {
+      refreshState.pendingFullRefresh = true;
+      return;
+    }
+    refreshState.refreshInProgress = true;
+    try {
+      const result = await refreshPtysOnce({
+        forceGitRefresh: false,
+        activeSessionOnly: true,
+        skipGitMetadata: true,
+      });
+      if (refreshState.pendingFullRefresh) {
+        refreshState.pendingFullRefresh = false;
+        void refreshPtys();
+      }
+      return result;
+    } finally {
+      refreshState.refreshInProgress = false;
+    }
   };
 
   const refreshPtysSubset = async (_ptyIds: string[]) => {
