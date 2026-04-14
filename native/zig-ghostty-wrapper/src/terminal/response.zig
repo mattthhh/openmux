@@ -19,18 +19,20 @@ pub fn readResponse(ptr: ?*anyopaque, out: [*]u8, buf_size: usize) callconv(.c) 
 
     @memcpy(out[0..len], wrapper.response_buffer.items[0..len]);
 
-    // Remove consumed bytes from buffer
+    // Remove consumed bytes from buffer and release excess capacity.
     if (len == wrapper.response_buffer.items.len) {
-        wrapper.response_buffer.clearRetainingCapacity();
+        // Fully consumed — free backing memory to prevent capacity retention.
+        wrapper.response_buffer.deinit(wrapper.alloc);
+        wrapper.response_buffer = std.ArrayList(u8).empty;
     } else {
-        // Shift remaining bytes to front
+        // Partially consumed — shift remaining bytes to front.
         const remaining = wrapper.response_buffer.items.len - len;
         std.mem.copyForwards(
             u8,
             wrapper.response_buffer.items[0..remaining],
             wrapper.response_buffer.items[len .. len + remaining],
         );
-        wrapper.response_buffer.shrinkRetainingCapacity(remaining);
+        wrapper.response_buffer.shrinkAndFree(wrapper.alloc, remaining);
     }
 
     return @intCast(len);

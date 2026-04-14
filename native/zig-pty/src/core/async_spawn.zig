@@ -11,7 +11,13 @@ pub const SpawnState = enum(u8) {
     complete,
     failed,
     cancelled,
+    consumed,
 };
+
+/// Layout: bits 0-7 = slot index, bits 8-30 = generation (23 bits).
+const SLOT_BITS: u32 = 8;
+const GEN_SHIFT: u32 = SLOT_BITS;
+const GEN_MASK: u32 = 0x7F_FFFF;
 
 pub const SpawnRequest = struct {
     // Input parameters (copied to owned buffers)
@@ -26,6 +32,7 @@ pub const SpawnRequest = struct {
     // Output
     state: std.atomic.Value(SpawnState),
     result_handle: std.atomic.Value(c_int),
+    generation: std.atomic.Value(u32),
 
     pub fn init() SpawnRequest {
         return .{
@@ -39,6 +46,7 @@ pub const SpawnRequest = struct {
             .rows = 0,
             .state = std.atomic.Value(SpawnState).init(.failed),
             .result_handle = std.atomic.Value(c_int).init(0),
+            .generation = std.atomic.Value(u32).init(0),
         };
     }
 };
@@ -94,6 +102,9 @@ pub fn deinitSpawnThread() void {
         thread.join();
         spawn_thread = null;
     }
+
+    // Drain any slots still in use (pending, cancelled, or unconsumed).
+    drainSpawnRequests();
 }
 
 fn spawnThreadLoop() void {
@@ -113,7 +124,7 @@ fn spawnThreadLoop() void {
 
             const state = req.state.load(.acquire);
             if (state == .cancelled) {
-                freeSpawnRequest(@intCast(i));
+                freeSpawnRequestSlot(@intCast(i));
                 _ = spawn_queue_count.fetchSub(1, .release);
                 continue;
             }
@@ -137,7 +148,7 @@ fn spawnThreadLoop() void {
                 if (result >= 0) {
                     handle_registry.removeHandle(@intCast(result));
                 }
-                freeSpawnRequest(@intCast(i));
+                freeSpawnRequestSlot(@intCast(i));
             } else {
                 // CAS succeeded - store result for caller to retrieve via spawnPoll
                 req.result_handle.store(result, .release);
@@ -148,28 +159,57 @@ fn spawnThreadLoop() void {
     }
 }
 
-pub fn allocSpawnRequest() ?u32 {
+/// Free all remaining used slots. Called after thread join during shutdown.
+pub fn drainSpawnRequests() void {
+    for (&spawn_request_used, 0..) |*used, i| {
+        if (used.load(.acquire)) {
+            freeSpawnRequestSlot(@intCast(i));
+        }
+    }
+}
+
+/// Allocate a request slot and return an encoded request ID.
+pub fn allocSpawnRequest() ?c_int {
     for (&spawn_request_used, 0..) |*used, i| {
         if (!used.load(.acquire)) {
             if (used.cmpxchgStrong(false, true, .acq_rel, .acquire) == null) {
-                return @intCast(i);
+                const old_gen = spawn_requests[i].generation.fetchAdd(1, .acq_rel);
+                const gen = (old_gen + 1) & GEN_MASK;
+                const encoded_id: c_int = @intCast(@as(u32, @intCast(i)) | (gen << GEN_SHIFT));
+                return encoded_id;
             }
         }
     }
     return null;
 }
 
-pub fn freeSpawnRequest(id: u32) void {
-    if (id >= constants.MAX_SPAWN_REQUESTS) return;
-    spawn_request_used[id].store(false, .release);
-    spawn_requests[id].state.store(.failed, .release);
-    spawn_requests[id].result_handle.store(0, .release);
+/// Free a request slot by raw slot index (internal use).
+pub fn freeSpawnRequestSlot(slot: u32) void {
+    if (slot >= constants.MAX_SPAWN_REQUESTS) return;
+    spawn_request_used[slot].store(false, .release);
+    spawn_requests[slot].state.store(.failed, .release);
+    spawn_requests[slot].result_handle.store(0, .release);
 }
 
-pub fn getSpawnRequest(id: u32) ?*SpawnRequest {
-    if (id >= constants.MAX_SPAWN_REQUESTS) return null;
-    if (!spawn_request_used[id].load(.acquire)) return null;
-    return &spawn_requests[id];
+/// Backward-compatible alias: accepts an encoded request_id and extracts
+/// the slot index. Used by callers that have already validated via
+/// getSpawnRequest.
+pub fn freeSpawnRequest(encoded_id: c_int) void {
+    const slot: u32 = @as(u32, @intCast(encoded_id)) & ((@as(u32, 1) << SLOT_BITS) - 1);
+    freeSpawnRequestSlot(slot);
+}
+
+/// Look up a request by encoded ID. Validates the generation counter
+/// to reject stale IDs from freed-and-reallocated slots.
+pub fn getSpawnRequest(encoded_id: c_int) ?*SpawnRequest {
+    if (encoded_id < 0) return null;
+    const id: u32 = @intCast(encoded_id);
+    const slot: u32 = id & ((@as(u32, 1) << SLOT_BITS) - 1);
+    const gen: u32 = (id >> GEN_SHIFT) & GEN_MASK;
+    if (slot >= constants.MAX_SPAWN_REQUESTS) return null;
+    if (!spawn_request_used[slot].load(.acquire)) return null;
+    if ((spawn_requests[slot].generation.load(.acquire) & GEN_MASK) != gen) return null;
+    return &spawn_requests[slot];
 }
 
 pub fn signalSpawnQueue() void {
