@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.80](https://github.com/monotykamary/openmux/compare/v0.3.79...v0.3.80) (2026-04-14)
+
+
+### Bug Fixes
+
+* **native:** prevent UAF, double-free, and slot leaks in async request lifecycle ([f3863d1](https://github.com/monotykamary/openmux/commit/f3863d15fd7cb759be2fa710e0362bfe16e00f71))
+
 ### [0.3.79](https://github.com/monotykamary/openmux/compare/v0.3.78...v0.3.79) (2026-04-12)
 
 ### [0.3.78](https://github.com/monotykamary/openmux/compare/v0.3.77...v0.3.78) (2026-04-11)
