@@ -106,20 +106,29 @@ export function resolveAggregatePtyOwnership(params: {
     };
   }
 
-  if (!params.activeSessionId) {
-    return null;
-  }
-
-  const location = findPtyLocation(params.ptyId, params.workspaces);
-  if (!location) {
-    return null;
-  }
-
-  return {
-    sessionId: params.activeSessionId,
-    paneId: location.paneId,
-    workspaceId: location.workspaceId,
-  };
+  // REMOVED: activeSessionId + findPtyLocation fallback.
+  //
+  // This fallback was fundamentally unsafe during session switches because
+  // `activeSessionId` (SolidJS reactive state) and `workspaces` (layout) can
+  // be out of sync — the layout updates in onSessionLoad but activeSessionId
+  // isn't published until after. When a PTY is created during a switch:
+  //
+  //   1. onSessionLoad updates the layout to session-B
+  //   2. createPTY fires a lifecycle event synchronously
+  //   3. handlePtyCreated runs as a microtask BEFORE aggregateSessionMappings
+  //      is populated (which happens in createPTY's continuation microtask)
+  //   4. findPtyLocation finds the PTY in session-B's layout (correct)
+  //   5. But activeSessionId is still session-A (not yet published)
+  //   6. Result: PTY attributed to session-A → DUPLICATION
+  //
+  // The handlePtyCreated retry mechanism handles null ownership correctly,
+  // and with the synchronous aggregateSessionMappings update in createPTY,
+  // the retry finds the correct aggregateOwner within ~50ms.
+  //
+  // All PTY creation paths (createPTY, createPaneWithPTY) now update
+  // aggregateSessionMappings synchronously, and handleResumeSession sets
+  // ptyToSessionMap (trackedOwner). So the fallback is no longer needed.
+  return null;
 }
 
 export function resolveAggregatePreviewPtyId(params: {

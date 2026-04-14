@@ -137,7 +137,11 @@ describe('resolveAggregatePtyOwnership', () => {
     });
   });
 
-  it('uses the active session plus live layout location as the final fallback', () => {
+  it('returns null when no ownership is available (fallback removed to prevent session bleed)', () => {
+    // The activeSessionId + findPtyLocation fallback was removed because it
+    // caused PTY duplication during session switches (layout and activeSessionId
+    // can be out of sync). Now returns null, letting the retry mechanism
+    // find the correct aggregateOwner instead.
     const workspace = createWorkspaceWithPanes(3, { id: 'pane-3', ptyId: 'pty-layout' }, []);
 
     expect(
@@ -148,11 +152,7 @@ describe('resolveAggregatePtyOwnership', () => {
         trackedOwner: null,
         aggregateOwner: null,
       })
-    ).toEqual({
-      sessionId: 'session-active',
-      paneId: 'pane-3',
-      workspaceId: 3,
-    });
+    ).toBeNull();
   });
 
   /**
@@ -188,30 +188,29 @@ describe('resolveAggregatePtyOwnership', () => {
     });
   });
 
-  it('would misattribute PTY to wrong session without aggregateOwner (the bug)', () => {
-    // This test documents the bug: WITHOUT aggregateOwner, the PTY
-    // falls through to the activeSessionId + findPtyLocation path.
-    // If the PTY happens to be in the current layout (e.g., during a
-    // switch where layout is mid-update), it gets attributed to
-    // the old session.
+  it('returns null when neither trackedOwner nor aggregateOwner is available (fallback removed)', () => {
+    // The activeSessionId + findPtyLocation fallback was removed because it was
+    // fundamentally unsafe during session switches. When a PTY is created
+    // during a switch, the layout reflects the NEW session but activeSessionId
+    // is still the OLD session, causing wrong attribution and duplication.
+    //
+    // Now, resolveAggregatePtyOwnership returns null when neither
+    // trackedOwner nor aggregateOwner is available. The handlePtyCreated
+    // retry mechanism handles this correctly — it retries and finds the
+    // correct aggregateOwner (set synchronously by createPTY).
     const workspace = createWorkspaceWithPanes(1, { id: 'pane-B1', ptyId: 'pty-new-for-B' }, []);
 
-    // activeSessionId is still session-A (old session during switch)
     const result = resolveAggregatePtyOwnership({
       ptyId: 'pty-new-for-B',
       workspaces: { 1: workspace },
-      activeSessionId: 'session-A', // WRONG session
+      activeSessionId: 'session-A',
       trackedOwner: null,
-      aggregateOwner: null, // Bug: no aggregate mapping!
+      aggregateOwner: null,
     });
 
-    // Without aggregateOwner, the PTY is attributed to session-A (wrong!)
-    expect(result).toEqual({
-      sessionId: 'session-A', // BUG: should be session-B
-      paneId: 'pane-B1',
-      workspaceId: 1,
-    });
-    // This demonstrates why the synchronous aggregateSessionMappings
-    // update in createPTY is critical.
+    // Previously this returned { sessionId: 'session-A', paneId: 'pane-B1', workspaceId: 1 }
+    // which was WRONG — it attributed the PTY to the old session.
+    // Now it returns null, letting the retry mechanism find the correct owner.
+    expect(result).toBeNull();
   });
 });
