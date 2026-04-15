@@ -192,15 +192,43 @@ export function createLifecycleHandlers(
     }
 
     // Clean up any pending pane creation that matches this PTY.
+    // Before removing, stamp its sortOrderHint into sessionPaneOrderIndex
+    // so that applySnapshot preserves the intended position.
     const ownership = resolvePtyOwnership(ptyId);
     if (ownership) {
       setState(
         produce((s) => {
-          removeMatchingPendingInsertions(s, {
+          const matchingInsertion = findMatchingPendingInsertion(s, {
             ptyId,
             sessionId: ownership.sessionId,
             paneId: ownership.paneId,
           });
+
+          if (matchingInsertion) {
+            // Stamp sortOrderHint into sessionPaneOrderIndex before removing
+            // the pending creation, so applySnapshot reads it from there.
+            if (matchingInsertion.sortOrderHint !== undefined) {
+              const paneId = ownership.paneId ?? matchingInsertion.pendingPaneId;
+              if (paneId) {
+                const sessionPaneOrder = getSessionPaneOrder(
+                  s.sessionPaneOrderIndex,
+                  ownership.sessionId
+                );
+                sessionPaneOrder.set(paneId, matchingInsertion.sortOrderHint);
+                setSessionPaneOrder(s.sessionPaneOrderIndex, ownership.sessionId, sessionPaneOrder);
+              }
+            }
+
+            removePendingPaneCreations(s, (insertion) => insertion.id === matchingInsertion.id);
+          } else {
+            // Fallback: remove by ptyId/paneId match
+            removePendingPaneCreations(
+              s,
+              (insertion) =>
+                insertion.pendingPtyId === ptyId ||
+                (!!ownership.paneId && insertion.pendingPaneId === ownership.paneId)
+            );
+          }
         })
       );
     }

@@ -2,13 +2,8 @@
  * Regression test: new panes created in aggregate view must appear adjacent
  * to the selected pane, not at the bottom.
  *
- * Two scenarios that caused bottom-sorting:
- * 1. When the PTY lifecycle event fires before createPaneWithPTY's onCreated
- *    callback sets pendingPtyId, findMatchingPendingInsertion can't match the
- *    pending insertion. This leaves sortOrderHint undefined, sorting the pane
- *    to the bottom.
- * 2. When sortOrderHint is set correctly but the pending insertion is removed
- *    before hydration sets the sessionPaneOrderIndex, the pane order is lost.
+ * With the single-writer model, adjacency is preserved through sortOrderHint
+ * in pendingPaneCreations → applySnapshot → sessionPaneOrderIndex.
  */
 
 import { beforeEach, describe, expect, it, vi } from 'bun:test';
@@ -166,7 +161,8 @@ function createHarness() {
     state,
     setState,
     resolvePtyOwnership,
-    getCurrentSessionHints
+    getCurrentSessionHints,
+    refreshers.refreshPtys
   );
 
   return {
@@ -260,38 +256,43 @@ describe('regression: new pane adjacent positioning in aggregate view', () => {
     vi.mocked(listAllPtysWithMetadata).mockResolvedValue([]);
   });
 
-  it.todo(
-    'places new pane adjacent to selected pane when pending insertion has sortOrderHint',
-    async () => {
-      const { state, setState, refreshers, lifecycleHandlers } = createHarness();
+  it('places new pane adjacent when pending insertion has sortOrderHint', async () => {
+    const { state, setState, refreshers, lifecycleHandlers, setCurrentSessionPtys } =
+      createHarness();
 
-      await refreshers.initialLoad();
+    await refreshers.initialLoad();
 
-      // Create a pending insertion with a valid sortOrderHint (0.5 = between pane-1 and pane-2)
-      setState(
-        produce((s) => {
-          s.pendingPaneCreations = [
-            {
-              id: 'pending-1',
-              sessionId: 'session-1',
-              insertAfterPtyId: 'pty-1',
-              insertAfterPaneId: 'pane-1',
-              pendingPtyId: 'pty-new',
-              pendingPaneId: 'pane-3',
-              sortOrderHint: 0.5,
-            },
-          ];
-        })
-      );
+    // Create a pending insertion with sortOrderHint (0.5 = between pane-1 and pane-2)
+    setState(
+      produce((s) => {
+        s.pendingPaneCreations = [
+          {
+            id: 'pending-1',
+            sessionId: 'session-1',
+            insertAfterPtyId: 'pty-1',
+            insertAfterPaneId: 'pane-1',
+            pendingPtyId: 'pty-new',
+            pendingPaneId: 'pane-3',
+            sortOrderHint: 0.5,
+          },
+        ];
+      })
+    );
 
-      await lifecycleHandlers.handlePtyCreated('pty-new');
+    // Simulate the PTY now being in the layout
+    setCurrentSessionPtys([
+      { ptyId: 'pty-1', paneId: 'pane-1', workspaceId: 1, title: 'one', cwd: '/tmp' },
+      { ptyId: 'pty-new', paneId: 'pane-3', workspaceId: 1, title: 'new', cwd: '/tmp' },
+      { ptyId: 'pty-2', paneId: 'pane-2', workspaceId: 1, title: 'two', cwd: '/tmp' },
+    ]);
 
-      // The new pane should be between pane-1 and pane-2, not at the bottom
-      expect(getVisiblePaneIds(state)).toEqual(['pane-1', 'pane-3', 'pane-2']);
-    }
-  );
+    await lifecycleHandlers.handlePtyCreated('pty-new');
 
-  it.todo('keeps pane adjacent across refreshes after creation', async () => {
+    // The new pane should be between pane-1 and pane-2, not at the bottom
+    expect(getVisiblePaneIds(state)).toEqual(['pane-1', 'pane-3', 'pane-2']);
+  });
+
+  it('keeps pane adjacent across refreshes after creation', async () => {
     const {
       state,
       setState,
@@ -319,11 +320,17 @@ describe('regression: new pane adjacent positioning in aggregate view', () => {
       })
     );
 
+    setCurrentSessionPtys([
+      { ptyId: 'pty-1', paneId: 'pane-1', workspaceId: 1, title: 'one', cwd: '/tmp' },
+      { ptyId: 'pty-new', paneId: 'pane-3', workspaceId: 1, title: 'new', cwd: '/tmp' },
+      { ptyId: 'pty-2', paneId: 'pane-2', workspaceId: 1, title: 'two', cwd: '/tmp' },
+    ]);
+
     await lifecycleHandlers.handlePtyCreated('pty-new');
 
     expect(getVisiblePaneIds(state)).toEqual(['pane-1', 'pane-3', 'pane-2']);
 
-    // Update the current session pane order to reflect the new pane
+    // Update the current session pane order to reflect the new pane at the end
     setCurrentSessionPaneOrder(
       new Map([
         ['pane-1', 0],
@@ -331,155 +338,155 @@ describe('regression: new pane adjacent positioning in aggregate view', () => {
         ['pane-2', 2],
       ])
     );
+
+    await refreshers.refreshPtys();
+
+    // Pane should still be adjacent after refresh — sortOrderHint persists
+    expect(getVisiblePaneIds(state)).toEqual(['pane-1', 'pane-3', 'pane-2']);
+  });
+
+  it('ignores lifecycle event when ownership is unknown (no pendingPtyId match)', async () => {
+    /**
+     * When the lifecycle event fires before onCreated sets pendingPtyId,
+     * resolvePtyOwnership still knows about the PTY. handlePtyCreated
+     * cleans up the matching pending insertion and triggers refreshPtys.
+     *
+     * If ownership is null, the event is skipped and the pending insertion
+     * remains until a later refresh or lifecycle event resolves it.
+     */
+    const { state, setState, refreshers, lifecycleHandlers, setOwnership } = createHarness();
+
+    await refreshers.initialLoad();
+
+    // Create a pending insertion WITHOUT pendingPtyId yet
+    setState(
+      produce((s) => {
+        s.pendingPaneCreations = [
+          {
+            id: 'pending-1',
+            sessionId: 'session-1',
+            insertAfterPtyId: 'pty-1',
+            insertAfterPaneId: 'pane-1',
+            pendingPtyId: null,
+            pendingPaneId: null,
+            sortOrderHint: 0.5,
+          },
+        ];
+      })
+    );
+
+    // Ownership is unknown for the incoming PTY
+    setOwnership('pty-new', null);
+    await lifecycleHandlers.handlePtyCreated('pty-new');
+
+    // No spurious entries; pending insertion remains
+    expect(state.allPtys.map((pty) => pty.paneId)).not.toContain('pane-3');
+    expect(state.pendingPaneCreations).toHaveLength(1);
+  });
+
+  it('does not sort pane to bottom when sortOrderHint is set but paneOrder is empty', async () => {
+    /**
+     * When sessionPaneOrderIndex is empty (e.g. during cold start),
+     * sortOrderHint from the pending insertion still provides a position.
+     */
+    const { state, setState, refreshers, lifecycleHandlers, setCurrentSessionPtys } =
+      createHarness();
+
+    await refreshers.initialLoad();
+
+    // Clear the session pane order index to simulate cold start
+    setState(
+      produce((s) => {
+        s.sessionPaneOrderIndex.clear();
+        s.pendingPaneCreations = [
+          {
+            id: 'pending-1',
+            sessionId: 'session-1',
+            insertAfterPtyId: 'pty-1',
+            insertAfterPaneId: 'pane-1',
+            pendingPtyId: 'pty-new',
+            pendingPaneId: 'pane-3',
+            sortOrderHint: 0.5,
+          },
+        ];
+      })
+    );
+
     setCurrentSessionPtys([
       { ptyId: 'pty-1', paneId: 'pane-1', workspaceId: 1, title: 'one', cwd: '/tmp' },
       { ptyId: 'pty-new', paneId: 'pane-3', workspaceId: 1, title: 'new', cwd: '/tmp' },
       { ptyId: 'pty-2', paneId: 'pane-2', workspaceId: 1, title: 'two', cwd: '/tmp' },
     ]);
 
-    await refreshers.refreshPtys();
+    await lifecycleHandlers.handlePtyCreated('pty-new');
 
-    // Pane should still be adjacent after refresh
-    expect(getVisiblePaneIds(state)).toEqual(['pane-1', 'pane-3', 'pane-2']);
+    // With sortOrderHint set, the pane should NOT be at the bottom
+    const paneIds = getVisiblePaneIds(state);
+    expect(paneIds).toContain('pane-3');
+    // pane-3 should not be the last pane
+    if (paneIds.length >= 3) {
+      expect(paneIds[paneIds.length - 1]).not.toBe('pane-3');
+    }
   });
 
-  it.todo(
-    'places new pane adjacent even when lifecycle fires before onCreated sets pendingPtyId',
-    async () => {
-      const { state, setState, refreshers, lifecycleHandlers } = createHarness();
+  it('stamps sortOrderHint into sessionPaneOrderIndex when layout reports pane at end', async () => {
+    /**
+     * When getCurrentSessionPaneOrder puts the new pane at the end (e.g.
+     * layout tree traversal appends new panes), the sortOrderHint from
+     * pendingPaneCreations overrides this via sessionPaneOrderIndex,
+     * keeping the pane adjacent.
+     */
+    const {
+      state,
+      setState,
+      refreshers,
+      lifecycleHandlers,
+      setCurrentSessionPaneOrder,
+      setCurrentSessionPtys,
+    } = createHarness();
 
-      await refreshers.initialLoad();
+    await refreshers.initialLoad();
 
-      // Create a pending insertion WITHOUT pendingPtyId yet (simulating lifecycle
-      // event firing before onCreated callback)
-      setState(
-        produce((s) => {
-          s.pendingPaneCreations = [
-            {
-              id: 'pending-1',
-              sessionId: 'session-1',
-              insertAfterPtyId: 'pty-1',
-              insertAfterPaneId: 'pane-1',
-              pendingPtyId: null,
-              pendingPaneId: null,
-              sortOrderHint: 0.5,
-            },
-          ];
-        })
-      );
+    setState(
+      produce((s) => {
+        s.pendingPaneCreations = [
+          {
+            id: 'pending-1',
+            sessionId: 'session-1',
+            insertAfterPtyId: 'pty-1',
+            insertAfterPaneId: 'pane-1',
+            pendingPtyId: 'pty-new',
+            pendingPaneId: 'pane-3',
+            sortOrderHint: 0.5,
+          },
+        ];
+      })
+    );
 
-      // The ownership maps pty-new to pane-3, so the lifecycle handler should
-      // still be able to match the pending insertion via insertAfterPaneId
-      await lifecycleHandlers.handlePtyCreated('pty-new');
+    setCurrentSessionPtys([
+      { ptyId: 'pty-1', paneId: 'pane-1', workspaceId: 1, title: 'one', cwd: '/tmp' },
+      { ptyId: 'pty-new', paneId: 'pane-3', workspaceId: 1, title: 'new', cwd: '/tmp' },
+      { ptyId: 'pty-2', paneId: 'pane-2', workspaceId: 1, title: 'two', cwd: '/tmp' },
+    ]);
 
-      // The new pane should be between pane-1 and pane-2, not at the bottom
-      const paneIds = getVisiblePaneIds(state);
-      expect(paneIds).toContain('pane-3');
-      if (paneIds.includes('pane-3') && paneIds.includes('pane-1') && paneIds.includes('pane-2')) {
-        const pane3Index = paneIds.indexOf('pane-3');
-        const pane1Index = paneIds.indexOf('pane-1');
-        const pane2Index = paneIds.indexOf('pane-2');
-        // pane-3 should be between pane-1 and pane-2
-        expect(pane3Index).toBeGreaterThan(pane1Index);
-        expect(pane3Index).toBeLessThan(pane2Index);
-      }
-    }
-  );
+    await lifecycleHandlers.handlePtyCreated('pty-new');
 
-  it.todo(
-    'does not sort pane to bottom when sortOrderHint is set but paneOrder is empty',
-    async () => {
-      const { state, setState, refreshers, lifecycleHandlers } = createHarness();
+    // The pane should be between pane-1 and pane-2
+    expect(getVisiblePaneIds(state)).toEqual(['pane-1', 'pane-3', 'pane-2']);
 
-      await refreshers.initialLoad();
+    // Simulate the layout reporting pane-3 at the END (wrong!)
+    setCurrentSessionPaneOrder(
+      new Map([
+        ['pane-1', 0],
+        ['pane-2', 1],
+        ['pane-3', 2], // end position — wrong!
+      ])
+    );
 
-      // Clear the session pane order index to simulate a state where
-      // the pane order hasn't been populated yet
-      setState(
-        produce((s) => {
-          s.sessionPaneOrderIndex.clear();
-          s.pendingPaneCreations = [
-            {
-              id: 'pending-1',
-              sessionId: 'session-1',
-              insertAfterPtyId: 'pty-1',
-              insertAfterPaneId: 'pane-1',
-              pendingPtyId: 'pty-new',
-              pendingPaneId: 'pane-3',
-              sortOrderHint: 0.5,
-            },
-          ];
-        })
-      );
+    await refreshers.refreshPtys();
 
-      await lifecycleHandlers.handlePtyCreated('pty-new');
-
-      // With sortOrderHint set, the pane should NOT be at the bottom
-      const paneIds = getVisiblePaneIds(state);
-      expect(paneIds).toContain('pane-3');
-      // pane-3 should not be the last pane (it should be between pane-1 and pane-2)
-      if (paneIds.length >= 3) {
-        expect(paneIds[paneIds.length - 1]).not.toBe('pane-3');
-      }
-    }
-  );
-
-  it.todo(
-    'stamps sortOrderHint into sessionPaneOrderIndex when getCurrentSessionPaneOrder puts new pane at the end',
-    async () => {
-      const {
-        state,
-        setState,
-        refreshers,
-        lifecycleHandlers,
-        setCurrentSessionPaneOrder,
-        setCurrentSessionPtys,
-      } = createHarness();
-
-      await refreshers.initialLoad();
-
-      setState(
-        produce((s) => {
-          s.pendingPaneCreations = [
-            {
-              id: 'pending-1',
-              sessionId: 'session-1',
-              insertAfterPtyId: 'pty-1',
-              insertAfterPaneId: 'pane-1',
-              pendingPtyId: 'pty-new',
-              pendingPaneId: 'pane-3',
-              sortOrderHint: 0.5,
-            },
-          ];
-        })
-      );
-
-      await lifecycleHandlers.handlePtyCreated('pty-new');
-
-      // The pane should be between pane-1 and pane-2
-      expect(getVisiblePaneIds(state)).toEqual(['pane-1', 'pane-3', 'pane-2']);
-
-      // Simulate the layout reporting pane-3 at the END of the pane order
-      // (this is what getCurrentSessionPaneOrder does for newly created panes)
-      setCurrentSessionPaneOrder(
-        new Map([
-          ['pane-1', 0],
-          ['pane-2', 1],
-          ['pane-3', 2], // end position — wrong!
-        ])
-      );
-      setCurrentSessionPtys([
-        { ptyId: 'pty-1', paneId: 'pane-1', workspaceId: 1, title: 'one', cwd: '/tmp' },
-        { ptyId: 'pty-2', paneId: 'pane-2', workspaceId: 1, title: 'two', cwd: '/tmp' },
-        { ptyId: 'pty-new', paneId: 'pane-3', workspaceId: 1, title: 'new', cwd: '/tmp' },
-      ]);
-
-      await refreshers.refreshPtys();
-
-      // After refresh, the pane should STILL be between pane-1 and pane-2,
-      // not at the bottom. The sortOrderHint (0.5) should override the
-      // layout-tree order (2) via the sessionPaneOrderIndex stamping.
-      expect(getVisiblePaneIds(state)).toEqual(['pane-1', 'pane-3', 'pane-2']);
-    }
-  );
+    // After refresh, the pane should STILL be between pane-1 and pane-2,
+    // because sortOrderHint (0.5) was persisted in sessionPaneOrderIndex
+    expect(getVisiblePaneIds(state)).toEqual(['pane-1', 'pane-3', 'pane-2']);
+  });
 });

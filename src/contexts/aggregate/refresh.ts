@@ -337,6 +337,14 @@ export function createAggregateViewRefreshers(
           const paneOrder =
             currentSessionPaneOrder ??
             (loadedSession ? buildSessionPaneOrder(loadedSession) : new Map<string, number>());
+          // Ensure all live PTY pane IDs are in the pane order.
+          // New panes that aren't in the layout yet get appended at the end.
+          for (const livePty of currentLivePtysForSession) {
+            if (livePty.paneId && !paneOrder.has(livePty.paneId)) {
+              const maxOrder = [...paneOrder.values()].reduce((max, o) => Math.max(max, o), -1);
+              paneOrder.set(livePty.paneId, maxOrder + 1);
+            }
+          }
           sessionPaneOrders.set(sessionId, paneOrder);
 
           for (const currentPty of currentLivePtysForSession) {

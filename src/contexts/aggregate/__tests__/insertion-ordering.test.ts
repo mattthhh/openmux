@@ -4,6 +4,8 @@
  * The important invariants are:
  * - once a PTY is inserted adjacent to a selected PTY, later refreshes must preserve that order
  * - tombstoned PTYs must be filtered in every load path, including the first aggregate load
+ * - sortOrderHint from pending pane creations is preserved through applySnapshot
+ * - handlePtyCreated triggers refreshPtys (single-writer principle)
  */
 import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { createStore, produce } from 'solid-js/store';
@@ -161,7 +163,8 @@ const createHarness = () => {
     state,
     setState,
     resolvePtyOwnership,
-    getCurrentSessionHints
+    getCurrentSessionHints,
+    refreshers.refreshPtys
   );
 
   return {
@@ -201,14 +204,6 @@ const getVisiblePtyIds = (state: AggregateViewState) =>
   state.flattenedTree
     .filter((item) => item.node.type === 'pty')
     .map((item) => item.node.ptyInfo.ptyId);
-
-const createDeferred = <T>() => {
-  let resolve!: (value: T | PromiseLike<T>) => void;
-  const promise = new Promise<T>((res) => {
-    resolve = res;
-  });
-  return { promise, resolve };
-};
 
 describe('aggregate insertion ordering', () => {
   beforeEach(() => {
@@ -302,7 +297,7 @@ describe('aggregate insertion ordering', () => {
         gitUntracked: 0,
         gitConflicted: 0,
         gitAhead: undefined,
-        gitBehind: undefined,
+        gitBelow: undefined,
         gitStashCount: undefined,
         gitState: undefined,
         gitDetached: false,
@@ -337,16 +332,14 @@ describe('aggregate insertion ordering', () => {
     ]);
   });
 
-  it.todo('shows the placeholder adjacent before metadata resolves', async () => {
-    const { state, setState, refreshers, lifecycleHandlers } = createHarness();
-    const metadataDeferred = createDeferred<Awaited<ReturnType<typeof getPtyMetadata>>>();
-
-    vi.mocked(getPtyMetadata).mockImplementation((ptyId: string) => {
-      if (ptyId !== 'pty-new') {
-        return Promise.resolve(null);
-      }
-      return metadataDeferred.promise;
-    });
+  it('new PTY appears via refreshPtys after handlePtyCreated, with correct title', async () => {
+    /**
+     * Single-writer: handlePtyCreated triggers refreshPtys, which rebuilds
+     * the snapshot from getCurrentSessionPtys. The PTY appears with its
+     * live metadata (title 'new'), not a '...' placeholder.
+     */
+    const { state, setState, refreshers, lifecycleHandlers, setCurrentSessionPtys } =
+      createHarness();
 
     await refreshers.initialLoad();
 
@@ -360,338 +353,237 @@ describe('aggregate insertion ordering', () => {
             insertAfterPaneId: 'pane-1',
             pendingPtyId: 'pty-new',
             pendingPaneId: 'pane-3',
+            sortOrderHint: 0.5,
           },
         ];
       })
     );
 
-    const createPromise = lifecycleHandlers.handlePtyCreated('pty-new');
+    // Before the PTY is in currentSessionPtys, handlePtyCreated triggers
+    // a refresh that won't include the new PTY yet. Update the harness
+    // to include the new PTY in the current session PTYs (simulating
+    // setPanePty having already run before the lifecycle microtask).
+    setCurrentSessionPtys([
+      { ptyId: 'pty-1', paneId: 'pane-1', workspaceId: 1, title: 'one', cwd: '/tmp' },
+      { ptyId: 'pty-new', paneId: 'pane-3', workspaceId: 1, title: 'new', cwd: '/tmp' },
+      { ptyId: 'pty-2', paneId: 'pane-2', workspaceId: 1, title: 'two', cwd: '/tmp' },
+    ]);
 
-    expect(getVisiblePtyIds(state)).toEqual(['pty-1', 'pty-new', 'pty-2']);
-    expect(state.allPtys.find((pty) => pty.ptyId === 'pty-new')?.title).toBe('...');
+    await lifecycleHandlers.handlePtyCreated('pty-new');
 
-    metadataDeferred.resolve({
-      ptyId: 'pty-new',
-      cwd: '/tmp',
-      foregroundProcess: 'bash',
-      shell: '/bin/bash',
-      title: 'new',
-      workspaceId: 1,
-      paneId: 'pane-3',
-      gitBranch: undefined,
-      gitDiffStats: undefined,
-      gitDirty: false,
-      gitStaged: 0,
-      gitUnstaged: 0,
-      gitUntracked: 0,
-      gitConflicted: 0,
-      gitAhead: undefined,
-      gitBehind: undefined,
-      gitStashCount: undefined,
-      gitState: undefined,
-      gitDetached: false,
-      gitRepoKey: undefined,
-      gitIsWorktree: false,
-      gitCommonDir: null,
-    });
+    // The PTY appears in allPtys with its live metadata (not '...')
+    const newPty = state.allPtys.find((pty) => pty.ptyId === 'pty-new');
+    expect(newPty).toBeDefined();
+    expect(newPty?.title).toBe('new');
 
-    await createPromise;
+    // The pending pane creation was cleaned up
+    expect(state.pendingPaneCreations).toHaveLength(0);
   });
 
-  it.todo(
-    'keeps a pending placeholder adjacent during refresh before metadata resolves',
-    async () => {
-      const { state, setState, refreshers, lifecycleHandlers } = createHarness();
-      const metadataDeferred = createDeferred<Awaited<ReturnType<typeof getPtyMetadata>>>();
+  it('pending pane creation sortOrderHint is preserved through refresh', async () => {
+    /**
+     * When a pending pane creation has a sortOrderHint, applySnapshot
+     * preserves it so the pane appears in the correct position.
+     */
+    const {
+      state,
+      setState,
+      refreshers,
+      lifecycleHandlers,
+      setCurrentSessionPaneOrder,
+      setCurrentSessionPtys,
+    } = createHarness();
 
-      vi.mocked(getPtyMetadata).mockImplementation((ptyId: string) => {
-        if (ptyId !== 'pty-new') {
-          return Promise.resolve(null);
-        }
-        return metadataDeferred.promise;
-      });
-      vi.mocked(listAllPtysWithMetadata).mockResolvedValue([
-        {
-          ptyId: 'pty-1',
-          cwd: '/tmp',
-          foregroundProcess: 'bash',
-          shell: '/bin/bash',
-          title: 'one',
-          workspaceId: 1,
-          paneId: 'pane-1',
-          gitBranch: undefined,
-          gitDiffStats: undefined,
-          gitDirty: false,
-          gitStaged: 0,
-          gitUnstaged: 0,
-          gitUntracked: 0,
-          gitConflicted: 0,
-          gitAhead: undefined,
-          gitBehind: undefined,
-          gitStashCount: undefined,
-          gitState: undefined,
-          gitDetached: false,
-          gitRepoKey: undefined,
-          gitIsWorktree: false,
-          gitCommonDir: null,
-        },
-        {
-          ptyId: 'pty-2',
-          cwd: '/tmp',
-          foregroundProcess: 'bash',
-          shell: '/bin/bash',
-          title: 'two',
-          workspaceId: 1,
-          paneId: 'pane-2',
-          gitBranch: undefined,
-          gitDiffStats: undefined,
-          gitDirty: false,
-          gitStaged: 0,
-          gitUnstaged: 0,
-          gitUntracked: 0,
-          gitConflicted: 0,
-          gitAhead: undefined,
-          gitBehind: undefined,
-          gitStashCount: undefined,
-          gitState: undefined,
-          gitDetached: false,
-          gitRepoKey: undefined,
-          gitIsWorktree: false,
-          gitCommonDir: null,
-        },
-      ]);
+    await refreshers.initialLoad();
 
-      await refreshers.initialLoad();
-
-      setState(
-        produce((s) => {
-          s.pendingPaneCreations = [
-            {
-              id: 'pending-1',
-              sessionId: 'session-1',
-              insertAfterPtyId: 'pty-1',
-              insertAfterPaneId: 'pane-1',
-              pendingPtyId: 'pty-new',
-              pendingPaneId: 'pane-3',
-            },
-          ];
-        })
-      );
-
-      const createPromise = lifecycleHandlers.handlePtyCreated('pty-new');
-
-      expect(getVisiblePtyIds(state)).toEqual(['pty-1', 'pty-new', 'pty-2']);
-
-      await refreshers.refreshPtys();
-
-      expect(getVisiblePtyIds(state)).toEqual(['pty-1', 'pty-new', 'pty-2']);
-      expect(state.allPtys.find((pty) => pty.ptyId === 'pty-new')?.title).toBe('...');
-
-      metadataDeferred.resolve({
-        ptyId: 'pty-new',
-        cwd: '/tmp',
-        foregroundProcess: 'bash',
-        shell: '/bin/bash',
-        title: 'new',
-        workspaceId: 1,
-        paneId: 'pane-3',
-        gitBranch: undefined,
-        gitDiffStats: undefined,
-        gitDirty: false,
-        gitStaged: 0,
-        gitUnstaged: 0,
-        gitUntracked: 0,
-        gitConflicted: 0,
-        gitAhead: undefined,
-        gitBehind: undefined,
-        gitStashCount: undefined,
-        gitState: undefined,
-        gitDetached: false,
-        gitRepoKey: undefined,
-        gitIsWorktree: false,
-        gitCommonDir: null,
-      });
-
-      await createPromise;
-    }
-  );
-
-  it.todo(
-    'replaces a saved row with the live PTY for the same pane instead of duplicating it',
-    async () => {
-      const { state, setState, refreshers, lifecycleHandlers } = createHarness();
-
-      await refreshers.initialLoad();
-
-      setState(
-        produce((s) => {
-          s.allPtys.push({
-            ptyId: 'saved:session-1:pane-3',
-            cwd: '/tmp',
-            foregroundProcess: 'htop',
-            shell: '/bin/bash',
-            workspaceId: 1,
-            paneId: 'pane-3',
+    setState(
+      produce((s) => {
+        s.pendingPaneCreations = [
+          {
+            id: 'pending-1',
             sessionId: 'session-1',
-            sessionMetadata: session,
-            title: 'saved-shell',
+            insertAfterPtyId: 'pty-1',
+            insertAfterPaneId: 'pane-1',
+            pendingPtyId: 'pty-new',
+            pendingPaneId: 'pane-3',
             sortOrderHint: 0.5,
-            gitBranch: undefined,
-            gitDiffStats: undefined,
-            gitDirty: false,
-            gitStaged: 0,
-            gitUnstaged: 0,
-            gitUntracked: 0,
-            gitConflicted: 0,
-            gitAhead: undefined,
-            gitBehind: undefined,
-            gitStashCount: undefined,
-            gitState: undefined,
-            gitDetached: false,
-            gitRepoKey: undefined,
-            gitIsWorktree: false,
-            gitCommonDir: null,
-          });
-          s.allPtysIndex = new Map(s.allPtys.map((pty, index) => [pty.ptyId, index] as const));
-          s.matchedPtys = s.allPtys;
-          s.matchedPtysIndex = new Map(
-            s.matchedPtys.map((pty, index) => [pty.ptyId, index] as const)
-          );
-          s.pendingPaneCreations = [
-            {
-              id: 'pending-1',
-              sessionId: 'session-1',
-              insertAfterPtyId: 'pty-1',
-              insertAfterPaneId: 'pane-1',
-              pendingPtyId: 'pty-new',
-              pendingPaneId: 'pane-3',
-              sortOrderHint: 0.5,
-            },
-          ];
-          recomputeMatches(s);
-          recomputeTree(s);
-        })
-      );
+          },
+        ];
+      })
+    );
 
-      await lifecycleHandlers.handlePtyCreated('pty-new');
+    setCurrentSessionPtys([
+      { ptyId: 'pty-1', paneId: 'pane-1', workspaceId: 1, title: 'one', cwd: '/tmp' },
+      { ptyId: 'pty-new', paneId: 'pane-3', workspaceId: 1, title: 'new', cwd: '/tmp' },
+      { ptyId: 'pty-2', paneId: 'pane-2', workspaceId: 1, title: 'two', cwd: '/tmp' },
+    ]);
+    setCurrentSessionPaneOrder(
+      new Map([
+        ['pane-1', 0],
+        ['pane-2', 1],
+        ['pane-3', 2], // layout reports end position
+      ])
+    );
 
-      expect(state.allPtys.filter((pty) => pty.paneId === 'pane-3')).toHaveLength(1);
-      expect(state.allPtys.find((pty) => pty.paneId === 'pane-3')?.ptyId).toBe('pty-new');
-    }
-  );
+    await lifecycleHandlers.handlePtyCreated('pty-new');
 
-  it.todo(
-    'keeps the first created PTY adjacent after the selected PTY across refreshes',
-    async () => {
-      const { state, setState, refreshers, lifecycleHandlers, setCurrentSessionPaneOrder } =
-        createHarness();
-
-      await refreshers.initialLoad();
-
-      expect(getSessionPaneOrder(state.sessionPaneOrderIndex, 'session-1')).toEqual(
-        new Map([
-          ['pane-1', 0],
-          ['pane-2', 1],
-        ])
-      );
-
-      setState(
-        produce((s) => {
-          s.pendingPaneCreations = [
-            {
-              id: 'pending-1',
-              sessionId: 'session-1',
-              insertAfterPtyId: 'pty-1',
-              insertAfterPaneId: 'pane-1',
-              pendingPtyId: 'pty-new',
-              pendingPaneId: 'pane-3',
-            },
-          ];
-        })
-      );
-
-      await lifecycleHandlers.handlePtyCreated('pty-new');
-
-      expect(getMetadataMock).toHaveBeenCalledWith('/tmp');
-      expect(getSessionPaneOrder(state.sessionPaneOrderIndex, 'session-1').get('pane-3')).toBe(0.5);
-      expect(getVisiblePtyIds(state)).toEqual(['pty-1', 'pty-new', 'pty-2']);
-
-      setCurrentSessionPaneOrder(
-        new Map([
-          ['pane-1', 0],
-          ['pane-2', 1],
-          ['pane-3', 2],
-        ])
-      );
-
-      await refreshers.refreshPtys();
-
-      expect(getVisiblePtyIds(state)).toEqual(['pty-1', 'pty-new', 'pty-2']);
-    }
-  );
-
-  it.todo('keeps the created PTY adjacent after optimistic keepalive expires', async () => {
-    vi.useFakeTimers();
-
-    try {
-      const {
-        state,
-        setState,
-        refreshers,
-        lifecycleHandlers,
-        setCurrentSessionPaneOrder,
-        setCurrentSessionPtys,
-      } = createHarness();
-
-      await refreshers.initialLoad();
-
-      setState(
-        produce((s) => {
-          s.pendingPaneCreations = [
-            {
-              id: 'pending-1',
-              sessionId: 'session-1',
-              insertAfterPtyId: 'pty-1',
-              insertAfterPaneId: 'pane-1',
-              pendingPtyId: 'pty-new',
-              pendingPaneId: 'pane-3',
-            },
-          ];
-        })
-      );
-
-      await lifecycleHandlers.handlePtyCreated('pty-new');
-      expect(getVisiblePtyIds(state)).toEqual(['pty-1', 'pty-new', 'pty-2']);
-
-      vi.advanceTimersByTime(5000);
-      await Promise.resolve();
-
-      expect(state.recentlyAddedPtyIds.has('pty-new')).toBe(false);
-
-      setCurrentSessionPaneOrder(
-        new Map([
-          ['pane-1', 0],
-          ['pane-2', 1],
-          ['pane-3', 2],
-        ])
-      );
-      setCurrentSessionPtys([
-        { ptyId: 'pty-1', paneId: 'pane-1', workspaceId: 1, title: 'one', cwd: '/tmp' },
-        { ptyId: 'pty-new', paneId: 'pane-3', workspaceId: 1, title: 'new', cwd: '/tmp' },
-        { ptyId: 'pty-2', paneId: 'pane-2', workspaceId: 1, title: 'two', cwd: '/tmp' },
-      ]);
-
-      await refreshers.refreshPtys();
-
-      expect(getSessionPaneOrder(state.sessionPaneOrderIndex, 'session-1').get('pane-3')).toBe(0.5);
-      expect(getVisiblePtyIds(state)).toEqual(['pty-1', 'pty-new', 'pty-2']);
-    } finally {
-      vi.useRealTimers();
-    }
+    // sortOrderHint (0.5) should be in sessionPaneOrderIndex, placing the pane
+    // between pane-1 (0) and pane-2 (1) instead of at the end (2)
+    const paneOrder = getSessionPaneOrder(state.sessionPaneOrderIndex, 'session-1');
+    expect(paneOrder.get('pane-3')).toBe(0.5);
   });
 
-  it.todo('preserves adjacency for overlapping pane creations in the same session', async () => {
-    const { state, setState, refreshers, lifecycleHandlers } = createHarness();
+  it('snapshot dedupes saved and live entries for the same pane', async () => {
+    /**
+     * When a saved: entry and a live PTY share the same pane, dedup
+     * keeps only the live entry.
+     */
+    const { state, setState, refreshers, lifecycleHandlers, setCurrentSessionPtys } =
+      createHarness();
+
+    await refreshers.initialLoad();
+
+    // Manually add a saved entry for pane-3 (simulating pre-existing state)
+    setState(
+      produce((s) => {
+        s.allPtys.push({
+          ptyId: 'saved:session-1:pane-3',
+          cwd: '/tmp',
+          foregroundProcess: 'htop',
+          shell: '/bin/bash',
+          workspaceId: 1,
+          paneId: 'pane-3',
+          sessionId: 'session-1',
+          sessionMetadata: session,
+          title: 'saved-shell',
+          sortOrderHint: 0.5,
+          gitBranch: undefined,
+          gitDiffStats: undefined,
+          gitDirty: false,
+          gitStaged: 0,
+          gitUnstaged: 0,
+          gitUntracked: 0,
+          gitConflicted: 0,
+          gitAhead: undefined,
+          gitBehind: undefined,
+          gitStashCount: undefined,
+          gitState: undefined,
+          gitDetached: false,
+          gitRepoKey: undefined,
+          gitIsWorktree: false,
+          gitCommonDir: null,
+        });
+        s.allPtysIndex = new Map(s.allPtys.map((pty, index) => [pty.ptyId, index] as const));
+        recomputeMatches(s);
+        recomputeTree(s);
+      })
+    );
+
+    // Now the live PTY appears in currentSessionPtys
+    setCurrentSessionPtys([
+      { ptyId: 'pty-1', paneId: 'pane-1', workspaceId: 1, title: 'one', cwd: '/tmp' },
+      { ptyId: 'pty-new', paneId: 'pane-3', workspaceId: 1, title: 'new', cwd: '/tmp' },
+      { ptyId: 'pty-2', paneId: 'pane-2', workspaceId: 1, title: 'two', cwd: '/tmp' },
+    ]);
+
+    setState(
+      produce((s) => {
+        s.pendingPaneCreations = [
+          {
+            id: 'pending-1',
+            sessionId: 'session-1',
+            insertAfterPtyId: 'pty-1',
+            insertAfterPaneId: 'pane-1',
+            pendingPtyId: 'pty-new',
+            pendingPaneId: 'pane-3',
+            sortOrderHint: 0.5,
+          },
+        ];
+      })
+    );
+
+    await lifecycleHandlers.handlePtyCreated('pty-new');
+
+    // After refresh, there should be only one entry for pane-3
+    expect(state.allPtys.filter((pty) => pty.paneId === 'pane-3')).toHaveLength(1);
+    // And it should be the live entry, not the saved entry
+    expect(state.allPtys.find((pty) => pty.paneId === 'pane-3')?.ptyId).toBe('pty-new');
+  });
+
+  it('keeps PTY adjacent after the selected PTY across refreshes', async () => {
+    /**
+     * After handlePtyCreated + refreshPtys, the new PTY appears adjacent
+     * to the selected PTY. A subsequent refresh preserves the position.
+     */
+    const {
+      state,
+      setState,
+      refreshers,
+      lifecycleHandlers,
+      setCurrentSessionPaneOrder,
+      setCurrentSessionPtys,
+    } = createHarness();
+
+    await refreshers.initialLoad();
+
+    expect(getSessionPaneOrder(state.sessionPaneOrderIndex, 'session-1')).toEqual(
+      new Map([
+        ['pane-1', 0],
+        ['pane-2', 1],
+      ])
+    );
+
+    setState(
+      produce((s) => {
+        s.pendingPaneCreations = [
+          {
+            id: 'pending-1',
+            sessionId: 'session-1',
+            insertAfterPtyId: 'pty-1',
+            insertAfterPaneId: 'pane-1',
+            pendingPtyId: 'pty-new',
+            pendingPaneId: 'pane-3',
+            sortOrderHint: 0.5,
+          },
+        ];
+      })
+    );
+
+    setCurrentSessionPtys([
+      { ptyId: 'pty-1', paneId: 'pane-1', workspaceId: 1, title: 'one', cwd: '/tmp' },
+      { ptyId: 'pty-new', paneId: 'pane-3', workspaceId: 1, title: 'new', cwd: '/tmp' },
+      { ptyId: 'pty-2', paneId: 'pane-2', workspaceId: 1, title: 'two', cwd: '/tmp' },
+    ]);
+
+    await lifecycleHandlers.handlePtyCreated('pty-new');
+
+    // The sortOrderHint is persisted in sessionPaneOrderIndex
+    expect(getSessionPaneOrder(state.sessionPaneOrderIndex, 'session-1').get('pane-3')).toBe(0.5);
+    expect(getVisiblePtyIds(state)).toEqual(['pty-1', 'pty-new', 'pty-2']);
+
+    // Layout now reports pane-3 at end position
+    setCurrentSessionPaneOrder(
+      new Map([
+        ['pane-1', 0],
+        ['pane-2', 1],
+        ['pane-3', 2],
+      ])
+    );
+
+    await refreshers.refreshPtys();
+
+    // Pane should still be adjacent — sortOrderHint (0.5) persists
+    expect(getVisiblePtyIds(state)).toEqual(['pty-1', 'pty-new', 'pty-2']);
+  });
+
+  it('preserves adjacency for overlapping pane creations', async () => {
+    /**
+     * Two pending pane creations with different sortOrderHints:
+     * after handlePtyCreated for both, each appears at its
+     * intended position.
+     */
+    const { state, setState, refreshers, lifecycleHandlers, setCurrentSessionPtys } =
+      createHarness();
 
     vi.mocked(getPtyMetadata).mockImplementation(async (ptyId: string) => {
       if (ptyId === 'pty-new') {
@@ -778,6 +670,13 @@ describe('aggregate insertion ordering', () => {
       })
     );
 
+    setCurrentSessionPtys([
+      { ptyId: 'pty-1', paneId: 'pane-1', workspaceId: 1, title: 'one', cwd: '/tmp' },
+      { ptyId: 'pty-new', paneId: 'pane-3', workspaceId: 1, title: 'new', cwd: '/tmp' },
+      { ptyId: 'pty-new-2', paneId: 'pane-4', workspaceId: 1, title: 'new-2', cwd: '/tmp' },
+      { ptyId: 'pty-2', paneId: 'pane-2', workspaceId: 1, title: 'two', cwd: '/tmp' },
+    ]);
+
     await lifecycleHandlers.handlePtyCreated('pty-new-2');
     await lifecycleHandlers.handlePtyCreated('pty-new');
 
@@ -787,57 +686,29 @@ describe('aggregate insertion ordering', () => {
     expect(state.pendingPaneCreations).toEqual([]);
   });
 
-  it.todo(
-    'keeps pending burst panes adjacent across refreshes before lifecycle ordering settles',
-    async () => {
-      const { state, setState, refreshers, setCurrentSessionPaneOrder, setCurrentSessionPtys } =
-        createHarness();
+  it('keeps burst panes adjacent across refreshes', async () => {
+    /**
+     * Multiple pending pane creations with sortOrderHints:
+     * after a refresh that includes them in getCurrentSessionPtys,
+     * they maintain their positions.
+     */
+    const { state, setState, refreshers, setCurrentSessionPaneOrder, setCurrentSessionPtys } =
+      createHarness();
 
-      vi.mocked(getPtyMetadata).mockImplementation(async (ptyId: string) => {
-        if (!ptyId.startsWith('pty-burst-')) {
-          return null;
-        }
+    vi.mocked(getPtyMetadata).mockImplementation(async (ptyId: string) => {
+      if (!ptyId.startsWith('pty-burst-')) {
+        return null;
+      }
 
-        const index = Number(ptyId.replace('pty-burst-', ''));
-        return {
-          ptyId,
-          cwd: `/repo-${index}`,
-          foregroundProcess: 'bash',
-          shell: '/bin/bash',
-          title: `burst-${index}`,
-          workspaceId: 1,
-          paneId: `pane-${index + 2}`,
-          gitBranch: undefined,
-          gitDiffStats: undefined,
-          gitDirty: false,
-          gitStaged: 0,
-          gitUnstaged: 0,
-          gitUntracked: 0,
-          gitConflicted: 0,
-          gitAhead: undefined,
-          gitBehind: undefined,
-          gitStashCount: undefined,
-          gitState: undefined,
-          gitDetached: false,
-          gitRepoKey: undefined,
-          gitIsWorktree: false,
-          gitCommonDir: null,
-        };
-      });
-
-      await refreshers.initialLoad();
-
-      const burstPtys = Array.from({ length: 5 }, (_, index) => ({
-        ptyId: `pty-burst-${index + 1}`,
-        cwd: `/repo-${index + 1}`,
-        foregroundProcess: undefined,
-        shell: 'shell',
+      const index = Number(ptyId.replace('pty-burst-', ''));
+      return {
+        ptyId,
+        cwd: `/repo-${index}`,
+        foregroundProcess: 'bash',
+        shell: '/bin/bash',
+        title: `burst-${index}`,
         workspaceId: 1,
-        paneId: `pane-${index + 3}`,
-        sessionId: 'session-1',
-        sessionMetadata: session,
-        title: '...',
-        sortOrderHint: 0.5 + index * 0.1,
+        paneId: `pane-${index + 2}`,
         gitBranch: undefined,
         gitDiffStats: undefined,
         gitDirty: false,
@@ -846,228 +717,191 @@ describe('aggregate insertion ordering', () => {
         gitUntracked: 0,
         gitConflicted: 0,
         gitAhead: undefined,
-        gitBehind: undefined,
+        gitBelow: undefined,
         gitStashCount: undefined,
         gitState: undefined,
         gitDetached: false,
         gitRepoKey: undefined,
         gitIsWorktree: false,
         gitCommonDir: null,
-      }));
+      };
+    });
 
-      setState(
-        produce((s) => {
-          s.allPtys = [s.allPtys[0]!, ...burstPtys, s.allPtys[1]!];
-          s.allPtysIndex = new Map(s.allPtys.map((pty, index) => [pty.ptyId, index] as const));
-          s.pendingPaneCreations = burstPtys.map((pty, index) => ({
-            id: `pending-burst-${index + 1}`,
+    await refreshers.initialLoad();
+
+    // Set up pending pane creations with sortOrderHints
+    const burstCount = 5;
+    const pendingCreations = Array.from({ length: burstCount }, (_, index) => ({
+      id: `pending-burst-${index + 1}`,
+      sessionId: 'session-1',
+      insertAfterPtyId: 'pty-1',
+      insertAfterPaneId: 'pane-1',
+      pendingPtyId: `pty-burst-${index + 1}`,
+      pendingPaneId: `pane-${index + 3}`,
+      sortOrderHint: 0.5 + index * 0.1,
+    }));
+
+    setState(
+      produce((s) => {
+        s.pendingPaneCreations = pendingCreations;
+      })
+    );
+
+    // Layout reports the burst PTYs in order
+    setCurrentSessionPaneOrder(
+      new Map([
+        ['pane-1', 0],
+        ['pane-2', 1],
+        ['pane-3', 2],
+        ['pane-4', 3],
+        ['pane-5', 4],
+        ['pane-6', 5],
+        ['pane-7', 6],
+      ])
+    );
+    setCurrentSessionPtys([
+      { ptyId: 'pty-1', paneId: 'pane-1', workspaceId: 1, title: 'one', cwd: '/tmp' },
+      ...Array.from({ length: burstCount }, (_, index) => ({
+        ptyId: `pty-burst-${index + 1}`,
+        paneId: `pane-${index + 3}`,
+        workspaceId: 1,
+        title: `burst-${index + 1}`,
+        cwd: `/repo-${index + 1}`,
+      })),
+      { ptyId: 'pty-2', paneId: 'pane-2', workspaceId: 1, title: 'two', cwd: '/tmp' },
+    ]);
+
+    await refreshers.refreshPtys();
+
+    // sortOrderHints from pendingPaneCreations should be applied to the
+    // session pane order, keeping the burst panes adjacent
+    expect(getVisiblePtyIds(state)).toEqual([
+      'pty-1',
+      'pty-burst-1',
+      'pty-burst-2',
+      'pty-burst-3',
+      'pty-burst-4',
+      'pty-burst-5',
+      'pty-2',
+    ]);
+  });
+
+  it('ignores early lifecycle events when ownership is unknown', async () => {
+    /**
+     * If resolvePtyOwnership returns null for a PTY, handlePtyCreated
+     * should not create any entry. The PTY will appear when the next
+     * refresh includes it via getCurrentSessionPtys.
+     */
+    const { state, setState, refreshers, lifecycleHandlers, setOwnership } = createHarness();
+
+    await refreshers.initialLoad();
+
+    setState(
+      produce((s) => {
+        s.pendingPaneCreations = [
+          {
+            id: 'pending-1',
             sessionId: 'session-1',
             insertAfterPtyId: 'pty-1',
             insertAfterPaneId: 'pane-1',
-            pendingPtyId: pty.ptyId,
-            pendingPaneId: pty.paneId ?? null,
-            sortOrderHint: pty.sortOrderHint,
-          }));
-          for (const pty of burstPtys) {
-            s.pendingPtyIds.add(pty.ptyId);
-          }
-          recomputeMatches(s);
-          recomputeTree(s);
-        })
-      );
-
-      setCurrentSessionPaneOrder(
-        new Map([
-          ['pane-1', 0],
-          ['pane-2', 1],
-          ['pane-3', 2],
-          ['pane-4', 3],
-          ['pane-5', 4],
-          ['pane-6', 5],
-          ['pane-7', 6],
-        ])
-      );
-      setCurrentSessionPtys([
-        { ptyId: 'pty-1', paneId: 'pane-1', workspaceId: 1, title: 'one', cwd: '/tmp' },
-        ...burstPtys.map((pty) => ({
-          ptyId: pty.ptyId,
-          paneId: pty.paneId!,
-          workspaceId: 1,
-          title: pty.title,
-          cwd: pty.cwd,
-        })),
-        { ptyId: 'pty-2', paneId: 'pane-2', workspaceId: 1, title: 'two', cwd: '/tmp' },
-      ]);
-
-      await refreshers.refreshPtys();
-
-      expect(getVisiblePtyIds(state)).toEqual([
-        'pty-1',
-        'pty-burst-1',
-        'pty-burst-2',
-        'pty-burst-3',
-        'pty-burst-4',
-        'pty-burst-5',
-        'pty-2',
-      ]);
-    }
-  );
-
-  it.todo(
-    'ignores early lifecycle events until a pending pane has an explicit PTY or pane claim',
-    async () => {
-      const { state, setState, refreshers, lifecycleHandlers, setOwnership } = createHarness();
-
-      await refreshers.initialLoad();
-
-      setState(
-        produce((s) => {
-          s.pendingPaneCreations = [
-            {
-              id: 'pending-1',
-              sessionId: 'session-1',
-              insertAfterPtyId: 'pty-1',
-              insertAfterPaneId: 'pane-1',
-              pendingPtyId: null,
-              pendingPaneId: null,
-              sortOrderHint: 0.5,
-            },
-            {
-              id: 'pending-2',
-              sessionId: 'session-1',
-              insertAfterPtyId: 'pty-1',
-              insertAfterPaneId: 'pane-1',
-              pendingPtyId: null,
-              pendingPaneId: null,
-              sortOrderHint: 0.75,
-            },
-          ];
-          recomputeMatches(s);
-          recomputeTree(s);
-        })
-      );
-
-      setOwnership('pty-race', null);
-      await lifecycleHandlers.handlePtyCreated('pty-race');
-
-      expect(state.allPtys.map((pty) => pty.ptyId)).toEqual(['pty-1', 'pty-2']);
-      expect(state.pendingPaneCreations.map((insertion) => insertion.pendingPtyId)).toEqual([
-        null,
-        null,
-      ]);
-    }
-  );
-
-  it.todo(
-    'preserves git metadata from saved row during live PTY transition, then updates on hydration',
-    async () => {
-      const { state, setState, refreshers, lifecycleHandlers } = createHarness();
-      const metadataDeferred = createDeferred<Awaited<ReturnType<typeof getPtyMetadata>>>();
-
-      vi.mocked(getPtyMetadata).mockImplementation(async (ptyId: string) => {
-        if (ptyId !== 'pty-new') {
-          return null;
-        }
-        return metadataDeferred.promise;
-      });
-
-      await refreshers.initialLoad();
-
-      setState(
-        produce((s) => {
-          s.allPtys.push({
-            ptyId: 'saved:session-1:pane-3',
-            cwd: '/tmp',
-            foregroundProcess: 'git',
-            shell: '/bin/bash',
-            workspaceId: 1,
-            paneId: 'pane-3',
-            sessionId: 'session-1',
-            sessionMetadata: session,
-            title: 'saved-shell',
+            pendingPtyId: null,
+            pendingPaneId: null,
             sortOrderHint: 0.5,
-            gitBranch: 'wrong-branch',
-            gitDiffStats: { added: 9, removed: 3, binary: 0 },
-            gitDirty: true,
-            gitStaged: 1,
-            gitUnstaged: 2,
-            gitUntracked: 0,
-            gitConflicted: 0,
-            gitAhead: 4,
-            gitBehind: 1,
-            gitStashCount: 0,
-            gitState: undefined,
-            gitDetached: false,
-            gitRepoKey: '/wrong-repo',
-            gitIsWorktree: false,
-            gitCommonDir: null,
+          },
+          {
+            id: 'pending-2',
+            sessionId: 'session-1',
+            insertAfterPtyId: 'pty-1',
+            insertAfterPaneId: 'pane-1',
+            pendingPtyId: null,
+            pendingPaneId: null,
+            sortOrderHint: 0.75,
+          },
+        ];
+      })
+    );
+
+    setOwnership('pty-race', null);
+    await lifecycleHandlers.handlePtyCreated('pty-race');
+
+    // No spurious entries added
+    expect(state.allPtys.map((pty) => pty.ptyId)).not.toContain('pty-race');
+    // Pending pane creations are NOT removed (no matching ptyId)
+    expect(state.pendingPaneCreations.map((insertion) => insertion.pendingPtyId)).toEqual([
+      null,
+      null,
+    ]);
+  });
+
+  it('git metadata is applied via refresh, not lifecycle path', async () => {
+    /**
+     * With the single-writer model, git metadata comes from the refresh
+     * snapshot (gitCache.getMetadataBatch), not from hydratePlaceholderRow.
+     * The PTY appears with correct git metadata immediately after refreshPtys.
+     */
+    const { state, setState, refreshers, lifecycleHandlers, setCurrentSessionPtys } =
+      createHarness();
+
+    // Mock git metadata batch to return correct data
+    getMetadataBatchMock.mockImplementation(async (cwds: string[], _opts: any) => {
+      const map = new Map();
+      for (const cwd of cwds) {
+        if (cwd === '/tmp') {
+          map.set(cwd, {
+            repoKey: '/correct-repo',
+            branch: 'correct-branch',
+            dirty: false,
+            staged: 0,
+            unstaged: 0,
+            untracked: 0,
+            conflicted: 0,
+            ahead: 0,
+            behind: 0,
+            stashCount: 0,
+            state: undefined,
+            detached: false,
+            isWorktree: false,
+            commonDir: null,
+            diffStats: undefined,
+            lastUpdated: Date.now(),
           });
-          s.allPtysIndex = new Map(s.allPtys.map((pty, index) => [pty.ptyId, index] as const));
-          s.pendingPaneCreations = [
-            {
-              id: 'pending-1',
-              sessionId: 'session-1',
-              insertAfterPtyId: 'pty-1',
-              insertAfterPaneId: 'pane-1',
-              pendingPtyId: 'pty-new',
-              pendingPaneId: 'pane-3',
-              sortOrderHint: 0.5,
-            },
-          ];
-          recomputeMatches(s);
-          recomputeTree(s);
-        })
-      );
+        }
+      }
+      return map;
+    });
 
-      const createPromise = lifecycleHandlers.handlePtyCreated('pty-new');
-      await Promise.resolve();
+    await refreshers.initialLoad();
 
-      // Intermediate state: git metadata from the saved row is preserved
-      // to prevent visual flicker (clear-then-redraw)
-      expect(state.allPtys.find((pty) => pty.ptyId === 'pty-new')).toMatchObject({
-        paneId: 'pane-3',
-        // Git metadata preserved from saved-row as a visual placeholder
-        gitBranch: 'wrong-branch',
-        gitRepoKey: '/wrong-repo',
-        gitDiffStats: { added: 9, removed: 3, binary: 0 },
-      });
+    setState(
+      produce((s) => {
+        s.pendingPaneCreations = [
+          {
+            id: 'pending-1',
+            sessionId: 'session-1',
+            insertAfterPtyId: 'pty-1',
+            insertAfterPaneId: 'pane-1',
+            pendingPtyId: 'pty-new',
+            pendingPaneId: 'pane-3',
+            sortOrderHint: 0.5,
+          },
+        ];
+      })
+    );
 
-      // Hydration updates with live PTY metadata, which replaces the stale data
-      metadataDeferred.resolve({
-        ptyId: 'pty-new',
-        cwd: '/tmp',
-        foregroundProcess: 'bash',
-        shell: '/bin/bash',
-        title: 'new',
-        workspaceId: 1,
-        paneId: 'pane-3',
-        gitBranch: 'correct-branch',
-        gitDiffStats: { added: 1, removed: 0, binary: 0 },
-        gitDirty: false,
-        gitStaged: 0,
-        gitUnstaged: 0,
-        gitUntracked: 0,
-        gitConflicted: 0,
-        gitAhead: 0,
-        gitBehind: 0,
-        gitStashCount: 0,
-        gitState: undefined,
-        gitDetached: false,
-        gitRepoKey: '/correct-repo',
-        gitIsWorktree: false,
-        gitCommonDir: null,
-      });
-      await createPromise;
+    setCurrentSessionPtys([
+      { ptyId: 'pty-1', paneId: 'pane-1', workspaceId: 1, title: 'one', cwd: '/tmp' },
+      { ptyId: 'pty-new', paneId: 'pane-3', workspaceId: 1, title: 'new', cwd: '/tmp' },
+      { ptyId: 'pty-2', paneId: 'pane-2', workspaceId: 1, title: 'two', cwd: '/tmp' },
+    ]);
 
-      // Final state: live PTY metadata replaces the stale saved-row data
-      expect(state.allPtys.find((pty) => pty.ptyId === 'pty-new')).toMatchObject({
-        paneId: 'pane-3',
-        gitBranch: 'correct-branch',
-        gitRepoKey: '/correct-repo',
-        gitDiffStats: { added: 1, removed: 0, binary: 0 },
-      });
-    }
-  );
+    await lifecycleHandlers.handlePtyCreated('pty-new');
+
+    // The PTY should have git metadata from the gitCache batch call
+    const newPty = state.allPtys.find((pty) => pty.ptyId === 'pty-new');
+    expect(newPty).toBeDefined();
+    expect(newPty?.gitBranch).toBe('correct-branch');
+    expect(newPty?.gitRepoKey).toBe('/correct-repo');
+  });
 
   it('does not re-add tombstoned PTYs during initial load', async () => {
     const { state, setState } = createHarness();
