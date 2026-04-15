@@ -26,6 +26,8 @@ import { ptyMetadataToInfo } from './pty-info';
 import {
   getSessionPaneOrder,
   getSessionPaneOrderKey,
+  getPendingPaneOrderKey,
+  isPendingPaneOrderKey,
   mergePaneOrder,
   setSessionPaneOrder,
 } from './pane-order';
@@ -580,13 +582,17 @@ export function createAggregateViewRefreshers(
 
         // Preserve pane sort orders from pending pane creations so that
         // newly created panes maintain their intended position.
+        // Use real paneId if available, otherwise a synthetic key derived from
+        // the pending creation ID. This ensures rapid sequential PTY creations
+        // each keep their intended position even before the real paneId is known.
         for (const insertion of s.pendingPaneCreations) {
-          if (!insertion.pendingPaneId || insertion.sortOrderHint === undefined) {
+          if (insertion.sortOrderHint === undefined) {
             continue;
           }
+          const paneIdForOrder = insertion.pendingPaneId ?? getPendingPaneOrderKey(insertion.id);
           const sessionPaneOrder =
             s.sessionPaneOrders.get(insertion.sessionId) ?? new Map<string, number>();
-          sessionPaneOrder.set(insertion.pendingPaneId, insertion.sortOrderHint);
+          sessionPaneOrder.set(paneIdForOrder, insertion.sortOrderHint);
           s.sessionPaneOrders.set(insertion.sessionId, sessionPaneOrder);
           setSessionPaneOrder(s.sessionPaneOrderIndex, insertion.sessionId, sessionPaneOrder);
         }

@@ -29,6 +29,7 @@ import {
   buildSessionPaneOrderFromAggregateState,
   getSessionPaneOrder,
   setSessionPaneOrder,
+  getPendingPaneOrderKey,
 } from './pane-order';
 import { recomputeMatches, recomputeTree } from './session';
 
@@ -210,14 +211,21 @@ export function createLifecycleHandlers(
           if (matchingInsertion) {
             // Stamp sortOrderHint into sessionPaneOrderIndex before removing
             // the pending creation, so applySnapshot reads it from there.
+            // Also migrate any synthetic pending key (__pending_<id>) to the
+            // real paneId so the order survives applySnapshot's rebuild.
             if (matchingInsertion.sortOrderHint !== undefined) {
-              const paneId = ownership.paneId ?? matchingInsertion.pendingPaneId;
-              if (paneId) {
+              const realPaneId = ownership.paneId ?? matchingInsertion.pendingPaneId;
+              if (realPaneId) {
                 const sessionPaneOrder = getSessionPaneOrder(
                   s.sessionPaneOrderIndex,
                   ownership.sessionId
                 );
-                sessionPaneOrder.set(paneId, matchingInsertion.sortOrderHint);
+                sessionPaneOrder.set(realPaneId, matchingInsertion.sortOrderHint);
+                // Remove the synthetic key if it was used before the real paneId was known.
+                const pendingKey = getPendingPaneOrderKey(matchingInsertion.id);
+                if (sessionPaneOrder.has(pendingKey)) {
+                  sessionPaneOrder.delete(pendingKey);
+                }
                 setSessionPaneOrder(s.sessionPaneOrderIndex, ownership.sessionId, sessionPaneOrder);
               }
             }

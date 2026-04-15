@@ -12,6 +12,19 @@ export type SessionPaneOrderIndex = AggregateViewState['sessionPaneOrderIndex'];
 
 const SESSION_PANE_ORDER_SEPARATOR = '\u0000';
 
+/** Synthetic pane ID prefix used to track sortOrderHint for pending creations
+ * that haven't been assigned a real paneId yet. Prevents the intended sort
+ * position from being lost when applySnapshot rebuilds sessionPaneOrderIndex. */
+const PENDING_PANE_ORDER_PREFIX = '__pending_';
+
+export function getPendingPaneOrderKey(pendingId: string): string {
+  return `${PENDING_PANE_ORDER_PREFIX}${pendingId}`;
+}
+
+export function isPendingPaneOrderKey(paneId: string): boolean {
+  return paneId.startsWith(PENDING_PANE_ORDER_PREFIX);
+}
+
 export function getSessionPaneOrderKey(sessionId: string, paneId: string): string {
   return `${sessionId}${SESSION_PANE_ORDER_SEPARATOR}${paneId}`;
 }
@@ -99,6 +112,14 @@ export function buildSessionPaneOrderFromAggregateState(
 ): Map<string, number> {
   const flattenedOrder = getSessionPaneOrder(state.sessionPaneOrderIndex, sessionId);
   if (flattenedOrder.size > 0) {
+    // Filter out synthetic pending keys — they're only stored in
+    // sessionPaneOrderIndex for persistence across applySnapshot calls
+    // and should not affect sort order computation for real panes.
+    for (const key of flattenedOrder.keys()) {
+      if (isPendingPaneOrderKey(key)) {
+        flattenedOrder.delete(key);
+      }
+    }
     return flattenedOrder;
   }
 

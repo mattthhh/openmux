@@ -20,6 +20,8 @@ import { mergePtyInfoPreservingGitMetadata } from './aggregate/git';
 import {
   getSessionPaneOrder,
   getSessionPaneOrderKey,
+  getPendingPaneOrderKey,
+  isPendingPaneOrderKey,
   setSessionPaneOrder,
 } from './aggregate/pane-order';
 import {
@@ -549,8 +551,12 @@ export function createAggregateViewActions(params: AggregateViewActionsParams) {
         // Stamp the pending insertion's sortOrderHint into the session pane order
         // index so that sortPtysForSession uses the correct (adjacent) position
         // instead of the layout-tree traversal order which puts new panes at the end.
-        if (insertion.pendingPaneId && insertion.sortOrderHint !== undefined) {
-          const key = getSessionPaneOrderKey(insertion.sessionId, insertion.pendingPaneId);
+        if (insertion.sortOrderHint !== undefined) {
+          // Use real paneId if available, otherwise use a synthetic key derived
+          // from the pending creation ID. This ensures the sort position is
+          // preserved even before the real paneId is assigned.
+          const paneIdForOrder = insertion.pendingPaneId ?? getPendingPaneOrderKey(insertion.id);
+          const key = getSessionPaneOrderKey(insertion.sessionId, paneIdForOrder);
           const existingOrder = s.sessionPaneOrderIndex.get(key);
           // Only override if the sortOrderHint is different from what the layout
           // traversal assigned (which is typically an end-of-list index).
@@ -559,7 +565,14 @@ export function createAggregateViewActions(params: AggregateViewActionsParams) {
               s.sessionPaneOrderIndex,
               insertion.sessionId
             );
-            sessionPaneOrder.set(insertion.pendingPaneId, insertion.sortOrderHint);
+            sessionPaneOrder.set(paneIdForOrder, insertion.sortOrderHint);
+            // When the real paneId is now known, remove the old synthetic key.
+            if (insertion.pendingPaneId) {
+              const pendingKey = getPendingPaneOrderKey(insertion.id);
+              if (sessionPaneOrder.has(pendingKey)) {
+                sessionPaneOrder.delete(pendingKey);
+              }
+            }
             setSessionPaneOrder(s.sessionPaneOrderIndex, insertion.sessionId, sessionPaneOrder);
           }
         }
@@ -574,6 +587,20 @@ export function createAggregateViewActions(params: AggregateViewActionsParams) {
   const removePendingPaneCreation = (id: string): void => {
     setState(
       produce((s) => {
+        const insertion = s.pendingPaneCreations.find((i) => i.id === id);
+        // Clean up the synthetic key from sessionPaneOrderIndex if the pending
+        // creation never resolved to a real paneId.
+        if (insertion && !insertion.pendingPaneId && insertion.sortOrderHint !== undefined) {
+          const sessionPaneOrder = getSessionPaneOrder(
+            s.sessionPaneOrderIndex,
+            insertion.sessionId
+          );
+          const pendingKey = getPendingPaneOrderKey(insertion.id);
+          if (sessionPaneOrder.has(pendingKey)) {
+            sessionPaneOrder.delete(pendingKey);
+            setSessionPaneOrder(s.sessionPaneOrderIndex, insertion.sessionId, sessionPaneOrder);
+          }
+        }
         removePendingPaneCreations(s, (insertion) => insertion.id === id);
         recomputeMatches(s);
         recomputeTree(s);
@@ -585,6 +612,26 @@ export function createAggregateViewActions(params: AggregateViewActionsParams) {
   const clearPendingPaneCreations = (): void => {
     setState(
       produce((s) => {
+        // Clean up all synthetic pending keys from sessionPaneOrderIndex.
+        const sessionsToClean = new Set<string>();
+        for (const insertion of s.pendingPaneCreations) {
+          if (!insertion.pendingPaneId && insertion.sortOrderHint !== undefined) {
+            sessionsToClean.add(insertion.sessionId);
+          }
+        }
+        for (const sessionId of sessionsToClean) {
+          const sessionPaneOrder = getSessionPaneOrder(s.sessionPaneOrderIndex, sessionId);
+          let changed = false;
+          for (const key of [...sessionPaneOrder.keys()]) {
+            if (isPendingPaneOrderKey(key)) {
+              sessionPaneOrder.delete(key);
+              changed = true;
+            }
+          }
+          if (changed) {
+            setSessionPaneOrder(s.sessionPaneOrderIndex, sessionId, sessionPaneOrder);
+          }
+        }
         s.pendingPaneCreations = [];
         recomputeMatches(s);
         recomputeTree(s);

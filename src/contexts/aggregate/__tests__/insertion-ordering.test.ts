@@ -996,4 +996,154 @@ describe('aggregate insertion ordering', () => {
     expect(newPtyAfterFullRefresh).toBeDefined();
     // Git metadata would now be populated if the git mock returned data
   });
+
+  it('preserves sort order for rapid sequential PTY creations before paneId is known', async () => {
+    /**
+     * When multiple PTYs are created rapidly, the second PTY is queued
+     * before the first one has resolved its real paneId. Previously,
+     * the pending creation's sortOrderHint was only preserved in
+     * sessionPaneOrderIndex if pendingPaneId was set — so the second
+     * PTY's intended position was lost when applySnapshot rebuilt
+     * the pane order. The fix uses a synthetic key (__pending_<id>)
+     * so the sort position survives across applySnapshot calls even
+     * before the real paneId is known.
+     */
+    const harness = createHarness();
+    const {
+      state,
+      setState,
+      refreshers,
+      lifecycleHandlers,
+      setCurrentSessionPtys,
+      setCurrentSessionPaneOrder,
+    } = harness;
+
+    await refreshers.initialLoad();
+    expect(getVisiblePtyIds(state)).toEqual(['pty-1', 'pty-2']);
+
+    // First PTY creation: sortOrderHint = 0.5 (between pane-1 at 0 and pane-2 at 1)
+    const insertion1Id = 'pending-1';
+    setState(
+      produce((s) => {
+        s.pendingPaneCreations = [
+          {
+            id: insertion1Id,
+            sessionId: 'session-1',
+            insertAfterPtyId: 'pty-1',
+            insertAfterPaneId: 'pane-1',
+            pendingPtyId: null,
+            pendingPaneId: null,
+            sortOrderHint: 0.5,
+          },
+        ];
+        // Stamp into sessionPaneOrderIndex (like upsertAggregatePendingPaneCreation does)
+        const sessionPaneOrder = getSessionPaneOrder(s.sessionPaneOrderIndex, 'session-1');
+        sessionPaneOrder.set('__pending_' + insertion1Id, 0.5);
+        recomputeMatches(s);
+        recomputeTree(s);
+      })
+    );
+
+    // Second PTY creation: also after pane-1, but PTY1 is still pending.
+    // sortOrderHint should be between pane-1 and PTY1.
+    const insertion2Id = 'pending-2';
+    const sortOrderHint2 = 0.75; // between pane-1 (0) and pane-2 (1), after PTY1 (0.5)
+    setState(
+      produce((s) => {
+        s.pendingPaneCreations = [
+          ...s.pendingPaneCreations,
+          {
+            id: insertion2Id,
+            sessionId: 'session-1',
+            insertAfterPtyId: 'pty-1',
+            insertAfterPaneId: 'pane-1',
+            pendingPtyId: null,
+            pendingPaneId: null,
+            sortOrderHint: sortOrderHint2,
+          },
+        ];
+        const sessionPaneOrder = getSessionPaneOrder(s.sessionPaneOrderIndex, 'session-1');
+        sessionPaneOrder.set('__pending_' + insertion2Id, sortOrderHint2);
+        recomputeMatches(s);
+        recomputeTree(s);
+      })
+    );
+
+    // Now the first PTY's onCreated fires: real ptyId and paneId are known
+    setState(
+      produce((s) => {
+        s.pendingPaneCreations = s.pendingPaneCreations.map((i) =>
+          i.id === insertion1Id ? { ...i, pendingPtyId: 'pty-new', pendingPaneId: 'pane-3' } : i
+        );
+        // Migrate synthetic key to real paneId (like onCreated -> upsertPendingPaneCreation)
+        const sessionPaneOrder = getSessionPaneOrder(s.sessionPaneOrderIndex, 'session-1');
+        sessionPaneOrder.set('pane-3', 0.5);
+        sessionPaneOrder.delete('__pending_' + insertion1Id);
+        recomputeMatches(s);
+        recomputeTree(s);
+      })
+    );
+
+    // handlePtyCreated for PTY1: stamps order, removes pending, triggers fast refresh
+    setCurrentSessionPtys([
+      { ptyId: 'pty-1', paneId: 'pane-1', workspaceId: 1, title: 'one', cwd: '/tmp' },
+      { ptyId: 'pty-new', paneId: 'pane-3', workspaceId: 1, title: 'new', cwd: '/tmp' },
+      { ptyId: 'pty-2', paneId: 'pane-2', workspaceId: 1, title: 'two', cwd: '/tmp' },
+    ]);
+    setCurrentSessionPaneOrder(
+      new Map([
+        ['pane-1', 0],
+        ['pane-3', 2], // layout traversal puts new pane at end
+        ['pane-2', 1],
+      ])
+    );
+
+    await lifecycleHandlers.handlePtyCreated('pty-new');
+
+    // PTY2's pending creation should still exist (not resolved yet)
+    const pending2AfterRefresh = state.pendingPaneCreations.find((i) => i.id === insertion2Id);
+    expect(pending2AfterRefresh).toBeDefined();
+
+    // PTY2's sortOrderHint should be preserved in sessionPaneOrderIndex
+    // (via the synthetic key that survives applySnapshot)
+    const paneOrderAfterRefresh = getSessionPaneOrder(state.sessionPaneOrderIndex, 'session-1');
+    expect(paneOrderAfterRefresh.has('__pending_' + insertion2Id)).toBe(true);
+    expect(paneOrderAfterRefresh.get('__pending_' + insertion2Id)).toBe(sortOrderHint2);
+
+    // Now PTY2 resolves
+    setState(
+      produce((s) => {
+        s.pendingPaneCreations = s.pendingPaneCreations.map((i) =>
+          i.id === insertion2Id ? { ...i, pendingPtyId: 'pty-new-2', pendingPaneId: 'pane-4' } : i
+        );
+        const sessionPaneOrder = getSessionPaneOrder(s.sessionPaneOrderIndex, 'session-1');
+        sessionPaneOrder.set('pane-4', sortOrderHint2);
+        sessionPaneOrder.delete('__pending_' + insertion2Id);
+        recomputeMatches(s);
+        recomputeTree(s);
+      })
+    );
+
+    harness.setOwnership('pty-new-2', {
+      sessionId: 'session-1',
+      paneId: 'pane-4',
+      workspaceId: 1,
+    });
+    setCurrentSessionPtys([
+      { ptyId: 'pty-1', paneId: 'pane-1', workspaceId: 1, title: 'one', cwd: '/tmp' },
+      { ptyId: 'pty-new', paneId: 'pane-3', workspaceId: 1, title: 'new', cwd: '/tmp' },
+      { ptyId: 'pty-new-2', paneId: 'pane-4', workspaceId: 1, title: 'new-2', cwd: '/tmp' },
+      { ptyId: 'pty-2', paneId: 'pane-2', workspaceId: 1, title: 'two', cwd: '/tmp' },
+    ]);
+
+    await lifecycleHandlers.handlePtyCreated('pty-new-2');
+
+    // Both new PTYs should maintain their intended positions
+    // (not jump to the bottom of the session group)
+    const paneOrder = getSessionPaneOrder(state.sessionPaneOrderIndex, 'session-1');
+    expect(paneOrder.get('pane-3')).toBe(0.5);
+    expect(paneOrder.get('pane-4')).toBe(sortOrderHint2);
+    expect(paneOrder.get('pane-1')).toBe(0);
+    expect(paneOrder.get('pane-2')).toBe(1);
+  });
 });
