@@ -590,9 +590,19 @@ export function createLifecycleHandlers(
           // a duplicate. This is a safety net — the pendingPtyIds cleanup in
           // applySnapshot should prevent us from reaching this branch, but we
           // guard against it anyway.
-          const paneKeyIndex = nextPty.paneId
+          let paneKeyIndex = nextPty.paneId
             ? findAggregatePtyIndexByPane(s.allPtys, ownership.sessionId, nextPty.paneId)
             : -1;
+          // Cross-session fallback: if the exact session+pane lookup fails,
+          // search for a stale entry with the same paneId under a different
+          // session. This can happen when the placeholder had a wrong sessionId
+          // that was corrected by applySnapshot but the saved: entry is under
+          // a different session.
+          if (paneKeyIndex === -1 && nextPty.paneId) {
+            paneKeyIndex = s.allPtys.findIndex(
+              (p) => p.paneId === nextPty.paneId && !isSavedAggregatePtyId(p.ptyId)
+            );
+          }
           if (paneKeyIndex !== -1 && s.allPtys[paneKeyIndex]) {
             // Replace the saved: entry with the hydrated live entry
             s.allPtys[paneKeyIndex] = {
