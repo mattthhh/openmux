@@ -159,13 +159,12 @@ const createHarness = () => {
     getCurrentSessionPtys
   );
 
-  const lifecycleHandlers = createLifecycleHandlers(
-    state,
-    setState,
+  const lifecycleHandlers = createLifecycleHandlers(state, setState, {
     resolvePtyOwnership,
     getCurrentSessionHints,
-    refreshers.refreshPtys
-  );
+    refreshPtys: refreshers.refreshPtys,
+    refreshActiveSession: refreshers.refreshActiveSession,
+  });
 
   return {
     state,
@@ -896,7 +895,11 @@ describe('aggregate insertion ordering', () => {
 
     await lifecycleHandlers.handlePtyCreated('pty-new');
 
-    // The PTY should have git metadata from the gitCache batch call
+    // handlePtyCreated uses the fast refresh (activeSessionOnly + skipGitMetadata),
+    // so git metadata is not yet applied. The background full refresh hydrates it.
+    await refreshers.refreshPtys();
+
+    // After the full refresh, the PTY should have git metadata
     const newPty = state.allPtys.find((pty) => pty.ptyId === 'pty-new');
     expect(newPty).toBeDefined();
     expect(newPty?.gitBranch).toBe('correct-branch');
@@ -936,5 +939,61 @@ describe('aggregate insertion ordering', () => {
 
     expect(state.allPtys.map((pty) => pty.ptyId)).toEqual(['pty-1']);
     expect(state.recentlyAddedPtyIds.has('pty-deleted')).toBe(false);
+  });
+
+  it('handlePtyCreated uses fast refresh (active session only, no git), then full refresh in background', async () => {
+    /**
+     * handlePtyCreated should use refreshActiveSession (fast: activeSessionOnly + skipGitMetadata)
+     * instead of the full refreshPtys. This makes new PTYs appear instantly.
+     * The full refresh is scheduled in the background to hydrate git metadata and other sessions.
+     */
+    const {
+      state,
+      setState,
+      refreshers,
+      lifecycleHandlers,
+      setCurrentSessionPtys,
+      getCurrentSessionPtys: _,
+    } = createHarness();
+
+    await refreshers.initialLoad();
+
+    setState(
+      produce((s) => {
+        s.pendingPaneCreations = [
+          {
+            id: 'pending-1',
+            sessionId: 'session-1',
+            insertAfterPtyId: 'pty-1',
+            insertAfterPaneId: 'pane-1',
+            pendingPtyId: 'pty-new',
+            pendingPaneId: 'pane-3',
+            sortOrderHint: 0.5,
+          },
+        ];
+      })
+    );
+
+    setCurrentSessionPtys([
+      { ptyId: 'pty-1', paneId: 'pane-1', workspaceId: 1, title: 'one', cwd: '/tmp' },
+      { ptyId: 'pty-new', paneId: 'pane-3', workspaceId: 1, title: 'new', cwd: '/tmp' },
+      { ptyId: 'pty-2', paneId: 'pane-2', workspaceId: 1, title: 'two', cwd: '/tmp' },
+    ]);
+
+    // After handlePtyCreated, the PTY should appear in allPtys immediately
+    // (via the fast refresh), even though git metadata is not yet hydrated.
+    await lifecycleHandlers.handlePtyCreated('pty-new');
+
+    const newPty = state.allPtys.find((pty) => pty.ptyId === 'pty-new');
+    expect(newPty).toBeDefined();
+    expect(newPty?.title).toBe('new');
+    // Git metadata is NOT yet applied (fast refresh skips it)
+    expect(newPty?.gitBranch).toBeUndefined();
+
+    // After the full refresh, git metadata is hydrated
+    await refreshers.refreshPtys();
+    const newPtyAfterFullRefresh = state.allPtys.find((pty) => pty.ptyId === 'pty-new');
+    expect(newPtyAfterFullRefresh).toBeDefined();
+    // Git metadata would now be populated if the git mock returned data
   });
 });

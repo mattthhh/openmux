@@ -66,15 +66,9 @@ export type {
 export function createLifecycleHandlers(
   state: AggregateViewState,
   setState: SetStoreFunction<AggregateViewState>,
-  resolvePtyOwnership: (ptyId: string) => PtyOwnership | null,
-  getCurrentSessionHints: () => CurrentSessionHints,
-  refreshPtys: () => Promise<void>
+  deps: LifecycleHandlerDeps
 ) {
-  return createAggregateLifecycleHandlers(state, setState, {
-    resolvePtyOwnership,
-    getCurrentSessionHints,
-    refreshPtys,
-  });
+  return createAggregateLifecycleHandlers(state, setState, deps);
 }
 
 export async function setupSubscriptions(

@@ -157,13 +157,12 @@ function createHarness() {
     getCurrentSessionPtys
   );
 
-  const lifecycleHandlers = createLifecycleHandlers(
-    state,
-    setState,
+  const lifecycleHandlers = createLifecycleHandlers(state, setState, {
     resolvePtyOwnership,
     getCurrentSessionHints,
-    refreshers.refreshPtys
-  );
+    refreshPtys: refreshers.refreshPtys,
+    refreshActiveSession: refreshers.refreshActiveSession,
+  });
 
   return {
     state,

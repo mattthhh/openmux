@@ -129,6 +129,9 @@ export interface LifecycleHandlerDeps {
   resolvePtyOwnership: (ptyId: string) => PtyOwnership | null;
   getCurrentSessionHints: () => CurrentSessionHints;
   refreshPtys: () => Promise<void>;
+  /** Fast refresh: only the active session, no git metadata.
+   *  Used by handlePtyCreated to make new PTYs appear instantly. */
+  refreshActiveSession: () => Promise<void | Error>;
 }
 
 function buildSessionPaneOrderFromState(
@@ -233,10 +236,11 @@ export function createLifecycleHandlers(
       );
     }
 
-    // Trigger a full refresh. The snapshot is the sole source of truth.
-    // By the time this runs, setPanePty has already updated the layout,
-    // so getCurrentSessionPtys will include this PTY with the correct session.
-    await deps.refreshPtys();
+    // Fast path: refresh only the active session without git metadata.
+    // This makes the new PTY appear in allPtys almost instantly instead
+    // of waiting for the full snapshot build (all sessions + git metadata).
+    // A full refresh is scheduled in the background to hydrate the rest.
+    await deps.refreshActiveSession();
   };
 
   const handlePtyDestroyed = (ptyId: string): void => {

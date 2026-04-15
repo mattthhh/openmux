@@ -44,6 +44,8 @@ export { ptyMetadataToInfo } from './pty-info';
 
 export interface RefreshersResult {
   refreshPtys: () => Promise<void>;
+  /** Fast refresh: only the active session, no git metadata. */
+  refreshActiveSession: () => Promise<void | Error>;
   refreshPtysSubset: (ptyIds: string[]) => Promise<void>;
   initialLoad: () => Promise<void | Error>;
 }
@@ -482,12 +484,15 @@ export function createAggregateViewRefreshers(
     }
   };
 
-  const applySnapshot = (snapshot: {
-    sessions: SessionMetadata[];
-    sessionLoadStates: Map<string, SessionLoadState>;
-    sessionPaneOrders: Map<string, Map<string, number>>;
-    ptys: PtyInfo[];
-  }) => {
+  const applySnapshot = (
+    snapshot: {
+      sessions: SessionMetadata[];
+      sessionLoadStates: Map<string, SessionLoadState>;
+      sessionPaneOrders: Map<string, Map<string, number>>;
+      ptys: PtyInfo[];
+    },
+    options?: { mergeWithExisting?: boolean }
+  ) => {
     setState(
       produce((s) => {
         const previousPaneOrderIndex = new Map(s.sessionPaneOrderIndex);
@@ -500,6 +505,12 @@ export function createAggregateViewRefreshers(
         // session they belong to. This eliminates the race condition where
         // optimistic entries from handlePtyCreated could have wrong sessionIds.
         //
+        // When mergeWithExisting is true (fast refresh from handlePtyCreated),
+        // we only replace data for sessions present in the snapshot, preserving
+        // data for other sessions until the full background refresh completes.
+        const snapshotSessionIds = new Set<string>(snapshot.sessions.map((s) => String(s.id)));
+        const mergeMode = options?.mergeWithExisting ?? false;
+
         // Preserve sortOrderHint from pending pane creations so that
         // newly created panes maintain their intended position.
         const pendingSortHints = new Map<string, number>();
@@ -515,21 +526,34 @@ export function createAggregateViewRefreshers(
         });
 
         s.isLoading = false;
-        s.allSessions.clear();
+        if (!mergeMode) {
+          s.allSessions.clear();
+        }
         for (const session of snapshot.sessions) {
           s.allSessions.set(session.id, session);
         }
 
-        s.sessionLoadStates.clear();
+        if (!mergeMode) {
+          s.sessionLoadStates.clear();
+        } else {
+          // Remove load states for sessions in the snapshot so they get replaced
+          for (const sessionId of snapshotSessionIds) {
+            s.sessionLoadStates.delete(sessionId);
+          }
+        }
         for (const [sessionId, loadState] of snapshot.sessionLoadStates) {
           s.sessionLoadStates.set(sessionId, loadState);
         }
 
-        s.loadingSessionIds.clear();
-        s.loadAttemptedSessionIds.clear();
+        if (!mergeMode) {
+          s.loadingSessionIds.clear();
+          s.loadAttemptedSessionIds.clear();
+        }
 
-        s.sessionPaneOrders = new Map();
-        s.sessionPaneOrderIndex.clear();
+        if (!mergeMode) {
+          s.sessionPaneOrders = new Map();
+          s.sessionPaneOrderIndex.clear();
+        }
         for (const [sessionId, paneOrder] of snapshot.sessionPaneOrders) {
           const existingOrder = getSessionPaneOrder(previousPaneOrderIndex, sessionId);
           const mergedPaneOrder = mergePaneOrder(
@@ -553,7 +577,16 @@ export function createAggregateViewRefreshers(
           setSessionPaneOrder(s.sessionPaneOrderIndex, insertion.sessionId, sessionPaneOrder);
         }
 
-        s.allPtys = dedupeAggregatePtysByPane(finalPtys);
+        if (mergeMode) {
+          // Merge PTYs: keep existing PTYs for sessions not in the snapshot,
+          // replace PTYs for sessions in the snapshot with snapshot data.
+          const existingPtysForOtherSessions = s.allPtys.filter(
+            (pty) => !snapshotSessionIds.has(pty.sessionId)
+          );
+          s.allPtys = dedupeAggregatePtysByPane([...existingPtysForOtherSessions, ...finalPtys]);
+        } else {
+          s.allPtys = dedupeAggregatePtysByPane(finalPtys);
+        }
         s.allPtysIndex = buildPtyIndex(s.allPtys);
 
         // Clear stale tracking sets — the snapshot is authoritative now.
@@ -576,6 +609,7 @@ export function createAggregateViewRefreshers(
     forceGitRefresh: boolean;
     activeSessionOnly?: boolean;
     skipGitMetadata?: boolean;
+    mergeWithExisting?: boolean;
   }): Promise<void | Error> => {
     setState('isLoading', true);
     const snapshot = await buildSnapshot(options);
@@ -584,7 +618,7 @@ export function createAggregateViewRefreshers(
       return snapshot;
     }
 
-    applySnapshot(snapshot);
+    applySnapshot(snapshot, { mergeWithExisting: options.mergeWithExisting });
     return;
   };
 
@@ -636,8 +670,37 @@ export function createAggregateViewRefreshers(
     await refreshPtys();
   };
 
+  /** Fast refresh: only the active session, no git metadata.
+   *  Used by handlePtyCreated to make new PTYs appear instantly
+   *  without waiting for the full snapshot build. */
+  const refreshActiveSession = async (): Promise<void | Error> => {
+    if (refreshState.refreshInProgress) {
+      refreshState.pendingFullRefresh = true;
+      return;
+    }
+    refreshState.refreshInProgress = true;
+    try {
+      const result = await refreshPtysOnce({
+        forceGitRefresh: false,
+        activeSessionOnly: true,
+        skipGitMetadata: true,
+        mergeWithExisting: true,
+      });
+      // Schedule a full refresh in the background to hydrate git metadata
+      // and load other sessions.
+      if (refreshState.pendingFullRefresh) {
+        refreshState.pendingFullRefresh = false;
+        void refreshPtys();
+      }
+      return result;
+    } finally {
+      refreshState.refreshInProgress = false;
+    }
+  };
+
   return {
     refreshPtys,
+    refreshActiveSession,
     refreshPtysSubset,
     initialLoad,
   };

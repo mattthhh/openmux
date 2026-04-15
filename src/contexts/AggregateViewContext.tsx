@@ -171,7 +171,7 @@ export function AggregateViewProvider(props: AggregateViewProviderProps) {
     return ptys;
   };
 
-  const { refreshPtys, initialLoad } = createAggregateViewRefreshers(
+  const { refreshPtys, refreshActiveSession, initialLoad } = createAggregateViewRefreshers(
     state,
     setState,
     refreshState,
@@ -184,13 +184,12 @@ export function AggregateViewProvider(props: AggregateViewProviderProps) {
   const handleTitleChange = createTitleChangeHandler(setState);
   const handleProcessChange = createProcessChangeHandler(setState);
 
-  const lifecycleHandlers = createLifecycleHandlers(
-    state,
-    setState,
+  const lifecycleHandlers = createLifecycleHandlers(state, setState, {
     resolvePtyOwnership,
     getCurrentSessionHints,
-    refreshPtys
-  );
+    refreshPtys,
+    refreshActiveSession,
+  });
 
   const loadPersistedSessionOrder = async (): Promise<void> => {
     const persistedOrder = await getAggregateSessionOrderResult();

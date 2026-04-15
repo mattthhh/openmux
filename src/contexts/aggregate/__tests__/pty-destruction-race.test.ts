@@ -151,7 +151,7 @@ describe('PTY destruction race condition', () => {
         ['pane-2', 1],
       ]);
 
-    const { refreshPtys } = createAggregateViewRefreshers(
+    const { refreshPtys, refreshActiveSession } = createAggregateViewRefreshers(
       state,
       setState,
       refreshState,
@@ -161,12 +161,12 @@ describe('PTY destruction race condition', () => {
       () => currentSessionPtys
     );
 
-    const lifecycleHandlers = createLifecycleHandlers(
-      state,
-      setState,
+    const lifecycleHandlers = createLifecycleHandlers(state, setState, {
       resolvePtyOwnership,
-      getCurrentSessionHints
-    );
+      getCurrentSessionHints,
+      refreshPtys: refreshPtys,
+      refreshActiveSession: refreshActiveSession,
+    });
 
     return {
       state,
