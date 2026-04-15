@@ -363,12 +363,12 @@ describe('cold-start e2e: aggregate view bleed prevention', () => {
     await refreshers.refreshPtys();
     assertNoBleed(state);
 
-    // Both PTYs should be under session-b
+    // Both PTYs should be under session-b (as saved: entries from loadSession)
     expect(
-      state.allPtys.some((pty) => pty.ptyId === 'pty-b1' && pty.sessionId === 'session-b')
+      state.allPtys.some((pty) => pty.paneId === 'pane-b1' && pty.sessionId === 'session-b')
     ).toBe(true);
     expect(
-      state.allPtys.some((pty) => pty.ptyId === 'pty-b2' && pty.sessionId === 'session-b')
+      state.allPtys.some((pty) => pty.paneId === 'pane-b2' && pty.sessionId === 'session-b')
     ).toBe(true);
 
     // None under session-a

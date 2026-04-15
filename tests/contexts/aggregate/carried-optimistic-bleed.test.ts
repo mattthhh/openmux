@@ -468,18 +468,21 @@ describe('carriedOptimisticPtys bleed: wrong-sessionId placeholder survives appl
     ).toBe(true);
   });
 
-  test('cross-session reconciliation in applySnapshot fixes wrong sessionId on live entries', async () => {
+  test('single-writer: applySnapshot replaces allPtys entirely, no stale entries survive', async () => {
     /**
-     * Simulates: a live PTY entry was stamped with sessionId 'session-a'
-     * (from stale ptyToSessionMap), but authoritative ownership says
-     * 'session-b'. The snapshot has a saved: entry for the same pane
-     * under 'session-b'. After applySnapshot's dedup step, the live entry
-     * still has wrong sessionId. The cross-session reconciliation step
-     * must fix it and re-dedup.
+     * With the single-writer model, applySnapshot completely replaces allPtys
+     * with the snapshot. No carriedOptimisticPtys, no cross-session reconciliation.
+     * Even if the previous allPtys had a wrong-sessionId entry, the snapshot
+     * is the sole source of truth and will not include it.
+     *
+     * A live PTY with wrong sessionId in the old allPtys is simply not
+     * carried forward. The snapshot builds from persisted session data
+     * (loadSession) and the current session's layout (getCurrentSessionPtys),
+     * which always have the correct sessionId.
      */
     const wrongSessionLive = makePtyInfo({
       ptyId: 'pty-b1',
-      sessionId: 'session-a',
+      sessionId: 'session-a', // WRONG
       paneId: 'pane-b1',
       title: '...',
     });
@@ -505,7 +508,6 @@ describe('carriedOptimisticPtys bleed: wrong-sessionId placeholder survives appl
       state,
       setState,
       refreshState,
-      // Ownership says pty-b1 belongs to session-b
       (ptyId) =>
         ptyId === 'pty-b1' ? { sessionId: 'session-b', paneId: 'pane-b1', workspaceId: 1 } : null,
       () => ({ sessionId: 'session-a', lastActiveWorkspaceId: 1, focusedPaneId: 'pane-a1' }),
@@ -520,14 +522,18 @@ describe('carriedOptimisticPtys bleed: wrong-sessionId placeholder survives appl
 
     await refreshers.refreshPtys();
 
-    // The live entry must be reassigned to session-b
+    // The snapshot replaces allPtys entirely. The old wrong-sessionId entry
+    // is gone. pane-b1 appears under session-b as a saved: entry.
     expect(
-      state.allPtys.some((pty) => pty.ptyId === 'pty-b1' && pty.sessionId === 'session-b')
+      state.allPtys.some((pty) => pty.paneId === 'pane-b1' && pty.sessionId === 'session-b')
     ).toBe(true);
 
     // No entry for pane-b1 under session-a
     expect(
       state.allPtys.some((pty) => pty.paneId === 'pane-b1' && pty.sessionId === 'session-a')
     ).toBe(false);
+
+    // The stale pty-b1 entry is gone (replaced by saved:session-b:pane-b1)
+    expect(state.allPtys.some((pty) => pty.ptyId === 'pty-b1')).toBe(false);
   });
 });

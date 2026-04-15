@@ -145,6 +145,7 @@ export class RefreshGuard implements AsyncDisposable {
 export interface LifecycleHandlerDeps {
   resolvePtyOwnership: (ptyId: string) => PtyOwnership | null;
   getCurrentSessionHints: () => CurrentSessionHints;
+  refreshPtys: () => Promise<void>;
 }
 
 function buildSessionPaneOrderFromState(
@@ -690,53 +691,30 @@ export function createLifecycleHandlers(
     );
   };
 
-  const MAX_OWNERSHIP_RETRIES = 5;
-  const MAX_SESSION_METADATA_RETRIES = 5;
-
-  const handlePtyCreated = async (ptyId: string, retryCount = 0): Promise<void> => {
+  /**
+   * Handle PTY creation lifecycle event.
+   *
+   * Single-writer principle: do NOT insert into allPtys here.
+   * Instead, clean up any pending pane creation that matches this PTY,
+   * then trigger refreshPtys(). The snapshot will include the new PTY
+   * via getCurrentSessionPtys (which reads from the layout), and
+   * applySnapshot will write it to allPtys with the correct sessionId.
+   *
+   * This eliminates the race condition where the old 3-phase insert
+   * (insertPlaceholderRow → stampOwnershipOnPlaceholder → hydratePlaceholderRow)
+   * could write entries with wrong sessionIds due to stale ptyToSessionMap
+   * or aggregateSessionMappings during rapid session switches.
+   */
+  const handlePtyCreated = async (ptyId: string): Promise<void> => {
     if (state.deletedPtyIds.has(ptyId)) {
       return;
     }
 
+    // Clean up any pending pane creation that matches this PTY.
     const ownership = resolvePtyOwnership(ptyId);
-
-    // When ownership is unknown, do NOT create any placeholder row.
-    // The lifecycle event fires as a microtask BEFORE createPTY's
-    // continuation sets aggregateSessionMappings/ptyToSessionMap, so
-    // on the first call both trackedOwner and aggregateOwner are null.
-    // Creating a placeholder with wrong/missing sessionId produces
-    // entries that dedupeAggregatePtysByPane cannot merge, causing
-    // duplication. Instead, return and let the next snapshot refresh
-    // (refreshPtys) populate the entry correctly. The snapshot uses
-    // getCurrentSessionPtys which reads from the layout directly.
-    if (!ownership) {
-      // Only retry if we haven't exceeded the limit. The first retry
-      // uses queueMicrotask to run right after createPTY's continuation
-      // sets the mappings. Subsequent retries use exponential backoff.
-      if (retryCount < MAX_OWNERSHIP_RETRIES) {
-        if (retryCount === 0) {
-          queueMicrotask(() => void handlePtyCreated(ptyId, 1));
-        } else {
-          const delay = Math.min(50 * Math.pow(2, retryCount), 500);
-          setTimeout(() => void handlePtyCreated(ptyId, retryCount + 1), delay);
-        }
-      }
-      return;
-    }
-
-    // Phase 1: insert optimistic placeholder (ownership is known)
-    insertPlaceholderRow(ptyId, ownership);
-
-    const sessionMetadata = getSessionMetadata(ownership.sessionId);
-    if (!sessionMetadata) {
-      if (retryCount < MAX_SESSION_METADATA_RETRIES) {
-        const delay = Math.min(50 * Math.pow(2, retryCount), 500);
-        setTimeout(() => void handlePtyCreated(ptyId, retryCount + 1), delay);
-        return;
-      }
+    if (ownership) {
       setState(
         produce((s) => {
-          s.pendingPtyIds.delete(ptyId);
           removeMatchingPendingInsertions(s, {
             ptyId,
             sessionId: ownership.sessionId,
@@ -744,14 +722,12 @@ export function createLifecycleHandlers(
           });
         })
       );
-      return;
     }
 
-    // Phase 2b: stamp ownership metadata onto the placeholder
-    stampOwnershipOnPlaceholder(ptyId, ownership);
-
-    // Phase 3: hydrate with live metadata
-    await hydratePlaceholderRow(ptyId, ownership);
+    // Trigger a full refresh. The snapshot is the sole source of truth.
+    // By the time this runs, setPanePty has already updated the layout,
+    // so getCurrentSessionPtys will include this PTY with the correct session.
+    await deps.refreshPtys();
   };
 
   const handlePtyDestroyed = (ptyId: string): void => {

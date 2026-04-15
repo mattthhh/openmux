@@ -67,11 +67,13 @@ export function createLifecycleHandlers(
   state: AggregateViewState,
   setState: SetStoreFunction<AggregateViewState>,
   resolvePtyOwnership: (ptyId: string) => PtyOwnership | null,
-  getCurrentSessionHints: () => CurrentSessionHints
+  getCurrentSessionHints: () => CurrentSessionHints,
+  refreshPtys: () => Promise<void>
 ) {
   return createAggregateLifecycleHandlers(state, setState, {
     resolvePtyOwnership,
     getCurrentSessionHints,
+    refreshPtys,
   });
 }
 

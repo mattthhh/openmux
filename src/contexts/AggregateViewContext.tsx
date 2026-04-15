@@ -188,7 +188,8 @@ export function AggregateViewProvider(props: AggregateViewProviderProps) {
     state,
     setState,
     resolvePtyOwnership,
-    getCurrentSessionHints
+    getCurrentSessionHints,
+    refreshPtys
   );
 
   const loadPersistedSessionOrder = async (): Promise<void> => {

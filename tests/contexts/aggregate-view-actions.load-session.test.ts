@@ -40,7 +40,7 @@ function createBasePty(): PtyInfo {
 }
 
 describe('createAggregateViewActions loadSessionPtys', () => {
-  it('does not materialize unloaded sessions by creating background PTYs', async () => {
+  it('triggers refreshPtys instead of calling loadSessionPtysOnDemand directly', async () => {
     const [state, setState] = createStore<AggregateViewState>({
       ...initialState,
       allSessions: new Map([
@@ -66,24 +66,20 @@ describe('createAggregateViewActions loadSessionPtys', () => {
       ]),
     });
 
-    const loadSessionPtysOnDemand = vi.fn().mockResolvedValue({
-      sessionId: 'session-1',
-      ptys: [],
-      lastActiveWorkspaceId: 1,
-    });
+    const refreshPtys = vi.fn().mockResolvedValue(undefined);
 
     const actions = createAggregateViewActions({
       state,
       setState,
-      refreshPtys: async () => {},
-      loadSessionPtysOnDemand,
+      refreshPtys,
+      loadSessionPtysOnDemand: vi.fn(),
     });
 
     await actions.loadSessionPtys('session-1');
 
-    expect(loadSessionPtysOnDemand).toHaveBeenCalledWith('session-1', {
-      createIfMissing: false,
-    });
+    // Single-writer principle: loadSessionPtys triggers refreshPtys
+    // instead of pushing to allPtys directly.
+    expect(refreshPtys).toHaveBeenCalled();
   });
 
   it('shows a queued optimistic placeholder immediately for pending pane creations', () => {

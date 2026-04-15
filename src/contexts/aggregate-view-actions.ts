@@ -288,19 +288,14 @@ export function createAggregateViewActions(params: AggregateViewActionsParams) {
   /**
    * Attempt to load session PTYs on demand.
    *
-   * This triggers a fresh aggregate refresh using the live PTY→session mapping.
-   * If the session has no live PTYs, the placeholder remains visible.
+   * Single-writer principle: do NOT push directly to allPtys here.
+   * Instead, trigger a refreshPtys() which will rebuild the snapshot
+   * from authoritative sources and apply it via applySnapshot.
+   * The snapshot includes all sessions (including lazy-loaded ones) via
+   * loadSession and getCurrentSessionPtys.
    */
   const loadSessionPtys = async (sessionId: string): Promise<void> => {
     if (state.loadingSessionIds.has(sessionId)) return;
-
-    const previousState = state.sessionLoadStates.get(sessionId);
-    const previousPaneCount = previousState?.paneCount;
-    const previousWorkspaceId =
-      previousState?.status === 'loaded' || previousState?.status === 'unloaded'
-        ? previousState.lastActiveWorkspaceId
-        : previousState?.lastActiveWorkspaceId;
-    const previousFocusedPaneId = previousState?.focusedPaneId;
 
     setState(
       produce((s) => {
@@ -308,106 +303,15 @@ export function createAggregateViewActions(params: AggregateViewActionsParams) {
         s.loadAttemptedSessionIds.add(sessionId);
         s.sessionLoadStates.set(sessionId, {
           status: 'loading',
-          paneCount: previousPaneCount,
-          lastActiveWorkspaceId: previousWorkspaceId,
-          focusedPaneId: previousFocusedPaneId,
         });
         recomputeTree(s);
       })
     );
 
-    const result = await loadSessionPtysOnDemand(sessionId, { createIfMissing: false });
-
-    setState(
-      produce((s) => {
-        s.loadingSessionIds.delete(sessionId);
-
-        if (result instanceof Error) {
-          s.sessionLoadStates.set(sessionId, {
-            status: 'error',
-            error: result.message,
-            lastActiveWorkspaceId: previousWorkspaceId,
-            focusedPaneId: previousFocusedPaneId,
-            paneCount: previousPaneCount,
-          });
-          recomputeTree(s);
-          return;
-        }
-
-        const sessionMetadata = s.allSessions.get(sessionId);
-        const existingIndex = new Map(s.allPtys.map((pty, index) => [pty.ptyId, index] as const));
-        const visiblePtys = result.ptys.filter(
-          (pty: PtyMetadata) => !s.deletedPtyIds.has(pty.ptyId)
-        );
-
-        for (const pty of visiblePtys) {
-          const nextPty: PtyInfo = {
-            ...pty,
-            sessionId,
-            sessionMetadata,
-          };
-
-          const index = existingIndex.get(pty.ptyId);
-          if (index === undefined) {
-            existingIndex.set(pty.ptyId, s.allPtys.length);
-            s.allPtys.push(nextPty);
-          } else {
-            s.allPtys[index] = mergePtyInfoPreservingGitMetadata(s.allPtys[index], {
-              ...s.allPtys[index],
-              ...nextPty,
-            });
-          }
-        }
-
-        if (visiblePtys.length > 0) {
-          for (const pty of visiblePtys) {
-            s.recentlyAddedPtyIds.add(pty.ptyId);
-          }
-
-          setTimeout(() => {
-            setState(
-              produce((s2) => {
-                for (const pty of visiblePtys) {
-                  s2.recentlyAddedPtyIds.delete(pty.ptyId);
-                }
-              })
-            );
-          }, 5000);
-        }
-
-        s.allPtysIndex = new Map(s.allPtys.map((pty, index) => [pty.ptyId, index] as const));
-
-        const paneCount =
-          visiblePtys.length > 0
-            ? visiblePtys.length
-            : (previousPaneCount ?? s.sessionLoadStates.get(sessionId)?.paneCount);
-
-        if (visiblePtys.length > 0) {
-          s.sessionLoadStates.set(sessionId, {
-            status: 'loaded',
-            lastActiveWorkspaceId: result.lastActiveWorkspaceId ?? previousWorkspaceId,
-            focusedPaneId: previousFocusedPaneId,
-            paneCount,
-          });
-          s.loadAttemptedSessionIds.delete(sessionId);
-        } else {
-          s.sessionLoadStates.set(sessionId, {
-            status: 'unloaded',
-            lastActiveWorkspaceId: result.lastActiveWorkspaceId ?? previousWorkspaceId,
-            focusedPaneId: previousFocusedPaneId,
-            paneCount,
-          });
-          s.loadAttemptedSessionIds.delete(sessionId);
-        }
-
-        recomputeMatches(s);
-        recomputeTree(s);
-      })
-    );
-
-    if (!(result instanceof Error) && result.ptys.length > 0) {
-      void refreshPtys();
-    }
+    // Single writer: let refreshPtys handle everything.
+    // It will load the session from disk, build the snapshot,
+    // and apply it atomically via applySnapshot.
+    await refreshPtys();
   };
 
   /** Get the loading state for a session */
