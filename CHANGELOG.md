@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.83](https://github.com/monotykamary/openmux/compare/v0.3.82...v0.3.83) (2026-04-15)
+
+
+### Bug Fixes
+
+* **aggregate:** preserve in-flight PTYs during session switch refresh ([c967942](https://github.com/monotykamary/openmux/commit/c96794251f4a2d8a754d3f003182777a7e6affd8))
+* **aggregate:** preserve sortOrderHint for rapid sequential PTY creations ([d465641](https://github.com/monotykamary/openmux/commit/d465641d4771e18698b4eb649613fa15c18ea025))
+* **aggregate:** prevent merge mode from clobbering other sessions' PTY data ([b8d8c0a](https://github.com/monotykamary/openmux/commit/b8d8c0a8d404eb93e7dbe3aa7afe804c5021a98c))
+* **aggregate:** revert instant-switch to placeholder, wait for real PTY in allPtys ([557e980](https://github.com/monotykamary/openmux/commit/557e9804a9e62b7baf9662ff27b51279a2b91200))
+* **aggregate:** serialize handlePtyCreated and preserve placeholder during refresh ([9b3f180](https://github.com/monotykamary/openmux/commit/9b3f1802fec948c8193eb51f98dd5b3388efb1f3))
+
 ### [0.3.82](https://github.com/monotykamary/openmux/compare/v0.3.81...v0.3.82) (2026-04-15)
 
 
