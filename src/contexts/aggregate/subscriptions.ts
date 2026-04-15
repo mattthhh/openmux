@@ -148,6 +148,12 @@ export function createLifecycleHandlers(
 ) {
   const { resolvePtyOwnership } = deps;
 
+  /** Sequential queue for handlePtyCreated. Prevents interleaved state
+   *  mutations and refreshes when multiple PTYs are created rapidly.
+   *  Each call awaits the previous one before starting, so
+   *  stamp-then-refresh never races with another stamp-then-refresh. */
+  let lifecycleChain: Promise<void> = Promise.resolve();
+
   const findMatchingPendingInsertion = (
     aggregateState: AggregateViewState,
     params: { ptyId: string; sessionId?: string | null; paneId?: string | null }
@@ -190,15 +196,17 @@ export function createLifecycleHandlers(
    * could write entries with wrong sessionIds due to stale ptyToSessionMap
    * or aggregateSessionMappings during rapid session switches.
    */
-  const handlePtyCreated = async (ptyId: string): Promise<void> => {
+  const handlePtyCreatedImpl = async (ptyId: string): Promise<void> => {
     if (state.deletedPtyIds.has(ptyId)) {
       return;
     }
 
-    // Clean up any pending pane creation that matches this PTY.
-    // Before removing, stamp its sortOrderHint into sessionPaneOrderIndex
-    // so that applySnapshot preserves the intended position.
     const ownership = resolvePtyOwnership(ptyId);
+
+    // Stamp the sort order BEFORE the refresh so applySnapshot reads it.
+    // But DON'T remove the pending creation yet — the placeholder stays
+    // in matchedPtys so the autoswitch effect can find it while the refresh
+    // is in progress.
     if (ownership) {
       setState(
         produce((s) => {
@@ -209,10 +217,6 @@ export function createLifecycleHandlers(
           });
 
           if (matchingInsertion) {
-            // Stamp sortOrderHint into sessionPaneOrderIndex before removing
-            // the pending creation, so applySnapshot reads it from there.
-            // Also migrate any synthetic pending key (__pending_<id>) to the
-            // real paneId so the order survives applySnapshot's rebuild.
             if (matchingInsertion.sortOrderHint !== undefined) {
               const realPaneId = ownership.paneId ?? matchingInsertion.pendingPaneId;
               if (realPaneId) {
@@ -221,7 +225,6 @@ export function createLifecycleHandlers(
                   ownership.sessionId
                 );
                 sessionPaneOrder.set(realPaneId, matchingInsertion.sortOrderHint);
-                // Remove the synthetic key if it was used before the real paneId was known.
                 const pendingKey = getPendingPaneOrderKey(matchingInsertion.id);
                 if (sessionPaneOrder.has(pendingKey)) {
                   sessionPaneOrder.delete(pendingKey);
@@ -229,10 +232,29 @@ export function createLifecycleHandlers(
                 setSessionPaneOrder(s.sessionPaneOrderIndex, ownership.sessionId, sessionPaneOrder);
               }
             }
+          }
+        })
+      );
+    }
 
+    // Refresh first — the pending creation's placeholder stays visible in
+    // matchedPtys so the autoswitch effect can select it immediately.
+    await deps.refreshActiveSession();
+
+    // NOW remove the pending creation. The refresh has put the real PTY
+    // into allPtys/matchedPtys, so the placeholder is no longer needed.
+    if (ownership) {
+      setState(
+        produce((s) => {
+          const matchingInsertion = findMatchingPendingInsertion(s, {
+            ptyId,
+            sessionId: ownership.sessionId,
+            paneId: ownership.paneId,
+          });
+
+          if (matchingInsertion) {
             removePendingPaneCreations(s, (insertion) => insertion.id === matchingInsertion.id);
           } else {
-            // Fallback: remove by ptyId/paneId match
             removePendingPaneCreations(
               s,
               (insertion) =>
@@ -240,15 +262,17 @@ export function createLifecycleHandlers(
                 (!!ownership.paneId && insertion.pendingPaneId === ownership.paneId)
             );
           }
+
+          recomputeMatches(s);
+          recomputeTree(s);
         })
       );
     }
+  };
 
-    // Fast path: refresh only the active session without git metadata.
-    // This makes the new PTY appear in allPtys almost instantly instead
-    // of waiting for the full snapshot build (all sessions + git metadata).
-    // A full refresh is scheduled in the background to hydrate the rest.
-    await deps.refreshActiveSession();
+  const handlePtyCreated = (ptyId: string): Promise<void> => {
+    lifecycleChain = lifecycleChain.then(() => handlePtyCreatedImpl(ptyId));
+    return lifecycleChain;
   };
 
   const handlePtyDestroyed = (ptyId: string): void => {

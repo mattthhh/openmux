@@ -1146,4 +1146,172 @@ describe('aggregate insertion ordering', () => {
     expect(paneOrder.get('pane-1')).toBe(0);
     expect(paneOrder.get('pane-2')).toBe(1);
   });
+
+  it('serialized handlePtyCreated: each refresh completes before next handler starts', async () => {
+    /**
+     * When multiple PTYs are created rapidly, handlePtyCreated calls
+     * are serialized via a promise chain. Each call stamps its sort order,
+     * awaits refreshActiveSession, THEN removes the pending creation.
+     * This prevents: (1) interleaved state mutations, (2) blocked refreshes
+     * where the second handler's refreshActiveSession returns immediately
+     * because the first is still in progress, (3) the PTY becoming invisible
+     * (pending creation removed but not in allPtys) during the gap.
+     */
+    const harness = createHarness();
+    const {
+      state,
+      setState,
+      refreshers,
+      lifecycleHandlers,
+      setCurrentSessionPtys,
+      setCurrentSessionPaneOrder,
+    } = harness;
+
+    await refreshers.initialLoad();
+
+    // Set up TWO pending pane creations with real IDs (simulating onCreated)
+    const insertion1Id = 'pending-1';
+    const insertion2Id = 'pending-2';
+    setState(
+      produce((s) => {
+        s.pendingPaneCreations = [
+          {
+            id: insertion1Id,
+            sessionId: 'session-1',
+            insertAfterPtyId: 'pty-1',
+            insertAfterPaneId: 'pane-1',
+            pendingPtyId: 'pty-new',
+            pendingPaneId: 'pane-3',
+            sortOrderHint: 0.5,
+          },
+          {
+            id: insertion2Id,
+            sessionId: 'session-1',
+            insertAfterPtyId: 'pty-1',
+            insertAfterPaneId: 'pane-1',
+            pendingPtyId: 'pty-new-2',
+            pendingPaneId: 'pane-4',
+            sortOrderHint: 0.75,
+          },
+        ];
+        const sessionPaneOrder = getSessionPaneOrder(s.sessionPaneOrderIndex, 'session-1');
+        sessionPaneOrder.set('pane-3', 0.5);
+        sessionPaneOrder.set('pane-4', 0.75);
+        recomputeMatches(s);
+        recomputeTree(s);
+      })
+    );
+
+    // Set up live PTYs for both new panes
+    harness.setOwnership('pty-new-2', { sessionId: 'session-1', paneId: 'pane-4', workspaceId: 1 });
+    setCurrentSessionPtys([
+      { ptyId: 'pty-1', paneId: 'pane-1', workspaceId: 1, title: 'one', cwd: '/tmp' },
+      { ptyId: 'pty-new', paneId: 'pane-3', workspaceId: 1, title: 'new', cwd: '/tmp' },
+      { ptyId: 'pty-new-2', paneId: 'pane-4', workspaceId: 1, title: 'new-2', cwd: '/tmp' },
+      { ptyId: 'pty-2', paneId: 'pane-2', workspaceId: 1, title: 'two', cwd: '/tmp' },
+    ]);
+    setCurrentSessionPaneOrder(
+      new Map([
+        ['pane-1', 0],
+        ['pane-3', 2],
+        ['pane-4', 3],
+        ['pane-2', 1],
+      ])
+    );
+
+    // Fire BOTH handlePtyCreated calls — they are serialized
+    const p1 = lifecycleHandlers.handlePtyCreated('pty-new');
+    const p2 = lifecycleHandlers.handlePtyCreated('pty-new-2');
+    await Promise.all([p1, p2]);
+
+    // Both pending creations should be removed
+    expect(state.pendingPaneCreations).toHaveLength(0);
+
+    // Both new PTYs should be in allPtys with correct sort orders
+    const ptyNew = state.allPtys.find((p) => p.ptyId === 'pty-new');
+    const ptyNew2 = state.allPtys.find((p) => p.ptyId === 'pty-new-2');
+    expect(ptyNew).toBeDefined();
+    expect(ptyNew2).toBeDefined();
+
+    // Sort orders preserved (not jumped to bottom)
+    const paneOrder = getSessionPaneOrder(state.sessionPaneOrderIndex, 'session-1');
+    expect(paneOrder.get('pane-3')).toBe(0.5);
+    expect(paneOrder.get('pane-4')).toBe(0.75);
+  });
+
+  it('placeholder stays in matchedPtys during handlePtyCreated refresh', async () => {
+    /**
+     * handlePtyCreated now does: stamp order → refresh → remove pending creation.
+     * The placeholder (from buildPendingAggregatePtys) stays in matchedPtys
+     * during the refresh, so the autoswitch effect can find it immediately.
+     * Only AFTER the refresh puts the real PTY into allPtys/matchedPtys is
+     * the pending creation removed (which removes the placeholder from
+     * matchedPtys, but by then the real PTY is already there).
+     */
+    const harness = createHarness();
+    const {
+      state,
+      setState,
+      refreshers,
+      lifecycleHandlers,
+      setCurrentSessionPtys,
+      setCurrentSessionPaneOrder,
+    } = harness;
+
+    await refreshers.initialLoad();
+
+    // Set up a pending pane creation with real IDs
+    setState(
+      produce((s) => {
+        s.pendingPaneCreations = [
+          {
+            id: 'pending-1',
+            sessionId: 'session-1',
+            insertAfterPtyId: 'pty-1',
+            insertAfterPaneId: 'pane-1',
+            pendingPtyId: 'pty-new',
+            pendingPaneId: 'pane-3',
+            sortOrderHint: 0.5,
+          },
+        ];
+        const sessionPaneOrder = getSessionPaneOrder(s.sessionPaneOrderIndex, 'session-1');
+        sessionPaneOrder.set('pane-3', 0.5);
+        recomputeMatches(s);
+        recomputeTree(s);
+      })
+    );
+
+    // The placeholder should be in matchedPtys
+    const placeholderBefore = state.matchedPtys.find(
+      (p) => p.ptyId === 'pending:pending-1' || p.ptyId === 'pty-new'
+    );
+    expect(placeholderBefore).toBeDefined();
+
+    setCurrentSessionPtys([
+      { ptyId: 'pty-1', paneId: 'pane-1', workspaceId: 1, title: 'one', cwd: '/tmp' },
+      { ptyId: 'pty-new', paneId: 'pane-3', workspaceId: 1, title: 'new', cwd: '/tmp' },
+      { ptyId: 'pty-2', paneId: 'pane-2', workspaceId: 1, title: 'two', cwd: '/tmp' },
+    ]);
+    setCurrentSessionPaneOrder(
+      new Map([
+        ['pane-1', 0],
+        ['pane-3', 2],
+        ['pane-2', 1],
+      ])
+    );
+
+    await lifecycleHandlers.handlePtyCreated('pty-new');
+
+    // After handlePtyCreated completes, the pending creation should be removed
+    expect(state.pendingPaneCreations).toHaveLength(0);
+
+    // The real PTY should be in allPtys (from the refresh)
+    const realPty = state.allPtys.find((p) => p.ptyId === 'pty-new');
+    expect(realPty).toBeDefined();
+    expect(realPty?.title).toBe('new');
+
+    // Sort order preserved
+    const paneOrder = getSessionPaneOrder(state.sessionPaneOrderIndex, 'session-1');
+    expect(paneOrder.get('pane-3')).toBe(0.5);
+  });
 });

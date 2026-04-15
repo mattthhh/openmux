@@ -367,7 +367,10 @@ export function AggregateStateManager() {
     };
     aggregate.upsertPendingPaneCreation(pendingInsertion);
 
-    setPendingPaneFocus(null);
+    // NOTE: do NOT set pendingPaneFocus(null) here. Rapid sequential
+    // creations would wipe a previous creation's unresolved focus,
+    // breaking autoswitch. The new focus is set below after
+    // createPaneWithPTY resolves, which overwrites any stale one.
 
     let targetWorkspaceId = layoutState.activeWorkspaceId;
     let targetCwd: string | undefined;
