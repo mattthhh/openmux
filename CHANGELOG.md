@@ -2,6 +2,38 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.82](https://github.com/monotykamary/openmux/compare/v0.3.81...v0.3.82) (2026-04-15)
+
+
+### Bug Fixes
+
+* **aggregate:** correct wrong sessionId + cross-session pane reconciliation ([16adc61](https://github.com/monotykamary/openmux/commit/16adc61bd474da2614750a2b62b214ed381f3cbd))
+* **aggregate:** cross-session pane search in hydratePlaceholderRow fallback ([92f5bb4](https://github.com/monotykamary/openmux/commit/92f5bb49c6ee639cca5bc96795178f369ad1f467))
+* **aggregate:** fast refresh for new PTY appearance + fix lifecycle handler deps ([9c13c8c](https://github.com/monotykamary/openmux/commit/9c13c8ce2f425103723789c70e8cc465f9e13666))
+* **aggregate:** fast refresh must not clobber other sessions data ([3004633](https://github.com/monotykamary/openmux/commit/300463358a81ca6d8599c525df563cb1b662a899))
+* **aggregate:** prevent carriedOptimisticPtys bleed when sessionId mismatches snapshot ([c50f30f](https://github.com/monotykamary/openmux/commit/c50f30fc08976de659d7919bf8c20bb098eb0e99))
+* **aggregate:** prevent duplicate from hydratePlaceholderRow after applySnapshot ([ae16d6a](https://github.com/monotykamary/openmux/commit/ae16d6aa272f49129e38c1d9cec16388d15ca2a1))
+* **aggregate:** prevent PTY duplication by skipping placeholders when ownership is unknown ([679024a](https://github.com/monotykamary/openmux/commit/679024a5d8f6c49509741c803e183b9343a83751))
+* **aggregate:** prevent PTY session bleed during rapid switching ([0a9460c](https://github.com/monotykamary/openmux/commit/0a9460ca205d7e392586824c854c86dd70c96c78))
+* **aggregate:** remove unsafe activeSessionId+findPtyLocation fallback ([0862a1e](https://github.com/monotykamary/openmux/commit/0862a1ee4ad9adcf35ab0d103c9e44be90133014))
+* **aggregate:** select new PTY placeholder immediately via matchedPtys ([2a8e2c2](https://github.com/monotykamary/openmux/commit/2a8e2c2a1a6672fa69d0f48d08c222eb6f6debd7))
+* **test:** use fresh Set for loadingSessionIds to avoid shared mutable state ([36f2ca3](https://github.com/monotykamary/openmux/commit/36f2ca30fc29946069c60fbf1f82f5d936d9b8ae))
+
+
+### Refactoring
+
+* **aggregate:** remove dead code from subscriptions.ts (-518 lines) ([7916921](https://github.com/monotykamary/openmux/commit/791692176662a1f65231e2de45f5ba691d4b9229))
+* **aggregate:** single-writer principle — applySnapshot is sole writer ([c1c52dd](https://github.com/monotykamary/openmux/commit/c1c52dd7ad5330926ff5449b8500a9fae5c16736))
+
+
+### Tests
+
+* **aggregate:** add autoswitch rapid-bleed tests with wrong-session placeholder correction ([93f4a9e](https://github.com/monotykamary/openmux/commit/93f4a9e1151656f3f556b8d96e67004d266d6e41))
+* **aggregate:** add race condition integration tests proving duplication fix ([a7404aa](https://github.com/monotykamary/openmux/commit/a7404aa001b851c3d7f5d075128d94bf9ceaa4be))
+* **aggregate:** add test for saved-entry-replaces-live-ptyId cold-start path ([2110ffe](https://github.com/monotykamary/openmux/commit/2110ffe6cafc82c155494f9dfd886bed295b5abb))
+* **aggregate:** cold-start e2e bleed prevention tests ([6d36c69](https://github.com/monotykamary/openmux/commit/6d36c698de31e44e9a4d510b76902d859640c408))
+* **aggregate:** rewrite insertion-ordering and adjacency tests ([132b79c](https://github.com/monotykamary/openmux/commit/132b79c471398e2b40738f70ab684184186afe7c))
+
 ### [0.3.81](https://github.com/monotykamary/openmux/compare/v0.3.80...v0.3.81) (2026-04-14)
 
 ### [0.3.80](https://github.com/monotykamary/openmux/compare/v0.3.79...v0.3.80) (2026-04-14)
