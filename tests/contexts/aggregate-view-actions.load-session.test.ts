@@ -43,6 +43,8 @@ describe('createAggregateViewActions loadSessionPtys', () => {
   it('triggers refreshPtys instead of calling loadSessionPtysOnDemand directly', async () => {
     const [state, setState] = createStore<AggregateViewState>({
       ...initialState,
+      loadingSessionIds: new Set(),
+      loadAttemptedSessionIds: new Set(),
       allSessions: new Map([
         [
           'session-1',
