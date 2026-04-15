@@ -232,6 +232,8 @@ export function createAggregateViewRefreshers(
         sessionLoadStates: Map<string, SessionLoadState>;
         sessionPaneOrders: Map<string, Map<string, number>>;
         ptys: PtyInfo[];
+        /** Sessions actually loaded in this snapshot (not inferred from PTYs). */
+        loadedSessionIds: Set<string>;
       }
     | Error
   > => {
@@ -390,7 +392,16 @@ export function createAggregateViewRefreshers(
                 .map((pty, index) => [pty.paneId as string, index] as const)
             );
           sessionPaneOrders.set(sessionId, paneOrder);
-          provisionalPtys.push(...existingCurrentSessionPtys.map((pty) => ({ ...pty })));
+          provisionalPtys.push(
+            ...existingCurrentSessionPtys.map((pty) => ({
+              ...pty,
+              // Stamp sessionId from the session being processed.
+              // The filter ensures pty.sessionId === effectiveCurrentSessionId,
+              // but explicit stamping prevents any stale sessionId from
+              // propagating if the filter logic ever changes.
+              sessionId,
+            }))
+          );
           sessionLoadStates.set(sessionId, {
             status: 'loaded',
             paneCount: existingCurrentSessionPtys.length,
@@ -468,11 +479,22 @@ export function createAggregateViewRefreshers(
         );
       }
 
+      // Track which sessions were actually loaded in this snapshot.
+      // In activeSessionOnly mode, only the effective current session
+      // was loaded — even if some PTYs have a different sessionId due
+      // to ownership resolution. This is critical for the merge mode
+      // in applySnapshot, which uses loadedSessionIds to decide which
+      // sessions' data to replace.
+      const loadedSessionIds = options.activeSessionOnly
+        ? new Set<string>(effectiveCurrentSessionId ? [effectiveCurrentSessionId] : [])
+        : new Set<string>(sessions.map((s) => String(s.id)));
+
       return {
         sessions,
         sessionLoadStates,
         sessionPaneOrders,
         ptys,
+        loadedSessionIds,
       };
     } catch (error) {
       return error instanceof AggregateBridgeError
@@ -492,6 +514,8 @@ export function createAggregateViewRefreshers(
       sessionLoadStates: Map<string, SessionLoadState>;
       sessionPaneOrders: Map<string, Map<string, number>>;
       ptys: PtyInfo[];
+      /** Sessions actually loaded in this snapshot (not inferred from PTYs). */
+      loadedSessionIds?: Set<string>;
     },
     options?: { mergeWithExisting?: boolean }
   ) => {
@@ -513,12 +537,15 @@ export function createAggregateViewRefreshers(
         // completes. Non-active sessions are listed in snapshot.sessions but
         // marked as 'unloaded' — they must NOT overwrite existing loaded data.
         const snapshotSessionIds = new Set<string>(snapshot.sessions.map((s) => String(s.id)));
-        // Sessions that actually have PTYs in the snapshot (the authoritative set).
-        // In activeSessionOnly mode, only the active session has PTYs;
-        // other sessions are listed but should not replace existing data.
-        const loadedSnapshotSessionIds = new Set<string>(
-          snapshot.ptys.map((p) => String(p.sessionId))
-        );
+        // Sessions that were actually loaded in this snapshot (not inferred
+        // from PTYs' sessionId, which can be wrong due to ownership resolution).
+        // In activeSessionOnly mode, only the active session was loaded even if
+        // some PTYs have a different sessionId. Using loadedSessionIds prevents
+        // the merge from clobbering other sessions' data when a PTY's sessionId
+        // points to a non-active session.
+        const loadedSnapshotSessionIds =
+          snapshot.loadedSessionIds ??
+          new Set<string>(snapshot.ptys.map((p) => String(p.sessionId)));
         const mergeMode = options?.mergeWithExisting ?? false;
 
         // Preserve sortOrderHint from pending pane creations so that
