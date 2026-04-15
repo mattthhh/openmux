@@ -374,6 +374,19 @@ export function createAggregateViewRefreshers(
             provisionalPtys.push(nextPty);
           }
 
+          // Preserve existing live PTYs from allPtys that are NOT in the
+          // live set. During a session switch, createPTY is fire-and-forget —
+          // some panes may not have their ptyId yet when getCurrentSessionPtys()
+          // runs. These "in-flight" PTYs were in the previous allPtys and would
+          // be lost if we only use the live set. Including them prevents
+          // "PTYs disappear, then reappear" during rapid session switches.
+          const livePtyIds = new Set(currentLivePtysForSession.map((p) => p.ptyId));
+          for (const existingPty of existingCurrentSessionPtys) {
+            if (!livePtyIds.has(existingPty.ptyId)) {
+              provisionalPtys.push({ ...existingPty, sessionId });
+            }
+          }
+
           sessionLoadStates.set(sessionId, {
             status: 'loaded',
             paneCount: currentLivePtysForSession.length,
