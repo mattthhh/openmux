@@ -176,7 +176,10 @@ function buildSavedPaneInfo(params: {
     paneId,
     sessionId,
     sessionMetadata,
-    title: existing?.title ?? title,
+    // Use the serialized title from the session data, not the '...'
+    // placeholder title from a stale existing entry. The '...' title
+    // means "data not yet loaded" — the serialized data IS the real data.
+    title: existing?.title && existing.title !== '...' ? existing.title : title,
     sortOrderHint: existing?.sortOrderHint,
     ...getEmptyGitMetadata(),
   };
@@ -516,21 +519,14 @@ export function createAggregateViewRefreshers(
           };
         });
         // Build a pane-id-only index from snapshot entries so that a
-        // wrong-sessionId optimistic entry is still caught. During cold-start
-        // and rapid session switches, a placeholder may have been inserted
-        // with an incorrect sessionId (stale ptyToSessionMap or
-        // aggregateSessionMappings). The snapshot entry for the same pane
-        // has the correct sessionId. If we only check (sessionId, paneId)
-        // pane keys, the wrong entry's key won't match and it gets carried
-        // → bleed.
-        //
-        // Two strategies catch this:
-        // 1. PaneId-only check: if the snapshot covers this paneId under ANY
-        //    session AND the optimistic entry's ownership resolves to a
-        //    different session, drop it (ownership says it's in the wrong
-        //    session, and the snapshot already covers the pane).
-        // 2. Ownership check: if the optimistic entry's ownership disagrees
-        //    with its stamped sessionId, drop it regardless.
+        // wrong-sessionId optimistic entry is caught and corrected.
+        // During cold-start and rapid session switches, a placeholder may
+        // have been inserted with an incorrect sessionId (stale ptyToSessionMap
+        // or aggregateSessionMappings). Instead of dropping these entries
+        // (which loses the PTY from the aggregate view), we correct the
+        // sessionId to match authoritative ownership, then carry them
+        // forward. The subsequent dedup step merges the corrected entry
+        // with any snapshot entry for the same pane.
         const snapshotPaneIdsBySession = new Map<string, Set<string>>();
         const snapshotPaneIdsAll = new Set<string>();
         for (const pty of snapshotPtys) {
@@ -542,31 +538,50 @@ export function createAggregateViewRefreshers(
           }
         }
 
-        const carriedOptimisticPtys = s.allPtys.filter((pty) => {
+        const carriedOptimisticPtys: PtyInfo[] = [];
+        for (const pty of s.allPtys) {
           const paneKey = getAggregatePaneKey(pty.sessionId, pty.paneId);
           const matchesExactPaneKey = paneKey && snapshotPaneKeys.has(paneKey);
 
           if (matchesExactPaneKey) {
             // Exact (sessionId, paneId) match — snapshot covers this entry.
-            return false;
+            continue;
+          }
+
+          if (
+            !snapshotPtyIds.has(pty.ptyId) &&
+            !(s.pendingPtyIds.has(pty.ptyId) || s.recentlyAddedPtyIds.has(pty.ptyId)) &&
+            !s.deletedPtyIds.has(pty.ptyId)
+          ) {
+            // Not an optimistic entry — skip
+            continue;
+          }
+
+          if (s.deletedPtyIds.has(pty.ptyId)) {
+            continue;
           }
 
           // Check if the optimistic entry's ownership disagrees with its
-          // stamped sessionId. If so, it's a wrong-session placeholder that
-          // would cause bleed if carried.
+          // stamped sessionId. If so, correct the sessionId instead of
+          // dropping — the PTY should appear under the correct session.
           const ownership = resolvePtyOwnership(pty.ptyId);
           const ownershipDisagrees = ownership && ownership.sessionId !== pty.sessionId;
 
-          // If ownership disagrees, don't carry — the snapshot or a future
-          // refresh will produce the correct entry.
           if (ownershipDisagrees) {
-            return false;
+            // Correct the sessionId to match authoritative ownership
+            carriedOptimisticPtys.push({
+              ...pty,
+              sessionId: ownership!.sessionId,
+              sessionMetadata: s.allSessions.get(ownership!.sessionId),
+              paneId: ownership!.paneId ?? pty.paneId,
+              workspaceId: ownership!.workspaceId ?? pty.workspaceId,
+            });
+            continue;
           }
 
           // If no ownership exists but the paneId is covered by the snapshot
           // under a different session, this is likely a wrong-session entry.
-          // Only apply this when the ptyId is NOT a saved: entry (saved entries
-          // legitimately share pane IDs across sessions).
+          // Only apply this when the ptyId is NOT a saved: entry.
           if (
             !ownership &&
             pty.paneId &&
@@ -575,16 +590,14 @@ export function createAggregateViewRefreshers(
             !snapshotPaneIdsBySession.get(pty.sessionId)?.has(pty.paneId)
           ) {
             // The snapshot covers this paneId but NOT under the entry's
-            // stamped session — the entry has a wrong sessionId.
-            return false;
+            // stamped session. The entry has a wrong sessionId. We don't
+            // know the correct session, so drop it — the snapshot entry
+            // already represents this pane.
+            continue;
           }
 
-          return (
-            !snapshotPtyIds.has(pty.ptyId) &&
-            (s.pendingPtyIds.has(pty.ptyId) || s.recentlyAddedPtyIds.has(pty.ptyId)) &&
-            !s.deletedPtyIds.has(pty.ptyId)
-          );
-        });
+          carriedOptimisticPtys.push(pty);
+        }
 
         s.isLoading = false;
         s.allSessions.clear();
@@ -659,6 +672,46 @@ export function createAggregateViewRefreshers(
         }
 
         s.allPtys = dedupeAggregatePtysByPane([...mergedSnapshotPtys, ...carriedOptimisticPtys]);
+
+        // Cross-session pane reconciliation: after dedup by (sessionId, paneId),
+        // entries with the same paneId but different sessionIds can survive.
+        // This happens when a live PTY was stamped with a wrong sessionId
+        // (e.g., stale ptyToSessionMap during cold start / rapid switch).
+        // Use authoritative ownership to reassign the correct sessionId,
+        // then re-dedup to merge the corrected entry with the snapshot entry.
+        //
+        // This is the safety net that catches any remaining bleed after
+        // the carriedOptimisticPtys ownership filters.
+        const paneIdToEntries = new Map<string, Array<{ index: number; pty: PtyInfo }>>();
+        for (let i = 0; i < s.allPtys.length; i++) {
+          const pty = s.allPtys[i];
+          if (pty.paneId && !isSavedAggregatePtyId(pty.ptyId)) {
+            const existing = paneIdToEntries.get(pty.paneId) ?? [];
+            existing.push({ index: i, pty });
+            paneIdToEntries.set(pty.paneId, existing);
+          }
+        }
+        let needsReconcile = false;
+        for (const [, entries] of paneIdToEntries) {
+          if (entries.length <= 1) continue;
+          // Multiple live entries for the same paneId across different sessions
+          for (const entry of entries) {
+            const ownership = resolvePtyOwnership(entry.pty.ptyId);
+            if (ownership && ownership.sessionId !== entry.pty.sessionId) {
+              // Ownership says this PTY belongs to a different session — fix it
+              s.allPtys[entry.index] = {
+                ...s.allPtys[entry.index],
+                sessionId: ownership.sessionId,
+                sessionMetadata: s.allSessions.get(ownership.sessionId),
+              };
+              needsReconcile = true;
+            }
+          }
+        }
+        if (needsReconcile) {
+          s.allPtys = dedupeAggregatePtysByPane(s.allPtys);
+        }
+
         s.allPtysIndex = buildPtyIndex(s.allPtys);
 
         // Clean up pendingPtyIds and recentlyAddedPtyIds for PTYs that are

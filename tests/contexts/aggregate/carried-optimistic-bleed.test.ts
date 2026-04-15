@@ -467,4 +467,67 @@ describe('carriedOptimisticPtys bleed: wrong-sessionId placeholder survives appl
       state.allPtys.some((pty) => pty.ptyId === 'pty-c1' && pty.sessionId === 'session-a')
     ).toBe(true);
   });
+
+  test('cross-session reconciliation in applySnapshot fixes wrong sessionId on live entries', async () => {
+    /**
+     * Simulates: a live PTY entry was stamped with sessionId 'session-a'
+     * (from stale ptyToSessionMap), but authoritative ownership says
+     * 'session-b'. The snapshot has a saved: entry for the same pane
+     * under 'session-b'. After applySnapshot's dedup step, the live entry
+     * still has wrong sessionId. The cross-session reconciliation step
+     * must fix it and re-dedup.
+     */
+    const wrongSessionLive = makePtyInfo({
+      ptyId: 'pty-b1',
+      sessionId: 'session-a',
+      paneId: 'pane-b1',
+      title: '...',
+    });
+
+    const [state, setState] = createStore<AggregateViewState>({
+      ...createFreshState(),
+      allPtys: [wrongSessionLive],
+      allPtysIndex: new Map([['pty-b1', 0]]),
+      pendingPtyIds: new Set(['pty-b1']),
+      recentlyAddedPtyIds: new Set(),
+      allSessions: new Map([
+        ['session-a', sessionA],
+        ['session-b', sessionB],
+      ]),
+    });
+
+    const refreshState: RefreshState = {
+      refreshInProgress: false,
+      pendingFullRefresh: false,
+    };
+
+    const refreshers = createAggregateViewRefreshers(
+      state,
+      setState,
+      refreshState,
+      // Ownership says pty-b1 belongs to session-b
+      (ptyId) =>
+        ptyId === 'pty-b1' ? { sessionId: 'session-b', paneId: 'pane-b1', workspaceId: 1 } : null,
+      () => ({ sessionId: 'session-a', lastActiveWorkspaceId: 1, focusedPaneId: 'pane-a1' }),
+      () => new Map([['pane-a1', 0]]),
+      () => []
+    );
+
+    vi.mocked(listSessionsResult).mockResolvedValue([sessionA, sessionB]);
+    vi.mocked(loadSession).mockImplementation(async (id: string) =>
+      id === 'session-a' ? serializedSessionA : serializedSessionB
+    );
+
+    await refreshers.refreshPtys();
+
+    // The live entry must be reassigned to session-b
+    expect(
+      state.allPtys.some((pty) => pty.ptyId === 'pty-b1' && pty.sessionId === 'session-b')
+    ).toBe(true);
+
+    // No entry for pane-b1 under session-a
+    expect(
+      state.allPtys.some((pty) => pty.paneId === 'pane-b1' && pty.sessionId === 'session-a')
+    ).toBe(false);
+  });
 });

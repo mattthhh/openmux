@@ -45,6 +45,7 @@ import {
   dedupeAggregatePtysByPane,
   findAggregatePtyIndexByPane,
   getSavedAggregatePtyId,
+  isSavedAggregatePtyId,
 } from './rows';
 import { recomputeMatches, recomputeTree } from './session';
 
@@ -348,6 +349,46 @@ export function createLifecycleHandlers(
           recomputeMatches(s);
           recomputeTree(s);
           return;
+        }
+
+        // Cross-session pane search: the exact (sessionId, paneId) lookup
+        // failed. Check if a STALE entry for this pane exists under a
+        // different session (e.g., from a wrong-sessionId placeholder that
+        // was inserted before ownership was resolved). If found, replace it
+        // with the correct-session entry instead of pushing a duplicate.
+        if (claimedPaneId) {
+          const staleIndex = s.allPtys.findIndex(
+            (p) =>
+              p.paneId === claimedPaneId &&
+              p.sessionId !== claimedSessionId &&
+              !isSavedAggregatePtyId(p.ptyId)
+          );
+          if (staleIndex !== -1 && s.allPtys[staleIndex]) {
+            const stalePty = s.allPtys[staleIndex];
+            clonePtyStdoutActivity(stalePty.ptyId, ptyId);
+
+            // Clean up the stale ptyId from tracking sets
+            s.pendingPtyIds.delete(stalePty.ptyId);
+            s.recentlyAddedPtyIds.delete(stalePty.ptyId);
+
+            if (claimedPaneId && sortOrderHint !== undefined) {
+              stampSortOrderHintIntoPaneIndex(s, claimedSessionId, claimedPaneId, sortOrderHint);
+            }
+
+            s.allPtys[staleIndex] = {
+              ...stalePty,
+              ptyId,
+              paneId: claimedPaneId,
+              sessionId: claimedSessionId,
+              sessionMetadata: s.allSessions.get(claimedSessionId),
+              workspaceId: stalePty.workspaceId ?? ownership.workspaceId,
+              sortOrderHint: sortOrderHint ?? stalePty.sortOrderHint,
+            };
+            s.allPtysIndex = buildPtyIndex(s.allPtys);
+            recomputeMatches(s);
+            recomputeTree(s);
+            return;
+          }
         }
 
         const placeholderPty: PtyInfo = {
