@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.84](https://github.com/monotykamary/openmux/compare/v0.3.83...v0.3.84) (2026-04-15)
+
+
+### Bug Fixes
+
+* **test:** mock effect/bridge in host-color-sync test ([31d3756](https://github.com/monotykamary/openmux/commit/31d375611856c7dfb8efb442361841a03cc6a205))
+
 ### [0.3.83](https://github.com/monotykamary/openmux/compare/v0.3.82...v0.3.83) (2026-04-15)
 
 
