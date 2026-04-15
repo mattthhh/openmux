@@ -179,7 +179,7 @@ export function AggregateStateManager() {
 
     const resolution = resolvePendingAggregatePaneFocus({
       pending: pendingPaneFocus(),
-      matchedPtys: aggregate.state.matchedPtys,
+      allPtys: aggregate.state.allPtys,
       flattenedTreeIndex: aggregate.state.flattenedTreeIndex,
       expandedSessionIds: expandedSessionIds(),
       filterQuery: filterQuery(),

@@ -20,20 +20,22 @@ function findPendingPanePty(
 
 export function resolvePendingAggregatePaneFocus(params: {
   pending: PendingAggregatePaneFocus | null;
-  /** matchedPtys includes placeholders from buildPendingAggregatePtys,
-   * allowing immediate selection of newly created PTYs that haven't
-   * appeared in allPtys yet. */
-  matchedPtys: PtyInfo[];
+  /** allPtys — only real (refreshed) PTYs, not placeholders.
+   * Waiting for the real PTY naturally serializes rapid creations:
+   * the cursor stays on the current PTY until the new one is confirmed
+   * in allPtys via refreshActiveSession, preventing the user from
+   * anchoring a second creation off a transient placeholder. */
+  allPtys: PtyInfo[];
   flattenedTreeIndex: Map<string, number>;
   expandedSessionIds: Set<string>;
   filterQuery: string;
 }): PendingAggregatePaneFocusResolution {
-  const { pending, matchedPtys, flattenedTreeIndex, expandedSessionIds, filterQuery } = params;
+  const { pending, allPtys, flattenedTreeIndex, expandedSessionIds, filterQuery } = params;
   if (!pending) {
     return { type: 'wait' };
   }
 
-  const matchingPty = findPendingPanePty(matchedPtys, pending);
+  const matchingPty = findPendingPanePty(allPtys, pending);
   if (!matchingPty) {
     return { type: 'wait' };
   }
