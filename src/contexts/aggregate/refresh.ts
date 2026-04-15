@@ -506,9 +506,17 @@ export function createAggregateViewRefreshers(
         // optimistic entries from handlePtyCreated could have wrong sessionIds.
         //
         // When mergeWithExisting is true (fast refresh from handlePtyCreated),
-        // we only replace data for sessions present in the snapshot, preserving
-        // data for other sessions until the full background refresh completes.
+        // we only replace data for sessions that have PTYs in the snapshot,
+        // preserving data for other sessions until the full background refresh
+        // completes. Non-active sessions are listed in snapshot.sessions but
+        // marked as 'unloaded' — they must NOT overwrite existing loaded data.
         const snapshotSessionIds = new Set<string>(snapshot.sessions.map((s) => String(s.id)));
+        // Sessions that actually have PTYs in the snapshot (the authoritative set).
+        // In activeSessionOnly mode, only the active session has PTYs;
+        // other sessions are listed but should not replace existing data.
+        const loadedSnapshotSessionIds = new Set<string>(
+          snapshot.ptys.map((p) => String(p.sessionId))
+        );
         const mergeMode = options?.mergeWithExisting ?? false;
 
         // Preserve sortOrderHint from pending pane creations so that
@@ -536,12 +544,18 @@ export function createAggregateViewRefreshers(
         if (!mergeMode) {
           s.sessionLoadStates.clear();
         } else {
-          // Remove load states for sessions in the snapshot so they get replaced
-          for (const sessionId of snapshotSessionIds) {
+          // Only remove load states for sessions that have PTYs in the snapshot.
+          // Non-active sessions are listed as 'unloaded' in the snapshot but
+          // must NOT overwrite their existing loaded state.
+          for (const sessionId of loadedSnapshotSessionIds) {
             s.sessionLoadStates.delete(sessionId);
           }
         }
         for (const [sessionId, loadState] of snapshot.sessionLoadStates) {
+          // In merge mode, skip 'unloaded' entries — they're placeholders for
+          // sessions we didn't actually load; preserving existing load states
+          // keeps the UI from flashing "Session (unloaded)".
+          if (mergeMode && loadState.status === 'unloaded') continue;
           s.sessionLoadStates.set(sessionId, loadState);
         }
 
@@ -578,10 +592,11 @@ export function createAggregateViewRefreshers(
         }
 
         if (mergeMode) {
-          // Merge PTYs: keep existing PTYs for sessions not in the snapshot,
-          // replace PTYs for sessions in the snapshot with snapshot data.
+          // Merge PTYs: keep existing PTYs for sessions that don't have PTYs
+          // in the snapshot (i.e., non-active sessions during a fast refresh),
+          // replace PTYs for sessions that do have PTYs in the snapshot.
           const existingPtysForOtherSessions = s.allPtys.filter(
-            (pty) => !snapshotSessionIds.has(pty.sessionId)
+            (pty) => !loadedSnapshotSessionIds.has(pty.sessionId)
           );
           s.allPtys = dedupeAggregatePtysByPane([...existingPtysForOtherSessions, ...finalPtys]);
         } else {
