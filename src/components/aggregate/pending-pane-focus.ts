@@ -15,24 +15,25 @@ function findPendingPanePty(
   ptys: PtyInfo[],
   pending: PendingAggregatePaneFocus
 ): PtyInfo | undefined {
-  return ptys.find(
-    (pty) => pty.sessionId === pending.sessionId && pty.paneId === pending.paneId,
-  );
+  return ptys.find((pty) => pty.sessionId === pending.sessionId && pty.paneId === pending.paneId);
 }
 
 export function resolvePendingAggregatePaneFocus(params: {
   pending: PendingAggregatePaneFocus | null;
-  allPtys: PtyInfo[];
+  /** matchedPtys includes placeholders from buildPendingAggregatePtys,
+   * allowing immediate selection of newly created PTYs that haven't
+   * appeared in allPtys yet. */
+  matchedPtys: PtyInfo[];
   flattenedTreeIndex: Map<string, number>;
   expandedSessionIds: Set<string>;
   filterQuery: string;
 }): PendingAggregatePaneFocusResolution {
-  const { pending, allPtys, flattenedTreeIndex, expandedSessionIds, filterQuery } = params;
+  const { pending, matchedPtys, flattenedTreeIndex, expandedSessionIds, filterQuery } = params;
   if (!pending) {
     return { type: 'wait' };
   }
 
-  const matchingPty = findPendingPanePty(allPtys, pending);
+  const matchingPty = findPendingPanePty(matchedPtys, pending);
   if (!matchingPty) {
     return { type: 'wait' };
   }

@@ -45,7 +45,7 @@ describe('resolvePendingAggregatePaneFocus', () => {
   it('waits until the new pane appears in aggregate state', () => {
     const result = resolvePendingAggregatePaneFocus({
       pending: createPending(),
-      allPtys: [],
+      matchedPtys: [],
       flattenedTreeIndex: new Map(),
       expandedSessionIds: new Set(['session-1']),
       filterQuery: '',
@@ -57,7 +57,7 @@ describe('resolvePendingAggregatePaneFocus', () => {
   it('clears the filter before focusing a hidden new pane', () => {
     const result = resolvePendingAggregatePaneFocus({
       pending: createPending(),
-      allPtys: [createPty()],
+      matchedPtys: [createPty()],
       flattenedTreeIndex: new Map(),
       expandedSessionIds: new Set(['session-1']),
       filterQuery: 'vim',
@@ -69,7 +69,7 @@ describe('resolvePendingAggregatePaneFocus', () => {
   it('expands the session before touching the filter', () => {
     const result = resolvePendingAggregatePaneFocus({
       pending: createPending(),
-      allPtys: [createPty()],
+      matchedPtys: [createPty()],
       flattenedTreeIndex: new Map(),
       expandedSessionIds: new Set(),
       filterQuery: 'vim',
@@ -81,7 +81,7 @@ describe('resolvePendingAggregatePaneFocus', () => {
   it('expands the session before selecting the new pane', () => {
     const result = resolvePendingAggregatePaneFocus({
       pending: createPending(),
-      allPtys: [createPty()],
+      matchedPtys: [createPty()],
       flattenedTreeIndex: new Map(),
       expandedSessionIds: new Set(),
       filterQuery: '',
@@ -93,7 +93,7 @@ describe('resolvePendingAggregatePaneFocus', () => {
   it('selects the matching PTY once it is visible', () => {
     const result = resolvePendingAggregatePaneFocus({
       pending: createPending(),
-      allPtys: [createPty()],
+      matchedPtys: [createPty()],
       flattenedTreeIndex: new Map([['pty-1', 3]]),
       expandedSessionIds: new Set(['session-1']),
       filterQuery: '',
@@ -105,7 +105,7 @@ describe('resolvePendingAggregatePaneFocus', () => {
   it('matches by session and pane to avoid selecting the wrong PTY', () => {
     const result = resolvePendingAggregatePaneFocus({
       pending: createPending({ sessionId: 'session-2', paneId: 'pane-2' }),
-      allPtys: [
+      matchedPtys: [
         createPty({ ptyId: 'pty-1', sessionId: 'session-1', paneId: 'pane-2' }),
         createPty({ ptyId: 'pty-2', sessionId: 'session-2', paneId: 'pane-2' }),
       ],
@@ -115,5 +115,30 @@ describe('resolvePendingAggregatePaneFocus', () => {
     });
 
     expect(result).toEqual({ type: 'select-pty', ptyId: 'pty-2' });
+  });
+
+  it('finds placeholder PTY in matchedPtys before it appears in allPtys', () => {
+    /**
+     * After onCreated fires, the pending pane creation has a real ptyId/paneId.
+     * buildPendingAggregatePtys creates a placeholder in matchedPtys with
+     * the real ptyId. resolvePendingAggregatePaneFocus must find this
+     * placeholder so the cursor moves to the new PTY immediately, without
+     * waiting for refreshActiveSession to put it in allPtys.
+     */
+    const placeholder: PtyInfo = {
+      ...createPty({ ptyId: 'pty-new', paneId: 'pane-new', sessionId: 'session-1' }),
+      title: '...',
+      cwd: '',
+    };
+
+    const result = resolvePendingAggregatePaneFocus({
+      pending: createPending({ paneId: 'pane-new' }),
+      matchedPtys: [placeholder],
+      flattenedTreeIndex: new Map([['pty-new', 5]]),
+      expandedSessionIds: new Set(['session-1']),
+      filterQuery: '',
+    });
+
+    expect(result).toEqual({ type: 'select-pty', ptyId: 'pty-new' });
   });
 });
