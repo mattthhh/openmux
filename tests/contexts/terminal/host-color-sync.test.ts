@@ -71,6 +71,10 @@ vi.mock('../../../native/zig-pty/ts/index', () => ({
   },
 }));
 
+vi.mock('../../../src/effect/bridge', () => ({
+  ...effectBridgeMocks,
+}));
+
 const makeColors = (foreground: number, background: number, isDefault = false): TerminalColors => ({
   foreground,
   background,
@@ -149,6 +153,7 @@ describe('createHostColorSync', () => {
     setHostColors.mockClear();
     setHostCapabilitiesColors.mockClear();
     applyHostColors.mockClear();
+    applyHostColors.mockResolvedValue(undefined);
 
     schemeListenerRef.current?.('dark');
     await new Promise((resolve) => setImmediate(resolve));
