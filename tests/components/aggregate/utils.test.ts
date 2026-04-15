@@ -4,6 +4,7 @@ import type { FlattenedTreeItem, PtyInfo } from '../../../src/contexts/aggregate
 import {
   resolveAggregatePreviewPtyId,
   resolveAggregatePtyOwnership,
+  resolveCurrentAggregatePtySessionId,
 } from '../../../src/components/aggregate/utils';
 import { createWorkspaceWithPanes } from '../../contexts/layout-reducer/fixtures';
 
@@ -46,6 +47,52 @@ const createPtyRow = (pty: PtyInfo): FlattenedTreeItem => ({
   prefix: '',
   index: 0,
   parentSessionId: pty.sessionId,
+});
+
+describe('resolveCurrentAggregatePtySessionId', () => {
+  it('prefers tracked owner over the effective current session hint', () => {
+    expect(
+      resolveCurrentAggregatePtySessionId({
+        effectiveSessionId: 'session-a',
+        switching: false,
+        trackedOwner: { sessionId: 'session-b', paneId: 'pane-b1' },
+        aggregateOwner: null,
+      })
+    ).toBe('session-b');
+  });
+
+  it('falls back to aggregate owner when tracked owner is missing', () => {
+    expect(
+      resolveCurrentAggregatePtySessionId({
+        effectiveSessionId: 'session-a',
+        switching: false,
+        trackedOwner: null,
+        aggregateOwner: { sessionId: 'session-b', paneId: 'pane-b1' },
+      })
+    ).toBe('session-b');
+  });
+
+  it('returns null while switching if ownership is unresolved', () => {
+    expect(
+      resolveCurrentAggregatePtySessionId({
+        effectiveSessionId: 'session-a',
+        switching: true,
+        trackedOwner: null,
+        aggregateOwner: null,
+      })
+    ).toBeNull();
+  });
+
+  it('falls back to the effective session when stable and unresolved', () => {
+    expect(
+      resolveCurrentAggregatePtySessionId({
+        effectiveSessionId: 'session-a',
+        switching: false,
+        trackedOwner: null,
+        aggregateOwner: null,
+      })
+    ).toBe('session-a');
+  });
 });
 
 describe('resolveAggregatePreviewPtyId', () => {

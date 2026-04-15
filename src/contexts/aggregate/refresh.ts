@@ -38,7 +38,12 @@ import {
 } from './subscriptions';
 import { recomputeMatches, recomputeTree } from './session';
 import type { AggregateViewState, PtyInfo, SessionLoadState } from './types';
-import { dedupeAggregatePtysByPane, getAggregatePaneKey, getSavedAggregatePtyId } from './rows';
+import {
+  dedupeAggregatePtysByPane,
+  getAggregatePaneKey,
+  getSavedAggregatePtyId,
+  isSavedAggregatePtyId,
+} from './rows';
 
 export { ptyMetadataToInfo } from './pty-info';
 
@@ -203,7 +208,7 @@ export function createAggregateViewRefreshers(
   state: AggregateViewState,
   setState: SetStoreFunction<AggregateViewState>,
   refreshState: RefreshState,
-  _resolvePtyOwnership: (ptyId: string) => PtyOwnership | null,
+  resolvePtyOwnership: (ptyId: string) => PtyOwnership | null,
   getCurrentSessionHints: () => CurrentSessionHints,
   getCurrentSessionPaneOrder: () => Map<string, number> | null,
   getCurrentSessionPtys?: () => CurrentSessionPty[]
@@ -239,11 +244,42 @@ export function createAggregateViewRefreshers(
       const currentSessionPtys = (getCurrentSessionPtys?.() ?? []).filter(
         (pty) => !state.deletedPtyIds.has(pty.ptyId)
       );
-      const activeSessionId = currentSessionHints.sessionId;
+      const hintedSessionId = currentSessionHints.sessionId;
+      // currentSessionPtys come from the live in-memory layout. During cold-start
+      // and session-switch races, a PTY may already have moved to another session
+      // while the stamped sessionId (or the active-session hint) is still stale.
+      // Prefer authoritative ownership resolution over the stamped/current hint.
+      const currentSessionPtysBySession = new Map<string, CurrentSessionPty[]>();
+      for (const pty of currentSessionPtys) {
+        const ownership = resolvePtyOwnership(pty.ptyId);
+        const ptySessionId = ownership?.sessionId ?? pty.sessionId ?? hintedSessionId;
+        if (!ptySessionId) {
+          continue;
+        }
+
+        const ownedPty: CurrentSessionPty = ownership
+          ? {
+              ...pty,
+              sessionId: ownership.sessionId,
+              paneId: ownership.paneId ?? pty.paneId,
+              workspaceId: ownership.workspaceId ?? pty.workspaceId,
+            }
+          : {
+              ...pty,
+              sessionId: ptySessionId,
+            };
+
+        const existing = currentSessionPtysBySession.get(ptySessionId) ?? [];
+        existing.push(ownedPty);
+        currentSessionPtysBySession.set(ptySessionId, existing);
+      }
+      const currentLiveSessionIds = [...currentSessionPtysBySession.keys()];
+      const effectiveCurrentSessionId =
+        currentLiveSessionIds.length === 1 ? currentLiveSessionIds[0] : hintedSessionId;
 
       // When loading only the active session, defer non-active session disk reads.
       const sessionsToLoad = options.activeSessionOnly
-        ? sessions.filter((s) => String(s.id) === activeSessionId)
+        ? sessions.filter((s) => String(s.id) === effectiveCurrentSessionId)
         : sessions;
       const sessionDetailsEntries = await Promise.all(
         sessionsToLoad.map(
@@ -271,10 +307,15 @@ export function createAggregateViewRefreshers(
         )
       );
       const currentLiveMetadata = new Map(currentLiveMetadataEntries);
-      const existingActivePtys = activeSessionId
-        ? state.allPtys.filter(
-            (pty) => pty.sessionId === activeSessionId && !pty.ptyId.startsWith('saved:')
-          )
+      const existingCurrentSessionPtys = effectiveCurrentSessionId
+        ? state.allPtys.filter((pty) => {
+            if (pty.sessionId !== effectiveCurrentSessionId || pty.ptyId.startsWith('saved:')) {
+              return false;
+            }
+
+            const ownership = resolvePtyOwnership(pty.ptyId);
+            return !ownership || ownership.sessionId === effectiveCurrentSessionId;
+          })
         : [];
 
       for (const session of sessions) {
@@ -282,7 +323,7 @@ export function createAggregateViewRefreshers(
 
         // When activeSessionOnly, mark non-active sessions as unloaded and skip.
         // They will be hydrated by the subsequent full refreshPtys() call.
-        if (options.activeSessionOnly && sessionId !== activeSessionId) {
+        if (options.activeSessionOnly && sessionId !== effectiveCurrentSessionId) {
           sessionLoadStates.set(sessionId, {
             status: 'unloaded',
           });
@@ -293,13 +334,14 @@ export function createAggregateViewRefreshers(
         const loadedSession =
           sessionDetails && !(sessionDetails instanceof Error) ? sessionDetails : null;
 
-        if (sessionId === activeSessionId && currentSessionPtys.length > 0) {
+        const currentLivePtysForSession = currentSessionPtysBySession.get(sessionId) ?? [];
+        if (currentLivePtysForSession.length > 0) {
           const paneOrder =
             currentSessionPaneOrder ??
             (loadedSession ? buildSessionPaneOrder(loadedSession) : new Map<string, number>());
           sessionPaneOrders.set(sessionId, paneOrder);
 
-          for (const currentPty of currentSessionPtys) {
+          for (const currentPty of currentLivePtysForSession) {
             const metadataResult = currentLiveMetadata.get(currentPty.ptyId);
             const nextPty =
               metadataResult && !(metadataResult instanceof Error) && metadataResult !== null
@@ -322,26 +364,26 @@ export function createAggregateViewRefreshers(
 
           sessionLoadStates.set(sessionId, {
             status: 'loaded',
-            paneCount: currentSessionPtys.length,
+            paneCount: currentLivePtysForSession.length,
             lastActiveWorkspaceId: currentSessionHints.lastActiveWorkspaceId,
             focusedPaneId: currentSessionHints.focusedPaneId,
           });
           continue;
         }
 
-        if (sessionId === activeSessionId && existingActivePtys.length > 0) {
+        if (sessionId === effectiveCurrentSessionId && existingCurrentSessionPtys.length > 0) {
           const paneOrder =
             currentSessionPaneOrder ??
             new Map(
-              existingActivePtys
+              existingCurrentSessionPtys
                 .filter((pty) => !!pty.paneId)
                 .map((pty, index) => [pty.paneId as string, index] as const)
             );
           sessionPaneOrders.set(sessionId, paneOrder);
-          provisionalPtys.push(...existingActivePtys.map((pty) => ({ ...pty })));
+          provisionalPtys.push(...existingCurrentSessionPtys.map((pty) => ({ ...pty })));
           sessionLoadStates.set(sessionId, {
             status: 'loaded',
-            paneCount: existingActivePtys.length,
+            paneCount: existingCurrentSessionPtys.length,
             lastActiveWorkspaceId: currentSessionHints.lastActiveWorkspaceId,
             focusedPaneId: currentSessionHints.focusedPaneId,
           });
@@ -473,11 +515,72 @@ export function createAggregateViewRefreshers(
                 : pty.title,
           };
         });
+        // Build a pane-id-only index from snapshot entries so that a
+        // wrong-sessionId optimistic entry is still caught. During cold-start
+        // and rapid session switches, a placeholder may have been inserted
+        // with an incorrect sessionId (stale ptyToSessionMap or
+        // aggregateSessionMappings). The snapshot entry for the same pane
+        // has the correct sessionId. If we only check (sessionId, paneId)
+        // pane keys, the wrong entry's key won't match and it gets carried
+        // → bleed.
+        //
+        // Two strategies catch this:
+        // 1. PaneId-only check: if the snapshot covers this paneId under ANY
+        //    session AND the optimistic entry's ownership resolves to a
+        //    different session, drop it (ownership says it's in the wrong
+        //    session, and the snapshot already covers the pane).
+        // 2. Ownership check: if the optimistic entry's ownership disagrees
+        //    with its stamped sessionId, drop it regardless.
+        const snapshotPaneIdsBySession = new Map<string, Set<string>>();
+        const snapshotPaneIdsAll = new Set<string>();
+        for (const pty of snapshotPtys) {
+          if (pty.paneId) {
+            snapshotPaneIdsAll.add(pty.paneId);
+            const sessionSet = snapshotPaneIdsBySession.get(pty.sessionId) ?? new Set<string>();
+            sessionSet.add(pty.paneId);
+            snapshotPaneIdsBySession.set(pty.sessionId, sessionSet);
+          }
+        }
+
         const carriedOptimisticPtys = s.allPtys.filter((pty) => {
           const paneKey = getAggregatePaneKey(pty.sessionId, pty.paneId);
+          const matchesExactPaneKey = paneKey && snapshotPaneKeys.has(paneKey);
+
+          if (matchesExactPaneKey) {
+            // Exact (sessionId, paneId) match — snapshot covers this entry.
+            return false;
+          }
+
+          // Check if the optimistic entry's ownership disagrees with its
+          // stamped sessionId. If so, it's a wrong-session placeholder that
+          // would cause bleed if carried.
+          const ownership = resolvePtyOwnership(pty.ptyId);
+          const ownershipDisagrees = ownership && ownership.sessionId !== pty.sessionId;
+
+          // If ownership disagrees, don't carry — the snapshot or a future
+          // refresh will produce the correct entry.
+          if (ownershipDisagrees) {
+            return false;
+          }
+
+          // If no ownership exists but the paneId is covered by the snapshot
+          // under a different session, this is likely a wrong-session entry.
+          // Only apply this when the ptyId is NOT a saved: entry (saved entries
+          // legitimately share pane IDs across sessions).
+          if (
+            !ownership &&
+            pty.paneId &&
+            !isSavedAggregatePtyId(pty.ptyId) &&
+            snapshotPaneIdsAll.has(pty.paneId) &&
+            !snapshotPaneIdsBySession.get(pty.sessionId)?.has(pty.paneId)
+          ) {
+            // The snapshot covers this paneId but NOT under the entry's
+            // stamped session — the entry has a wrong sessionId.
+            return false;
+          }
+
           return (
             !snapshotPtyIds.has(pty.ptyId) &&
-            !(paneKey && snapshotPaneKeys.has(paneKey)) &&
             (s.pendingPtyIds.has(pty.ptyId) || s.recentlyAddedPtyIds.has(pty.ptyId)) &&
             !s.deletedPtyIds.has(pty.ptyId)
           );

@@ -35,7 +35,10 @@ import { useLayout } from './LayoutContext';
 import { useSession } from './SessionContext';
 import { getActiveSessionIdForShim } from '../effect/bridge/app-coordinator-bridge';
 import { useTerminal } from './TerminalContext';
-import { resolveAggregatePtyOwnership } from '../components/aggregate/utils';
+import {
+  resolveAggregatePtyOwnership,
+  resolveCurrentAggregatePtySessionId,
+} from '../components/aggregate/utils';
 import { collectPanes } from '../core/layout-tree';
 import {
   getAggregateSessionOrderResult,
@@ -67,14 +70,17 @@ export function AggregateViewProvider(props: AggregateViewProviderProps) {
       aggregateOwner: getAggregateSessionForPty(ptyId),
     });
 
+  const getEffectiveCurrentSessionId = () =>
+    getActiveSessionIdForShim() ?? session.state.activeSessionId;
+
   const getCurrentSessionHints = () => ({
-    sessionId: session.state.activeSessionId,
+    sessionId: getEffectiveCurrentSessionId(),
     lastActiveWorkspaceId: layout.state.activeWorkspaceId,
     focusedPaneId: layout.activeWorkspace?.focusedPaneId ?? undefined,
   });
 
   const getCurrentSessionPaneOrder = () => {
-    const sessionId = session.state.activeSessionId;
+    const sessionId = getEffectiveCurrentSessionId();
     if (!sessionId || session.state.switching) return null;
 
     const paneIds: string[] = [];
@@ -100,7 +106,7 @@ export function AggregateViewProvider(props: AggregateViewProviderProps) {
    * This avoids waiting for the expensive full refresh.
    */
   const getCurrentSessionPtys = () => {
-    const sessionId = session.state.activeSessionId;
+    const sessionId = getEffectiveCurrentSessionId();
     if (!sessionId) return [];
 
     const ptys: Array<{
@@ -109,6 +115,7 @@ export function AggregateViewProvider(props: AggregateViewProviderProps) {
       workspaceId: number;
       title?: string;
       cwd?: string;
+      sessionId?: string;
     }> = [];
 
     for (const [wsId, workspace] of Object.entries(layout.state.workspaces)) {
@@ -130,15 +137,15 @@ export function AggregateViewProvider(props: AggregateViewProviderProps) {
           collectPtys(n.second);
         } else if (n.id && n.ptyId && terminal.isPtyActive(n.ptyId)) {
           const trackedSession = terminal.findSessionForPty(n.ptyId);
-          // During a session switch, session.state.activeSessionId hasn't been
-          // updated yet, but setActiveSessionIdForShim was already called.
-          // Use the shim-level session ID to avoid filtering out PTYs that
-          // belong to the new (switching-to) session.
-          const effectiveSessionId = getActiveSessionIdForShim() ?? sessionId;
-          if (trackedSession && trackedSession.sessionId !== effectiveSessionId) {
-            return;
-          }
-          if (!trackedSession && session.state.switching) {
+          const aggregateOwner = getAggregateSessionForPty(n.ptyId);
+          const effectiveSessionId = sessionId;
+          const resolvedSessionId = resolveCurrentAggregatePtySessionId({
+            effectiveSessionId,
+            switching: session.state.switching,
+            trackedOwner: trackedSession,
+            aggregateOwner,
+          });
+          if (!resolvedSessionId) {
             return;
           }
 
@@ -148,6 +155,7 @@ export function AggregateViewProvider(props: AggregateViewProviderProps) {
             workspaceId,
             title: n.title,
             cwd: getStoredSessionCwd(n.id),
+            sessionId: resolvedSessionId,
           });
         }
       };

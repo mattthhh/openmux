@@ -131,6 +131,27 @@ export function resolveAggregatePtyOwnership(params: {
   return null;
 }
 
+export function resolveCurrentAggregatePtySessionId(params: {
+  effectiveSessionId: string | null;
+  switching: boolean;
+  trackedOwner: { sessionId: string; paneId: string } | null;
+  aggregateOwner: { sessionId: string; paneId: string } | null;
+}): string | null {
+  if (params.trackedOwner) {
+    return params.trackedOwner.sessionId;
+  }
+
+  if (params.aggregateOwner) {
+    return params.aggregateOwner.sessionId;
+  }
+
+  if (params.switching) {
+    return null;
+  }
+
+  return params.effectiveSessionId;
+}
+
 export function resolveAggregatePreviewPtyId(params: {
   selectedPtyId: string | null;
   selectedIndex: number;

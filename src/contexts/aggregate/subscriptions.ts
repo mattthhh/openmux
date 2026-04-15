@@ -81,6 +81,13 @@ export interface CurrentSessionPty {
   workspaceId: number;
   title?: string;
   cwd?: string;
+  /**
+   * Effective owner session for the current in-memory layout snapshot.
+   * This may differ transiently from SessionContext.activeSessionId during
+   * cold-start/session-switch races, so refresh.ts must trust this value over
+   * the hinted active session when it is present.
+   */
+  sessionId?: string;
 }
 
 export type TitleChangeHandler = (event: { ptyId: string; title: string }) => void;
