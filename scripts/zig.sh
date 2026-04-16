@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Work around Zig 0.15.x failing to link its macOS build runner against the
+# Work around Zig failing to link its macOS build runner against the
 # Xcode 26 SDK, whose libSystem.tbd may omit arm64-macos stubs. When that
 # happens, prefer the Command Line Tools SDK, which still exposes the arm64
 # entries Zig expects.

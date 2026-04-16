@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [main]
 
+env:
+  ZIG_VERSION: 0.16.0
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -18,8 +21,6 @@ jobs:
 
       - name: Setup Zig
         shell: bash
-        env:
-          ZIG_VERSION: 0.15.2
         run: |
           set -euxo pipefail
           case "$(uname -s)-$(uname -m)" in
@@ -52,7 +53,7 @@ jobs:
         uses: actions/cache@v5
         with:
           path: native/zig-git/zig-out/libgit2
-          key: libgit2-${{ runner.os }}-${{ runner.arch }}-${{ steps.libgit2.outputs.rev }}-${{ hashFiles('native/zig-git/build.zig') }}
+          key: libgit2-${{ runner.os }}-${{ runner.arch }}-${{ env.ZIG_VERSION }}-${{ steps.libgit2.outputs.rev }}-${{ hashFiles('native/zig-git/build.zig') }}
 
       - name: Cache native libraries
         uses: actions/cache@v5
@@ -61,7 +62,7 @@ jobs:
             native/zig-pty/zig-out/lib
             native/zig-git/zig-out/lib
             native/zig-ghostty-wrapper/zig-out/lib
-          key: native-libs-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('native/zig-pty/build.zig', 'native/zig-pty/src/**/*.zig', 'native/zig-git/build.zig', 'native/zig-git/src/**/*.zig', 'native/zig-ghostty-wrapper/build.zig', 'native/zig-ghostty-wrapper/src/**/*.zig', 'vendor/ghostty/**/*.zig') }}
+          key: native-libs-${{ runner.os }}-${{ runner.arch }}-${{ env.ZIG_VERSION }}-${{ hashFiles('native/zig-pty/build.zig', 'native/zig-pty/src/**/*.zig', 'native/zig-git/build.zig', 'native/zig-git/src/**/*.zig', 'native/zig-ghostty-wrapper/build.zig', 'native/zig-ghostty-wrapper/src/**/*.zig', 'native/zig-ghostty-wrapper/compat/**/*', 'vendor/ghostty/**/*.zig') }}
 
       - name: Setup CMake
         run: |
@@ -128,8 +129,6 @@ jobs:
 
       - name: Setup Zig
         shell: bash
-        env:
-          ZIG_VERSION: 0.15.2
         run: |
           set -euxo pipefail
           case "$(uname -s)-$(uname -m)" in
@@ -162,7 +161,7 @@ jobs:
         uses: actions/cache@v5
         with:
           path: native/zig-git/zig-out/libgit2
-          key: libgit2-${{ runner.os }}-${{ runner.arch }}-${{ steps.libgit2.outputs.rev }}-${{ hashFiles('native/zig-git/build.zig') }}
+          key: libgit2-${{ runner.os }}-${{ runner.arch }}-${{ env.ZIG_VERSION }}-${{ steps.libgit2.outputs.rev }}-${{ hashFiles('native/zig-git/build.zig') }}
 
       - name: Setup CMake
         run: |

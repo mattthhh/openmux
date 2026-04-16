@@ -8,6 +8,9 @@ on:
 permissions:
   contents: write
 
+env:
+  ZIG_VERSION: 0.16.0
+
 jobs:
   build:
     strategy:
@@ -34,7 +37,7 @@ jobs:
       - name: Setup Zig
         uses: mlugg/setup-zig@v2
         with:
-          version: 0.15.2
+          version: ${{ env.ZIG_VERSION }}
 
       - name: Get libgit2 revision
         id: libgit2
@@ -44,7 +47,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: native/zig-git/zig-out/libgit2
-          key: libgit2-${{ runner.os }}-${{ runner.arch }}-${{ steps.libgit2.outputs.rev }}-${{ hashFiles('native/zig-git/build.zig') }}
+          key: libgit2-${{ runner.os }}-${{ runner.arch }}-${{ env.ZIG_VERSION }}-${{ steps.libgit2.outputs.rev }}-${{ hashFiles('native/zig-git/build.zig') }}
 
       - name: Setup CMake
         run: |
