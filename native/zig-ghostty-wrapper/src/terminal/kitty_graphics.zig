@@ -1,5 +1,4 @@
 const std = @import("std");
-const builtin = @import("builtin");
 const state = @import("state.zig");
 const types = @import("types.zig");
 
@@ -7,19 +6,8 @@ const TerminalWrapper = state.TerminalWrapper;
 const GhosttyKittyImageInfo = types.GhosttyKittyImageInfo;
 const GhosttyKittyPlacement = types.GhosttyKittyPlacement;
 
-const is_posix_clock = switch (builtin.os.tag) {
-    .windows, .uefi, .wasi => false,
-    else => true,
-};
-
-fn instantToNanos(ts: std.time.Instant) u64 {
-    if (comptime is_posix_clock) {
-        const sec: u64 = if (ts.timestamp.sec < 0) 0 else @intCast(ts.timestamp.sec);
-        const nsec: u64 = if (ts.timestamp.nsec < 0) 0 else @intCast(ts.timestamp.nsec);
-        return sec * std.time.ns_per_s + nsec;
-    }
-
-    return ts.timestamp;
+fn instantToNanos(ts: u64) u64 {
+    return ts;
 }
 
 pub fn getKittyImagesDirty(ptr: ?*anyopaque) callconv(.c) bool {

@@ -4,13 +4,14 @@
 const std = @import("std");
 const exports = @import("../ffi/exports.zig");
 const constants = @import("../util/constants.zig");
+const sleep_util = @import("../util/sleep.zig");
 
 fn waitForSpawnDrain() !void {
     var attempts: usize = 0;
     while (attempts < 200) : (attempts += 1) {
         const request_id = exports.bun_pty_spawn_async("true", "", "", 80, 24);
         if (request_id < 0) {
-            std.Thread.sleep(10 * std.time.ns_per_ms);
+            sleep_util.sleepMilliseconds(10);
             continue;
         }
 
@@ -19,7 +20,7 @@ fn waitForSpawnDrain() !void {
         while (handle == constants.SPAWN_PENDING and iterations < 100) : (iterations += 1) {
             handle = exports.bun_pty_spawn_poll(request_id);
             if (handle == constants.SPAWN_PENDING) {
-                std.Thread.sleep(10 * std.time.ns_per_ms);
+                sleep_util.sleepMilliseconds(10);
             }
         }
 
@@ -45,7 +46,7 @@ test "async spawn basic flow" {
     while (handle == constants.SPAWN_PENDING and iterations < 100) : (iterations += 1) {
         handle = exports.bun_pty_spawn_poll(request_id);
         if (handle == constants.SPAWN_PENDING) {
-            std.Thread.sleep(10 * std.time.ns_per_ms);
+            sleep_util.sleepMilliseconds(10);
         }
     }
 
@@ -62,19 +63,19 @@ test "async spawn with cwd" {
     while (handle == constants.SPAWN_PENDING and iterations < 100) : (iterations += 1) {
         handle = exports.bun_pty_spawn_poll(request_id);
         if (handle == constants.SPAWN_PENDING) {
-            std.Thread.sleep(10 * std.time.ns_per_ms);
+            sleep_util.sleepMilliseconds(10);
         }
     }
 
     try std.testing.expect(handle > 0);
 
     // Wait for output and verify
-    std.Thread.sleep(100 * std.time.ns_per_ms);
+    sleep_util.sleepMilliseconds(100);
     var buf: [1024]u8 = undefined;
     const n = exports.bun_pty_read(handle, &buf, buf.len);
     if (n > 0) {
         const output = buf[0..@intCast(n)];
-        try std.testing.expect(std.mem.indexOf(u8, output, "tmp") != null);
+        try std.testing.expect(std.mem.find(u8, output, "tmp") != null);
     }
 
     exports.bun_pty_close(handle);
@@ -106,7 +107,7 @@ test "async spawn cancel after completion" {
     while (iterations < 100) : (iterations += 1) {
         const result = exports.bun_pty_spawn_poll(request_id);
         if (result != constants.SPAWN_PENDING) break;
-        std.Thread.sleep(10 * std.time.ns_per_ms);
+        sleep_util.sleepMilliseconds(10);
     }
 
     // Now cancel - should clean up the handle
@@ -155,7 +156,7 @@ test "multiple concurrent async spawns" {
         while (h.* == constants.SPAWN_PENDING and iterations < 100) : (iterations += 1) {
             h.* = exports.bun_pty_spawn_poll(request_ids[i]);
             if (h.* == constants.SPAWN_PENDING) {
-                std.Thread.sleep(10 * std.time.ns_per_ms);
+                sleep_util.sleepMilliseconds(10);
             }
         }
         try std.testing.expect(h.* > 0);
@@ -214,7 +215,7 @@ test "cancel race: rapid spawn cancel cycles" {
     }
 
     // Give time for any pending spawns to complete and clean up
-    std.Thread.sleep(500 * std.time.ns_per_ms);
+    sleep_util.sleepMilliseconds(500);
 }
 
 test "cancelled requests free slots for reuse" {
@@ -253,7 +254,7 @@ test "cancelled requests free slots for reuse" {
             exports.bun_pty_spawn_cancel(rid);
         }
 
-        std.Thread.sleep(10 * std.time.ns_per_ms);
+        sleep_util.sleepMilliseconds(10);
     }
 
     try std.testing.expect(false);
@@ -283,7 +284,7 @@ test "cancel race: concurrent spawns with interleaved cancels" {
             while (handle == constants.SPAWN_PENDING and iterations < 100) : (iterations += 1) {
                 handle = exports.bun_pty_spawn_poll(rid);
                 if (handle == constants.SPAWN_PENDING) {
-                    std.Thread.sleep(10 * std.time.ns_per_ms);
+                    sleep_util.sleepMilliseconds(10);
                 }
             }
             // Should complete successfully

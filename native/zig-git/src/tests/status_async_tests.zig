@@ -3,6 +3,7 @@ const constants = @import("../constants.zig");
 const helpers = @import("../test_helpers.zig");
 const c = helpers.c;
 const api = @import("../api.zig");
+const sleep_util = @import("../sleep.zig");
 
 test "status async reports branch after commit" {
     _ = api.omx_git_init();
@@ -11,7 +12,7 @@ test "status async reports branch after commit" {
     defer tmp.cleanup();
 
     const allocator = std.testing.allocator;
-    const repo_path = try tmp.dir.realpathAlloc(allocator, ".");
+    const repo_path = try helpers.tmpDirPathAlloc(allocator, &tmp);
     defer allocator.free(repo_path);
 
     const repo = try helpers.initRepo(allocator, repo_path);
@@ -66,7 +67,7 @@ test "status async reports branch after commit" {
             @as(c_int, @intCast(commondir_buf.len)),
         );
         if (status == constants.STATUS_PENDING) {
-            std.Thread.sleep(1 * std.time.ns_per_ms);
+            sleep_util.sleepMilliseconds(1);
         }
     }
 

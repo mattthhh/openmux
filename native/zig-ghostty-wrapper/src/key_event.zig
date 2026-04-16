@@ -135,7 +135,7 @@ pub fn free(event_: Event) callconv(.c) void {
 
 pub fn set_action(event_: Event, action: KeyAction) callconv(.c) void {
     if (comptime std.debug.runtime_safety) {
-        _ = std.meta.intToEnum(KeyAction, @intFromEnum(action)) catch {
+        _ = std.enums.fromInt(KeyAction, @intFromEnum(action)) orelse {
             log.warn("set_action invalid action value={d}", .{@intFromEnum(action)});
             return;
         };
@@ -152,7 +152,7 @@ pub fn get_action(event_: Event) callconv(.c) KeyAction {
 
 pub fn set_key(event_: Event, k: Key) callconv(.c) void {
     if (comptime std.debug.runtime_safety) {
-        _ = std.meta.intToEnum(Key, @intFromEnum(k)) catch {
+        _ = std.enums.fromInt(Key, @intFromEnum(k)) orelse {
             log.warn("set_key invalid key value={d}", .{@intFromEnum(k)});
             return;
         };

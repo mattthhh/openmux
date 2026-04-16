@@ -7,6 +7,9 @@ const posix = @import("../util/posix.zig");
 const c = posix.c;
 const constants = @import("../util/constants.zig");
 const winsize = @import("../util/winsize.zig");
+const pty_io = @import("../io.zig");
+const sleep_util = @import("../util/sleep.zig");
+const macos_kq = if (builtin.os.tag == .macos) @import("../util/macos_kqueue.zig") else struct {};
 
 pub const Pty = struct {
     master_fd: c_int,
@@ -122,11 +125,10 @@ pub const Pty = struct {
         if (self.exit_detected.load(.acquire)) return;
 
         if (builtin.os.tag == .macos) {
-            var event: c.struct_kevent = undefined;
-            var timeout = c.timespec{ .tv_sec = 0, .tv_nsec = 0 };
-            const n = c.kevent(self.proc_exit_fd, null, 0, &event, 1, &timeout);
-            if (n == 1 and event.filter == c.EVFILT_PROC and (event.fflags & c.NOTE_EXIT) != 0) {
-                self.markExitDetected();
+            if (macos_kq.checkExitEvent(self.proc_exit_fd)) |event| {
+                if (event.filter == macos_kq.EVFILT_PROC and (event.fflags & macos_kq.NOTE_EXIT) != 0) {
+                    self.markExitDetected();
+                }
             }
             return;
         }
@@ -189,7 +191,7 @@ pub const Pty = struct {
                 if (self.hasProcExitWatcher()) {
                     if (self.exit_detected.load(.acquire) and master_has_hangup) break;
                     if (master_has_hangup) {
-                        std.Thread.sleep(1 * std.time.ns_per_ms);
+                        sleep_util.sleepMilliseconds(1);
                     }
                     continue;
                 }
@@ -207,15 +209,16 @@ pub const Pty = struct {
             const n = c.read(self.master_fd, &buf, buf.len);
 
             if (n > 0) {
+                const io = pty_io.get();
                 var written: usize = 0;
                 while (written < @as(usize, @intCast(n))) {
                     const w = self.ring.write(buf[written..@intCast(n)]);
                     if (w == 0) {
-                        self.ring.mutex.lock();
+                        self.ring.mutex.lock(io) catch unreachable;
                         while (self.ring.availableSpace() == 0 and !self.stopping.load(.acquire)) {
-                            self.ring.not_full.timedWait(&self.ring.mutex, 100 * std.time.ns_per_ms) catch {};
+                            self.ring.not_full.wait(io, &self.ring.mutex) catch {};
                         }
-                        self.ring.mutex.unlock();
+                        self.ring.mutex.unlock(io);
                         if (self.stopping.load(.acquire)) break;
                     } else {
                         written += w;
@@ -231,7 +234,7 @@ pub const Pty = struct {
                         self.signalWakeup();
                         break;
                     }
-                    std.Thread.sleep(1 * std.time.ns_per_ms);
+                    sleep_util.sleepMilliseconds(1);
                     continue;
                 }
 
@@ -342,7 +345,8 @@ pub const Pty = struct {
         const n = self.ring.read(buf[0..len]);
 
         if (n > 0) {
-            self.ring.not_full.signal();
+            const io = pty_io.get();
+            self.ring.not_full.signal(io);
             return @intCast(n);
         }
 
@@ -372,7 +376,7 @@ pub const Pty = struct {
                 const err = std.c._errno().*;
                 if (err == c.EINTR) continue;
                 if (err == c.EAGAIN or err == c.EWOULDBLOCK) {
-                    std.Thread.sleep(1 * std.time.ns_per_ms);
+                    sleep_util.sleepMilliseconds(1);
                     continue;
                 }
                 return constants.ERROR;
@@ -388,8 +392,8 @@ pub const Pty = struct {
         const ws: c.winsize = winsize.makeWinsize(cols, rows);
         self.cols = cols;
         self.rows = rows;
-        self.pixel_width = ws.ws_xpixel;
-        self.pixel_height = ws.ws_ypixel;
+        self.pixel_width = ws.xpixel;
+        self.pixel_height = ws.ypixel;
 
         if (c.ioctl(self.master_fd, c.TIOCSWINSZ, &ws) == -1) {
             return constants.ERROR;
@@ -408,8 +412,8 @@ pub const Pty = struct {
         const ws: c.winsize = winsize.makeWinsizeWithPixels(cols, rows, pixel_width, pixel_height);
         self.cols = cols;
         self.rows = rows;
-        self.pixel_width = ws.ws_xpixel;
-        self.pixel_height = ws.ws_ypixel;
+        self.pixel_width = ws.xpixel;
+        self.pixel_height = ws.ypixel;
 
         if (c.ioctl(self.master_fd, c.TIOCSWINSZ, &ws) == -1) {
             return constants.ERROR;
@@ -427,7 +431,8 @@ pub const Pty = struct {
 
     pub fn deinit(self: *Pty) void {
         self.stopping.store(true, .release);
-        self.ring.not_full.signal();
+        const io = pty_io.get();
+        self.ring.not_full.signal(io);
 
         if (self.reader_thread) |thread| {
             thread.join();

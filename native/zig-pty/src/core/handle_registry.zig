@@ -3,6 +3,8 @@
 const std = @import("std");
 const Pty = @import("pty.zig").Pty;
 const constants = @import("../util/constants.zig");
+const pty_io = @import("../io.zig");
+const sleep_util = @import("../util/sleep.zig");
 
 const allocator = std.heap.c_allocator;
 
@@ -10,13 +12,14 @@ const allocator = std.heap.c_allocator;
 // condition-variable state through the registry on spawn.
 var handles: [constants.MAX_HANDLES]?*Pty = [_]?*Pty{null} ** constants.MAX_HANDLES;
 var next_handle: u32 = 1;
-var registry_mutex: std.Thread.Mutex = .{};
+var registry_mutex: std.Io.Mutex = .init;
 var handle_ref_counts: [constants.MAX_HANDLES]std.atomic.Value(u32) = [_]std.atomic.Value(u32){std.atomic.Value(u32).init(0)} ** constants.MAX_HANDLES;
 var handle_closing: [constants.MAX_HANDLES]std.atomic.Value(bool) = [_]std.atomic.Value(bool){std.atomic.Value(bool).init(false)} ** constants.MAX_HANDLES;
 
 pub fn allocHandle() ?u32 {
-    registry_mutex.lock();
-    defer registry_mutex.unlock();
+    const io = pty_io.get();
+    registry_mutex.lock(io) catch unreachable;
+    defer registry_mutex.unlock(io);
 
     // Find free slot
     var i: u32 = 0;
@@ -33,8 +36,9 @@ pub fn allocHandle() ?u32 {
 
 pub fn acquireHandle(h: u32) ?*Pty {
     if (h == 0 or h >= constants.MAX_HANDLES) return null;
-    registry_mutex.lock();
-    defer registry_mutex.unlock();
+    const io = pty_io.get();
+    registry_mutex.lock(io) catch unreachable;
+    defer registry_mutex.unlock(io);
 
     if (handle_closing[h].load(.acquire)) return null;
 
@@ -55,8 +59,9 @@ pub fn createHandle(h: u32) ?*Pty {
 
     const pty = allocator.create(Pty) catch return null;
 
-    registry_mutex.lock();
-    defer registry_mutex.unlock();
+    const io = pty_io.get();
+    registry_mutex.lock(io) catch unreachable;
+    defer registry_mutex.unlock(io);
 
     if (handles[h] != null) {
         allocator.destroy(pty);
@@ -72,38 +77,40 @@ pub fn createHandle(h: u32) ?*Pty {
 pub fn removeHandle(h: u32) void {
     if (h == 0 or h >= constants.MAX_HANDLES) return;
 
+    const io = pty_io.get();
+
     // Mark handle as closing so new operations can't acquire it.
-    registry_mutex.lock();
+    registry_mutex.lock(io) catch unreachable;
     if (handles[h] == null or handle_closing[h].load(.acquire)) {
-        registry_mutex.unlock();
+        registry_mutex.unlock(io);
         return;
     }
     handle_closing[h].store(true, .release);
-    registry_mutex.unlock();
+    registry_mutex.unlock(io);
 
     // Wait for in-flight operations to complete.
     while (handle_ref_counts[h].load(.acquire) != 0) {
-        std.Thread.sleep(1 * std.time.ns_per_ms);
+        sleep_util.sleepMilliseconds(1);
     }
 
     // Deinitialize outside the registry lock to avoid blocking other handles.
     var pty_ptr: *Pty = undefined;
-    registry_mutex.lock();
+    registry_mutex.lock(io) catch unreachable;
     if (handles[h]) |pty| {
         pty_ptr = pty;
     } else {
         handle_closing[h].store(false, .release);
-        registry_mutex.unlock();
+        registry_mutex.unlock(io);
         return;
     }
-    registry_mutex.unlock();
+    registry_mutex.unlock(io);
 
     pty_ptr.deinit();
     allocator.destroy(pty_ptr);
 
-    registry_mutex.lock();
+    registry_mutex.lock(io) catch unreachable;
     handles[h] = null;
     handle_ref_counts[h].store(0, .release);
     handle_closing[h].store(false, .release);
-    registry_mutex.unlock();
+    registry_mutex.unlock(io);
 }

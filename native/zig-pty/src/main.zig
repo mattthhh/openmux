@@ -26,6 +26,7 @@
 
 const std = @import("std");
 const exports = @import("ffi/exports.zig");
+const pty_io = @import("io.zig");
 
 // ============================================================================
 // FFI Exports - These must be `export fn` to create symbols in the shared lib
@@ -143,6 +144,11 @@ export fn bun_pty_notify_cancel(token: c_int) c_int {
 
 export fn bun_pty_notify_register_signal(name: [*:0]const u8, sig: c_int) c_int {
     return exports.bun_pty_notify_register_signal(name, sig);
+}
+
+// Initialize thread-local Io for the calling thread on library load
+comptime {
+    _ = pty_io;
 }
 
 // ============================================================================

@@ -3,6 +3,8 @@ const constants = @import("../constants.zig");
 const helpers = @import("../test_helpers.zig");
 const c = helpers.c;
 const api = @import("../api.zig");
+const sleep_util = @import("../sleep.zig");
+const git_io = @import("../io.zig");
 
 test "diff stats include tracked changes" {
     _ = api.omx_git_init();
@@ -11,14 +13,14 @@ test "diff stats include tracked changes" {
     defer tmp.cleanup();
 
     const allocator = std.testing.allocator;
-    const repo_path = try tmp.dir.realpathAlloc(allocator, ".");
+    const repo_path = try helpers.tmpDirPathAlloc(allocator, &tmp);
     defer allocator.free(repo_path);
 
     const repo = try helpers.initRepo(allocator, repo_path);
     defer c.git_repository_free(@as(?*c.git_repository, repo));
 
     try helpers.commitFile(allocator, repo, tmp.dir, "tracked.txt", "a\nb\n");
-    try tmp.dir.writeFile(.{ .sub_path = "tracked.txt", .data = "a\nb\nc\n" });
+    try tmp.dir.writeFile(git_io.get(), .{ .sub_path = "tracked.txt", .data = "a\nb\nc\n" });
 
     const repo_path_z = try allocator.dupeZ(u8, repo_path);
     defer allocator.free(repo_path_z);
@@ -34,7 +36,7 @@ test "diff stats include tracked changes" {
     while (status == constants.DIFF_PENDING) {
         status = api.omx_git_diff_stats_poll(req_id, &added, &removed, &binary);
         if (status == constants.DIFF_PENDING) {
-            std.Thread.sleep(1 * std.time.ns_per_ms);
+            sleep_util.sleepMilliseconds(1);
         }
     }
 
@@ -51,14 +53,14 @@ test "diff stats include untracked changes" {
     defer tmp.cleanup();
 
     const allocator = std.testing.allocator;
-    const repo_path = try tmp.dir.realpathAlloc(allocator, ".");
+    const repo_path = try helpers.tmpDirPathAlloc(allocator, &tmp);
     defer allocator.free(repo_path);
 
     const repo = try helpers.initRepo(allocator, repo_path);
     defer c.git_repository_free(@as(?*c.git_repository, repo));
 
     try helpers.commitFile(allocator, repo, tmp.dir, "tracked.txt", "first\n");
-    try tmp.dir.writeFile(.{ .sub_path = "untracked.txt", .data = "one\ntwo\nthree\n" });
+    try tmp.dir.writeFile(git_io.get(), .{ .sub_path = "untracked.txt", .data = "one\ntwo\nthree\n" });
 
     const repo_path_z = try allocator.dupeZ(u8, repo_path);
     defer allocator.free(repo_path_z);
@@ -74,7 +76,7 @@ test "diff stats include untracked changes" {
     while (status == constants.DIFF_PENDING) {
         status = api.omx_git_diff_stats_poll(req_id, &added, &removed, &binary);
         if (status == constants.DIFF_PENDING) {
-            std.Thread.sleep(1 * std.time.ns_per_ms);
+            sleep_util.sleepMilliseconds(1);
         }
     }
 
@@ -95,7 +97,7 @@ test "diff stats count binary changes separately" {
     defer tmp.cleanup();
 
     const allocator = std.testing.allocator;
-    const repo_path = try tmp.dir.realpathAlloc(allocator, ".");
+    const repo_path = try helpers.tmpDirPathAlloc(allocator, &tmp);
     defer allocator.free(repo_path);
 
     const repo = try helpers.initRepo(allocator, repo_path);
@@ -108,7 +110,7 @@ test "diff stats count binary changes separately" {
     defer allocator.free(binary_data);
     @memset(binary_data, 0);
 
-    try tmp.dir.writeFile(.{ .sub_path = "tracked.txt", .data = binary_data });
+    try tmp.dir.writeFile(git_io.get(), .{ .sub_path = "tracked.txt", .data = binary_data });
 
     const repo_path_z = try allocator.dupeZ(u8, repo_path);
     defer allocator.free(repo_path_z);
@@ -124,7 +126,7 @@ test "diff stats count binary changes separately" {
     while (status == constants.DIFF_PENDING) {
         status = api.omx_git_diff_stats_poll(req_id, &added, &removed, &binary);
         if (status == constants.DIFF_PENDING) {
-            std.Thread.sleep(1 * std.time.ns_per_ms);
+            sleep_util.sleepMilliseconds(1);
         }
     }
 

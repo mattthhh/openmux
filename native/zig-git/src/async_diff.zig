@@ -5,6 +5,7 @@ const c = @cImport({
 
 const constants = @import("constants.zig");
 const git_mutex = @import("git_mutex.zig");
+const git_io = @import("io.zig");
 
 pub const DiffState = enum(u8) {
     pending,
@@ -40,16 +41,17 @@ var diff_request_used: [constants.MAX_DIFF_REQUESTS]std.atomic.Value(bool) =
 
 var diff_thread: ?std.Thread = null;
 var diff_thread_running: std.atomic.Value(bool) = std.atomic.Value(bool).init(false);
-var diff_thread_mutex: std.Thread.Mutex = .{};
-var diff_queue_mutex: std.Thread.Mutex = .{};
-var diff_queue_cond: std.Thread.Condition = .{};
+var diff_thread_mutex: std.Io.Mutex = .init;
+var diff_queue_mutex: std.Io.Mutex = .init;
+var diff_queue_cond: std.Io.Condition = .init;
 var diff_queue_count: std.atomic.Value(u32) = std.atomic.Value(u32).init(0);
 
 pub fn initDiffThread() bool {
     if (diff_thread_running.load(.acquire)) return true;
 
-    diff_thread_mutex.lock();
-    defer diff_thread_mutex.unlock();
+    const io = git_io.get();
+    diff_thread_mutex.lock(io) catch unreachable;
+    defer diff_thread_mutex.unlock(io);
 
     if (diff_thread_running.load(.acquire)) return true;
 
@@ -63,16 +65,17 @@ pub fn initDiffThread() bool {
 }
 
 pub fn deinitDiffThread() void {
-    diff_thread_mutex.lock();
-    defer diff_thread_mutex.unlock();
+    const io = git_io.get();
+    diff_thread_mutex.lock(io) catch unreachable;
+    defer diff_thread_mutex.unlock(io);
 
     if (!diff_thread_running.load(.acquire)) return;
 
     diff_thread_running.store(false, .release);
 
-    diff_queue_mutex.lock();
-    diff_queue_cond.signal();
-    diff_queue_mutex.unlock();
+    diff_queue_mutex.lock(io) catch unreachable;
+    diff_queue_cond.signal(io);
+    diff_queue_mutex.unlock(io);
 
     if (diff_thread) |thread| {
         thread.join();
@@ -81,12 +84,15 @@ pub fn deinitDiffThread() void {
 }
 
 fn diffThreadLoop() void {
+    git_io.initThreadIo();
+    const io = git_io.get();
+
     while (diff_thread_running.load(.acquire)) {
-        diff_queue_mutex.lock();
+        diff_queue_mutex.lock(io) catch unreachable;
         while (diff_queue_count.load(.acquire) == 0 and diff_thread_running.load(.acquire)) {
-            diff_queue_cond.timedWait(&diff_queue_mutex, 100 * std.time.ns_per_ms) catch {};
+            diff_queue_cond.wait(io, &diff_queue_mutex) catch {};
         }
-        diff_queue_mutex.unlock();
+        diff_queue_mutex.unlock(io);
 
         if (!diff_thread_running.load(.acquire)) break;
 
@@ -262,6 +268,7 @@ pub fn getDiffRequest(id: u32) ?*DiffRequest {
 }
 
 pub fn signalDiffQueue() void {
+    const io = git_io.get();
     _ = diff_queue_count.fetchAdd(1, .release);
-    diff_queue_cond.signal();
+    diff_queue_cond.signal(io);
 }

@@ -112,7 +112,7 @@ fn pickArgvBasename(argv0: []const u8, argv1: []const u8) []const u8 {
     if (stripped.len == 0) return argv0_base;
 
     if ((std.mem.eql(u8, stripped, "cli") or std.mem.eql(u8, stripped, "index")) and
-        std.mem.indexOf(u8, argv1, "codex") != null)
+        std.mem.find(u8, argv1, "codex") != null)
     {
         return "codex";
     }
@@ -170,7 +170,7 @@ const macos = struct {
         var argmax_size: usize = @sizeOf(c_int);
         var mib = [_]c_int{ CTL_KERN, KERN_ARGMAX };
 
-        if (c.sysctl(&mib, 2, &argmax, &argmax_size, null, 0) != 0) {
+        if (c.sysctl(@ptrCast(&mib), 2, @ptrCast(&argmax), &argmax_size, null, 0) != 0) {
             return constants.ERROR;
         }
 
@@ -184,7 +184,7 @@ const macos = struct {
         var size: usize = safe_argmax;
 
         var mib2 = [_]c_int{ CTL_KERN, KERN_PROCARGS2, pid };
-        if (c.sysctl(&mib2, 3, &procargs_buf, &size, null, 0) != 0) {
+        if (c.sysctl(@ptrCast(&mib2), 3, @ptrCast(&procargs_buf), &size, null, 0) != 0) {
             return constants.ERROR;
         }
 
@@ -239,7 +239,7 @@ const macos = struct {
         if (builtin.os.tag != .macos) return constants.ERROR;
 
         var info: [PROC_PIDTBSDINFO_SIZE]u8 = undefined;
-        const result = c.proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, PROC_PIDTBSDINFO_SIZE);
+        const result = c.proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, @ptrCast(&info), PROC_PIDTBSDINFO_SIZE);
 
         if (result <= 0) {
             return constants.ERROR;
@@ -262,7 +262,7 @@ const macos = struct {
         if (builtin.os.tag != .macos) return constants.ERROR;
 
         var info: [PROC_PIDVNODEPATHINFO_SIZE]u8 = undefined;
-        const result = c.proc_pidinfo(pid, PROC_PIDVNODEPATHINFO, 0, &info, PROC_PIDVNODEPATHINFO_SIZE);
+        const result = c.proc_pidinfo(pid, PROC_PIDVNODEPATHINFO, 0, @ptrCast(&info), PROC_PIDVNODEPATHINFO_SIZE);
 
         if (result <= 0) {
             return constants.ERROR;
@@ -301,7 +301,7 @@ const macos = struct {
         const max_pids: usize = @min(pid_count + 100, 10000);
         var pid_buf: [10000 * 4]u8 = undefined;
 
-        const actual_bytes = c.proc_listpids(1, 0, &pid_buf, @intCast(max_pids * 4));
+        const actual_bytes = c.proc_listpids(1, 0, @ptrCast(&pid_buf), @intCast(max_pids * 4));
         if (actual_bytes <= 0) return parent_pid;
 
         const actual_count: usize = @intCast(@divTrunc(actual_bytes, 4));
@@ -317,7 +317,7 @@ const macos = struct {
             const pid = pid_ptr.*;
             if (pid <= 0) continue;
 
-            const result = c.proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, PROC_PIDTBSDINFO_SIZE);
+            const result = c.proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, @ptrCast(&info), PROC_PIDTBSDINFO_SIZE);
             if (result <= 0) continue;
 
             const ppid_ptr: *align(1) const u32 = @ptrCast(&info[PPID_OFFSET]);

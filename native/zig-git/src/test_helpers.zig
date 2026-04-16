@@ -3,6 +3,10 @@ pub const c = @cImport({
     @cInclude("git2.h");
 });
 
+pub fn tmpDirPathAlloc(allocator: std.mem.Allocator, tmp: *std.testing.TmpDir) ![]u8 {
+    return std.fmt.allocPrint(allocator, ".zig-cache/tmp/{s}", .{tmp.sub_path});
+}
+
 pub fn initRepo(allocator: std.mem.Allocator, path: []const u8) !*c.git_repository {
     const path_z = try allocator.dupeZ(u8, path);
     defer allocator.free(path_z);
@@ -22,11 +26,12 @@ pub fn initRepo(allocator: std.mem.Allocator, path: []const u8) !*c.git_reposito
 pub fn commitFile(
     allocator: std.mem.Allocator,
     repo: *c.git_repository,
-    dir: std.fs.Dir,
+    dir: std.Io.Dir,
     path: []const u8,
     contents: []const u8,
 ) !void {
-    try dir.writeFile(.{ .sub_path = path, .data = contents });
+    const io = @import("io.zig").get();
+    try dir.writeFile(io, .{ .sub_path = path, .data = contents });
 
     var index: ?*c.git_index = null;
     if (c.git_repository_index(&index, repo) != 0 or index == null) {

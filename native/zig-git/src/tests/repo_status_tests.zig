@@ -3,6 +3,7 @@ const constants = @import("../constants.zig");
 const helpers = @import("../test_helpers.zig");
 const c = helpers.c;
 const api = @import("../api.zig");
+const git_io = @import("../io.zig");
 
 test "repo status counts untracked changes" {
     _ = api.omx_git_init();
@@ -11,13 +12,13 @@ test "repo status counts untracked changes" {
     defer tmp.cleanup();
 
     const allocator = std.testing.allocator;
-    const repo_path = try tmp.dir.realpathAlloc(allocator, ".");
+    const repo_path = try helpers.tmpDirPathAlloc(allocator, &tmp);
     defer allocator.free(repo_path);
 
     const repo = try helpers.initRepo(allocator, repo_path);
     defer c.git_repository_free(@as(?*c.git_repository, repo));
 
-    try tmp.dir.writeFile(.{ .sub_path = "untracked.txt", .data = "one\ntwo\n" });
+    try tmp.dir.writeFile(git_io.get(), .{ .sub_path = "untracked.txt", .data = "one\ntwo\n" });
 
     var branch_buf: [constants.MAX_BRANCH_LEN]u8 = undefined;
     var gitdir_buf: [constants.MAX_CWD_LEN]u8 = undefined;

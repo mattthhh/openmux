@@ -22,9 +22,9 @@ pub fn makeWinsizeWithPixels(
 ) c.winsize {
     const max = std.math.maxInt(u16);
     return .{
-        .ws_col = cols,
-        .ws_row = rows,
-        .ws_xpixel = @intCast(@min(pixel_width, max)),
-        .ws_ypixel = @intCast(@min(pixel_height, max)),
+        .col = cols,
+        .row = rows,
+        .xpixel = @intCast(@min(pixel_width, max)),
+        .ypixel = @intCast(@min(pixel_height, max)),
     };
 }

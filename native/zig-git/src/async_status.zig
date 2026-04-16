@@ -2,6 +2,7 @@ const std = @import("std");
 
 const constants = @import("constants.zig");
 const repo_status = @import("repo_status.zig");
+const git_io = @import("io.zig");
 
 pub const StatusState = enum(u8) {
     pending,
@@ -35,16 +36,17 @@ var status_request_used: [constants.MAX_STATUS_REQUESTS]std.atomic.Value(bool) =
 
 var status_thread: ?std.Thread = null;
 var status_thread_running: std.atomic.Value(bool) = std.atomic.Value(bool).init(false);
-var status_thread_mutex: std.Thread.Mutex = .{};
-var status_queue_mutex: std.Thread.Mutex = .{};
-var status_queue_cond: std.Thread.Condition = .{};
+var status_thread_mutex: std.Io.Mutex = .init;
+var status_queue_mutex: std.Io.Mutex = .init;
+var status_queue_cond: std.Io.Condition = .init;
 var status_queue_count: std.atomic.Value(u32) = std.atomic.Value(u32).init(0);
 
 pub fn initStatusThread() bool {
     if (status_thread_running.load(.acquire)) return true;
 
-    status_thread_mutex.lock();
-    defer status_thread_mutex.unlock();
+    const io = git_io.get();
+    status_thread_mutex.lock(io) catch unreachable;
+    defer status_thread_mutex.unlock(io);
 
     if (status_thread_running.load(.acquire)) return true;
 
@@ -58,16 +60,17 @@ pub fn initStatusThread() bool {
 }
 
 pub fn deinitStatusThread() void {
-    status_thread_mutex.lock();
-    defer status_thread_mutex.unlock();
+    const io = git_io.get();
+    status_thread_mutex.lock(io) catch unreachable;
+    defer status_thread_mutex.unlock(io);
 
     if (!status_thread_running.load(.acquire)) return;
 
     status_thread_running.store(false, .release);
 
-    status_queue_mutex.lock();
-    status_queue_cond.signal();
-    status_queue_mutex.unlock();
+    status_queue_mutex.lock(io) catch unreachable;
+    status_queue_cond.signal(io);
+    status_queue_mutex.unlock(io);
 
     if (status_thread) |thread| {
         thread.join();
@@ -76,12 +79,15 @@ pub fn deinitStatusThread() void {
 }
 
 fn statusThreadLoop() void {
+    git_io.initThreadIo();
+    const io = git_io.get();
+
     while (status_thread_running.load(.acquire)) {
-        status_queue_mutex.lock();
+        status_queue_mutex.lock(io) catch unreachable;
         while (status_queue_count.load(.acquire) == 0 and status_thread_running.load(.acquire)) {
-            status_queue_cond.timedWait(&status_queue_mutex, 100 * std.time.ns_per_ms) catch {};
+            status_queue_cond.wait(io, &status_queue_mutex) catch {};
         }
-        status_queue_mutex.unlock();
+        status_queue_mutex.unlock(io);
 
         if (!status_thread_running.load(.acquire)) break;
 
@@ -135,6 +141,7 @@ pub fn getStatusRequest(id: u32) ?*StatusRequest {
 }
 
 pub fn signalStatusQueue() void {
+    const io = git_io.get();
     _ = status_queue_count.fetchAdd(1, .release);
-    status_queue_cond.signal();
+    status_queue_cond.signal(io);
 }

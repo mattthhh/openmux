@@ -5,6 +5,7 @@ const std = @import("std");
 const spawn_module = @import("../core/spawn.zig");
 const exports = @import("../ffi/exports.zig");
 const constants = @import("../util/constants.zig");
+const sleep_util = @import("../util/sleep.zig");
 const handle_registry = @import("../core/handle_registry.zig");
 const posix = @import("../util/posix.zig");
 const c = posix.c;
@@ -18,7 +19,7 @@ test "basic pty spawn" {
     try std.testing.expect(handle > 0);
 
     // Wait a bit for output
-    std.Thread.sleep(100 * std.time.ns_per_ms);
+    sleep_util.sleepMilliseconds(100);
 
     var buf: [1024]u8 = undefined;
     const n = exports.bun_pty_read(handle, &buf, buf.len);
@@ -31,7 +32,7 @@ test "pty spawn with cwd" {
     const handle = spawn_module.spawnPty("pwd", "/tmp", "", 80, 24);
     try std.testing.expect(handle > 0);
 
-    std.Thread.sleep(100 * std.time.ns_per_ms);
+    sleep_util.sleepMilliseconds(100);
 
     var buf: [1024]u8 = undefined;
     const n = exports.bun_pty_read(handle, &buf, buf.len);
@@ -39,7 +40,7 @@ test "pty spawn with cwd" {
 
     // Output should contain /tmp
     const output = buf[0..@intCast(n)];
-    try std.testing.expect(std.mem.indexOf(u8, output, "/tmp") != null);
+    try std.testing.expect(std.mem.find(u8, output, "/tmp") != null);
 
     exports.bun_pty_close(handle);
 }
@@ -70,10 +71,10 @@ test "pty resize with pixels updates winsize" {
     var ws: c.winsize = undefined;
     const rc = c.ioctl(pty.master_fd, c.TIOCGWINSZ, &ws);
     try std.testing.expectEqual(@as(c_int, 0), rc);
-    try std.testing.expectEqual(@as(u16, 100), ws.ws_col);
-    try std.testing.expectEqual(@as(u16, 50), ws.ws_row);
-    try std.testing.expectEqual(@as(u16, 1234), ws.ws_xpixel);
-    try std.testing.expectEqual(@as(u16, 567), ws.ws_ypixel);
+    try std.testing.expectEqual(@as(u16, 100), ws.col);
+    try std.testing.expectEqual(@as(u16, 50), ws.row);
+    try std.testing.expectEqual(@as(u16, 1234), ws.xpixel);
+    try std.testing.expectEqual(@as(u16, 567), ws.ypixel);
 
     handle_registry.releaseHandle(handle_u32);
     exports.bun_pty_close(handle);
@@ -92,8 +93,8 @@ test "pty reports pixel size in winsize" {
     var ws: c.winsize = undefined;
     const rc = c.ioctl(pty.master_fd, c.TIOCGWINSZ, &ws);
     try std.testing.expectEqual(@as(c_int, 0), rc);
-    try std.testing.expect(ws.ws_xpixel > 0);
-    try std.testing.expect(ws.ws_ypixel > 0);
+    try std.testing.expect(ws.xpixel > 0);
+    try std.testing.expect(ws.ypixel > 0);
 
     handle_registry.releaseHandle(handle_u32);
     exports.bun_pty_close(handle);
@@ -108,7 +109,7 @@ test "write to pty" {
     try std.testing.expect(handle > 0);
     defer exports.bun_pty_close(handle);
 
-    std.Thread.sleep(50 * std.time.ns_per_ms);
+    sleep_util.sleepMilliseconds(50);
 
     // Write data
     const data = "hello\n";
@@ -116,7 +117,7 @@ test "write to pty" {
     try std.testing.expectEqual(constants.SUCCESS, result);
 
     // Read back (cat echoes input)
-    std.Thread.sleep(100 * std.time.ns_per_ms);
+    sleep_util.sleepMilliseconds(100);
     var buf: [1024]u8 = undefined;
     const n = exports.bun_pty_read(handle, &buf, buf.len);
     try std.testing.expect(n > 0);
@@ -131,7 +132,7 @@ test "kill terminates process" {
     try std.testing.expect(handle > 0);
     defer exports.bun_pty_close(handle);
 
-    std.Thread.sleep(50 * std.time.ns_per_ms);
+    sleep_util.sleepMilliseconds(50);
 
     // Verify process is running
     const pid = exports.bun_pty_get_pid(handle);
@@ -142,7 +143,7 @@ test "kill terminates process" {
     try std.testing.expectEqual(constants.SUCCESS, result);
 
     // Wait for exit
-    std.Thread.sleep(200 * std.time.ns_per_ms);
+    sleep_util.sleepMilliseconds(200);
 
     // Exit code should reflect signal (128 + SIGTERM = 143)
     const exit_code = exports.bun_pty_get_exit_code(handle);
@@ -156,7 +157,7 @@ test "exit code for successful command" {
     defer exports.bun_pty_close(handle);
 
     // Wait for process to exit
-    std.Thread.sleep(200 * std.time.ns_per_ms);
+    sleep_util.sleepMilliseconds(200);
 
     const exit_code = exports.bun_pty_get_exit_code(handle);
     // Should be 0 for 'true' command, or -1 if not yet reaped
@@ -169,7 +170,7 @@ test "exit code for failing command" {
     defer exports.bun_pty_close(handle);
 
     // Wait for process to exit
-    std.Thread.sleep(200 * std.time.ns_per_ms);
+    sleep_util.sleepMilliseconds(200);
 
     const exit_code = exports.bun_pty_get_exit_code(handle);
     // Should be 1 for 'false' command, or -1 if not yet reaped
@@ -211,7 +212,7 @@ test "wakeup fd becomes readable when output arrives" {
             saw_output = true;
             break;
         }
-        std.Thread.sleep(20 * std.time.ns_per_ms);
+        sleep_util.sleepMilliseconds(20);
     }
 
     try std.testing.expect(saw_output);
@@ -248,7 +249,7 @@ test "wakeup fd becomes readable when child exits without output" {
             saw_exit = true;
             break;
         }
-        std.Thread.sleep(20 * std.time.ns_per_ms);
+        sleep_util.sleepMilliseconds(20);
     }
 
     try std.testing.expect(saw_exit);
@@ -260,7 +261,7 @@ test "read returns child exited after process ends" {
     defer exports.bun_pty_close(handle);
 
     // Wait for process to exit
-    std.Thread.sleep(300 * std.time.ns_per_ms);
+    sleep_util.sleepMilliseconds(300);
 
     // Drain any remaining output
     var buf: [1024]u8 = undefined;
@@ -277,7 +278,7 @@ test "read returns child exited after process ends" {
             total_read += @intCast(n);
             if (total_read > 10000) break; // Safety limit
         }
-        std.Thread.sleep(20 * std.time.ns_per_ms);
+        sleep_util.sleepMilliseconds(20);
     }
 
     try std.testing.expect(saw_exit);
@@ -288,7 +289,7 @@ test "read returns child exited even with no output" {
     try std.testing.expect(handle > 0);
     defer exports.bun_pty_close(handle);
 
-    std.Thread.sleep(200 * std.time.ns_per_ms);
+    sleep_util.sleepMilliseconds(200);
 
     var buf: [256]u8 = undefined;
     var saw_exit = false;
@@ -299,7 +300,7 @@ test "read returns child exited even with no output" {
             saw_exit = true;
             break;
         }
-        std.Thread.sleep(20 * std.time.ns_per_ms);
+        sleep_util.sleepMilliseconds(20);
     }
 
     try std.testing.expect(saw_exit);

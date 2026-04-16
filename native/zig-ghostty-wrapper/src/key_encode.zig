@@ -80,7 +80,7 @@ pub fn setopt(
     value: ?*const anyopaque,
 ) callconv(.c) void {
     if (comptime std.debug.runtime_safety) {
-        _ = std.meta.intToEnum(Option, @intFromEnum(option)) catch {
+        _ = std.enums.fromInt(Option, @intFromEnum(option)) orelse {
             log.warn("setopt invalid option value={d}", .{@intFromEnum(option)});
             return;
         };
@@ -113,15 +113,15 @@ fn setoptTyped(
         },
         .macos_option_as_alt => {
             if (comptime std.debug.runtime_safety) {
-                _ = std.meta.intToEnum(@TypeOf(opts.macos_option_as_alt), @intFromEnum(value.*)) catch {
+                _ = std.enums.fromInt(@TypeOf(opts.macos_option_as_alt), @intFromEnum(value.*)) orelse {
                     log.warn("setopt invalid OptionAsAlt value={d}", .{@intFromEnum(value.*)});
                     return;
                 };
             }
-            opts.macos_option_as_alt = std.meta.intToEnum(
+            opts.macos_option_as_alt = std.enums.fromInt(
                 @TypeOf(opts.macos_option_as_alt),
                 @intFromEnum(value.*),
-            ) catch return;
+            ) orelse return;
         },
     }
 }

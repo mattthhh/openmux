@@ -5,6 +5,7 @@ const std = @import("std");
 const constants = @import("../util/constants.zig");
 const spawn_module = @import("spawn.zig");
 const handle_registry = @import("handle_registry.zig");
+const pty_io = @import("../io.zig");
 
 pub const SpawnState = enum(u8) {
     pending,
@@ -50,17 +51,18 @@ var spawn_request_used: [constants.MAX_SPAWN_REQUESTS]std.atomic.Value(bool) = [
 // Spawn thread state
 var spawn_thread: ?std.Thread = null;
 var spawn_thread_running: std.atomic.Value(bool) = std.atomic.Value(bool).init(false);
-var spawn_thread_mutex: std.Thread.Mutex = .{};
-var spawn_queue_mutex: std.Thread.Mutex = .{};
-var spawn_queue_cond: std.Thread.Condition = .{};
+var spawn_thread_mutex: std.Io.Mutex = .init;
+var spawn_queue_mutex: std.Io.Mutex = .init;
+var spawn_queue_cond: std.Io.Condition = .init;
 var spawn_queue_count: std.atomic.Value(u32) = std.atomic.Value(u32).init(0);
 
 pub fn initSpawnThread() bool {
     // Fast path: already running
     if (spawn_thread_running.load(.acquire)) return true;
 
-    spawn_thread_mutex.lock();
-    defer spawn_thread_mutex.unlock();
+    const io = pty_io.get();
+    spawn_thread_mutex.lock(io) catch unreachable;
+    defer spawn_thread_mutex.unlock(io);
 
     // Double-check under lock
     if (spawn_thread_running.load(.acquire)) return true;
@@ -76,8 +78,9 @@ pub fn initSpawnThread() bool {
 }
 
 pub fn deinitSpawnThread() void {
-    spawn_thread_mutex.lock();
-    defer spawn_thread_mutex.unlock();
+    const io = pty_io.get();
+    spawn_thread_mutex.lock(io) catch unreachable;
+    defer spawn_thread_mutex.unlock(io);
 
     if (!spawn_thread_running.load(.acquire)) return;
 
@@ -85,9 +88,9 @@ pub fn deinitSpawnThread() void {
     spawn_thread_running.store(false, .release);
 
     // Wake the thread if waiting on condition
-    spawn_queue_mutex.lock();
-    spawn_queue_cond.signal();
-    spawn_queue_mutex.unlock();
+    spawn_queue_mutex.lock(io) catch unreachable;
+    spawn_queue_cond.signal(io);
+    spawn_queue_mutex.unlock(io);
 
     // Join the thread
     if (spawn_thread) |thread| {
@@ -97,13 +100,16 @@ pub fn deinitSpawnThread() void {
 }
 
 fn spawnThreadLoop() void {
+    pty_io.initThreadIo();
+    const io = pty_io.get();
+
     while (spawn_thread_running.load(.acquire)) {
         // Wait for work
-        spawn_queue_mutex.lock();
+        spawn_queue_mutex.lock(io) catch unreachable;
         while (spawn_queue_count.load(.acquire) == 0 and spawn_thread_running.load(.acquire)) {
-            spawn_queue_cond.timedWait(&spawn_queue_mutex, 100 * std.time.ns_per_ms) catch {};
+            spawn_queue_cond.wait(io, &spawn_queue_mutex) catch {};
         }
-        spawn_queue_mutex.unlock();
+        spawn_queue_mutex.unlock(io);
 
         if (!spawn_thread_running.load(.acquire)) break;
 
@@ -173,6 +179,7 @@ pub fn getSpawnRequest(id: u32) ?*SpawnRequest {
 }
 
 pub fn signalSpawnQueue() void {
+    const io = pty_io.get();
     _ = spawn_queue_count.fetchAdd(1, .release);
-    spawn_queue_cond.signal();
+    spawn_queue_cond.signal(io);
 }

@@ -2,6 +2,7 @@
 //! Lock-free on fast path; uses condition variable when buffer is full
 
 const std = @import("std");
+const pty_io = @import("../io.zig");
 
 pub const RING_BUFFER_SIZE: usize = 256 * 1024; // 256KB ring buffer
 
@@ -10,15 +11,15 @@ pub const RingBuffer = struct {
     write_pos: std.atomic.Value(usize),
     read_pos: std.atomic.Value(usize),
     // Condition variable for producer to wait when buffer is full
-    mutex: std.Thread.Mutex,
-    not_full: std.Thread.Condition,
+    mutex: std.Io.Mutex,
+    not_full: std.Io.Condition,
 
     pub fn initInPlace(self: *RingBuffer) void {
         self.* = std.mem.zeroes(RingBuffer);
         self.write_pos = std.atomic.Value(usize).init(0);
         self.read_pos = std.atomic.Value(usize).init(0);
-        self.mutex = .{};
-        self.not_full = .{};
+        self.mutex = .init;
+        self.not_full = .init;
     }
 
     pub fn init() RingBuffer {

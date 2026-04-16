@@ -8,6 +8,7 @@ const constants = @import("../util/constants.zig");
 const winsize = @import("../util/winsize.zig");
 const Pty = @import("pty.zig").Pty;
 const handle_registry = @import("handle_registry.zig");
+const macos_kq = if (builtin.os.tag == .macos) @import("../util/macos_kqueue.zig") else struct {};
 
 fn setNonBlocking(fd: c_int) bool {
     const flags = c.fcntl(fd, c.F_GETFL);
@@ -21,20 +22,11 @@ fn setCloseOnExec(fd: c_int) void {
 
 fn createProcessExitEventFd(pid: c_int) c_int {
     if (builtin.os.tag == .macos) {
-        const kq = c.kqueue();
+        const kq = macos_kq.createKqueue();
         if (kq < 0) return -1;
         setCloseOnExec(kq);
 
-        const change = c.struct_kevent{
-            .ident = @intCast(pid),
-            .filter = c.EVFILT_PROC,
-            .flags = c.EV_ADD | c.EV_ENABLE | c.EV_ONESHOT,
-            .fflags = c.NOTE_EXIT | c.NOTE_EXITSTATUS,
-            .data = 0,
-            .udata = null,
-        };
-
-        if (c.kevent(kq, &change, 1, null, 0, null) == -1) {
+        if (macos_kq.registerExitWatch(kq, pid) == -1) {
             _ = c.close(kq);
             return -1;
         }
@@ -75,7 +67,7 @@ pub fn spawnPty(
         return constants.ERROR;
     }
 
-    if (c.pipe(&wake_fds[0]) == -1) {
+    if (c.pipe(&wake_fds) == -1) {
         _ = c.close(master_fd);
         _ = c.close(slave_fd);
         return constants.ERROR;
@@ -231,8 +223,8 @@ pub fn spawnPty(
         pid,
         cols,
         rows,
-        ws.ws_xpixel,
-        ws.ws_ypixel,
+        ws.xpixel,
+        ws.ypixel,
         wake_fds[0],
         wake_fds[1],
         proc_exit_fd,

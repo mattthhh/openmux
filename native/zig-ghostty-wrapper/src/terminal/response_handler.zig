@@ -294,10 +294,7 @@ pub const ResponseHandler = struct {
             .format = t.format,
             .compression = t.compression,
             .data = "",
-            .transmit_time = std.time.Instant.now() catch {
-                resp.message = "EINVAL: internal error";
-                return self.applyKittyQuiet(cmd, resp);
-            },
+            .transmit_time = std.c.mach_absolute_time(),
             .implicit_id = false,
         };
 

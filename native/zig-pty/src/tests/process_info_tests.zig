@@ -5,6 +5,7 @@ const std = @import("std");
 const spawn_module = @import("../core/spawn.zig");
 const exports = @import("../ffi/exports.zig");
 const constants = @import("../util/constants.zig");
+const sleep_util = @import("../util/sleep.zig");
 const process_info = @import("../ffi/process_info.zig");
 
 // ============================================================================
@@ -17,7 +18,7 @@ test "get foreground pid returns valid pid" {
     defer exports.bun_pty_close(handle);
 
     // Give the process time to start
-    std.Thread.sleep(50 * std.time.ns_per_ms);
+    sleep_util.sleepMilliseconds(50);
 
     const fg_pid = exports.bun_pty_get_foreground_pid(handle);
     // Foreground pid should be positive (the shell or sleep process)
@@ -46,7 +47,7 @@ test "get cwd for pty shell process" {
     try std.testing.expect(handle > 0);
     defer exports.bun_pty_close(handle);
 
-    std.Thread.sleep(50 * std.time.ns_per_ms);
+    sleep_util.sleepMilliseconds(50);
 
     const pid = exports.bun_pty_get_pid(handle);
     try std.testing.expect(pid > 0);
@@ -57,7 +58,7 @@ test "get cwd for pty shell process" {
 
     const cwd = buf[0..@intCast(len)];
     // Should contain /tmp since we started in /tmp
-    try std.testing.expect(std.mem.indexOf(u8, cwd, "tmp") != null);
+    try std.testing.expect(std.mem.find(u8, cwd, "tmp") != null);
 }
 
 // ============================================================================
@@ -84,7 +85,7 @@ test "get process name returns shell name" {
     try std.testing.expect(handle > 0);
     defer exports.bun_pty_close(handle);
 
-    std.Thread.sleep(50 * std.time.ns_per_ms);
+    sleep_util.sleepMilliseconds(50);
 
     const pid = exports.bun_pty_get_pid(handle);
     try std.testing.expect(pid > 0);
