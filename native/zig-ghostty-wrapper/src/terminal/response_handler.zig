@@ -10,6 +10,17 @@ const device_status = ghostty.device_status;
 const kitty_gfx = ghostty.kitty.graphics;
 const kitty_max_dimension: u32 = 10000;
 
+fn monotonicTimestamp() u64 {
+    var ts: std.c.timespec = undefined;
+    if (std.c.clock_gettime(std.c.CLOCK.MONOTONIC, &ts) != 0) {
+        return 0;
+    }
+
+    const sec: u64 = @intCast(ts.sec);
+    const nsec: u64 = @intCast(ts.nsec);
+    return sec * std.time.ns_per_s + nsec;
+}
+
 /// Response handler that processes VT sequences and queues responses.
 /// This extends the readonly stream handler to also handle queries.
 pub const ResponseHandler = struct {
@@ -294,7 +305,7 @@ pub const ResponseHandler = struct {
             .format = t.format,
             .compression = t.compression,
             .data = "",
-            .transmit_time = std.c.mach_absolute_time(),
+            .transmit_time = monotonicTimestamp(),
             .implicit_id = false,
         };
 

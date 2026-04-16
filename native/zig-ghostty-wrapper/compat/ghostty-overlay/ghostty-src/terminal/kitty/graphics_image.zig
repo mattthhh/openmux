@@ -19,6 +19,17 @@ const max_dimension = 10000;
 /// Maximum size in bytes, taken from Kitty.
 const max_size = 400 * 1024 * 1024; // 400MB
 
+fn monotonicTimestamp() u64 {
+    var ts: std.c.timespec = undefined;
+    if (std.c.clock_gettime(std.c.CLOCK.MONOTONIC, &ts) != 0) {
+        return 0;
+    }
+
+    const sec: u64 = @intCast(ts.sec);
+    const nsec: u64 = @intCast(ts.nsec);
+    return sec * std.time.ns_per_s + nsec;
+}
+
 /// An image that is still being loaded. The image should be initialized
 /// using init on the first chunk and then addData for each subsequent
 /// chunk. Once all chunks have been added, complete should be called
@@ -399,7 +410,7 @@ pub const LoadingImage = struct {
         }
 
         // Set our time
-        self.image.transmit_time = std.c.mach_absolute_time();
+        self.image.transmit_time = monotonicTimestamp();
 
         // Everything looks good, copy the image data over.
         var result = self.image;

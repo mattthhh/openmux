@@ -119,7 +119,17 @@ fn buildOnigurumaModule(
     b: *std.Build,
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
+    enabled: bool,
 ) *std.Build.Module {
+    if (!enabled) {
+        return b.createModule(.{
+            .root_source_file = b.path("compat/oniguruma_stub.zig"),
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
+        });
+    }
+
     const include_dir = b.option([]const u8, "onig_include_dir", "Path to oniguruma headers") orelse "/opt/homebrew/include";
     const lib_dir = b.option([]const u8, "onig_lib_dir", "Path to oniguruma libraries") orelse "/opt/homebrew/lib";
     const lib_name = b.option([]const u8, "onig_lib_name", "System library name for oniguruma") orelse "onig";
@@ -347,7 +357,8 @@ pub fn build(b: *std.Build) !void {
         vendor_root.path(b, "src/build/uucode_config.zig"),
     );
     const unicode_tables = try UnicodeTables.init(b, vendor_root, uucode.module);
-    const oniguruma_module = buildOnigurumaModule(b, target, optimize);
+    const oniguruma_enabled = false;
+    const oniguruma_module = buildOnigurumaModule(b, target, optimize, oniguruma_enabled);
     const wuffs_module = buildWuffsStubModule(b, target, optimize);
     const dcimgui_module = b.createModule(.{
         .root_source_file = b.path("compat/dcimgui_stub.zig"),
@@ -357,7 +368,7 @@ pub fn build(b: *std.Build) !void {
 
     const terminal_options: TerminalOptions = .{
         .artifact = .lib,
-        .oniguruma = false,
+        .oniguruma = oniguruma_enabled,
         .simd = simd_enabled,
         .c_abi = false,
         .slow_runtime_safety = optimize == .Debug,
