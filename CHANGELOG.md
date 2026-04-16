@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.85](https://github.com/monotykamary/openmux/compare/v0.3.84...v0.3.85) (2026-04-16)
+
+
+### Build System
+
+* **native:** migrate zig subprojects to zig 0.16 ([7a65983](https://github.com/monotykamary/openmux/commit/7a659830326d7d42076121a0414a2a8f168170a7))
+
 ### [0.3.84](https://github.com/monotykamary/openmux/compare/v0.3.83...v0.3.84) (2026-04-15)
 
 
