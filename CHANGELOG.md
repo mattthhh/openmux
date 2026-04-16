@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.86](https://github.com/monotykamary/openmux/compare/v0.3.85...v0.3.86) (2026-04-16)
+
+
+### Bug Fixes
+
+* **native:** restore ghostty wrapper linux ci build ([2b0af95](https://github.com/monotykamary/openmux/commit/2b0af95ef5c94671389244f0b9095a0e1cb14b8c))
+* **native:** restore zig-pty linux build on zig 0.16 ([0970114](https://github.com/monotykamary/openmux/commit/09701142e00d10f2a7aeb82cdc1ad6ca11113f74))
+
+
+### CI/CD
+
+* use zig 0.16.0 in workflows ([25b9070](https://github.com/monotykamary/openmux/commit/25b9070c586e0b86f6fa5d97c3e1845c4d121918))
+
 ### [0.3.85](https://github.com/monotykamary/openmux/compare/v0.3.84...v0.3.85) (2026-04-16)
 
 
