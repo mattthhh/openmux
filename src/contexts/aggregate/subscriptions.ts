@@ -241,6 +241,16 @@ export function createLifecycleHandlers(
     // matchedPtys so the autoswitch effect can select it immediately.
     await deps.refreshActiveSession();
 
+    // Yield to let createPaneWithPTY's onCreated callback fire.
+    // When the lifecycle event arrives before onCreated sets pendingPtyId,
+    // the pending creation is still unclaimed. Yielding lets the JS runtime
+    // process the onCreated microtask/macrotask, which stamps pendingPtyId
+    // onto the insertion. Without this yield, findPendingPaneCreationForLifecycle
+    // can't match unclaimed insertions when there are multiple for the same
+    // session (it only matches when exactly one is unclaimed), leaving the
+    // pending creation orphaned and permanently blocking autoswitch.
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
     // NOW remove the pending creation. The refresh has put the real PTY
     // into allPtys/matchedPtys, so the placeholder is no longer needed.
     if (ownership) {
@@ -262,6 +272,17 @@ export function createLifecycleHandlers(
                 (!!ownership.paneId && insertion.pendingPaneId === ownership.paneId)
             );
           }
+
+          // Fallback: remove any pending creation whose real PTY has landed
+          // in the flattened tree index. This catches cases where onCreated
+          // fired during the yield above but the match-by-ptyId still missed
+          // (e.g., the insertion's pendingPtyId was set to a different PTY
+          // due to rapid sequential creations).
+          removePendingPaneCreations(
+            s,
+            (insertion) =>
+              insertion.pendingPtyId !== null && s.flattenedTreeIndex.has(insertion.pendingPtyId)
+          );
 
           recomputeMatches(s);
           recomputeTree(s);

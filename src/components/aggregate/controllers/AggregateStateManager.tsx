@@ -201,6 +201,24 @@ export function AggregateStateManager() {
 
     aggregate.selectPty(resolution.ptyId);
     setPendingPaneFocus(null);
+
+    // Clean up any pending pane creations that are now resolved.
+    // When handlePtyCreated fires before onCreated sets pendingPtyId
+    // (and there are multiple unclaimed insertions), the lifecycle
+    // handler can't match the insertion and leaves it orphaned.
+    // Now that the real PTY is selected and visible in the tree,
+    // remove any pending creation whose PTY has landed in the index.
+    const resolvedPtyId = resolution.ptyId;
+    const treeIndex = aggregate.state.flattenedTreeIndex;
+    if (resolvedPtyId && treeIndex.has(resolvedPtyId)) {
+      const pendingCreations = aggregate.state.pendingPaneCreations;
+      const orphaned = pendingCreations.filter(
+        (insertion) => insertion.pendingPtyId !== null && treeIndex.has(insertion.pendingPtyId)
+      );
+      for (const insertion of orphaned) {
+        aggregate.removePendingPaneCreation(insertion.id);
+      }
+    }
   });
 
   // AUTOSWITCH: Automatically switch sessions when navigating to a pane from a different session
