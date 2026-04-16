@@ -40,10 +40,7 @@ pub const c = struct {
 
     pub const EINTR: c_int = @intFromEnum(std.c.E.INTR);
     pub const EAGAIN: c_int = @intFromEnum(std.c.E.AGAIN);
-    pub const EWOULDBLOCK: c_int = if (builtin.os.tag == .macos)
-        EAGAIN
-    else
-        @intFromEnum(std.c.E.WOULDBLOCK);
+    pub const EWOULDBLOCK: c_int = EAGAIN;
     pub const EPIPE: c_int = @intFromEnum(std.c.E.PIPE);
 
     pub const WNOHANG: c_int = @intCast(std.posix.W.NOHANG);
@@ -118,7 +115,7 @@ pub const c = struct {
 
     pub fn WTERMSIG(status: c_int) c_int {
         if (builtin.os.tag == .linux) {
-            return @intFromEnum(std.posix.W.TERMSIG(@bitCast(@as(u32, @intCast(status)))));
+            return @intCast(@intFromEnum(std.posix.W.TERMSIG(@bitCast(@as(u32, @intCast(status))))));
         }
         return status & 0x7f;
     }
