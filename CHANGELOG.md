@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.87](https://github.com/monotykamary/openmux/compare/v0.3.86...v0.3.87) (2026-04-16)
+
+
+### Bug Fixes
+
+* **aggregate:** clean up orphaned pending pane creations that block autoswitch ([6db0303](https://github.com/monotykamary/openmux/commit/6db0303a9bad7459ec7a196ec435b8f5000ce9ff))
+
 ### [0.3.86](https://github.com/monotykamary/openmux/compare/v0.3.85...v0.3.86) (2026-04-16)
 
 
