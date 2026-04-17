@@ -60,30 +60,16 @@ export function setupKeyboardRouting(params: {
   useKeyboard(
     async (event: OpenTuiKeyEvent) => {
       const normalizedEvent = normalizeKeyEvent(event);
-      // Route to overlays via KeyboardRouter (handles confirmation, session picker, aggregate view)
-      // Use event.sequence for printable chars (handles shift for uppercase/symbols)
-      // Fall back to event.name for special keys
-      const charCode = normalizedEvent.sequence?.charCodeAt(0) ?? 0;
-      const isPrintableChar = normalizedEvent.sequence?.length === 1 && charCode >= 32 && charCode < 127;
-      const keyToPass = isPrintableChar ? normalizedEvent.sequence! : normalizedEvent.key;
 
-      const routeResult = await routeKeyboardEventSync({
-        key: keyToPass,
-        ctrl: normalizedEvent.ctrl,
-        alt: normalizedEvent.alt,
-        shift: normalizedEvent.shift,
-        sequence: normalizedEvent.sequence,
-        baseCode: normalizedEvent.baseCode,
-        eventType: normalizedEvent.eventType,
-        repeated: normalizedEvent.repeated,
-      });
-
-      // If an overlay handled the key, don't process further
-      if (routeResult.handled) {
+      // Handle copy mode BEFORE async overlay routing to avoid:
+      // 1. Microtask delays that can interleave event processing and drop inputs
+      // 2. Overlay handlers accidentally consuming copy mode events
+      if (keyboardHandler.mode === 'copy') {
+        handleCopyModeKey(normalizedEvent);
         return;
       }
 
-      // If in search mode, handle search-specific keys
+      // Handle search mode before async overlay routing for the same reasons
       if (keyboardHandler.mode === 'search') {
         handleSearchKeyboard(normalizedEvent, {
           exitSearchMode,
@@ -101,8 +87,27 @@ export function setupKeyboardRouting(params: {
         return;
       }
 
-      if (keyboardHandler.mode === 'copy') {
-        handleCopyModeKey(normalizedEvent);
+      // Route to overlays via KeyboardRouter (handles confirmation, session picker, aggregate view)
+      // Use event.sequence for printable chars (handles shift for uppercase/symbols)
+      // Fall back to event.name for special keys
+      const charCode = normalizedEvent.sequence?.charCodeAt(0) ?? 0;
+      const isPrintableChar =
+        normalizedEvent.sequence?.length === 1 && charCode >= 32 && charCode < 127;
+      const keyToPass = isPrintableChar ? normalizedEvent.sequence! : normalizedEvent.key;
+
+      const routeResult = await routeKeyboardEventSync({
+        key: keyToPass,
+        ctrl: normalizedEvent.ctrl,
+        alt: normalizedEvent.alt,
+        shift: normalizedEvent.shift,
+        sequence: normalizedEvent.sequence,
+        baseCode: normalizedEvent.baseCode,
+        eventType: normalizedEvent.eventType,
+        repeated: normalizedEvent.repeated,
+      });
+
+      // If an overlay handled the key, don't process further
+      if (routeResult.handled) {
         return;
       }
 

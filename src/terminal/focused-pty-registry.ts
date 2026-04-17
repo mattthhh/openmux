@@ -26,8 +26,12 @@
  */
 type ClipboardPasteHandler = (ptyId: string) => void;
 
+/** Callback invoked before clipboard paste to exit copy mode if active */
+type CopyModeExitCallback = () => void;
+
 let focusedPtyId: string | null = null;
 let clipboardPasteHandler: ClipboardPasteHandler | null = null;
+let copyModeExitCallback: CopyModeExitCallback | null = null;
 
 /**
  * Set the currently focused PTY ID.
@@ -47,12 +51,22 @@ export function setClipboardPasteHandler(handler: ClipboardPasteHandler): void {
 }
 
 /**
+ * Set a callback that exits copy mode before pasting.
+ * Called when a bracketed paste arrives while copy mode is active.
+ */
+export function setCopyModeExitCallback(callback: CopyModeExitCallback | null): void {
+  copyModeExitCallback = callback;
+}
+
+/**
  * Trigger clipboard paste to the currently focused PTY.
  * Called when paste start marker is detected in stdin.
  * Returns true if paste was triggered, false if no focused PTY or handler.
  */
 export function triggerClipboardPaste(): boolean {
   if (focusedPtyId && clipboardPasteHandler) {
+    // Exit copy mode if active so the pasted content is visible to the user
+    copyModeExitCallback?.();
     clipboardPasteHandler(focusedPtyId);
     return true;
   }

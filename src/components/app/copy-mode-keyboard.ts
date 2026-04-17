@@ -15,6 +15,7 @@ type VimSequenceHandler = {
 export function createCopyModeKeyHandler(deps: {
   copyMode: CopyModeContextValue;
   exitCopyMode: () => void;
+  pasteCallback?: () => void;
   getVimHandler: () => VimSequenceHandler;
 }) {
   let countBuffer = '';
@@ -78,6 +79,14 @@ export function createCopyModeKeyHandler(deps: {
       }
       resetOperator();
       deps.exitCopyMode();
+      return true;
+    }
+
+    // Cmd+V / Super+V: exit copy mode and paste clipboard content to PTY
+    if (combo === 'meta+v') {
+      resetOperator();
+      deps.exitCopyMode();
+      deps.pasteCallback?.();
       return true;
     }
 

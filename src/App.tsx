@@ -3,6 +3,7 @@
  */
 
 import { useTerminalDimensions, useRenderer } from '@opentui/solid';
+import { createEffect } from 'solid-js';
 import {
   useConfig,
   useLayout,
@@ -28,7 +29,7 @@ import {
 } from './core/user-config';
 import { onShimDetached } from './effect/bridge';
 import { createPaneResizeHandlers, createPasteHandler } from './components/app';
-import { setClipboardPasteHandler } from './terminal/focused-pty-registry';
+import { setClipboardPasteHandler, setCopyModeExitCallback } from './terminal/focused-pty-registry';
 import { readFromClipboard } from './effect/bridge';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -150,6 +151,11 @@ function AppContent() {
   // Create paste handler for bracketed paste from host terminal
   const pasteHandler = createPasteHandler({
     getFocusedPtyId: getActivePtyId,
+    exitCopyMode: () => {
+      if (keyboardState.state.mode === 'copy') {
+        handleExitCopyMode();
+      }
+    },
     writeToPTY,
   });
   setupAppEffects({
@@ -178,6 +184,7 @@ function AppContent() {
     pasteHandler,
     setUpdateLabel,
     setClipboardPasteHandler,
+    setCopyModeExitCallback,
     readFromClipboard,
     writeToPTY,
     onShimDetached,
@@ -297,9 +304,18 @@ function AppContent() {
     keyboardExitCopyMode();
   };
 
+  // Wire copy mode exit into the focused PTY registry so that
+  // bracketed paste (Cmd+V via host terminal) can exit copy mode
+  // before pasting clipboard content to the PTY
+  createEffect(() => {
+    const active = keyboardState.state.mode === 'copy';
+    setCopyModeExitCallback(active ? handleExitCopyMode : null);
+  });
+
   const handleCopyModeKey = createCopyModeKeyHandler({
     copyMode,
     exitCopyMode: handleExitCopyMode,
+    pasteCallback: handlePaste,
     getVimHandler: copyModeVimState.getCopyVimHandler,
   });
 

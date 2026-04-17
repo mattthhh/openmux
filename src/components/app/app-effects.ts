@@ -17,6 +17,7 @@ export type AppEffectsDeps = Omit<OverlayClipDeps, 'commandPaletteCommands'> & {
   pasteHandler: { handleBracketedPaste: (event: PasteEvent) => void };
   setUpdateLabel: (label: string | null) => void;
   setClipboardPasteHandler: (handler: (ptyId: string) => void) => void;
+  setCopyModeExitCallback: (callback: (() => void) | null) => void;
   readFromClipboard: () => Promise<string | null>;
   writeToPTY: (ptyId: string, data: string) => void | Promise<void>;
   onShimDetached: (handler: () => void) => () => void;
@@ -31,6 +32,7 @@ export function setupAppEffects(deps: AppEffectsDeps): void {
     pasteHandler,
     setUpdateLabel,
     setClipboardPasteHandler,
+    setCopyModeExitCallback,
     readFromClipboard,
     writeToPTY,
     onShimDetached,
@@ -54,6 +56,11 @@ export function setupAppEffects(deps: AppEffectsDeps): void {
   });
 
   setupFocusedPtyRegistry(getFocusedPtyId);
+
+  // Wire up the copy mode exit callback so bracketed paste can
+  // exit copy mode before writing pasted content to the PTY
+  setCopyModeExitCallback(null);
+
   setupHostFocusTracking({
     renderer,
     isPtyActive,

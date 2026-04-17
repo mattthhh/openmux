@@ -7,7 +7,7 @@ import { decodePasteBytes, type PasteEvent } from '@opentui/core';
 
 export interface PasteHandlerDeps {
   getFocusedPtyId: () => string | undefined;
-
+  exitCopyMode?: () => void;
   writeToPTY: (ptyId: string, data: string) => void;
 }
 
@@ -15,15 +15,14 @@ export interface PasteHandlerDeps {
  * Create paste handler
  */
 export function createPasteHandler(deps: PasteHandlerDeps) {
-  const {
-    getFocusedPtyId,
-    writeToPTY,
-  } = deps;
+  const { getFocusedPtyId, exitCopyMode, writeToPTY } = deps;
 
   /**
    * Handle bracketed paste from host terminal (Cmd+V sends this)
    */
   const handleBracketedPaste = (event: PasteEvent) => {
+    // Exit copy mode if active so the pasted content is visible to the user
+    exitCopyMode?.();
     // Write the pasted text directly to the focused pane's PTY
     const focusedPtyId = getFocusedPtyId();
     if (focusedPtyId) {
