@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.88](https://github.com/monotykamary/openmux/compare/v0.3.87...v0.3.88) (2026-04-17)
+
+
+### Bug Fixes
+
+* **copy-mode:** handle dropped inputs and add Cmd+V paste ([c4e716b](https://github.com/monotykamary/openmux/commit/c4e716b2e1a705154c30f6314fbb2252d2d48ba8))
+
 ### [0.3.87](https://github.com/monotykamary/openmux/compare/v0.3.86...v0.3.87) (2026-04-16)
 
 
