@@ -963,16 +963,6 @@ pub fn resize(self: *PageList, opts: Resize) Allocator.Error!void {
             try self.resizeCols(cols, opts.cursor);
         },
     }
-
-    // Various resize operations can change our total row count such
-    // that our viewport pin is now in the active area and has insufficient
-    // space. We need to check for this case and fix it up.
-    switch (self.viewport) {
-        .pin => if (self.pinIsActive(self.viewport_pin.*)) {
-            self.viewport = .active;
-        },
-        .active, .top => {},
-    }
 }
 
 /// Resize the pagelist with reflow by adding or removing columns.
@@ -1105,6 +1095,17 @@ fn resizeCols(
         if (total >= self.rows) break;
     } else {
         for (total..self.rows) |_| _ = try self.grow();
+    }
+
+    // Reflow can unwrap enough rows that a history viewport pin lands in the
+    // active area before we do any preserved-cursor growth below. Switch back
+    // to the active viewport now so intermediate grow() integrity checks stay
+    // valid.
+    switch (self.viewport) {
+        .active, .top => {},
+        .pin => if (self.pinIsActive(self.viewport_pin.*)) {
+            self.viewport = .active;
+        },
     }
 
     // See preserved_cursor setup for why.

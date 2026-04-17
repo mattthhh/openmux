@@ -88,12 +88,12 @@
     "standard-version": "^9.5.0"
   },
   "peerDependencies": {
-    "typescript": "^6.0.2"
+    "typescript": "^6.0.3"
   },
   "dependencies": {
     "@iarna/toml": "^2.2.5",
-    "@opentui/core": "^0.1.99",
-    "@opentui/solid": "^0.1.99",
+    "@opentui/core": "^0.1.100",
+    "@opentui/solid": "^0.1.100",
     "errore": "^0.14.1",
     "solid-js": "^1.9.12",
     "zod": "^4.3.6"
