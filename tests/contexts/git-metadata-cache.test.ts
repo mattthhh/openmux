@@ -5,6 +5,13 @@ import {
 } from '../../src/contexts/git-metadata-cache';
 import type { GitInfo, GitDiffStats } from '../../src/effect/services/pty/helpers';
 
+/** Compare metadata ignoring lastUpdated (unstable across ms ticks on CI) */
+const expectMetaEqual = (a: any, b: any) => {
+  const { lastUpdated: _a, ...restA } = a;
+  const { lastUpdated: _b, ...restB } = b;
+  expect(restA).toEqual(restB);
+};
+
 describe('GitMetadataCache', () => {
   let fetchGitInfoCalls: string[] = [];
   let fetchDiffStatsCalls: string[] = [];
@@ -58,8 +65,8 @@ describe('GitMetadataCache', () => {
       const meta1 = await cache.getMetadata('/repo1', { skipDiffStats: true });
       const meta2 = await cache.getMetadata('/repo1', { skipDiffStats: true });
 
-      // Verify metadata values are equal (equivalent snapshots)
-      expect(meta1).toEqual(meta2);
+      // Verify metadata values are equal (equivalent snapshots, ignoring timestamp)
+      expectMetaEqual(meta1!, meta2!);
       // Verify they are different objects (detached snapshots)
       expect(meta1).not.toBe(meta2);
       // Verify the repoKey is correctly set from the fetch
@@ -102,8 +109,8 @@ describe('GitMetadataCache', () => {
       expect(fetchGitInfoCalls.length).toBe(3);
 
       const metas = cwds.map((cwd) => results.get(cwd));
-      expect(metas[0]).toEqual(metas[1]);
-      expect(metas[1]).toEqual(metas[2]);
+      expectMetaEqual(metas[0]!, metas[1]!);
+      expectMetaEqual(metas[1]!, metas[2]!);
       expect(metas[0]).not.toBe(metas[1]);
       expect(metas[1]).not.toBe(metas[2]);
     });
@@ -139,7 +146,7 @@ describe('GitMetadataCache', () => {
       const results = await cache.getMetadataBatch(cwds, { skipDiffStats: true });
 
       expect(fetchGitInfoCalls.length).toBe(3);
-      expect(results.get('/repo1/src')).toEqual(results.get('/repo1/tests'));
+      expectMetaEqual(results.get('/repo1/src')!, results.get('/repo1/tests')!);
       expect(results.get('/repo1/src')).not.toBe(results.get('/repo1/tests'));
       expect(results.get('/repo2/src')?.repoKey).toBe('/repo2');
       expect(results.get('/repo1/src')?.repoKey).toBe('/repo1');
@@ -172,7 +179,7 @@ describe('GitMetadataCache', () => {
       const first = await cache.getMetadata('/repo', { skipDiffStats: false });
       const second = await cache.getMetadata('/repo', { skipDiffStats: true });
 
-      expect(second).toEqual(first);
+      expectMetaEqual(second!, first!);
       expect(second).not.toBe(first);
       expect(second?.diffStats).toEqual(mockDiffStats);
       expect(fetchGitInfoCalls.length).toBe(2);
