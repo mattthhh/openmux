@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.91](https://github.com/monotykamary/openmux/compare/v0.3.90...v0.3.91) (2026-04-18)
+
+
+### Bug Fixes
+
+* **pty:** replace erase-to-end with clear-screen in pi redraw normalization ([3321086](https://github.com/monotykamary/openmux/commit/332108622533b4e51cf5272312c38687aa91e7e3))
+
 ### [0.3.90](https://github.com/monotykamary/openmux/compare/v0.3.89...v0.3.90) (2026-04-18)
 
 
