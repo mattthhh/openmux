@@ -52,8 +52,8 @@ const CLEAR_SCREEN_C1_REGEX = /\x9b2J/g;
 
 // Pi full redraws reach data-handler after sync-mode-parser has already stripped
 // CSI ? 2026 h/l. Normalize the post-sync payload instead of looking for sync markers.
+const CLEAR_SCREEN_SEQUENCE = '\x1b[2J';
 const CURSOR_HOME_SEQUENCE = '\x1b[H';
-const ERASE_TO_END_OF_SCREEN_SEQUENCE = '\x1b[J';
 const PI_FULL_REDRAW_PREFIX_REGEX =
   /^(?:\x1b\[2J|\x9b2J)(?:\x1b\[(?:H|1;1H)|\x9b(?:H|1;1H))(?:\x1b\[3J|\x9b3J)/;
 const RAW_PI_SYNC_FULL_REDRAW_START_REGEX =
@@ -117,9 +117,14 @@ function shouldSuppressClearScreen(session: InternalPtySession): boolean {
  * sync-mode-parser strips CSI ? 2026 h/l before ready segments reach data-handler, so
  * the real payload we see here starts with CSI 2 J, home, CSI 3 J, then the new frame.
  *
- * Preserve the full frame so the emulator keeps the transcript in scrollback. We only
- * replace the destructive prefix with cursor-home + erase-to-end, which clears the
- * visible viewport without wiping history.
+ * The original sequence (CSI 2J + CSI H + CSI 3J) would clear the screen, push visible
+ * content to scrollback, then destroy all scrollback. We keep CSI 2J (which properly
+ * clears the visible screen and preserves visible-as-scrollback) and CSI H (cursor
+ * home), but drop CSI 3J to preserve the user's scrollback history.
+ *
+ * Previous approach (CSI H + CSI J) only erased the visible viewport without pushing
+ * content to scrollback, causing the frame write to produce duplicate scrollback entries
+ * and a visible content-shift artifact as ghostty's VT parser scrolled new lines.
  *
  * @internal Exported for testing
  */
@@ -128,7 +133,7 @@ export function normalizePiFullRedrawSegment(segment: string, _terminalRows: num
   if (!match) return segment;
 
   const frame = segment.slice(match[0].length);
-  return `${CURSOR_HOME_SEQUENCE}${ERASE_TO_END_OF_SCREEN_SEQUENCE}${frame}`;
+  return `${CLEAR_SCREEN_SEQUENCE}${CURSOR_HOME_SEQUENCE}${frame}`;
 }
 
 /**
