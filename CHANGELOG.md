@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.90](https://github.com/monotykamary/openmux/compare/v0.3.89...v0.3.90) (2026-04-18)
+
+
+### Features
+
+* **scroll:** add animated chase scrolling for smooth viewport transitions ([ba1bc0d](https://github.com/monotykamary/openmux/commit/ba1bc0dc19bf1823d1118a68a78bf15f244dd88e))
+
 ### [0.3.89](https://github.com/monotykamary/openmux/compare/v0.3.88...v0.3.89) (2026-04-17)
 
 
