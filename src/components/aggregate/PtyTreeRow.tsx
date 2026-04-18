@@ -12,7 +12,7 @@
  * - No global polling loop
  */
 
-import { createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
+import { For, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
 import type { PtyInfo } from '../../contexts/aggregate-view-types';
 import type { AggregateTheme } from '../../core/types';
 import {
@@ -195,19 +195,6 @@ function calculateShimmerColors(
   return { colors, defaultColor: baseColor };
 }
 
-interface StaticCharacterProps {
-  char: string;
-  color: string;
-}
-
-function StaticCharacter(props: StaticCharacterProps) {
-  return (
-    <text fg={props.color} selectable={false}>
-      {props.char}
-    </text>
-  );
-}
-
 function ShimmeringLabel(props: ShimmeringLabelProps) {
   // CRITICAL FIX: Only subscribe to RAF when actually animating
   // This prevents all visible rows from re-rendering at 60fps
@@ -224,18 +211,27 @@ function ShimmeringLabel(props: ShimmeringLabelProps) {
     )
   );
 
-  // Memoize character array to avoid recreating on every render
-  const characters = props.text;
+  // Memoize character array to keep renderables stable across animation frames.
+  // <For> uses keyed reconciliation so text nodes are reused (only fg color
+  // updates) instead of destroyed and recreated on every RAF tick.
+  // This prevents hit-testing transient nodes that have been unregistered
+  // from Renderable.renderablesByNumber, which caused clicks to be lost.
+  const characters = createMemo(() => Array.from(props.text));
 
-  // Batch calculation eliminates per-character getPtyShimmerColor calls.
-  // Reduces CPU from O(n) per frame to O(1) per frame for the color calculation.
   return (
-    <>
-      {Array.from(characters).map((char, index) => {
-        const color = shimmerColors().colors[index] ?? shimmerColors().defaultColor;
-        return <StaticCharacter char={char} color={color} />;
-      })}
-    </>
+    <For each={characters()}>
+      {(char, index) => {
+        // Access shimmerColors() reactively so SolidJS re-evaluates the fg prop
+        // on each frame. <For> keeps the text node stable across frames (same
+        // renderable ID), so hit-testing never targets a destroyed node.
+        const color = () => shimmerColors().colors[index()] ?? shimmerColors().defaultColor;
+        return (
+          <text fg={color()} selectable={false}>
+            {char}
+          </text>
+        );
+      }}
+    </For>
   );
 }
 
@@ -349,32 +345,46 @@ export function PtyTreeRow(props: PtyTreeRowProps) {
     return ' '.repeat(padLen);
   });
 
+  const handleClick = (event: { preventDefault: () => void }) => {
+    event.preventDefault();
+    props.onClick?.();
+  };
+
   // Apply shimmer to label characters only while this row is actively animating.
   // NOTE: The shimmer is rendered as a separate component to isolate the
   // high-frequency re-renders (~60fps during animation) from the row's event
   // handlers. This prevents mouse click events from being lost during animation.
+  //
+  // CRITICAL: Text nodes don't receive onMouseDown events in OpenTUI (issue #112),
+  // so we wrap the label in a box with the handler. During shimmer, the text
+  // nodes are recreated rapidly, which causes clicks to be lost when they
+  // target text nodes directly.
   const renderLabel = createMemo(() => {
     const text = displayLabel();
     const baseColor = baseFgColor();
 
     if (!isAnimating()) {
       return (
-        <text fg={baseColor} selectable={false}>
-          {text}
-        </text>
+        <box style={{ height: 1, flexDirection: 'row' }} onMouseDown={handleClick}>
+          <text fg={baseColor} selectable={false}>
+            {text}
+          </text>
+        </box>
       );
     }
 
     // Use ShimmeringLabel component to isolate RAF-triggered re-renders.
-    // This prevents the parent row's event handlers from being disrupted.
+    // Wrap in a box with onMouseDown since text nodes don't receive mouse events.
     return (
-      <ShimmeringLabel
-        text={text}
-        baseColor={baseColor}
-        ptyId={props.pty.ptyId}
-        shimmerTargetColor={props.shimmerTargetColor}
-        isAnimating={true}
-      />
+      <box style={{ height: 1, flexDirection: 'row' }} onMouseDown={handleClick}>
+        <ShimmeringLabel
+          text={text}
+          baseColor={baseColor}
+          ptyId={props.pty.ptyId}
+          shimmerTargetColor={props.shimmerTargetColor}
+          isAnimating={true}
+        />
+      </box>
     );
   });
 
@@ -438,12 +448,12 @@ export function PtyTreeRow(props: PtyTreeRowProps) {
       }
     }
 
-    return <>{parts}</>;
-  };
-
-  const handleClick = (event: { preventDefault: () => void }) => {
-    event.preventDefault();
-    props.onClick?.();
+    // Wrap in box with onMouseDown since text nodes don't receive mouse events
+    return (
+      <box style={{ height: 1, flexDirection: 'row' }} onMouseDown={handleClick}>
+        <>{parts}</>
+      </box>
+    );
   };
 
   return (
@@ -453,13 +463,17 @@ export function PtyTreeRow(props: PtyTreeRowProps) {
       onMouseDown={handleClick}
     >
       {/* Indentation only - NO tree prefix */}
-      <text fg={subtleColor()} selectable={false}>
-        {props.indent}
-      </text>
+      <box style={{ height: 1, flexDirection: 'row' }} onMouseDown={handleClick}>
+        <text fg={subtleColor()} selectable={false}>
+          {props.indent}
+        </text>
+      </box>
       {/* Label with optional shimmer */}
       {renderLabel()}
       {/* Padding */}
-      <text selectable={false}>{padding()}</text>
+      <box style={{ height: 1, flexDirection: 'row' }} onMouseDown={handleClick}>
+        <text selectable={false}>{padding()}</text>
+      </box>
       {/* Git metadata */}
       {renderGitMeta()}
     </box>
