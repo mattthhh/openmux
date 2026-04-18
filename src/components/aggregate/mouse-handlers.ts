@@ -6,7 +6,10 @@
 import { type MouseEvent as OpenTUIMouseEvent } from '@opentui/core';
 import { writeToPty } from '../../effect/bridge';
 import { inputHandler } from '../../terminal/input-handler';
-import { createTerminalMouseHandler, type TerminalMouseDeps } from '../shared/terminal-mouse-handler';
+import {
+  createTerminalMouseHandler,
+  type TerminalMouseDeps,
+} from '../shared/terminal-mouse-handler';
 
 export interface MouseHandlerDeps extends TerminalMouseDeps {
   getPreviewMode: () => boolean;
@@ -62,7 +65,7 @@ export function createAggregateMouseHandlers(deps: MouseHandlerDeps) {
     if (!scrollState || scrollState.scrollbackLength === 0) return 0;
     const innerHeight = getPreviewInnerHeight();
     // relY 0 = top = max offset, relY (innerHeight-1) = bottom = 0 offset
-    const ratio = 1 - (relY / Math.max(1, innerHeight - 1));
+    const ratio = 1 - relY / Math.max(1, innerHeight - 1);
     return Math.round(ratio * scrollState.scrollbackLength);
   };
 
@@ -103,7 +106,9 @@ export function createAggregateMouseHandlers(deps: MouseHandlerDeps) {
    * Check if coordinates are inside the content area
    */
   const isInsideContent = (relX: number, relY: number) => {
-    return relX >= 0 && relY >= 0 && relX < getPreviewInnerWidth() && relY < getPreviewInnerHeight();
+    return (
+      relX >= 0 && relY >= 0 && relX < getPreviewInnerWidth() && relY < getPreviewInnerHeight()
+    );
   };
 
   /**
@@ -153,7 +158,10 @@ export function createAggregateMouseHandlers(deps: MouseHandlerDeps) {
 
     // Try selection first
     const handled = mouseHandler.handleSelectionMouseDown(
-      ptyId, relX, relY, event.modifiers?.shift ?? false
+      ptyId,
+      relX,
+      relY,
+      event.modifiers?.shift ?? false
     );
     if (handled) return;
 
@@ -227,7 +235,10 @@ export function createAggregateMouseHandlers(deps: MouseHandlerDeps) {
 
     // Try selection drag first
     const handled = mouseHandler.handleSelectionMouseDrag(
-      ptyId, relX, relY, getPreviewInnerHeight()
+      ptyId,
+      relX,
+      relY,
+      getPreviewInnerHeight()
     );
     if (handled) return;
 
@@ -270,7 +281,9 @@ export function createAggregateMouseHandlers(deps: MouseHandlerDeps) {
     }
 
     // Handle scroll locally (works even when preview isn't active).
-    const scrollSpeed = 3;
+    // 1 line per event — the ScrollAnimator in TerminalContext smooths
+    // rapid events into a chase animation.
+    const scrollSpeed = 1;
     if (direction === 'up') {
       scrollTerminal(ptyId, scrollSpeed);
     } else if (direction === 'down') {

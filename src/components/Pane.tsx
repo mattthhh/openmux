@@ -336,8 +336,9 @@ export function Pane(props: PaneProps) {
         props.onMouseInput(sequence);
       }
     } else {
-      // Handle scroll locally
-      const scrollSpeed = 3;
+      // Handle scroll locally (1 line per event — the ScrollAnimator
+      // in TerminalContext smooths rapid events into a chase animation)
+      const scrollSpeed = 1;
       if (direction === 'up') {
         scrollTerminal(props.ptyId, scrollSpeed);
       } else if (direction === 'down') {

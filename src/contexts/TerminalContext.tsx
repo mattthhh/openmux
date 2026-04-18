@@ -213,6 +213,7 @@ export function TerminalProvider(props: TerminalProviderProps) {
     shouldCacheScrollState,
     onPtyDestroyed: (ptyId) => {
       getKittyGraphicsRenderer()?.markPtyDestroyed(ptyId);
+      scrollHandlers.removeAnimation(ptyId);
     },
   });
 
@@ -318,6 +319,8 @@ export function TerminalProvider(props: TerminalProviderProps) {
     if (!isShimClient()) {
       destroyAllPtys();
     }
+    // Clean up scroll animation loop
+    scrollHandlers.cleanup();
     // Worker pool cleanup happens via runtime disposal
   });
 
