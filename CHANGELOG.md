@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.92](https://github.com/monotykamary/openmux/compare/v0.3.91...v0.3.92) (2026-04-18)
+
+
+### Bug Fixes
+
+* **aggregate:** restore click handling during shimmer animation ([4af215f](https://github.com/monotykamary/openmux/commit/4af215f9c97aa712041b334193a8dda81f904b24)), closes [#112](https://github.com/monotykamary/openmux/issues/112)
+
 ### [0.3.91](https://github.com/monotykamary/openmux/compare/v0.3.90...v0.3.91) (2026-04-18)
 
 
