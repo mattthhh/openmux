@@ -644,7 +644,20 @@ export function createAggregateViewRefreshers(
           const existingPtysForOtherSessions = s.allPtys.filter(
             (pty) => !loadedSnapshotSessionIds.has(pty.sessionId)
           );
-          s.allPtys = dedupeAggregatePtysByPane([...existingPtysForOtherSessions, ...finalPtys]);
+          // Include existing PTYs for loaded sessions so that
+          // dedupeAggregatePtysByPane can preserve git metadata from them
+          // when snapshot PTYs have empty git fields (from skipGitMetadata).
+          // Without this, the merge discards existing PTYs that carry cached
+          // git data, causing a visible flicker where git metadata clears
+          // and only reappears after the subsequent full refreshPtys().
+          const existingPtysForLoadedSessions = s.allPtys.filter((pty) =>
+            loadedSnapshotSessionIds.has(pty.sessionId)
+          );
+          s.allPtys = dedupeAggregatePtysByPane([
+            ...existingPtysForOtherSessions,
+            ...existingPtysForLoadedSessions,
+            ...finalPtys,
+          ]);
         } else {
           s.allPtys = dedupeAggregatePtysByPane(finalPtys);
         }

@@ -205,6 +205,88 @@ describe('regression: git metadata must not clear then redraw', () => {
     });
   });
 
+  it('dedupeAggregatePtysByPane preserves git metadata from existing live PTY when snapshot PTY has empty git fields (merge-mode applySnapshot)', () => {
+    // Simulates the applySnapshot merge-mode scenario:
+    // 1. Existing PTYs in allPtys have git metadata (from a prior full refresh)
+    // 2. Snapshot PTYs (from refreshActiveSession with skipGitMetadata:true) have empty git fields
+    // 3. Both sets are passed to dedupeAggregatePtysByPane
+    // 4. The deduplication must preserve git metadata from the existing PTYs
+
+    const existingLivePty: PtyInfo = {
+      ptyId: 'pty-1',
+      cwd: '/repo',
+      gitBranch: 'main',
+      gitDiffStats: { added: 10, removed: 2, binary: 0 },
+      gitDirty: true,
+      gitStaged: 1,
+      gitUnstaged: 2,
+      gitUntracked: 0,
+      gitConflicted: 0,
+      gitAhead: 7,
+      gitBehind: 0,
+      gitStashCount: 0,
+      gitState: undefined,
+      gitDetached: false,
+      gitRepoKey: '/repo',
+      gitIsWorktree: false,
+      gitCommonDir: null,
+      foregroundProcess: 'nvim',
+      shell: '/bin/zsh',
+      title: 'editor',
+      workspaceId: 1,
+      paneId: 'pane-1',
+      sessionId: 'session-1',
+      sessionMetadata,
+      sortOrderHint: 0,
+    };
+
+    const newPanePty: PtyInfo = {
+      ptyId: 'pty-2',
+      cwd: '/repo',
+      ...emptyGitFields,
+      foregroundProcess: undefined,
+      shell: 'shell',
+      title: '...',
+      workspaceId: 1,
+      paneId: 'pane-2',
+      sessionId: 'session-1',
+      sessionMetadata,
+      sortOrderHint: 1,
+    };
+
+    // Snapshot PTYs: same panes as existing but with empty git fields
+    const snapshotPty1: PtyInfo = {
+      ...existingLivePty,
+      ...emptyGitFields,
+      title: 'editor',
+    };
+    const snapshotPty2 = { ...newPanePty };
+
+    // This is what applySnapshot now passes: existing PTYs first, then snapshot PTYs
+    const deduped = dedupeAggregatePtysByPane([existingLivePty, snapshotPty1, snapshotPty2]);
+
+    expect(deduped).toHaveLength(2);
+
+    // pane-1: snapshot version preferred (same ptyId), git metadata preserved from existing
+    const pane1 = deduped.find((p) => p.paneId === 'pane-1');
+    expect(pane1).toBeDefined();
+    expect(pane1!.ptyId).toBe('pty-1');
+    expect(pane1!.gitBranch).toBe('main');
+    expect(pane1!.gitDiffStats).toEqual({ added: 10, removed: 2, binary: 0 });
+    expect(pane1!.gitDirty).toBe(true);
+    expect(pane1!.gitStaged).toBe(1);
+    expect(pane1!.gitUnstaged).toBe(2);
+    expect(pane1!.gitAhead).toBe(7);
+    expect(pane1!.gitRepoKey).toBe('/repo');
+
+    // pane-2: only the new pane, no git metadata (no existing to inherit from)
+    const pane2 = deduped.find((p) => p.paneId === 'pane-2');
+    expect(pane2).toBeDefined();
+    expect(pane2!.ptyId).toBe('pty-2');
+    expect(pane2!.gitBranch).toBeUndefined();
+    expect(pane2!.gitRepoKey).toBeUndefined();
+  });
+
   it('mergePtyInfoPreservingGitMetadata preserves git metadata when next has empty fields', () => {
     // This is the core invariant: when transitioning from one git state to
     // the next, if the next state has empty git fields (partial refresh),
