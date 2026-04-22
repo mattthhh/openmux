@@ -14,6 +14,7 @@ import { produce, type SetStoreFunction } from 'solid-js/store';
 
 import type { SerializedLayoutNode, SerializedSession, SessionMetadata } from '../../effect/models';
 import { getPtyMetadata } from '../../effect/bridge/aggregate';
+import type { PtyMetadata } from '../../effect/bridge/aggregate';
 import { listSessionsResult, loadSession } from '../../effect/bridge/session-bridge';
 import { AggregateBridgeError } from '../../effect/errors';
 import { clonePtyStdoutActivity } from '../../core/shimmer';
@@ -41,6 +42,7 @@ import {
 import { recomputeMatches, recomputeTree } from './session';
 import type { AggregateViewState, PtyInfo, SessionLoadState } from './types';
 import { dedupeAggregatePtysByPane, getAggregatePaneKey, getSavedAggregatePtyId } from './rows';
+import { createSuspendedPtyCache, SuspendedPtyCache } from './refresh/suspended-pty-cache';
 
 export { ptyMetadataToInfo } from './pty-info';
 
@@ -50,6 +52,8 @@ export interface RefreshersResult {
   refreshActiveSession: () => Promise<void | Error>;
   refreshPtysSubset: (ptyIds: string[]) => Promise<void>;
   initialLoad: () => Promise<void | Error>;
+  /** Live PTY metadata cache for non-active sessions. */
+  suspendedPtyCache: SuspendedPtyCache;
 }
 
 function collectSerializedPaneIds(
@@ -219,6 +223,7 @@ export function createAggregateViewRefreshers(
     fetchGitInfo: (cwd) => getGitInfo(cwd, { force: false }),
     fetchDiffStats: getGitDiffStats,
   });
+  const suspendedPtyCache = createSuspendedPtyCache();
 
   const buildSnapshot = async (options: {
     forceGitRefresh: boolean;
@@ -295,6 +300,28 @@ export function createAggregateViewRefreshers(
       const sessionLoadStates = new Map<string, SessionLoadState>();
       const sessionPaneOrders = new Map<string, Map<string, number>>();
       const provisionalPtys: PtyInfo[] = [];
+
+      // Pre-load live metadata for non-active sessions in the background.
+      // Suspended PTYs stay alive across session switches — we can fetch
+      // their real foregroundProcess, shell, title, and cwd just like we
+      // do for git metadata. Cache TTL prevents repeated fetches on
+      // every keystroke.
+      const nonActiveSessionIds = options.activeSessionOnly
+        ? []
+        : sessions
+            .filter((s) => String(s.id) !== effectiveCurrentSessionId)
+            .map((s) => String(s.id));
+
+      const suspendedPtyPreloadPromise =
+        nonActiveSessionIds.length > 0
+          ? suspendedPtyCache.preloadSessions(nonActiveSessionIds)
+          : Promise.resolve(
+              new Map<
+                string,
+                Map<string, { ptyId: string; metadata: PtyMetadata; lastUpdated: number }>
+              >()
+            );
+
       const previousPanePtyByKey = new Map<string, PtyInfo>();
       for (const pty of dedupeAggregatePtysByPane(state.allPtys)) {
         const paneKey = getAggregatePaneKey(pty.sessionId, pty.paneId);
@@ -475,6 +502,50 @@ export function createAggregateViewRefreshers(
           lastActiveWorkspaceId: loadedSession.activeWorkspaceId,
           focusedPaneId: activeWorkspace?.focusedPaneId ?? undefined,
         });
+      }
+
+      // Apply suspended live metadata overlay to non-active sessions.
+      // This runs after all provisionalPtys are built (active + non-active),
+      // and overlays real PTY data where available, just like git metadata.
+      const suspendedPtysBySession = await suspendedPtyPreloadPromise;
+      if (suspendedPtysBySession.size > 0) {
+        const ptyIdToSuspended = new Map<string, { metadata: PtyMetadata; paneId: string }>();
+        for (const [sessionId, paneMap] of suspendedPtysBySession) {
+          for (const [paneId, suspendedPty] of paneMap) {
+            ptyIdToSuspended.set(suspendedPty.ptyId, {
+              metadata: suspendedPty.metadata,
+              paneId,
+            });
+            // Also index by (sessionId, paneId) for synthetic saved: entries
+            ptyIdToSuspended.set(`${sessionId}\u0000${paneId}`, {
+              metadata: suspendedPty.metadata,
+              paneId,
+            });
+          }
+        }
+
+        for (let i = 0; i < provisionalPtys.length; i++) {
+          const pty = provisionalPtys[i];
+          if (pty.sessionId === effectiveCurrentSessionId) {
+            continue; // active session already has live data
+          }
+          // Match by real ptyId (for entries that have one) or (sessionId,paneId)
+          const key = ptyIdToSuspended.has(pty.ptyId)
+            ? pty.ptyId
+            : `${pty.sessionId}\u0000${pty.paneId}`;
+          const suspended = ptyIdToSuspended.get(key);
+          if (!suspended) continue;
+
+          // Overlay live metadata, preferring live over disk snapshot
+          provisionalPtys[i] = {
+            ...pty,
+            ptyId: suspended.metadata.ptyId,
+            cwd: suspended.metadata.cwd || pty.cwd,
+            foregroundProcess: suspended.metadata.foregroundProcess ?? pty.foregroundProcess,
+            shell: suspended.metadata.shell ?? pty.shell,
+            title: suspended.metadata.title ?? pty.title,
+          };
+        }
       }
 
       // Skip git metadata hydration when requested (fast initial load).
@@ -777,5 +848,6 @@ export function createAggregateViewRefreshers(
     refreshActiveSession,
     refreshPtysSubset,
     initialLoad,
+    suspendedPtyCache,
   };
 }

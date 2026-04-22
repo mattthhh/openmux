@@ -10,6 +10,7 @@ import type { SetStoreFunction } from 'solid-js/store';
 import type { AggregateViewState } from './aggregate-view-types';
 import { didPtyInfoChange } from './aggregate/git';
 import { createAggregateViewRefreshers } from './aggregate/refresh';
+import type { SuspendedPtyCache } from './aggregate/refresh/suspended-pty-cache';
 import {
   cleanupSubscriptions,
   createActivityBasedRefresh,
@@ -62,6 +63,7 @@ export type {
   LifecycleHandlerDeps,
   TitleChangeEvent,
 };
+export type { SuspendedPtyCache };
 
 export function createLifecycleHandlers(
   state: AggregateViewState,

@@ -171,24 +171,36 @@ export function AggregateViewProvider(props: AggregateViewProviderProps) {
     return ptys;
   };
 
-  const { refreshPtys, refreshActiveSession, initialLoad } = createAggregateViewRefreshers(
-    state,
-    setState,
-    refreshState,
-    resolvePtyOwnership,
-    getCurrentSessionHints,
-    getCurrentSessionPaneOrder,
-    getCurrentSessionPtys
-  );
+  const { refreshPtys, refreshActiveSession, initialLoad, suspendedPtyCache } =
+    createAggregateViewRefreshers(
+      state,
+      setState,
+      refreshState,
+      resolvePtyOwnership,
+      getCurrentSessionHints,
+      getCurrentSessionPaneOrder,
+      getCurrentSessionPtys
+    );
 
-  const handleTitleChange = createTitleChangeHandler(setState);
-  const handleProcessChange = createProcessChangeHandler(setState);
+  const titleHandler = createTitleChangeHandler(setState);
+  const processHandler = createProcessChangeHandler(setState);
+  const handleTitleChange = (event: { ptyId: string; title: string }) => {
+    suspendedPtyCache.invalidateByPtyId(event.ptyId);
+    titleHandler(event);
+  };
+  const handleProcessChange = (event: { ptyId: string; processName: string }) => {
+    suspendedPtyCache.invalidateByPtyId(event.ptyId);
+    processHandler(event);
+  };
 
   const lifecycleHandlers = createLifecycleHandlers(state, setState, {
     resolvePtyOwnership,
     getCurrentSessionHints,
     refreshPtys,
     refreshActiveSession,
+    onPtyDestroyed: (ptyId) => {
+      suspendedPtyCache.invalidateByPtyId(ptyId);
+    },
   });
 
   const loadPersistedSessionOrder = async (): Promise<void> => {
@@ -254,6 +266,7 @@ export function AggregateViewProvider(props: AggregateViewProviderProps) {
             void refreshPtys();
           })();
         } else {
+          suspendedPtyCache.clear();
           cleanupSubscriptions(subscriptions, subscriptionsEpoch);
         }
       }

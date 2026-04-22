@@ -133,6 +133,8 @@ export interface LifecycleHandlerDeps {
   /** Fast refresh: only the active session, no git metadata.
    *  Used by handlePtyCreated to make new PTYs appear instantly. */
   refreshActiveSession: () => Promise<void | Error>;
+  /** Optional callback when a suspended PTY is destroyed. Used to invalidate caches. */
+  onPtyDestroyed?: (ptyId: string) => void;
 }
 
 function buildSessionPaneOrderFromState(
@@ -297,6 +299,9 @@ export function createLifecycleHandlers(
   };
 
   const handlePtyDestroyed = (ptyId: string): void => {
+    // Invalidate external caches while we have the ptyId before removal
+    deps.onPtyDestroyed?.(ptyId);
+
     setState(
       produce((s) => {
         s.deletedPtyIds.add(ptyId);
