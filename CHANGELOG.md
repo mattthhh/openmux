@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.93](https://github.com/monotykamary/openmux/compare/v0.3.92...v0.3.93) (2026-04-22)
+
+
+### Bug Fixes
+
+* **aggregate:** preserve git metadata during fast refresh on pane creation ([4e151d0](https://github.com/monotykamary/openmux/commit/4e151d018e0ca214f64350d66234ed95c984efca))
+
 ### [0.3.92](https://github.com/monotykamary/openmux/compare/v0.3.91...v0.3.92) (2026-04-18)
 
 
