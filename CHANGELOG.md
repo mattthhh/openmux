@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.97](https://github.com/monotykamary/openmux/compare/v0.3.96...v0.3.97) (2026-04-23)
+
+
+### Refactoring
+
+* **aggregate:** unify per-field PTY metadata subscriptions into single stream ([cb1d06e](https://github.com/monotykamary/openmux/commit/cb1d06e66e3e1e4f32dc05df1f3efce88c0c07cc))
+
 ### [0.3.96](https://github.com/monotykamary/openmux/compare/v0.3.95...v0.3.96) (2026-04-23)
 
 
