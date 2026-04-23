@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.96](https://github.com/monotykamary/openmux/compare/v0.3.95...v0.3.96) (2026-04-23)
+
+
+### Features
+
+* **aggregate:** add subscribeToCwdChange for instant folder name updates ([a8e5aea](https://github.com/monotykamary/openmux/commit/a8e5aeac6467d36620fc0d3b7ac9d871570c5b23))
+
 ### [0.3.95](https://github.com/monotykamary/openmux/compare/v0.3.94...v0.3.95) (2026-04-22)
 
 
