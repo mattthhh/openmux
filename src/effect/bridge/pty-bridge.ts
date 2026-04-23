@@ -333,12 +333,6 @@ export interface PtyActivityEvent {
   ptyId: string;
 }
 
-/** PTY foreground process change event */
-export interface PtyForegroundProcessChangeEvent {
-  ptyId: string;
-  processName: string;
-}
-
 /** PTY CWD change event */
 export interface PtyCwdChangeEvent {
   ptyId: string;
@@ -369,18 +363,6 @@ export function subscribeToAllPtyActivity(
   );
 }
 
-/** Subscribe to foreground process changes across all PTYs */
-export function subscribeToForegroundProcessChanges(
-  callback: (event: PtyForegroundProcessChangeEvent) => void
-): Promise<() => void> {
-  const pty = getPtyService();
-  return Promise.resolve(
-    pty.subscribeToForegroundProcessChange((event: { ptyId: string; processName: string }) => {
-      callback({ ptyId: event.ptyId, processName: event.processName });
-    })
-  );
-}
-
 /** Subscribe to CWD changes across all PTYs */
 export function subscribeToCwdChanges(
   callback: (event: PtyCwdChangeEvent) => void
@@ -391,6 +373,34 @@ export function subscribeToCwdChanges(
       callback({ ptyId: event.ptyId, cwd: event.cwd });
     })
   );
+}
+
+/** Unified metadata change event (title / process / cwd) */
+export interface PtyMetadataChangeEvent {
+  ptyId: string;
+  title?: string;
+  foregroundProcess?: string;
+  cwd?: string;
+}
+
+/** Subscribe to all PTY metadata changes via a single stream.
+ *  This is a derived composition of the underlying per-field registries.
+ *  Keeps the PTY service interface stable while simplifying consumers. */
+export function subscribeToMetadataChanges(
+  callback: (event: PtyMetadataChangeEvent) => void
+): Promise<() => void> {
+  const pty = getPtyService();
+  const cleanups: (() => void)[] = [];
+
+  cleanups.push(pty.subscribeToTitle((e) => callback({ ptyId: e.ptyId, title: e.title })));
+  cleanups.push(
+    pty.subscribeToForegroundProcessChange((e) =>
+      callback({ ptyId: e.ptyId, foregroundProcess: e.processName })
+    )
+  );
+  cleanups.push(pty.subscribeToCwdChange((e) => callback({ ptyId: e.ptyId, cwd: e.cwd })));
+
+  return Promise.resolve(() => cleanups.forEach((c) => c()));
 }
 
 /** Get PTY title */

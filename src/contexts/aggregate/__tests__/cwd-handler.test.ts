@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect } from 'bun:test';
-import { createCwdChangeHandler } from '../subscriptions';
+import { createMetadataChangeHandler } from '../subscriptions';
 import type { AggregateViewState } from '../../aggregate-view-types';
 import { createStore } from 'solid-js/store';
 
@@ -75,13 +75,13 @@ function makeState(ptys: ReturnType<typeof makePty>[] = [makePty()]) {
 describe('CWD handler (litmus)', () => {
   it('creates a function', () => {
     const [_state, setState] = makeState();
-    const handler = createCwdChangeHandler(setState);
+    const handler = createMetadataChangeHandler(setState);
     expect(typeof handler).toBe('function');
   });
 
   it('updates cwd in allPtys and matchedPtys when ptyId matches', () => {
     const [state, setState] = makeState();
-    const handler = createCwdChangeHandler(setState);
+    const handler = createMetadataChangeHandler(setState);
 
     handler({ ptyId: 'pty-1', cwd: '/home/user/other-project' });
 
@@ -91,7 +91,7 @@ describe('CWD handler (litmus)', () => {
 
   it('does not update when ptyId is not in the index', () => {
     const [state, setState] = makeState();
-    const handler = createCwdChangeHandler(setState);
+    const handler = createMetadataChangeHandler(setState);
 
     handler({ ptyId: 'unknown-pty', cwd: '/somewhere' });
 
@@ -101,7 +101,7 @@ describe('CWD handler (litmus)', () => {
 
   it('does not replace the entry when cwd is unchanged', () => {
     const [state, setState] = makeState();
-    const handler = createCwdChangeHandler(setState);
+    const handler = createMetadataChangeHandler(setState);
     const before = state.allPtys[0];
 
     handler({ ptyId: 'pty-1', cwd: '/home/user/project' });
@@ -114,7 +114,7 @@ describe('CWD handler (litmus)', () => {
     const pty1 = makePty({ ptyId: 'pty-1', cwd: '/a' });
     const pty2 = makePty({ ptyId: 'pty-2', cwd: '/b' });
     const [state, setState] = makeState([pty1, pty2]);
-    const handler = createCwdChangeHandler(setState);
+    const handler = createMetadataChangeHandler(setState);
 
     handler({ ptyId: 'pty-2', cwd: '/b/updated' });
 

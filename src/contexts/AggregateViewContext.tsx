@@ -22,13 +22,11 @@ import {
   createSubscriptionManager,
   createRefreshState,
   createAggregateViewRefreshers,
-  createTitleChangeHandler,
-  createProcessChangeHandler,
-  createCwdChangeHandler,
+  createMetadataChangeHandler,
   createLifecycleHandlers,
   setupSubscriptions,
   cleanupSubscriptions,
-  type CwdChangeHandler,
+  type MetadataChangeEvent,
 } from './aggregate-view-subscriptions';
 
 import { createAggregateViewActions } from './aggregate-view-actions';
@@ -184,20 +182,10 @@ export function AggregateViewProvider(props: AggregateViewProviderProps) {
       getCurrentSessionPtys
     );
 
-  const titleHandler = createTitleChangeHandler(setState);
-  const processHandler = createProcessChangeHandler(setState);
-  const cwdHandler = createCwdChangeHandler(setState);
-  const handleTitleChange = (event: { ptyId: string; title: string }) => {
+  const metadataHandler = createMetadataChangeHandler(setState);
+  const handleMetadataChange = (event: MetadataChangeEvent) => {
     suspendedPtyCache.invalidateByPtyId(event.ptyId);
-    titleHandler(event);
-  };
-  const handleProcessChange = (event: { ptyId: string; processName: string }) => {
-    suspendedPtyCache.invalidateByPtyId(event.ptyId);
-    processHandler(event);
-  };
-  const handleCwdChange: CwdChangeHandler = (event) => {
-    suspendedPtyCache.invalidateByPtyId(event.ptyId);
-    cwdHandler(event);
+    metadataHandler(event);
   };
 
   const lifecycleHandlers = createLifecycleHandlers(state, setState, {
@@ -264,9 +252,7 @@ export function AggregateViewProvider(props: AggregateViewProviderProps) {
               subscriptions,
               subscriptionsEpoch,
               refreshPtys,
-              handleTitleChange,
-              handleProcessChange,
-              handleCwdChange,
+              handleMetadataChange,
               lifecycleHandlers
             );
 

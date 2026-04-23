@@ -58,8 +58,7 @@ export {
   createRefreshState,
   RefreshGuard,
   createLifecycleHandlers,
-  createTitleChangeHandler,
-  createProcessChangeHandler,
+  createMetadataChangeHandler,
   setupSubscriptions,
   createGitRepoChangeRefresh,
   createActivityBasedRefresh,
@@ -67,13 +66,11 @@ export {
   type SubscriptionManager,
   type RefreshState,
   type RefreshFlagKey,
-  type TitleChangeHandler,
+  type MetadataChangeEvent,
   type LifecycleEvent,
   type LifecycleHandlers,
   type SubscriptionSetupDeps,
   type LifecycleHandlerDeps,
-  type TitleChangeEvent,
-  type ProcessChangeEvent,
 } from './subscriptions';
 
 export { ptyMetadataToInfo, createAggregateViewRefreshers, type RefreshersResult } from './refresh';

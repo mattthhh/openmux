@@ -10,7 +10,7 @@ import { createStore, produce } from 'solid-js/store';
 import type { PtyInfo, AggregateViewState } from '../../src/contexts/aggregate-view-types';
 import { initialState } from '../../src/contexts/aggregate-view-types';
 import { buildPtyIndex, recomputeMatches } from '../../src/contexts/aggregate-view-helpers';
-import { createTitleChangeHandler } from '../../src/contexts/aggregate-view-subscriptions';
+import { createMetadataChangeHandler } from '../../src/contexts/aggregate-view-subscriptions';
 
 function createMockPty(overrides: Partial<PtyInfo> = {}): PtyInfo {
   return {
@@ -59,10 +59,10 @@ describe('AggregateView - PTY Name Consistency', () => {
         matchedPtysIndex: buildPtyIndex([pty1]),
       });
 
-      const handleTitleChange = createTitleChangeHandler(setState);
+      const handleMetadataChange = createMetadataChangeHandler(setState);
 
       // When nvim sets its title to "main.rs"
-      handleTitleChange({ ptyId: 'pty-1', title: 'main.rs' });
+      handleMetadataChange({ ptyId: 'pty-1', title: 'main.rs' });
 
       // Then: foregroundProcess should still be "nvim", not "main.rs"
       expect(state.allPtys[0].foregroundProcess).toBe('nvim');
@@ -86,10 +86,10 @@ describe('AggregateView - PTY Name Consistency', () => {
         matchedPtysIndex: buildPtyIndex([pty1]),
       });
 
-      const handleTitleChange = createTitleChangeHandler(setState);
+      const handleMetadataChange = createMetadataChangeHandler(setState);
 
       // Application sets title (different from process name)
-      handleTitleChange({ ptyId: 'pty-1', title: 'My Application v1.0' });
+      handleMetadataChange({ ptyId: 'pty-1', title: 'My Application v1.0' });
 
       // The card should still show "node" not "My Application v1.0"
       expect(state.allPtys[0].foregroundProcess).toBe('node');
@@ -116,12 +116,12 @@ describe('AggregateView - PTY Name Consistency', () => {
         matchedPtysIndex: buildPtyIndex([pty1, pty2]),
       });
 
-      const handleTitleChange = createTitleChangeHandler(setState);
+      const handleMetadataChange = createMetadataChangeHandler(setState);
 
       // PTY 1's nvim has file "main.rs" open
-      handleTitleChange({ ptyId: 'pty-1', title: 'main.rs' });
+      handleMetadataChange({ ptyId: 'pty-1', title: 'main.rs' });
       // PTY 2's nvim has file "README.md" open
-      handleTitleChange({ ptyId: 'pty-2', title: 'README.md' });
+      handleMetadataChange({ ptyId: 'pty-2', title: 'README.md' });
 
       // Both should still show "nvim" as process
       expect(state.allPtys[0].foregroundProcess).toBe('nvim');
@@ -156,7 +156,7 @@ describe('AggregateView - PTY Name Consistency', () => {
         matchedPtysIndex: buildPtyIndex([pty1, pty2]),
       });
 
-      const handleTitleChange = createTitleChangeHandler(setState);
+      const handleMetadataChange = createMetadataChangeHandler(setState);
 
       // Simulate stale index: manually corrupt the index to point to wrong PTY
       setState(
@@ -167,7 +167,7 @@ describe('AggregateView - PTY Name Consistency', () => {
       );
 
       // Now when pty-1's title changes
-      handleTitleChange({ ptyId: 'pty-1', title: 'should-not-apply-to-pty2' });
+      handleMetadataChange({ ptyId: 'pty-1', title: 'should-not-apply-to-pty2' });
 
       // The update should be rejected or pty-2 should not be affected
       // Since ptyId at index 1 doesn't match "pty-1", no update should occur
@@ -193,7 +193,7 @@ describe('AggregateView - PTY Name Consistency', () => {
         matchedPtysIndex: buildPtyIndex([pty1, pty2, pty3]),
       });
 
-      const handleTitleChange = createTitleChangeHandler(setState);
+      const handleMetadataChange = createMetadataChangeHandler(setState);
 
       // Remove middle PTY (simulating PTY destruction)
       setState(
@@ -206,7 +206,7 @@ describe('AggregateView - PTY Name Consistency', () => {
       // Now the index is stale: pty-3's index is still 2, but it's now at position 1
 
       // Send title update for pty-3
-      handleTitleChange({ ptyId: 'pty-3', title: 'new-title' });
+      handleMetadataChange({ ptyId: 'pty-3', title: 'new-title' });
 
       // Should either rebuild index automatically or validate before update
       // pty-1 should NOT receive pty-3's update
@@ -234,7 +234,7 @@ describe('AggregateView - PTY Name Consistency', () => {
         matchedPtysIndex: buildPtyIndex(ptys),
       });
 
-      const handleTitleChange = createTitleChangeHandler(setState);
+      const handleMetadataChange = createMetadataChangeHandler(setState);
 
       // Simulate rapid lifecycle: remove multiple PTYs at once
       setState(
@@ -247,7 +247,7 @@ describe('AggregateView - PTY Name Consistency', () => {
       // Send updates to remaining PTYs
       const remainingEvenIndices = [0, 2, 4, 6, 8];
       remainingEvenIndices.forEach((idx) => {
-        handleTitleChange({ ptyId: `pty-${idx}`, title: `title-${idx}` });
+        handleMetadataChange({ ptyId: `pty-${idx}`, title: `title-${idx}` });
       });
 
       // With stale indices, some updates may be rejected to prevent cross-contamination
@@ -284,7 +284,7 @@ describe('AggregateView - PTY Name Consistency', () => {
         matchedPtysIndex: buildPtyIndex([pty1, pty2]),
       });
 
-      const handleTitleChange = createTitleChangeHandler(setState);
+      const handleMetadataChange = createMetadataChangeHandler(setState);
 
       // Corrupt the index - make pty-1's index point to pty-2's position
       setState(
@@ -295,8 +295,8 @@ describe('AggregateView - PTY Name Consistency', () => {
       );
 
       // Both nvims set their titles
-      handleTitleChange({ ptyId: 'pty-1', title: 'file-a.txt' });
-      handleTitleChange({ ptyId: 'pty-2', title: 'file-b.txt' });
+      handleMetadataChange({ ptyId: 'pty-1', title: 'file-a.txt' });
+      handleMetadataChange({ ptyId: 'pty-2', title: 'file-b.txt' });
 
       // Both processes should still be nvim (not overwritten)
       expect(state.allPtys.find((p) => p.ptyId === 'pty-1')?.foregroundProcess).toBe('nvim');

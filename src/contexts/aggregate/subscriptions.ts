@@ -7,13 +7,9 @@ import { produce, type SetStoreFunction } from 'solid-js/store';
 import { runStream, streamFromSubscription, tap } from '../../effect/stream-utils';
 import {
   subscribeToAllPtyActivity,
-  subscribeToAllTitleChanges,
-  subscribeToCwdChanges,
-  subscribeToForegroundProcessChanges,
+  subscribeToMetadataChanges,
   subscribeToPtyLifecycle,
-  type PtyCwdChangeEvent,
-  type PtyTitleChangeEvent,
-  type PtyForegroundProcessChangeEvent,
+  type PtyMetadataChangeEvent,
 } from '../../effect/bridge/pty-bridge';
 import { removeAggregateSessionMappingForPty } from '../../effect/bridge/aggregate';
 import { subscribeToGitRepoChanges } from '../../effect/services/pty/helpers';
@@ -37,9 +33,7 @@ import { recomputeMatches, recomputeTree } from './session';
 
 export interface SubscriptionManager {
   lifecycle: (() => void) | null;
-  titleChange: (() => void) | null;
-  processChange: (() => void) | null;
-  cwdChange: (() => void) | null;
+  metadataChanges: (() => void) | null;
   gitChanges: (() => void) | null;
   polling: (() => void) | null;
 }
@@ -78,8 +72,6 @@ export interface CurrentSessionPty {
   sessionId?: string;
 }
 
-export type TitleChangeHandler = (event: { ptyId: string; title: string }) => void;
-
 export interface LifecycleEvent {
   type: 'created' | 'destroyed';
   ptyId: string;
@@ -94,18 +86,14 @@ export interface SubscriptionSetupDeps {
   subscriptions: SubscriptionManager;
   subscriptionsEpoch: { value: number };
   refreshPtys: () => Promise<void>;
-  handleTitleChange: TitleChangeHandler;
-  handleProcessChange: (event: ProcessChangeEvent) => void;
-  handleCwdChange: CwdChangeHandler;
+  handleMetadataChange: (event: MetadataChangeEvent) => void;
   lifecycleHandlers: LifecycleHandlers;
 }
 
 export function createSubscriptionManager(): SubscriptionManager {
   return {
     lifecycle: null,
-    titleChange: null,
-    processChange: null,
-    cwdChange: null,
+    metadataChanges: null,
     gitChanges: null,
     polling: null,
   };
@@ -429,94 +417,68 @@ export function createLifecycleHandlers(
   return { handlePtyCreated, handlePtyDestroyed };
 }
 
-export interface TitleChangeEvent {
+export interface MetadataChangeEvent {
   ptyId: string;
-  title: string;
+  title?: string;
+  foregroundProcess?: string;
+  cwd?: string;
 }
 
-export function createTitleChangeHandler(
+export function createMetadataChangeHandler(
   setState: SetStoreFunction<AggregateViewState>
-): (event: TitleChangeEvent) => void {
-  return (event: TitleChangeEvent) => {
+): (event: MetadataChangeEvent) => void {
+  return (event: MetadataChangeEvent) => {
     setState(
       produce((s) => {
         const allIndex = s.allPtysIndex.get(event.ptyId);
         if (allIndex !== undefined && s.allPtys[allIndex]) {
-          const ptyAtIndex = s.allPtys[allIndex];
-          if (ptyAtIndex.ptyId === event.ptyId) {
-            s.allPtys[allIndex] = { ...ptyAtIndex, title: event.title };
+          const pty = s.allPtys[allIndex];
+          if (pty.ptyId === event.ptyId) {
+            let changed = false;
+            if (event.title !== undefined && pty.title !== event.title) {
+              changed = true;
+              pty.title = event.title;
+            }
+            if (
+              event.foregroundProcess !== undefined &&
+              pty.foregroundProcess !== event.foregroundProcess
+            ) {
+              changed = true;
+              pty.foregroundProcess = event.foregroundProcess;
+            }
+            if (event.cwd !== undefined && pty.cwd !== event.cwd) {
+              changed = true;
+              pty.cwd = event.cwd;
+            }
+            if (!changed) {
+              s.allPtys[allIndex] = pty;
+            }
           }
         }
 
         const matchedIndex = s.matchedPtysIndex.get(event.ptyId);
         if (matchedIndex !== undefined && s.matchedPtys[matchedIndex]) {
-          const ptyAtIndex = s.matchedPtys[matchedIndex];
-          if (ptyAtIndex.ptyId === event.ptyId) {
-            s.matchedPtys[matchedIndex] = { ...ptyAtIndex, title: event.title };
-          }
-        }
-      })
-    );
-  };
-}
-
-export interface ProcessChangeEvent {
-  ptyId: string;
-  processName: string;
-}
-
-export function createProcessChangeHandler(
-  setState: SetStoreFunction<AggregateViewState>
-): (event: ProcessChangeEvent) => void {
-  return (event: ProcessChangeEvent) => {
-    setState(
-      produce((s) => {
-        const allIndex = s.allPtysIndex.get(event.ptyId);
-        if (allIndex !== undefined && s.allPtys[allIndex]) {
-          const ptyAtIndex = s.allPtys[allIndex];
-          if (ptyAtIndex.ptyId === event.ptyId) {
-            s.allPtys[allIndex] = { ...ptyAtIndex, foregroundProcess: event.processName };
-          }
-        }
-
-        const matchedIndex = s.matchedPtysIndex.get(event.ptyId);
-        if (matchedIndex !== undefined && s.matchedPtys[matchedIndex]) {
-          const ptyAtIndex = s.matchedPtys[matchedIndex];
-          if (ptyAtIndex.ptyId === event.ptyId) {
-            s.matchedPtys[matchedIndex] = { ...ptyAtIndex, foregroundProcess: event.processName };
-          }
-        }
-      })
-    );
-  };
-}
-
-export interface CwdChangeEvent {
-  ptyId: string;
-  cwd: string;
-}
-
-export type CwdChangeHandler = (event: CwdChangeEvent) => void;
-
-export function createCwdChangeHandler(
-  setState: SetStoreFunction<AggregateViewState>
-): CwdChangeHandler {
-  return (event: CwdChangeEvent) => {
-    setState(
-      produce((s) => {
-        const allIndex = s.allPtysIndex.get(event.ptyId);
-        if (allIndex !== undefined && s.allPtys[allIndex]) {
-          const ptyAtIndex = s.allPtys[allIndex];
-          if (ptyAtIndex.ptyId === event.ptyId && ptyAtIndex.cwd !== event.cwd) {
-            s.allPtys[allIndex] = { ...ptyAtIndex, cwd: event.cwd };
-          }
-        }
-
-        const matchedIndex = s.matchedPtysIndex.get(event.ptyId);
-        if (matchedIndex !== undefined && s.matchedPtys[matchedIndex]) {
-          const ptyAtIndex = s.matchedPtys[matchedIndex];
-          if (ptyAtIndex.ptyId === event.ptyId && ptyAtIndex.cwd !== event.cwd) {
-            s.matchedPtys[matchedIndex] = { ...ptyAtIndex, cwd: event.cwd };
+          const pty = s.matchedPtys[matchedIndex];
+          if (pty.ptyId === event.ptyId) {
+            let changed = false;
+            if (event.title !== undefined && pty.title !== event.title) {
+              changed = true;
+              pty.title = event.title;
+            }
+            if (
+              event.foregroundProcess !== undefined &&
+              pty.foregroundProcess !== event.foregroundProcess
+            ) {
+              changed = true;
+              pty.foregroundProcess = event.foregroundProcess;
+            }
+            if (event.cwd !== undefined && pty.cwd !== event.cwd) {
+              changed = true;
+              pty.cwd = event.cwd;
+            }
+            if (!changed) {
+              s.matchedPtys[matchedIndex] = pty;
+            }
           }
         }
       })
@@ -528,80 +490,62 @@ export async function setupSubscriptions(
   state: AggregateViewState,
   deps: SubscriptionSetupDeps
 ): Promise<void> {
-  const {
-    subscriptions,
-    subscriptionsEpoch,
-    handleTitleChange,
-    handleCwdChange,
-    lifecycleHandlers,
-  } = deps;
-
+  const { subscriptions, subscriptionsEpoch, handleMetadataChange, lifecycleHandlers } = deps;
   const refreshPtys = deps.refreshPtys;
 
   const epoch = ++subscriptionsEpoch.value;
 
-  const lifecycleStream = streamFromSubscription<{ type: 'created' | 'destroyed'; ptyId: string }>(
-    ({ emit }) => subscribeToPtyLifecycle(emit)
-  );
+  const tryInstall = (setup: () => () => void, slot: 'lifecycle' | 'metadataChanges'): boolean => {
+    const unsub = setup();
+    if (epoch !== subscriptionsEpoch.value || !state.showAggregateView) {
+      unsub();
+      return false;
+    }
+    subscriptions[slot] = unsub;
+    return true;
+  };
 
-  const lifecycleUnsub = runStream(
-    tap(lifecycleStream, (event) => {
-      if (event.type === 'created') {
-        void lifecycleHandlers.handlePtyCreated(event.ptyId);
-        return;
-      }
-      lifecycleHandlers.handlePtyDestroyed(event.ptyId);
-    }),
-    { label: 'aggregate-view-lifecycle' }
-  );
-
-  if (epoch !== subscriptionsEpoch.value || !state.showAggregateView) {
-    lifecycleUnsub();
+  if (
+    !tryInstall(
+      () =>
+        runStream(
+          tap(
+            streamFromSubscription<{ type: 'created' | 'destroyed'; ptyId: string }>(({ emit }) =>
+              subscribeToPtyLifecycle(emit)
+            ),
+            (event) => {
+              if (event.type === 'created') {
+                void lifecycleHandlers.handlePtyCreated(event.ptyId);
+                return;
+              }
+              lifecycleHandlers.handlePtyDestroyed(event.ptyId);
+            }
+          ),
+          { label: 'aggregate-view-lifecycle' }
+        ),
+      'lifecycle'
+    )
+  ) {
     return;
   }
-  subscriptions.lifecycle = lifecycleUnsub;
 
-  const titleStream = tap(
-    streamFromSubscription<PtyTitleChangeEvent>(({ emit }) => subscribeToAllTitleChanges(emit)),
-    (event) => handleTitleChange(event)
-  );
-  const titleUnsub = runStream(titleStream, { label: 'aggregate-view-title' });
-
-  if (epoch !== subscriptionsEpoch.value || !state.showAggregateView) {
-    titleUnsub();
+  if (
+    !tryInstall(
+      () =>
+        runStream(
+          tap(
+            streamFromSubscription<PtyMetadataChangeEvent>(({ emit }) =>
+              subscribeToMetadataChanges(emit)
+            ),
+            (event) => handleMetadataChange(event)
+          ),
+          { label: 'aggregate-view-metadata' }
+        ),
+      'metadataChanges'
+    )
+  ) {
     return;
   }
-  subscriptions.titleChange = titleUnsub;
-
-  const processChangeStream = tap(
-    streamFromSubscription<PtyForegroundProcessChangeEvent>(({ emit }) =>
-      subscribeToForegroundProcessChanges(emit)
-    ),
-    (event) => deps.handleProcessChange(event)
-  );
-  const processChangeUnsub = runStream(processChangeStream, {
-    label: 'aggregate-view-process-change',
-  });
-
-  if (epoch !== subscriptionsEpoch.value || !state.showAggregateView) {
-    processChangeUnsub();
-    return;
-  }
-  subscriptions.processChange = processChangeUnsub;
-
-  const cwdChangeStream = tap(
-    streamFromSubscription<PtyCwdChangeEvent>(({ emit }) => subscribeToCwdChanges(emit)),
-    (event) => handleCwdChange(event)
-  );
-  const cwdChangeUnsub = runStream(cwdChangeStream, {
-    label: 'aggregate-view-cwd-change',
-  });
-
-  if (epoch !== subscriptionsEpoch.value || !state.showAggregateView) {
-    cwdChangeUnsub();
-    return;
-  }
-  subscriptions.cwdChange = cwdChangeUnsub;
 
   const gitChangeUnsub = createGitRepoChangeRefresh(state, subscriptionsEpoch, epoch, refreshPtys);
   if (epoch !== subscriptionsEpoch.value || !state.showAggregateView) {
@@ -695,16 +639,8 @@ export function cleanupSubscriptions(
   subscriptionsEpoch: { value: number }
 ): void {
   subscriptionsEpoch.value += 1;
-  subscriptions.lifecycle?.();
-  subscriptions.titleChange?.();
-  subscriptions.processChange?.();
-  subscriptions.cwdChange?.();
-  subscriptions.gitChanges?.();
-  subscriptions.polling?.();
-  subscriptions.lifecycle = null;
-  subscriptions.titleChange = null;
-  subscriptions.processChange = null;
-  subscriptions.cwdChange = null;
-  subscriptions.gitChanges = null;
-  subscriptions.polling = null;
+  for (const key of Object.keys(subscriptions) as Array<keyof SubscriptionManager>) {
+    subscriptions[key]?.();
+    subscriptions[key] = null;
+  }
 }

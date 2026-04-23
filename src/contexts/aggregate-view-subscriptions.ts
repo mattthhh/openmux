@@ -14,37 +14,30 @@ import type { SuspendedPtyCache } from './aggregate/refresh/suspended-pty-cache'
 import {
   cleanupSubscriptions,
   createActivityBasedRefresh,
-  createCwdChangeHandler,
   createGitRepoChangeRefresh,
   createLifecycleHandlers as createAggregateLifecycleHandlers,
-  createProcessChangeHandler,
+  createMetadataChangeHandler,
   createRefreshState,
   createSubscriptionManager,
-  createTitleChangeHandler,
   setupSubscriptions as setupAggregateSubscriptions,
-  type CwdChangeHandler,
-  type CwdChangeEvent,
   type CurrentSessionHints,
   type CurrentSessionPty,
   type LifecycleEvent,
   type LifecycleHandlerDeps,
   type LifecycleHandlers,
+  type MetadataChangeEvent,
   type PtyOwnership,
   type RefreshFlagKey,
   type RefreshState,
   type SubscriptionManager,
   type SubscriptionSetupDeps,
-  type TitleChangeEvent,
-  type TitleChangeHandler,
 } from './aggregate/subscriptions';
 
 export {
   didPtyInfoChange,
   createSubscriptionManager,
   createRefreshState,
-  createTitleChangeHandler,
-  createProcessChangeHandler,
-  createCwdChangeHandler,
+  createMetadataChangeHandler,
 };
 export {
   createAggregateViewRefreshers,
@@ -60,14 +53,11 @@ export type {
   PtyOwnership,
   CurrentSessionHints,
   CurrentSessionPty,
-  TitleChangeHandler,
-  CwdChangeHandler,
+  MetadataChangeEvent,
   LifecycleEvent,
   LifecycleHandlers,
   SubscriptionSetupDeps,
   LifecycleHandlerDeps,
-  TitleChangeEvent,
-  CwdChangeEvent,
 };
 export type { SuspendedPtyCache };
 
@@ -84,9 +74,7 @@ export async function setupSubscriptions(
   subscriptions: SubscriptionManager,
   subscriptionsEpoch: { value: number },
   refreshPtys: () => Promise<void>,
-  handleTitleChange: (event: { ptyId: string; title: string }) => void,
-  handleProcessChange: (event: { ptyId: string; processName: string }) => void,
-  handleCwdChange: CwdChangeHandler,
+  handleMetadataChange: (event: MetadataChangeEvent) => void,
   lifecycleHandlers: {
     handlePtyCreated: (ptyId: string) => Promise<void>;
     handlePtyDestroyed: (ptyId: string) => void;
@@ -96,9 +84,7 @@ export async function setupSubscriptions(
     subscriptions,
     subscriptionsEpoch,
     refreshPtys,
-    handleTitleChange,
-    handleProcessChange,
-    handleCwdChange,
+    handleMetadataChange,
     lifecycleHandlers,
   });
 }

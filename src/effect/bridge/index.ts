@@ -45,11 +45,13 @@ export {
   subscribeToAllTitleChanges,
   subscribeToAllPtyActivity,
   subscribeToCwdChanges,
+  subscribeToMetadataChanges,
   getPtyTitle,
   type PtyLifecycleEvent,
   type PtyTitleChangeEvent,
   type PtyActivityEvent,
   type PtyCwdChangeEvent,
+  type PtyMetadataChangeEvent,
 } from './pty-bridge';
 
 // Session bridge
