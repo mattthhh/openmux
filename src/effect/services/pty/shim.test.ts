@@ -40,6 +40,7 @@ describe('createShimPtyService (litmus)', () => {
     expect(service.dispose).toBeTypeOf('function');
     expect(service.subscribeToLifecycle).toBeTypeOf('function');
     expect(service.subscribeToTitle).toBeTypeOf('function');
+    expect(service.subscribeToCwdChange).toBeTypeOf('function');
   });
 
   it('batches concurrent cwd lookups into a single shim round trip', async () => {

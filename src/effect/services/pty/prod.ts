@@ -20,7 +20,7 @@ import { createSession } from './session-factory';
 import { createOperations } from './operations';
 import { createSubscriptions } from './subscriptions';
 import { PtyState } from './state';
-import type { PtyService, PtyTitleChangeEvent } from './interface';
+import type { PtyService, PtyTitleChangeEvent, PtyCwdChangeEvent } from './interface';
 
 /** Configuration for PTY service */
 export interface PtyServiceConfig {
@@ -36,12 +36,14 @@ export function createPtyService(config: PtyServiceConfig, _fs?: unknown): PtySe
   type LifecycleEvent = { type: 'created' | 'destroyed'; ptyId: PtyId };
   type ActivityEvent = { ptyId: PtyId };
   type ForegroundProcessChangeEvent = { ptyId: PtyId; processName: string };
+  type CwdChangeEvent = PtyCwdChangeEvent;
 
   const lifecycleRegistry = createSubscriptionRegistry<LifecycleEvent>();
   const globalTitleRegistry = createSubscriptionRegistry<PtyTitleChangeEvent>();
   const globalActivityRegistry = createSubscriptionRegistry<ActivityEvent>();
   const globalForegroundProcessChangeRegistry =
     createSubscriptionRegistry<ForegroundProcessChangeEvent>();
+  const globalCwdChangeRegistry = createSubscriptionRegistry<CwdChangeEvent>();
   const scrollbackArchiveManager = new ScrollbackArchiveManager(
     SCROLLBACK_ARCHIVE_MAX_BYTES_GLOBAL
   );
@@ -77,6 +79,7 @@ export function createPtyService(config: PtyServiceConfig, _fs?: unknown): PtySe
         onActivity: (ptyId) => globalActivityRegistry.notifySync({ ptyId }),
         onForegroundProcessChange: (ptyId, processName) =>
           globalForegroundProcessChangeRegistry.notifySync({ ptyId, processName }),
+        onCwdChange: (ptyId, cwd) => globalCwdChangeRegistry.notifySync({ ptyId, cwd }),
         onExit: handleExit,
       },
       options
@@ -104,6 +107,7 @@ export function createPtyService(config: PtyServiceConfig, _fs?: unknown): PtySe
     globalTitleRegistry,
     globalActivityRegistry,
     globalForegroundProcessChangeRegistry,
+    globalCwdChangeRegistry,
   });
 
   async function setHostColors(colors: TerminalColors): Promise<void> {
@@ -145,6 +149,7 @@ export function createPtyService(config: PtyServiceConfig, _fs?: unknown): PtySe
     subscribeToTitle: subscriptions.subscribeToTitle,
     subscribeToAllActivity: subscriptions.subscribeToAllActivity,
     subscribeToForegroundProcessChange: subscriptions.subscribeToForegroundProcessChange,
+    subscribeToCwdChange: subscriptions.subscribeToCwdChange,
     dispose,
   };
 }

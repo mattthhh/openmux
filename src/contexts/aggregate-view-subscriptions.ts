@@ -14,6 +14,7 @@ import type { SuspendedPtyCache } from './aggregate/refresh/suspended-pty-cache'
 import {
   cleanupSubscriptions,
   createActivityBasedRefresh,
+  createCwdChangeHandler,
   createGitRepoChangeRefresh,
   createLifecycleHandlers as createAggregateLifecycleHandlers,
   createProcessChangeHandler,
@@ -21,6 +22,8 @@ import {
   createSubscriptionManager,
   createTitleChangeHandler,
   setupSubscriptions as setupAggregateSubscriptions,
+  type CwdChangeHandler,
+  type CwdChangeEvent,
   type CurrentSessionHints,
   type CurrentSessionPty,
   type LifecycleEvent,
@@ -41,6 +44,7 @@ export {
   createRefreshState,
   createTitleChangeHandler,
   createProcessChangeHandler,
+  createCwdChangeHandler,
 };
 export {
   createAggregateViewRefreshers,
@@ -57,11 +61,13 @@ export type {
   CurrentSessionHints,
   CurrentSessionPty,
   TitleChangeHandler,
+  CwdChangeHandler,
   LifecycleEvent,
   LifecycleHandlers,
   SubscriptionSetupDeps,
   LifecycleHandlerDeps,
   TitleChangeEvent,
+  CwdChangeEvent,
 };
 export type { SuspendedPtyCache };
 
@@ -80,6 +86,7 @@ export async function setupSubscriptions(
   refreshPtys: () => Promise<void>,
   handleTitleChange: (event: { ptyId: string; title: string }) => void,
   handleProcessChange: (event: { ptyId: string; processName: string }) => void,
+  handleCwdChange: CwdChangeHandler,
   lifecycleHandlers: {
     handlePtyCreated: (ptyId: string) => Promise<void>;
     handlePtyDestroyed: (ptyId: string) => void;
@@ -91,6 +98,7 @@ export async function setupSubscriptions(
     refreshPtys,
     handleTitleChange,
     handleProcessChange,
+    handleCwdChange,
     lifecycleHandlers,
   });
 }

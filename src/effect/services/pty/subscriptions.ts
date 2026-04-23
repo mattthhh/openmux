@@ -9,7 +9,7 @@ import type { GitInfo } from './helpers';
 import { getCurrentScrollState } from './notification';
 import { getGitInfo } from './helpers';
 import type { SubscriptionRegistry } from './subscription-manager';
-import type { GetPtyGitInfoOptions, PtyTitleChangeEvent } from './interface';
+import type { GetPtyGitInfoOptions, PtyCwdChangeEvent, PtyTitleChangeEvent } from './interface';
 
 export interface SubscriptionsDeps {
   getSessionOrFail: (id: PtyId) => Promise<InternalPtySession | PtyNotFoundError>;
@@ -20,6 +20,7 @@ export interface SubscriptionsDeps {
     ptyId: PtyId;
     processName: string;
   }>;
+  globalCwdChangeRegistry: SubscriptionRegistry<PtyCwdChangeEvent>;
 }
 
 export function createSubscriptions(deps: SubscriptionsDeps) {
@@ -29,6 +30,7 @@ export function createSubscriptions(deps: SubscriptionsDeps) {
     globalTitleRegistry,
     globalActivityRegistry,
     globalForegroundProcessChangeRegistry,
+    globalCwdChangeRegistry,
   } = deps;
 
   async function subscribe(
@@ -166,6 +168,10 @@ export function createSubscriptions(deps: SubscriptionsDeps) {
     return globalForegroundProcessChangeRegistry.subscribe(callback);
   }
 
+  function subscribeToCwdChange(callback: (event: PtyCwdChangeEvent) => void): () => void {
+    return globalCwdChangeRegistry.subscribe(callback);
+  }
+
   return {
     subscribe,
     onExit,
@@ -175,5 +181,6 @@ export function createSubscriptions(deps: SubscriptionsDeps) {
     subscribeToTitle,
     subscribeToAllActivity,
     subscribeToForegroundProcessChange,
+    subscribeToCwdChange,
   };
 }

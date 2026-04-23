@@ -8,8 +8,10 @@ import { runStream, streamFromSubscription, tap } from '../../effect/stream-util
 import {
   subscribeToAllPtyActivity,
   subscribeToAllTitleChanges,
+  subscribeToCwdChanges,
   subscribeToForegroundProcessChanges,
   subscribeToPtyLifecycle,
+  type PtyCwdChangeEvent,
   type PtyTitleChangeEvent,
   type PtyForegroundProcessChangeEvent,
 } from '../../effect/bridge/pty-bridge';
@@ -37,6 +39,7 @@ export interface SubscriptionManager {
   lifecycle: (() => void) | null;
   titleChange: (() => void) | null;
   processChange: (() => void) | null;
+  cwdChange: (() => void) | null;
   gitChanges: (() => void) | null;
   polling: (() => void) | null;
 }
@@ -93,6 +96,7 @@ export interface SubscriptionSetupDeps {
   refreshPtys: () => Promise<void>;
   handleTitleChange: TitleChangeHandler;
   handleProcessChange: (event: ProcessChangeEvent) => void;
+  handleCwdChange: CwdChangeHandler;
   lifecycleHandlers: LifecycleHandlers;
 }
 
@@ -101,6 +105,7 @@ export function createSubscriptionManager(): SubscriptionManager {
     lifecycle: null,
     titleChange: null,
     processChange: null,
+    cwdChange: null,
     gitChanges: null,
     polling: null,
   };
@@ -486,11 +491,50 @@ export function createProcessChangeHandler(
   };
 }
 
+export interface CwdChangeEvent {
+  ptyId: string;
+  cwd: string;
+}
+
+export type CwdChangeHandler = (event: CwdChangeEvent) => void;
+
+export function createCwdChangeHandler(
+  setState: SetStoreFunction<AggregateViewState>
+): CwdChangeHandler {
+  return (event: CwdChangeEvent) => {
+    setState(
+      produce((s) => {
+        const allIndex = s.allPtysIndex.get(event.ptyId);
+        if (allIndex !== undefined && s.allPtys[allIndex]) {
+          const ptyAtIndex = s.allPtys[allIndex];
+          if (ptyAtIndex.ptyId === event.ptyId && ptyAtIndex.cwd !== event.cwd) {
+            s.allPtys[allIndex] = { ...ptyAtIndex, cwd: event.cwd };
+          }
+        }
+
+        const matchedIndex = s.matchedPtysIndex.get(event.ptyId);
+        if (matchedIndex !== undefined && s.matchedPtys[matchedIndex]) {
+          const ptyAtIndex = s.matchedPtys[matchedIndex];
+          if (ptyAtIndex.ptyId === event.ptyId && ptyAtIndex.cwd !== event.cwd) {
+            s.matchedPtys[matchedIndex] = { ...ptyAtIndex, cwd: event.cwd };
+          }
+        }
+      })
+    );
+  };
+}
+
 export async function setupSubscriptions(
   state: AggregateViewState,
   deps: SubscriptionSetupDeps
 ): Promise<void> {
-  const { subscriptions, subscriptionsEpoch, handleTitleChange, lifecycleHandlers } = deps;
+  const {
+    subscriptions,
+    subscriptionsEpoch,
+    handleTitleChange,
+    handleCwdChange,
+    lifecycleHandlers,
+  } = deps;
 
   const refreshPtys = deps.refreshPtys;
 
@@ -544,6 +588,20 @@ export async function setupSubscriptions(
     return;
   }
   subscriptions.processChange = processChangeUnsub;
+
+  const cwdChangeStream = tap(
+    streamFromSubscription<PtyCwdChangeEvent>(({ emit }) => subscribeToCwdChanges(emit)),
+    (event) => handleCwdChange(event)
+  );
+  const cwdChangeUnsub = runStream(cwdChangeStream, {
+    label: 'aggregate-view-cwd-change',
+  });
+
+  if (epoch !== subscriptionsEpoch.value || !state.showAggregateView) {
+    cwdChangeUnsub();
+    return;
+  }
+  subscriptions.cwdChange = cwdChangeUnsub;
 
   const gitChangeUnsub = createGitRepoChangeRefresh(state, subscriptionsEpoch, epoch, refreshPtys);
   if (epoch !== subscriptionsEpoch.value || !state.showAggregateView) {
@@ -640,11 +698,13 @@ export function cleanupSubscriptions(
   subscriptions.lifecycle?.();
   subscriptions.titleChange?.();
   subscriptions.processChange?.();
+  subscriptions.cwdChange?.();
   subscriptions.gitChanges?.();
   subscriptions.polling?.();
   subscriptions.lifecycle = null;
   subscriptions.titleChange = null;
   subscriptions.processChange = null;
+  subscriptions.cwdChange = null;
   subscriptions.gitChanges = null;
   subscriptions.polling = null;
 }

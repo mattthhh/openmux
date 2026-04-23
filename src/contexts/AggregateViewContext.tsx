@@ -24,9 +24,11 @@ import {
   createAggregateViewRefreshers,
   createTitleChangeHandler,
   createProcessChangeHandler,
+  createCwdChangeHandler,
   createLifecycleHandlers,
   setupSubscriptions,
   cleanupSubscriptions,
+  type CwdChangeHandler,
 } from './aggregate-view-subscriptions';
 
 import { createAggregateViewActions } from './aggregate-view-actions';
@@ -184,6 +186,7 @@ export function AggregateViewProvider(props: AggregateViewProviderProps) {
 
   const titleHandler = createTitleChangeHandler(setState);
   const processHandler = createProcessChangeHandler(setState);
+  const cwdHandler = createCwdChangeHandler(setState);
   const handleTitleChange = (event: { ptyId: string; title: string }) => {
     suspendedPtyCache.invalidateByPtyId(event.ptyId);
     titleHandler(event);
@@ -191,6 +194,10 @@ export function AggregateViewProvider(props: AggregateViewProviderProps) {
   const handleProcessChange = (event: { ptyId: string; processName: string }) => {
     suspendedPtyCache.invalidateByPtyId(event.ptyId);
     processHandler(event);
+  };
+  const handleCwdChange: CwdChangeHandler = (event) => {
+    suspendedPtyCache.invalidateByPtyId(event.ptyId);
+    cwdHandler(event);
   };
 
   const lifecycleHandlers = createLifecycleHandlers(state, setState, {
@@ -259,6 +266,7 @@ export function AggregateViewProvider(props: AggregateViewProviderProps) {
               refreshPtys,
               handleTitleChange,
               handleProcessChange,
+              handleCwdChange,
               lifecycleHandlers
             );
 

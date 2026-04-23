@@ -10,7 +10,12 @@ import type { PtyId, Cols, Rows } from '../../types';
 import type { PtySession } from '../../models';
 import { makePtyId } from '../../types';
 import type { GitInfo } from './helpers';
-import type { PtyService, PtyTitleChangeEvent, GetPtyGitInfoOptions } from './interface';
+import type {
+  PtyService,
+  PtyCwdChangeEvent,
+  PtyTitleChangeEvent,
+  GetPtyGitInfoOptions,
+} from './interface';
 
 /**
  * Create test PTY service - mock PTY for testing.
@@ -136,6 +141,7 @@ export function createTestPtyService(): PtyService {
     subscribeToTitle,
     subscribeToAllActivity: () => () => {},
     subscribeToForegroundProcessChange: () => () => {},
+    subscribeToCwdChange: (_callback: (event: PtyCwdChangeEvent) => void) => () => {},
     dispose: () => {
       ptyIds.clear();
     },

@@ -34,6 +34,7 @@ vi.mock('../../../effect/bridge/session-bridge', () => ({
 vi.mock('../../../effect/bridge/pty-bridge', () => ({
   subscribeToPtyLifecycle: vi.fn(() => Promise.resolve(() => {})),
   subscribeToAllTitleChanges: vi.fn(() => Promise.resolve(() => {})),
+  subscribeToCwdChanges: vi.fn(() => Promise.resolve(() => {})),
 }));
 
 vi.mock('../../../effect/services/pty/helpers', () => ({

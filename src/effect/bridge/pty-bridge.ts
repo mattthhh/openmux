@@ -339,6 +339,12 @@ export interface PtyForegroundProcessChangeEvent {
   processName: string;
 }
 
+/** PTY CWD change event */
+export interface PtyCwdChangeEvent {
+  ptyId: string;
+  cwd: string;
+}
+
 /** Subscribe to all PTY title changes */
 export function subscribeToAllTitleChanges(
   callback: (event: PtyTitleChangeEvent) => void
@@ -371,6 +377,18 @@ export function subscribeToForegroundProcessChanges(
   return Promise.resolve(
     pty.subscribeToForegroundProcessChange((event: { ptyId: string; processName: string }) => {
       callback({ ptyId: event.ptyId, processName: event.processName });
+    })
+  );
+}
+
+/** Subscribe to CWD changes across all PTYs */
+export function subscribeToCwdChanges(
+  callback: (event: PtyCwdChangeEvent) => void
+): Promise<() => void> {
+  const pty = getPtyService();
+  return Promise.resolve(
+    pty.subscribeToCwdChange((event: { ptyId: string; cwd: string }) => {
+      callback({ ptyId: event.ptyId, cwd: event.cwd });
     })
   );
 }

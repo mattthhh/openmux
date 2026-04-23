@@ -5,7 +5,12 @@
 
 // Types
 export type { InternalPtySession } from './types';
-export type { PtyService, PtyTitleChangeEvent, GetPtyGitInfoOptions } from './interface';
+export type {
+  PtyService,
+  PtyTitleChangeEvent,
+  PtyCwdChangeEvent,
+  GetPtyGitInfoOptions,
+} from './interface';
 export type { PtyServiceConfig } from './prod';
 
 // State management

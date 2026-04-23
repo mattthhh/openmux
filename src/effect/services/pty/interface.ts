@@ -20,6 +20,11 @@ export interface PtyTitleChangeEvent {
   title: string;
 }
 
+export interface PtyCwdChangeEvent {
+  ptyId: PtyId;
+  cwd: string;
+}
+
 export interface GetPtyGitInfoOptions {
   includeDiffStats?: boolean;
 }
@@ -134,6 +139,9 @@ export interface PtyService {
   subscribeToForegroundProcessChange(
     callback: (event: { ptyId: PtyId; processName: string }) => void
   ): () => void;
+
+  /** Subscribe to CWD changes across ALL PTYs (fired by shell integration OSC 777) */
+  subscribeToCwdChange(callback: (event: PtyCwdChangeEvent) => void): () => void;
 
   /** Dispose the PTY service and clean up all resources */
   dispose(): void;

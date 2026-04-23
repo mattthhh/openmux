@@ -329,6 +329,10 @@ export function createShimPtyService(): PtyService {
       // Return no-op unsubscribe
       return () => {};
     },
+    subscribeToCwdChange: (_callback) => {
+      // Shim CWD changes are picked up via activity-based refresh
+      return () => {};
+    },
     dispose: () => {
       // Shim service doesn't need cleanup - it's a proxy.
     },

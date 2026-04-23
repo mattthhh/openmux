@@ -98,6 +98,12 @@ describe('createTestPtyService (litmus)', () => {
     unsub();
   });
 
+  it('should return no-op for CWD change subscriptions', () => {
+    const unsub = service.subscribeToCwdChange(() => {});
+    expect(unsub).toBeTypeOf('function');
+    unsub();
+  });
+
   it('should return undefined for git and foreground-process metadata', async () => {
     expect(await service.getGitInfo('pty' as any)).toBeUndefined();
     expect(await service.getGitInfo('pty' as any, { includeDiffStats: true })).toBeUndefined();

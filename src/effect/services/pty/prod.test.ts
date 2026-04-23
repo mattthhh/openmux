@@ -105,6 +105,7 @@ describe('createPtyService (litmus)', () => {
     expect(service.subscribeToTitle).toBeTypeOf('function');
     expect(service.listAll).toBeTypeOf('function');
     expect(service.dispose).toBeTypeOf('function');
+    expect(service.subscribeToCwdChange).toBeTypeOf('function');
   });
 
   it('should return empty list initially', async () => {

@@ -39,6 +39,7 @@ export interface SessionFactoryDeps {
   onTitleChange: (ptyId: PtyId, title: string) => void;
   onActivity: (ptyId: PtyId) => void;
   onForegroundProcessChange: (ptyId: PtyId, processName: string) => void;
+  onCwdChange: (ptyId: PtyId, cwd: string) => void;
   onExit?: (ptyId: PtyId, exitCode: number) => void;
 }
 
@@ -220,6 +221,7 @@ export async function createSession(
     onCwd: (nextCwd: string) => {
       session.cwd = nextCwd;
       session.cwdReported = true;
+      deps.onCwdChange(id, nextCwd);
     },
     onNotification: (notification) => {
       const subtitle = session.emulator.getTitle() || session.lastCommand || '';

@@ -109,6 +109,7 @@ describe('createSession', () => {
         scrollbackArchiveRoot,
         onLifecycleEvent: vi.fn(),
         onTitleChange: vi.fn(),
+        onCwdChange: vi.fn(),
         onExit,
       },
       { cols: makeCols(80), rows: makeRows(24) }
@@ -183,6 +184,7 @@ describe('createSession', () => {
         scrollbackArchiveRoot,
         onLifecycleEvent: vi.fn(),
         onTitleChange: vi.fn(),
+        onCwdChange: vi.fn(),
       },
       {
         cols: makeCols(80),
@@ -264,6 +266,7 @@ describe('createSession', () => {
         onLifecycleEvent: vi.fn(),
         onTitleChange: vi.fn(),
         onActivity: vi.fn(),
+        onCwdChange: vi.fn(),
       },
       { cols: makeCols(80), rows: makeRows(24), cwd: '/initial' }
     );
