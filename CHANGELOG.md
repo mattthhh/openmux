@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.98](https://github.com/monotykamary/openmux/compare/v0.3.97...v0.3.98) (2026-04-24)
+
+
+### Features
+
+* **aggregate:** add PtyPicker overlay with MRU alt-tab, debounce, and vim mode ([e9b5d86](https://github.com/monotykamary/openmux/commit/e9b5d8676d5453d979e13ff81477671693a3597d))
+
 ### [0.3.97](https://github.com/monotykamary/openmux/compare/v0.3.96...v0.3.97) (2026-04-23)
 
 
