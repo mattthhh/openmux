@@ -1,8 +1,9 @@
 /**
  * PtyPicker - fuzzy-finder overlay for PTY selection inside the aggregate view.
  *
- * Shows ALL PTYs with active ones sorted to the top. No default filter —
- * the full list is always visible, with active PTYs grouped first.
+ * Shows ALL PTYs in the same session-grouped order as the sidebar, with
+ * active PTYs visually highlighted and inactive ones dimmed. No default
+ * filter — the full list is always visible.
  *
  * Vim mode is respected: when vim mode is enabled, starts in normal mode
  * (j/k to navigate, i to enter insert/filter mode). When vim mode is
@@ -12,12 +13,14 @@
  * selection. On open, pushes the current selectedPtyId to MRU (ensuring
  * freshness), then walks MRU[1...] to find the "previous" PTY.
  *
- * Reads PTYs from AggregateViewContext — no mutations on the aggregate
- * view itself beyond selectPty/enterPreviewMode/pushPtyMru.
+ * Reads PTYs from AggregateViewContext.flattenedTree to match sidebar
+ * order — no mutations on the aggregate view itself beyond
+ * selectPty/enterPreviewMode/pushPtyMru.
  */
 
 import { Show, For, createEffect, createSignal, createMemo, untrack } from 'solid-js';
 import { useAggregateView, type PtyInfo } from '../contexts/AggregateViewContext';
+import type { FlattenedTreeItem } from '../contexts/aggregate-view-types';
 import { useTheme } from '../contexts/ThemeContext';
 import { useConfig } from '../contexts/ConfigContext';
 import { eventToCombo, matchKeybinding } from '../core/keybindings';
@@ -36,18 +39,15 @@ interface PtyPickerProps {
   onVimModeChange?: (mode: VimInputMode) => void;
 }
 
-/** Sort PTYs: active first, then inactive. Preserves relative order within each group. */
-function sortPtysActiveFirst(ptys: PtyInfo[]): PtyInfo[] {
-  const active: PtyInfo[] = [];
-  const inactive: PtyInfo[] = [];
-  for (const pty of ptys) {
-    if (isActivePty(pty)) {
-      active.push(pty);
-    } else {
-      inactive.push(pty);
+/** Extract PTYs from flattened tree in sidebar order (session-grouped). */
+function extractPtysInTreeOrder(items: FlattenedTreeItem[]): PtyInfo[] {
+  const ptys: PtyInfo[] = [];
+  for (const item of items) {
+    if (item.node.type === 'pty') {
+      ptys.push(item.node.ptyInfo);
     }
   }
-  return [...active, ...inactive];
+  return ptys;
 }
 
 function filterPickerPtys(ptys: PtyInfo[], query: string): PtyInfo[] {
@@ -57,7 +57,7 @@ function filterPickerPtys(ptys: PtyInfo[], query: string): PtyInfo[] {
   const terms = trimmedQuery.toLowerCase().split(/\s+/).filter(Boolean);
   if (terms.length === 0) return ptys;
 
-  const filtered = ptys.filter((pty) => {
+  return ptys.filter((pty) => {
     const cwd = pty.cwd.toLowerCase();
     const branch = pty.gitBranch?.toLowerCase() ?? '';
     const process = pty.foregroundProcess?.toLowerCase() ?? '';
@@ -70,8 +70,6 @@ function filterPickerPtys(ptys: PtyInfo[], query: string): PtyInfo[] {
         title.includes(term)
     );
   });
-
-  return sortPtysActiveFirst(filtered);
 }
 
 function formatPtyLabel(pty: PtyInfo): string {
@@ -125,30 +123,30 @@ export function PtyPicker(props: PtyPickerProps) {
   /** Snapshot of PTYs taken when the picker opens — stays stable while open */
   const [snapshotPtys, setSnapshotPtys] = createSignal<PtyInfo[]>([]);
 
-  /** Sorted PTYs: active first, inactive second. Filtered by search query if present. */
+  /** PTYs in sidebar tree order, filtered by search query if present. */
   const pickerPtys = createMemo(() => {
-    const sorted = sortPtysActiveFirst(snapshotPtys());
+    const ptys = snapshotPtys();
     const query = searchQuery();
     if (query.trim()) {
-      return filterPickerPtys(sorted, query);
+      return filterPickerPtys(ptys, query);
     }
-    return sorted;
+    return ptys;
   });
 
   /** Take a snapshot and auto-select when the picker opens */
   createEffect(() => {
     if (!aggregate.state.showPtyPicker) return;
 
-    const allPtys = untrack(() => aggregate.state.allPtys);
-    setSnapshotPtys([...allPtys]);
+    // Snapshot PTYs from the flattened tree so the picker uses the same
+    // session-grouped order as the sidebar — no re-sorting, no instability.
+    const treePtys = untrack(() => extractPtysInTreeOrder(aggregate.state.flattenedTree));
+    setSnapshotPtys(treePtys);
     setSearchQuery('');
     vimHandler.reset();
 
     if (vimEnabled()) {
       setVimMode('normal');
     }
-
-    const sorted = sortPtysActiveFirst(allPtys);
 
     // Push the current selection to MRU immediately. This ensures the MRU
     // is fresh even if the debounce hasn't fired yet (e.g., user opened
@@ -159,14 +157,12 @@ export function PtyPicker(props: PtyPickerProps) {
     }
 
     // Read MRU inside untrack to prevent the pushPtyMru write above
-    // from triggering this effect to re-run (which would retake the
-    // snapshot with potentially different allPtys, causing the active
-    // PTY to disappear).
+    // from triggering this effect to re-run.
     const mru = untrack(() => aggregate.state.ptyMru);
 
     const trySelect = (ptyId: string | null) => {
       if (!ptyId) return -1;
-      return sorted.findIndex((p) => p.ptyId === ptyId);
+      return treePtys.findIndex((p) => p.ptyId === ptyId);
     };
 
     /**
@@ -189,7 +185,7 @@ export function PtyPicker(props: PtyPickerProps) {
     // Fallback: first PTY that isn't the workspace's active PTY
     const activeId = untrack(() => props.activePtyId);
     if (activeId) {
-      const altIdx = sorted.findIndex((p) => p.ptyId !== activeId);
+      const altIdx = treePtys.findIndex((p) => p.ptyId !== activeId);
       if (altIdx >= 0) {
         setSelectedIndex(altIdx);
         return;
