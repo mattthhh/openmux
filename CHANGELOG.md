@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.99](https://github.com/monotykamary/openmux/compare/v0.3.98...v0.3.99) (2026-04-24)
+
+
+### Bug Fixes
+
+* **aggregate:** use sidebar tree order in PtyPicker for consistent PTY ordering ([68b61dc](https://github.com/monotykamary/openmux/commit/68b61dc8a83f7679dc6cc1b113d0ffd9e5412244))
+
 ### [0.3.98](https://github.com/monotykamary/openmux/compare/v0.3.97...v0.3.98) (2026-04-24)
 
 
