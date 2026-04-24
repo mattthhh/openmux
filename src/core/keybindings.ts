@@ -118,7 +118,10 @@ function toComboString(parsed: ParsedCombo): string {
 }
 
 function parseComboString(combo: string): ParsedCombo | null {
-  const parts = combo.split('+').map(part => part.trim()).filter(Boolean);
+  const parts = combo
+    .split('+')
+    .map((part) => part.trim())
+    .filter(Boolean);
   if (parts.length === 0) return null;
 
   let ctrl = false;
@@ -237,6 +240,9 @@ export function resolveKeybindings(config: KeybindingsConfig): ResolvedKeybindin
       list: resolveKeybindingMap(config.sessionPicker.list),
       rename: resolveKeybindingMap(config.sessionPicker.rename),
     },
+    ptyPicker: {
+      list: resolveKeybindingMap(config.ptyPicker.list),
+    },
     confirmation: resolveKeybindingMap(config.confirmation),
   };
 }
@@ -325,7 +331,8 @@ export function formatComboSet(combos: string[]): string {
       return modKey ? `${modKey}${arrowLabel}` : arrowLabel;
     }
 
-    const isBracketPair = uniqueKeys.length === 2 && uniqueKeys.includes('[') && uniqueKeys.includes(']');
+    const isBracketPair =
+      uniqueKeys.length === 2 && uniqueKeys.includes('[') && uniqueKeys.includes(']');
     if (isBracketPair) {
       return modKey ? `${modKey}[/]` : '[/]';
     }

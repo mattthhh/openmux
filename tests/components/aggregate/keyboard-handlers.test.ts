@@ -30,11 +30,11 @@ function createDeps(overrides: Partial<AggregateKeyboardDeps> = {}) {
   });
   const clearPrefixTimeout = vi.fn();
   const startPrefixTimeout = vi.fn();
-  const exitPreviewMode = vi.fn();
   const onToggleSessionPicker = vi.fn();
   const onToggleCommandPalette = vi.fn();
   const handleListEnter = vi.fn(() => true);
   const togglePreviewZoom = vi.fn();
+  const togglePtyPicker = vi.fn();
 
   const deps: AggregateKeyboardDeps = {
     getPreviewMode: () => previewMode,
@@ -75,7 +75,6 @@ function createDeps(overrides: Partial<AggregateKeyboardDeps> = {}) {
     enterPreviewMode: vi.fn(() => {
       previewMode = true;
     }),
-    exitPreviewMode,
     togglePreviewZoom,
     exitAggregateMode: vi.fn(),
     exitSearchMode: vi.fn(),
@@ -94,6 +93,7 @@ function createDeps(overrides: Partial<AggregateKeyboardDeps> = {}) {
     onRequestKillPty: vi.fn(),
     clearPrefixTimeout,
     startPrefixTimeout,
+    togglePtyPicker,
     ...overrides,
   };
 
@@ -106,11 +106,12 @@ function createDeps(overrides: Partial<AggregateKeyboardDeps> = {}) {
     handleEnterCopyMode,
     handleCopyModeKeys,
     clearPrefixTimeout,
-    exitPreviewMode,
+    closeAggregateView: deps.closeAggregateView,
     onToggleSessionPicker,
     onToggleCommandPalette,
     handleListEnter,
     togglePreviewZoom,
+    togglePtyPicker,
   };
 }
 
@@ -135,7 +136,7 @@ describe('createAggregateKeyboardHandler', () => {
 
     expect(handler.handleKeyDown({ key: 'q', eventType: 'press' })).toBe(true);
     expect(setup.handleCopyModeKeys).toHaveBeenCalledWith({ key: 'q', eventType: 'press' });
-    expect(setup.exitPreviewMode).not.toHaveBeenCalled();
+    expect(setup.closeAggregateView).not.toHaveBeenCalled();
   });
 
   it('enters copy mode via prefix+[ while in preview mode', () => {
@@ -167,17 +168,17 @@ describe('createAggregateKeyboardHandler', () => {
     expect(setup.handleListEnter).toHaveBeenCalledTimes(1);
   });
 
-  it('does not open the shared session picker from aggregate list mode via the normal binding', () => {
+  it('opens the PTY picker from aggregate list mode via the alt+s binding', () => {
     const setup = createDeps({
       getPreviewMode: () => false,
     });
     const handler = createAggregateKeyboardHandler(setup.deps);
 
     expect(handler.handleKeyDown({ key: 's', alt: true, eventType: 'press' })).toBe(true);
-    expect(setup.onToggleSessionPicker).not.toHaveBeenCalled();
+    expect(setup.togglePtyPicker).toHaveBeenCalledTimes(1);
   });
 
-  it('does not open the shared session picker from aggregate mode via the prefix binding', () => {
+  it('does not open the session picker from aggregate mode via the prefix binding', () => {
     const setup = createDeps({
       getPreviewMode: () => false,
     });
@@ -186,6 +187,7 @@ describe('createAggregateKeyboardHandler', () => {
     expect(handler.handleKeyDown({ key: 'b', ctrl: true, eventType: 'press' })).toBe(true);
     expect(handler.handleKeyDown({ key: 's', eventType: 'press' })).toBe(true);
     expect(setup.onToggleSessionPicker).not.toHaveBeenCalled();
+    expect(setup.togglePtyPicker).not.toHaveBeenCalled();
     expect(setup.getPrefixActive()).toBe(false);
   });
 

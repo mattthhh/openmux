@@ -17,8 +17,6 @@ export {
   borderStyleMap,
   calculateLayoutDimensions,
   getHintsText,
-  getFilterText,
-  calculateFooterWidths,
   type LayoutConfig,
   type LayoutDimensions,
 } from './layout-utils';

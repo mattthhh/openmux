@@ -30,7 +30,6 @@ export function createAggregateKeyboardHandler(deps: AggregateKeyboardDeps) {
     onDetach,
     closeAggregateView,
     exitAggregateMode,
-    exitPreviewMode,
     togglePreviewZoom,
     handleEnterSearch,
     handleEnterCopyMode,
@@ -85,7 +84,8 @@ export function createAggregateKeyboardHandler(deps: AggregateKeyboardDeps) {
     getKeybindings: deps.getKeybindings,
     handleEnterSearch: deps.handleEnterSearch,
     handleEnterCopyMode: deps.handleEnterCopyMode,
-    exitPreviewMode: deps.exitPreviewMode,
+    closeAggregateView: deps.closeAggregateView,
+    exitAggregateMode: deps.exitAggregateMode,
     navigateToNextPty: deps.navigateToNextPty,
     navigateToPrevPty: deps.navigateToPrevPty,
     handleNewPaneInSession: deps.handleNewPaneInSession,
@@ -139,6 +139,10 @@ export function createAggregateKeyboardHandler(deps: AggregateKeyboardDeps) {
       onToggleCommandPalette?.();
       return true;
     }
+    if (globalAction === 'session.picker.toggle') {
+      deps.togglePtyPicker();
+      return true;
+    }
     if (globalAction === 'pane.zoom' && getPreviewMode()) {
       togglePreviewZoom();
       return true;
@@ -161,12 +165,8 @@ export function createAggregateKeyboardHandler(deps: AggregateKeyboardDeps) {
           onDetach?.();
           return true;
         case 'aggregate.prefix.exit':
-          if (getPreviewMode()) {
-            exitPreviewMode();
-          } else {
-            closeAggregateView();
-            exitAggregateMode();
-          }
+          closeAggregateView();
+          exitAggregateMode();
           return true;
         case 'aggregate.prefix.search':
           if (getPreviewMode()) {

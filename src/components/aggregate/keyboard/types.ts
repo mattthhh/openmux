@@ -68,7 +68,8 @@ export interface PreviewDeps {
 
   handleEnterSearch: () => Promise<void>;
   handleEnterCopyMode: () => void;
-  exitPreviewMode: () => void;
+  closeAggregateView: () => void;
+  exitAggregateMode: () => void;
   navigateToNextPty: () => void;
   navigateToPrevPty: () => void;
   handleNewPaneInSession: () => Promise<void>;
@@ -89,8 +90,8 @@ export interface GlobalDeps {
 
   closeAggregateView: () => void;
   exitAggregateMode: () => void;
-  exitPreviewMode: () => void;
   togglePreviewZoom: () => void;
+  togglePtyPicker: () => void;
 
   handleEnterSearch: () => Promise<void>;
   handleEnterCopyMode: () => void;
@@ -111,4 +112,5 @@ export interface AggregateKeyboardDeps extends ListDeps, SearchDeps, PreviewDeps
   getSelectedPtyId: () => string | null;
   enterPreviewMode: () => void;
   onToggleSessionPicker?: () => void;
+  togglePtyPicker: () => void;
 }

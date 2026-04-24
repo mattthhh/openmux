@@ -128,7 +128,9 @@ export function getHintsText(
   }
 
   if (previewMode) {
-    const back = formatHintComboSet(getCombos(aggregateBindings.preview, 'aggregate.preview.exit'));
+    const close = formatHintComboSet(
+      getCombos(aggregateBindings.preview, 'aggregate.preview.exit')
+    );
     const search = formatHintComboSet(
       getCombos(aggregateBindings.preview, 'aggregate.preview.search')
     );
@@ -137,13 +139,14 @@ export function getHintsText(
     const newPane = formatHintComboSet(
       getCombos(aggregateBindings.preview, 'aggregate.preview.new.pane')
     );
+    const ptyPicker = formatGlobalActionHint(keybindings, 'session.picker.toggle');
     const navCombos = [
       ...getCombos(aggregateBindings.preview, 'aggregate.preview.up'),
       ...getCombos(aggregateBindings.preview, 'aggregate.preview.down'),
     ];
     const navigate = formatHintComboSet(navCombos);
     const zoomLabel = previewZoomed ? 'unzoom' : 'zoom';
-    return `${back}:back ${search}:search ${navigate}:nav ${newPane}:new ${zoom}:${zoomLabel} ${kill}:kill`;
+    return `${navigate}:nav ${search}:search ${ptyPicker}:ptys ${newPane}:new ${zoom}:${zoomLabel} ${kill}:kill ${close}:close`;
   }
 
   if (vimEnabled) {
@@ -155,9 +158,10 @@ export function getHintsText(
       getCombos(aggregateBindings.list, 'aggregate.list.toggle.scope')
     );
     const kill = formatHintComboSet(getCombos(aggregateBindings.list, 'aggregate.kill'));
+    const ptyPicker = formatGlobalActionHint(keybindings, 'session.picker.toggle');
     const scopeLabel = showInactive ? 'all' : 'active';
     const modeHint = vimMode === 'insert' ? 'esc:normal' : 'i:filter';
-    return `j/k:nav gg/G:jump enter:open/toggle ${newPane}:new ${jump}:jump ${toggleScope}:scope(${scopeLabel}) ${kill}:kill q:close ${modeHint}`;
+    return `j/k:nav gg/G:jump enter:open/toggle ${newPane}:new ${jump}:jump ${toggleScope}:scope(${scopeLabel}) ${kill}:kill ${ptyPicker}:ptys q:close ${modeHint}`;
   }
 
   const navCombos = [
@@ -173,24 +177,7 @@ export function getHintsText(
   );
   const kill = formatHintComboSet(getCombos(aggregateBindings.list, 'aggregate.kill'));
   const close = formatHintComboSet(getCombos(aggregateBindings.list, 'aggregate.list.close'));
+  const ptyPicker = formatGlobalActionHint(keybindings, 'session.picker.toggle');
   const scopeLabel = showInactive ? 'all' : 'active';
-  return `${navigate}:nav ${interact}:open/toggle ${newPane}:new ${jump}:jump ${toggleScope}:scope(${scopeLabel}) ${kill}:kill ${close}:close`;
-}
-
-/**
- * Generate filter text with cursor
- */
-export function getFilterText(filterQuery: string): string {
-  return `Filter: ${filterQuery}_`;
-}
-
-/**
- * Calculate footer text widths
- */
-export function calculateFooterWidths(totalWidth: number, filterText: string, hintsText: string) {
-  const minFilterWidth = Math.min(filterText.length, Math.max(1, totalWidth - 2));
-  const maxHintsWidth = Math.max(0, totalWidth - minFilterWidth - 2);
-  const hintsWidth = Math.min(hintsText.length, maxHintsWidth);
-  const filterWidth = totalWidth - hintsWidth - 2; // -2 for spacing
-  return { hintsWidth, filterWidth };
+  return `${navigate}:nav ${interact}:open/toggle ${newPane}:new ${jump}:jump ${toggleScope}:scope(${scopeLabel}) ${kill}:kill ${ptyPicker}:ptys ${close}:close`;
 }

@@ -2,7 +2,9 @@
  * ListPane - Left-side session/PTY list component for AggregateView.
  *
  * Displays a scrollable, hierarchical tree of sessions and their PTYs.
- * Supports selection, expansion, drag-and-drop reordering, and lazy loading.
+ * Mouse interaction is preserved (click to select/expand/scroll) but
+ * the list pane always appears visually unfocused (dim border) — the
+ * preview pane is the only "focused" area in aggregate view.
  *
  * NOTE: Uses ListPaneContext for theme, layout, viewport, and handlers.
  * Props reduced from 26 to 4: components, SessionTreeNode, PtyTreeRow, PlaceholderRow.
@@ -47,7 +49,6 @@ export const ListPane: Component<ListPaneProps> = (props) => {
 
   // Handle mouse up on session (toggle or end drag)
   const handleSessionMouseUp = (sessionId: string, loadState: { status: string }) => {
-    // Only toggle if not dragging and session is loaded
     if (loadState.status === 'loaded') {
       ctx.selectionHandlers.onToggleSession(sessionId);
     }
@@ -63,13 +64,9 @@ export const ListPane: Component<ListPaneProps> = (props) => {
         height: ctx.layout.height,
         border: true,
         borderStyle: 'single',
-        borderColor: ctx.state.isPreviewMode
-          ? colors.theme.pane.borderColor
-          : colors.theme.pane.focusedBorderColor,
-      }}
-      onMouseDown={(e: { preventDefault: () => void }) => {
-        e.preventDefault();
-        ctx.scrollHandlers.onExitPreview();
+        // Always use the unfocused (dim) border color — the preview pane
+        // is the only "focused" pane in aggregate view.
+        borderColor: colors.theme.pane.borderColor,
       }}
       onMouseDrag={(e: OpenTUIMouseEvent) => {
         e.preventDefault();
@@ -136,7 +133,6 @@ export const ListPane: Component<ListPaneProps> = (props) => {
                     <Show
                       when={node().type === 'pty'}
                       fallback={
-                        // Placeholder row
                         <props.components.PlaceholderRow
                           indent={ptyIndent()}
                           maxWidth={ctx.layout.innerWidth}
@@ -146,19 +142,11 @@ export const ListPane: Component<ListPaneProps> = (props) => {
                           label={(node() as Extract<TreeNode, { type: 'placeholder' }>).message}
                           onClick={() => {
                             ctx.selectionHandlers.onSelectItem(item.index);
-                            const placeholderNode = node() as Extract<
-                              TreeNode,
-                              { type: 'placeholder' }
-                            >;
-                            const sessionId = placeholderNode.parentSessionId;
-                            if (sessionId) {
-                              ctx.scrollHandlers.onPlaceholderClick(sessionId);
-                            }
                           }}
                         />
                       }
                     >
-                      {/* PTY row */}
+                      {/* PTY row — click selects the PTY for preview */}
                       <props.components.PtyTreeRow
                         pty={(node() as Extract<TreeNode, { type: 'pty' }>).ptyInfo}
                         isSelected={isSelected()}
@@ -170,15 +158,12 @@ export const ListPane: Component<ListPaneProps> = (props) => {
                         onClick={() => {
                           const ptyNode = node() as Extract<TreeNode, { type: 'pty' }>;
                           ctx.selectionHandlers.onSelectPty(ptyNode.ptyInfo.ptyId);
-                          if (ctx.state.isPreviewMode) {
-                            ctx.scrollHandlers.onExitPreview();
-                          }
                         }}
                       />
                     </Show>
                   }
                 >
-                  {/* Session row */}
+                  {/* Session row — click toggles expand/collapse */}
                   <props.components.SessionTreeNode
                     sessionName={(node() as Extract<TreeNode, { type: 'session' }>).session.name}
                     paneCount={(node() as Extract<TreeNode, { type: 'session' }>).ptyCount}

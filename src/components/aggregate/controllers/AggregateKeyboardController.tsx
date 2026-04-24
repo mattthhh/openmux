@@ -191,7 +191,6 @@ export function AggregateKeyboardController(props: AggregateKeyboardControllerPr
     navigateToPrevPty: aggregate.navigateToPrevPty,
     navigateToNextPty: aggregate.navigateToNextPty,
     enterPreviewMode: aggregate.enterPreviewMode,
-    exitPreviewMode: aggregate.exitPreviewMode,
     togglePreviewZoom: aggregate.togglePreviewZoom,
     exitAggregateMode: keyboard.exitAggregateMode,
     exitSearchMode: search.exitSearchMode,
@@ -217,6 +216,7 @@ export function AggregateKeyboardController(props: AggregateKeyboardControllerPr
     scrollListUp: aggregate.scrollListUp,
     scrollListDown: aggregate.scrollListDown,
     setListScrollOffset: aggregate.setListScrollOffset,
+    togglePtyPicker: aggregate.openPtyPicker,
   };
 
   // Create keyboard handler

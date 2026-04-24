@@ -19,6 +19,7 @@ export type OverlayType =
   | 'workspaceLabel'
   | 'templateOverlay'
   | 'sessionPicker'
+  | 'ptyPicker'
   | 'aggregateView';
 
 /** Priority determines which handler gets called first (higher = earlier) */
@@ -29,6 +30,7 @@ const OVERLAY_PRIORITY: Record<OverlayType, number> = {
   workspaceLabel: 23,
   templateOverlay: 22,
   sessionPicker: 20,
+  ptyPicker: 15, // Inside aggregate view, above it but below session picker
   aggregateView: 10,
 };
 

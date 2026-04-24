@@ -14,19 +14,15 @@ import { useTerminal } from '../contexts/TerminalContext';
 import { useConfig } from '../contexts/ConfigContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useSelection } from '../contexts/SelectionContext';
+import { useLayout } from '../contexts/LayoutContext';
 import { getHostBackgroundColor } from '../effect/bridge';
 import { useOverlayColors } from './overlay-colors';
 import {
   calculateAggregateListViewport,
   getAggregateListScrollOffsetForSelection,
 } from './aggregate/list-viewport';
-import {
-  calculateLayoutDimensions,
-  getHintsText,
-  getFilterText,
-  calculateFooterWidths,
-} from './aggregate';
-import { truncateHint } from './overlay-hints';
+import { calculateLayoutDimensions, getHintsText } from './aggregate';
+import { truncateHintRight } from './overlay-hints';
 import {
   ListPane,
   PreviewPane,
@@ -35,6 +31,7 @@ import {
   PtyTreeRow,
   PlaceholderRow,
 } from './aggregate';
+import { PtyPicker } from './PtyPicker';
 import { ListPaneProvider } from '../contexts/ListPaneContext';
 import { useSessionDrag } from './aggregate/hooks';
 import {
@@ -42,6 +39,8 @@ import {
   AggregateMouseController,
   AggregateStateManager,
 } from './aggregate/controllers';
+
+import { getFocusedPtyId } from '../core/workspace-utils';
 
 interface AggregateViewProps {
   width: number;
@@ -62,6 +61,7 @@ export function AggregateView(props: AggregateViewProps) {
   const config = useConfig();
   const theme = useTheme();
   const selection = useSelection();
+  const layout = useLayout();
   const colors = useOverlayColors();
 
   // Hooks
@@ -152,6 +152,9 @@ export function AggregateView(props: AggregateViewProps) {
     getTerminalStateSync: kbCtrl.getAggregateTerminalStateSync,
   });
 
+  /** The PTY ID that was focused before the aggregate view opened */
+  const activePtyId = () => getFocusedPtyId(layout.activeWorkspace) ?? null;
+
   // Footer text
   const hintsText = () =>
     getHintsText(
@@ -164,8 +167,6 @@ export function AggregateView(props: AggregateViewProps) {
       kbCtrl.vimEnabled(),
       kbCtrl.vimMode()
     );
-  const filterText = () => getFilterText(aggregate.state.filterQuery);
-  const footerWidths = () => calculateFooterWidths(props.width, filterText(), hintsText());
   const hostBgColor = () => {
     void terminal.hostColorsVersion;
     return getHostBackgroundColor();
@@ -222,7 +223,7 @@ export function AggregateView(props: AggregateViewProps) {
               scrollHandlers={{
                 onScrollUp: aggregate.scrollListUp,
                 onScrollDown: aggregate.scrollListDown,
-                onExitPreview: aggregate.exitPreviewMode,
+                onExitPreview: () => {},
                 onPlaceholderClick: () => {},
               }}
               shimmerTargetColor={hostBgColor()}
@@ -247,44 +248,17 @@ export function AggregateView(props: AggregateViewProps) {
             components={{ InteractivePreview }}
           />
         </box>
-        <box style={{ height: 1, flexDirection: 'row' }}>
-          <Show
-            when={!aggregate.state.previewMode}
-            fallback={
-              <>
-                <box style={{ width: footerWidths().filterWidth }} />
-                <box
-                  style={{
-                    width: footerWidths().hintsWidth + 2,
-                    flexDirection: 'row',
-                    justifyContent: 'flex-end',
-                  }}
-                >
-                  <text fg={colors.subtle()}>
-                    {truncateHint(hintsText(), footerWidths().hintsWidth)}
-                  </text>
-                </box>
-              </>
-            }
-          >
-            <box style={{ width: footerWidths().filterWidth }}>
-              <text fg={colors.foreground()}>
-                {filterText().slice(0, footerWidths().filterWidth)}
-              </text>
-            </box>
-            <box
-              style={{
-                width: footerWidths().hintsWidth + 2,
-                flexDirection: 'row',
-                justifyContent: 'flex-end',
-              }}
-            >
-              <text fg={colors.subtle()}>
-                {truncateHint(hintsText(), footerWidths().hintsWidth)}
-              </text>
-            </box>
-          </Show>
+        <box style={{ height: 1, flexDirection: 'row', justifyContent: 'flex-end' }}>
+          <text fg={colors.subtle()}>{truncateHintRight(hintsText(), props.width)}</text>
         </box>
+
+        {/* PTY Picker overlay (layered on top of aggregate view) */}
+        <PtyPicker
+          width={props.width}
+          height={props.height}
+          activePtyId={activePtyId()}
+          onVimModeChange={props.onVimModeChange}
+        />
       </box>
     </Show>
   );

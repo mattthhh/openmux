@@ -158,6 +158,16 @@ export const DEFAULT_KEYBINDINGS: KeybindingsConfig = {
       backspace: 'session.picker.rename.delete',
     },
   },
+  ptyPicker: {
+    list: {
+      escape: 'pty.picker.close',
+      q: 'pty.picker.close',
+      down: 'pty.picker.down',
+      up: 'pty.picker.up',
+      enter: 'pty.picker.select',
+      backspace: 'pty.picker.filter.delete',
+    },
+  },
   confirmation: {
     escape: 'confirm.cancel',
     enter: 'confirm.accept',

@@ -40,6 +40,7 @@ import {
   resolveCurrentAggregatePtySessionId,
 } from '../components/aggregate/utils';
 import { collectPanes } from '../core/layout-tree';
+import { getFocusedPtyId } from '../core/workspace-utils';
 import {
   getAggregateSessionOrderResult,
   setAggregateSessionOrder,
@@ -231,6 +232,10 @@ export function AggregateViewProvider(props: AggregateViewProviderProps) {
     refreshPtys,
     onCreatePaneInSession: handleCreatePaneInSession,
     persistSessionOrder,
+    getFocusedPtyId: () => {
+      const ws = layout.activeWorkspace;
+      return ws ? (getFocusedPtyId(ws) ?? null) : null;
+    },
   });
 
   createEffect(

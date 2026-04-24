@@ -39,7 +39,11 @@ export function createAggregatePreviewHandler(deps: PreviewDeps) {
     }
 
     if (action === 'aggregate.preview.exit') {
-      deps.exitPreviewMode();
+      // Deprecated list-mode exit. Alt+escape now closes the aggregate view
+      // entirely instead of dropping to list mode. The PTY picker overlay
+      // (alt+s) handles search/filter instead of the list pane.
+      deps.closeAggregateView();
+      deps.exitAggregateMode();
       return true;
     }
 

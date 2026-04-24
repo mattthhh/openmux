@@ -197,6 +197,9 @@ function mergeKeybindings(
       list: mergeKeybindingMap(base.sessionPicker.list, overrides.sessionPicker?.list),
       rename: mergeKeybindingMap(base.sessionPicker.rename, overrides.sessionPicker?.rename),
     },
+    ptyPicker: {
+      list: mergeKeybindingMap(base.ptyPicker.list, overrides.ptyPicker?.list),
+    },
     confirmation: mergeKeybindingMap(base.confirmation, overrides.confirmation),
   };
 }

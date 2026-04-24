@@ -39,6 +39,8 @@ export interface AggregateViewActionsParams {
   onCreatePaneInSession?: (sessionId: string) => void;
   /** Persist manual aggregate session order */
   persistSessionOrder?: (order: string[]) => Promise<void>;
+  /** The PTY ID that was focused before the aggregate view opened */
+  getFocusedPtyId?: () => string | null;
 }
 
 export function createAggregateViewActions(params: AggregateViewActionsParams) {
@@ -100,15 +102,35 @@ export function createAggregateViewActions(params: AggregateViewActionsParams) {
   };
 
   const openAggregateView = () => {
+    const focusedPtyId = params.getFocusedPtyId?.() ?? null;
+
     setState(
       produce((s) => {
         s.showAggregateView = true;
         s.filterQuery = '';
         s.pendingPaneCreations = [];
         s.listScrollOffset = 0;
-        clearPreviewState(s);
+        s.previewMode = true;
+        s.previewZoomed = false;
         recomputeMatches(s);
         recomputeTree(s);
+
+        // Prefer the focused PTY (the one the user was working on before
+        // opening the aggregate view). Fall back to the first PTY in the tree.
+        if (focusedPtyId) {
+          const focusedIndex = s.flattenedTreeIndex.get(focusedPtyId);
+          if (focusedIndex !== undefined) {
+            applySelection(s, focusedIndex);
+            return;
+          }
+        }
+
+        const firstPtyIndex = s.flattenedTree.findIndex((item) => item.node.type === 'pty');
+        if (firstPtyIndex >= 0) {
+          applySelection(s, firstPtyIndex);
+        } else {
+          applySelection(s, 0);
+        }
       })
     );
   };
@@ -123,6 +145,7 @@ export function createAggregateViewActions(params: AggregateViewActionsParams) {
         s.selectedSessionId = null;
         s.pendingPaneCreations = [];
         s.listScrollOffset = 0;
+        s.showPtyPicker = false;
         clearPreviewState(s);
       })
     );
@@ -639,6 +662,29 @@ export function createAggregateViewActions(params: AggregateViewActionsParams) {
     );
   };
 
+  /** Open the PTY picker overlay */
+  const openPtyPicker = () => {
+    setState('showPtyPicker', true);
+  };
+
+  /** Close the PTY picker overlay */
+  const closePtyPicker = () => {
+    setState('showPtyPicker', false);
+  };
+
+  /** Maximum MRU stack depth */
+  const MRU_CAPACITY = 8;
+
+  /** Push a PTY ID onto the MRU stack (dedup + reorder, LIFO) */
+  const pushPtyMru = (ptyId: string) => {
+    setState(
+      produce((s) => {
+        const filtered = s.ptyMru.filter((id) => id !== ptyId);
+        s.ptyMru = [ptyId, ...filtered].slice(0, MRU_CAPACITY);
+      })
+    );
+  };
+
   return {
     openAggregateView,
     closeAggregateView,
@@ -676,5 +722,8 @@ export function createAggregateViewActions(params: AggregateViewActionsParams) {
     upsertPendingPaneCreation: upsertAggregatePendingPaneCreation,
     removePendingPaneCreation,
     clearPendingPaneCreations,
+    openPtyPicker,
+    closePtyPicker,
+    pushPtyMru,
   };
 }

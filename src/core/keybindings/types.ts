@@ -34,6 +34,9 @@ export interface KeybindingsConfig {
     list: KeybindingMap;
     rename: KeybindingMap;
   };
+  ptyPicker: {
+    list: KeybindingMap;
+  };
   confirmation: KeybindingMap;
 }
 
@@ -63,6 +66,9 @@ export interface ResolvedKeybindings {
   sessionPicker: {
     list: ResolvedKeybindingMap;
     rename: ResolvedKeybindingMap;
+  };
+  ptyPicker: {
+    list: ResolvedKeybindingMap;
   };
   confirmation: ResolvedKeybindingMap;
 }

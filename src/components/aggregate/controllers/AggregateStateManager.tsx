@@ -7,6 +7,7 @@
 
 import { createEffect, onCleanup, createSignal } from 'solid-js';
 import { loadSessionData } from '../../../effect/bridge';
+import { getFocusedPtyId } from '../../../core/workspace-utils';
 import { useLayout } from '../../../contexts/LayoutContext';
 import { useSession } from '../../../contexts/SessionContext';
 import { useTerminal } from '../../../contexts/TerminalContext';
@@ -218,6 +219,73 @@ export function AggregateStateManager() {
       for (const insertion of orphaned) {
         aggregate.removePendingPaneCreation(insertion.id);
       }
+    }
+  });
+
+  // AUTO-SELECT: When the aggregate view is open in preview mode with no PTY selected,
+  // automatically select the first available PTY as soon as PTYs load.
+  // Prefer the PTY the user was focused on before opening the aggregate view.
+  createEffect(() => {
+    if (!isActive()) return;
+    if (!previewMode()) return;
+    if (selectedPtyId()) return;
+
+    const tree = flattenedTree();
+
+    // Try the focused PTY first (the one the user was working on)
+    const focusedPtyId = getFocusedPtyId(layout.activeWorkspace) ?? null;
+    if (focusedPtyId) {
+      const focusedIndex = tree.findIndex(
+        (item) => item.node.type === 'pty' && item.node.ptyInfo.ptyId === focusedPtyId
+      );
+      if (focusedIndex >= 0) {
+        aggregate.setSelectedIndex(focusedIndex);
+        return;
+      }
+    }
+
+    // Fallback: first PTY in the tree
+    const firstPtyIndex = tree.findIndex((item) => item.node.type === 'pty');
+    if (firstPtyIndex < 0) return;
+
+    aggregate.setSelectedIndex(firstPtyIndex);
+  });
+
+  // PTY MRU DEBOUNCE: When the selected PTY changes (via picker, sidebar click,
+  // or j/k navigation), push it to the MRU stack after the user settles.
+  // This prevents rapid j/k flips from flooding the MRU — only the PTY the
+  // user "sticks with" gets registered.
+  let mruDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+  const MRU_SETTLE_MS = 500;
+
+  createEffect(() => {
+    if (!isActive()) return;
+    if (!previewMode()) return;
+
+    const ptyId = selectedPtyId();
+    if (!ptyId) return;
+
+    // Track that this effect read selectedPtyId so it re-runs on changes
+    void ptyId;
+
+    // Clear any pending debounce from a previous selection
+    if (mruDebounceTimer !== null) {
+      clearTimeout(mruDebounceTimer);
+    }
+
+    mruDebounceTimer = setTimeout(() => {
+      mruDebounceTimer = null;
+      // Only push if the selection is still the same after the settle period
+      if (selectedPtyId() === ptyId) {
+        aggregate.pushPtyMru(ptyId);
+      }
+    }, MRU_SETTLE_MS);
+  });
+
+  onCleanup(() => {
+    if (mruDebounceTimer !== null) {
+      clearTimeout(mruDebounceTimer);
+      mruDebounceTimer = null;
     }
   });
 

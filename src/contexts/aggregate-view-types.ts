@@ -215,6 +215,14 @@ export interface AggregateViewUiSlice {
   previewZoomed: boolean;
   /** Scroll offset for the session/PTY list (0 = top) */
   listScrollOffset: number;
+  /** Whether the PTY picker overlay is shown (inside aggregate view) */
+  showPtyPicker: boolean;
+  /**
+   * MRU stack of PTY IDs (most-recently-used).
+   * MRU[0] = most recent, MRU[1] = second most recent, etc.
+   * Used by the PTY picker for alt-tab selection.
+   */
+  ptyMru: string[];
 }
 
 /** Filterable PTY collection state. */
@@ -308,6 +316,8 @@ export function createAggregateViewUiSlice(): AggregateViewUiSlice {
     previewMode: false,
     previewZoomed: false,
     listScrollOffset: 0,
+    showPtyPicker: false,
+    ptyMru: [],
   };
 }
 
@@ -417,4 +427,10 @@ export interface AggregateViewContextValue {
   removePendingPaneCreation: (id: string) => void;
   /** Clear all pending aggregate pane insertion requests */
   clearPendingPaneCreations: () => void;
+  /** Open the PTY picker overlay */
+  openPtyPicker: () => void;
+  /** Close the PTY picker overlay */
+  closePtyPicker: () => void;
+  /** Push a PTY ID onto the MRU stack (dedup + reorder) */
+  pushPtyMru: (ptyId: string) => void;
 }
