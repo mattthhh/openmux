@@ -223,8 +223,9 @@ export function SessionBridge(props: SessionBridgeProps) {
   };
 
   const onDeleteSession = (sessionId: string) => {
-    // Clean up PTYs for deleted session
-    cleanupSessionPtys(sessionId);
+    // Clean up PTYs for deleted session (fire-and-forget is safe here —
+    // PTY destruction is deferred via deferMacrotask and errors are logged)
+    void cleanupSessionPtys(sessionId);
   };
 
   const resetLayoutForTemplate = async () => {

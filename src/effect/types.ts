@@ -63,5 +63,10 @@ export const makeRows = (n: number): Rows => n as Rows;
 /** Make WorkspaceId from number */
 export const makeWorkspaceId = (n: number): WorkspaceId => n as WorkspaceId;
 
-/** Cast a string to PtyId */
-export const asPtyId = (id: string): PtyId => id as PtyId;
+/** Cast a string to PtyId. Validates format in development mode. */
+export const asPtyId = (id: string): PtyId => {
+  if (process.env.NODE_ENV !== 'production' && !id.startsWith('pty-')) {
+    console.warn(`[openmux] asPtyId: unexpected PTY ID format: ${id}`);
+  }
+  return id as PtyId;
+};

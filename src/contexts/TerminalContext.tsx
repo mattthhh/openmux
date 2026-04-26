@@ -70,7 +70,7 @@ export interface TerminalContextValue {
     | undefined
   >;
   /** Cleanup PTYs for a deleted session */
-  cleanupSessionPtys: (sessionId: string) => void;
+  cleanupSessionPtys: (sessionId: string) => Promise<void>;
   /** Write input to the focused pane's PTY */
   writeToFocused: (data: string) => void;
   /** Write input to a specific PTY */
@@ -398,7 +398,7 @@ export function TerminalProvider(props: TerminalProviderProps) {
   };
 
   // Cleanup PTYs for a deleted session
-  const handleCleanupSessionPtys = (sessionId: string) => {
+  const handleCleanupSessionPtys = (sessionId: string): Promise<void> => {
     const savedMapping = sessionPtyMap.get(sessionId);
     if (savedMapping) {
       for (const ptyId of savedMapping.values()) {
@@ -414,10 +414,10 @@ export function TerminalProvider(props: TerminalProviderProps) {
         destroyPty(ptyId);
       }
       sessionPtyMap.delete(sessionId);
-      return;
+      return Promise.resolve();
     }
 
-    getSessionPtyMapping(sessionId).then((mappingInfo) => {
+    return getSessionPtyMapping(sessionId).then((mappingInfo) => {
       if (!mappingInfo) return;
       for (const ptyId of mappingInfo.mapping.values()) {
         const unsub = unsubscribeFns.get(ptyId);

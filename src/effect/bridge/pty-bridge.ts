@@ -4,7 +4,8 @@
  * Directly uses PTY service interface without Effect runtime.
  */
 
-import type { PtyId, Cols, Rows } from '../types';
+import type { Cols, Rows } from '../types';
+import { asPtyId } from '../types';
 import type {
   TerminalCell,
   TerminalState,
@@ -18,9 +19,6 @@ import { isShimClient } from '../../shim/mode';
 import * as ShimClient from '../../shim/client';
 import { getPtyService } from './services-instance';
 import type { PtySpawnError } from '../errors';
-
-/** Helper to convert string to PtyId branded type */
-const asPtyId = (id: string): PtyId => id as PtyId;
 
 /** Create a PTY session */
 export async function createPtySession(options: {
@@ -42,7 +40,14 @@ export async function createPtySession(options: {
   return result;
 }
 
-/** Write data to a PTY */
+/**
+ * Write data to a PTY.
+ *
+ * Deliberately swallows errors (logs warning) instead of returning them.
+ * This is a fire-and-forget pattern for responsive typing — callers in
+ * TerminalContext discard the promise so keystrokes never block on await.
+ * Errors here are non-recoverable (destination PTY gone) and logging is sufficient.
+ */
 export async function writeToPty(ptyId: string, data: string): Promise<void> {
   const pty = getPtyService();
   const result = await pty.write(asPtyId(ptyId), data);
@@ -51,7 +56,12 @@ export async function writeToPty(ptyId: string, data: string): Promise<void> {
   }
 }
 
-/** Send focus event to a PTY */
+/**
+ * Send focus event to a PTY.
+ *
+ * Fire-and-forget: errors are logged but not returned. Focus events are
+ * best-effort and should not block UI interaction.
+ */
 export async function sendPtyFocusEvent(ptyId: string, focused: boolean): Promise<void> {
   const pty = getPtyService();
   const result = await pty.sendFocusEvent(asPtyId(ptyId), focused);
@@ -60,7 +70,13 @@ export async function sendPtyFocusEvent(ptyId: string, focused: boolean): Promis
   }
 }
 
-/** Resize a PTY */
+/**
+ * Resize a PTY.
+ *
+ * Fire-and-forget: errors are logged but not returned. Resize failures
+ * are non-critical — the PTY will simply render at its current size until
+ * the next successful resize.
+ */
 export async function resizePty(
   ptyId: string,
   cols: number,
