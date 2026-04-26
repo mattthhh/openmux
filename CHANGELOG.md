@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.101](https://github.com/monotykamary/openmux/compare/v0.3.100...v0.3.101) (2026-04-26)
+
+
+### Refactoring
+
+* **cli,aggregate:** modularize update.ts and refresh.ts ([7253a76](https://github.com/monotykamary/openmux/commit/7253a7680aebc35c68d75867626241ade88277a5))
+
 ### [0.3.100](https://github.com/monotykamary/openmux/compare/v0.3.99...v0.3.100) (2026-04-26)
 
 
