@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.100](https://github.com/monotykamary/openmux/compare/v0.3.99...v0.3.100) (2026-04-26)
+
+
+### Bug Fixes
+
+* **aggregate:** recompute tree after metadata changes to prevent stale cwd/title ([3c4fbac](https://github.com/monotykamary/openmux/commit/3c4fbacf1c9c2e26dc8e1c27876f383c1d2d93c1))
+
 ### [0.3.99](https://github.com/monotykamary/openmux/compare/v0.3.98...v0.3.99) (2026-04-24)
 
 
