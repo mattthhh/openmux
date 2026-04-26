@@ -6,7 +6,7 @@ import type { VimInputMode } from '../../core/vim-sequences';
 import type { SearchContextValue } from '../../contexts/search/types';
 import type { SessionState } from '../../core/operations/session-actions';
 import type { useConfig } from '../../contexts/ConfigContext';
-import type { useKeyboard } from '../../contexts';
+import type { useKeyboard } from '../../contexts/KeyboardContext';
 import type { useSession } from '../../contexts/SessionContext';
 
 export function createOverlayVimMode(params: {
