@@ -123,4 +123,38 @@ describe('CWD handler (litmus)', () => {
     expect(state.matchedPtys[0].cwd).toBe('/a');
     expect(state.matchedPtys[1].cwd).toBe('/b/updated');
   });
+
+  it('updates flattenedTree references when cwd changes', () => {
+    const pty = makePty({ ptyId: 'pty-1', cwd: '/home/user/project' });
+    const [state, setState] = makeState([pty]);
+
+    // Provide session metadata so recomputeTree can build the tree
+    setState(
+      'allSessions',
+      new Map([
+        [
+          'session-1',
+          {
+            id: 'session-1',
+            name: 'session-1',
+            createdAt: 0,
+            updatedAt: 0,
+            autoNamed: false,
+            lastSwitchedAt: 0,
+          },
+        ],
+      ])
+    );
+    setState('expandedSessionIds', new Set(['session-1']));
+
+    const handler = createMetadataChangeHandler(setState);
+    handler({ ptyId: 'pty-1', cwd: '/home/user/other' });
+
+    // The flattenedTree entry should reflect the new cwd
+    const treeNode = state.flattenedTree[0];
+    expect(treeNode).toBeDefined();
+    if (treeNode?.node.type === 'pty') {
+      expect(treeNode.node.ptyInfo.cwd).toBe('/home/user/other');
+    }
+  });
 });

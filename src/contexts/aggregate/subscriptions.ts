@@ -430,6 +430,8 @@ export function createMetadataChangeHandler(
   return (event: MetadataChangeEvent) => {
     setState(
       produce((s) => {
+        let treeChanged = false;
+
         const allIndex = s.allPtysIndex.get(event.ptyId);
         if (allIndex !== undefined && s.allPtys[allIndex]) {
           const pty = s.allPtys[allIndex];
@@ -452,6 +454,8 @@ export function createMetadataChangeHandler(
             }
             if (!changed) {
               s.allPtys[allIndex] = pty;
+            } else {
+              treeChanged = true;
             }
           }
         }
@@ -478,8 +482,17 @@ export function createMetadataChangeHandler(
             }
             if (!changed) {
               s.matchedPtys[matchedIndex] = pty;
+            } else {
+              treeChanged = true;
             }
           }
+        }
+
+        // Must recompute the tree so flattenedTree nodes hold fresh references
+        // to the updated PtyInfo objects. Without this, the tree drawer reads
+        // stale cwd/title/foregroundProcess from the old immutable copies.
+        if (treeChanged) {
+          recomputeTree(s);
         }
       })
     );
