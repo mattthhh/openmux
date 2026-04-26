@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.103](https://github.com/monotykamary/openmux/compare/v0.3.102...v0.3.103) (2026-04-26)
+
+
+### Bug Fixes
+
+* **bridge:** make cleanupSessionPtys async, add PtyId validation, document fire-and-forget ([01036c6](https://github.com/monotykamary/openmux/commit/01036c6d9e1d21beebf32c712f73efa8dba2ebba))
+
+
+### Refactoring
+
+* **effect:** inject clipboard dependency to break service-bridge circular dep ([a94faf6](https://github.com/monotykamary/openmux/commit/a94faf6f3a0d16cb4d4f77cc0c31195ca2879261))
+* **shim:** wrap PTY client state in ShimPtyRegistry class and fix context circular dep ([210f698](https://github.com/monotykamary/openmux/commit/210f6986b124fae3953ec626574f74ecc8f2937e))
+* **terminal:** break circular deps between types and scrollback modules ([4c3fe08](https://github.com/monotykamary/openmux/commit/4c3fe085b5c60ace28ba330ddf70156c32684495))
+
 ### [0.3.102](https://github.com/monotykamary/openmux/compare/v0.3.101...v0.3.102) (2026-04-26)
 
 ### [0.3.101](https://github.com/monotykamary/openmux/compare/v0.3.100...v0.3.101) (2026-04-26)
