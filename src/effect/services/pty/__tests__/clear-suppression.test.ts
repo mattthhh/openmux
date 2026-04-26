@@ -221,6 +221,7 @@ describe('createDataHandler pi redraw integration', () => {
       getScrollbackArchiverResetCount,
     } = createMockSession();
     const { handleData } = createDataHandler({
+      copyToClipboard: async () => true,
       session,
       syncParser: createSyncModeParser(),
     });
@@ -236,6 +237,7 @@ describe('createDataHandler pi redraw integration', () => {
   it('still schedules scrollback archiving for the normalized redraw', async () => {
     const { session, getScrollbackScheduleCount } = createMockSession();
     const { handleData } = createDataHandler({
+      copyToClipboard: async () => true,
       session,
       syncParser: createSyncModeParser(),
     });
@@ -250,6 +252,7 @@ describe('createDataHandler pi redraw integration', () => {
     const { session, emulatorWrites } = createMockSession();
     session.rows = 2;
     const { handleData } = createDataHandler({
+      copyToClipboard: async () => true,
       session,
       syncParser: createSyncModeParser(),
     });
@@ -263,6 +266,7 @@ describe('createDataHandler pi redraw integration', () => {
   it('leaves normal synchronized output untouched', async () => {
     const { session, emulatorWrites } = createMockSession();
     const { handleData } = createDataHandler({
+      copyToClipboard: async () => true,
       session,
       syncParser: createSyncModeParser(),
     });
@@ -277,6 +281,7 @@ describe('createDataHandler pi redraw integration', () => {
     vi.useFakeTimers();
     const { session, emulatorWrites } = createMockSession();
     const { handleData } = createDataHandler({
+      copyToClipboard: async () => true,
       session,
       syncParser: createSyncModeParser(),
       syncTimeoutMs: 100,
@@ -300,6 +305,7 @@ describe('createDataHandler pi redraw integration', () => {
     vi.useFakeTimers();
     const { session, emulatorWrites } = createMockSession();
     const { handleData } = createDataHandler({
+      copyToClipboard: async () => true,
       session,
       syncParser: createSyncModeParser(),
       syncTimeoutMs: 100,

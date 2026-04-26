@@ -25,6 +25,8 @@ import type { PtyService, PtyTitleChangeEvent, PtyCwdChangeEvent } from './inter
 /** Configuration for PTY service */
 export interface PtyServiceConfig {
   defaultShell: string;
+  /** Clipboard writer injected from services — avoids circular dep through bridge */
+  copyToClipboard: (text: string) => Promise<boolean>;
 }
 
 /**
@@ -81,6 +83,7 @@ export function createPtyService(config: PtyServiceConfig, _fs?: unknown): PtySe
           globalForegroundProcessChangeRegistry.notifySync({ ptyId, processName }),
         onCwdChange: (ptyId, cwd) => globalCwdChangeRegistry.notifySync({ ptyId, cwd }),
         onExit: handleExit,
+        copyToClipboard: config.copyToClipboard,
       },
       options
     );

@@ -98,6 +98,7 @@ describe('createDataHandler', () => {
   it('batches segments across ticks', async () => {
     const { session, emulator } = createSession();
     const handler = createDataHandler({
+      copyToClipboard: async () => true,
       session,
       syncParser: createSyncModeParser(),
       syncTimeoutMs: 50,
@@ -118,6 +119,7 @@ describe('createDataHandler', () => {
   it('flushes sync mode buffer after timeout', async () => {
     const { session, emulator } = createSession();
     const handler = createDataHandler({
+      copyToClipboard: async () => true,
       session,
       syncParser: createSyncModeParser(),
       syncTimeoutMs: 10,
@@ -139,6 +141,7 @@ describe('createDataHandler', () => {
     emulator.drainResponses = vi.fn(() => ['\x1b_Gi=1;OK\x1b\\']);
 
     const handler = createDataHandler({
+      copyToClipboard: async () => true,
       session,
       syncParser: createSyncModeParser(),
       syncTimeoutMs: 50,
@@ -154,6 +157,7 @@ describe('createDataHandler', () => {
     const { session, emulator } = createSession();
 
     const handler = createDataHandler({
+      copyToClipboard: async () => true,
       session,
       syncParser: createSyncModeParser(),
       syncTimeoutMs: 50,
@@ -180,6 +184,7 @@ describe('createDataHandler', () => {
     emulator.drainResponses = vi.fn(() => ['\x1b_Gi=1;OK\x1b\\']);
 
     const handler = createDataHandler({
+      copyToClipboard: async () => true,
       session,
       syncParser: createSyncModeParser(),
       syncTimeoutMs: 50,
@@ -197,6 +202,7 @@ describe('createDataHandler', () => {
     const { session, pty } = createSession();
 
     const handler = createDataHandler({
+      copyToClipboard: async () => true,
       session,
       syncParser: createSyncModeParser(),
       syncTimeoutMs: 50,

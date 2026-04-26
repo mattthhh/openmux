@@ -41,6 +41,8 @@ export interface SessionFactoryDeps {
   onForegroundProcessChange: (ptyId: PtyId, processName: string) => void;
   onCwdChange: (ptyId: PtyId, cwd: string) => void;
   onExit?: (ptyId: PtyId, exitCode: number) => void;
+  /** Clipboard writer injected from bridge — avoids circular dep in data-handler */
+  copyToClipboard: (text: string) => Promise<boolean>;
 }
 
 export interface CreateSessionOptions {
@@ -245,6 +247,7 @@ export async function createSession(
     session,
     syncParser,
     commandParser,
+    copyToClipboard: deps.copyToClipboard,
   });
 
   // Wire up PTY data handler

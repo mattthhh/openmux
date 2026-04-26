@@ -71,8 +71,23 @@ export async function initializeServices(
   // Create file system
   const fs = createFileSystem();
 
+  // Create clipboard first (needed by PTY service for OSC 52 handling)
+  const clipboard = await createClipboard();
+
   // Create PTY service for app or shim mode
-  const pty = mode === 'shim' ? createPtyService(config, fs) : createShimPtyService();
+  const pty =
+    mode === 'shim'
+      ? createPtyService(
+          {
+            defaultShell: config.defaultShell,
+            copyToClipboard: async (text) => {
+              const result = await clipboard.write(text).catch(() => false);
+              return result !== false;
+            },
+          },
+          fs
+        )
+      : createShimPtyService();
 
   // Create session storage
   const sessionStorage = await createSessionStorage(fs, config);
@@ -81,9 +96,6 @@ export async function initializeServices(
   // Create session manager
   const sessionManager = await createSessionManager(sessionStorage, pty);
   if (sessionManager instanceof Error) return sessionManager;
-
-  // Create clipboard
-  const clipboard = await createClipboard();
 
   // Create template storage
   const templateStorage = await createTemplateStorage(fs, config);

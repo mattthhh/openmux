@@ -6,7 +6,6 @@ import type { SyncModeParser } from '../../../terminal/sync-mode-parser';
 import type { InternalPtySession } from './types';
 import { deferMacrotask } from '../../../core/scheduling';
 import { tracePtyChunk, tracePtyEvent } from '../../../terminal/pty-trace';
-import { copyToClipboard } from '../../bridge/clipboard-bridge';
 import * as errore from 'errore';
 import { DataHandlerError } from '../../errors';
 
@@ -21,6 +20,8 @@ interface DataHandlerOptions {
   syncParser: SyncModeParser;
   commandParser?: { processData: (data: string) => void | Promise<void> };
   syncTimeoutMs?: number;
+  /** Injected clipboard writer — avoids importing the bridge singleton (breaks circular dep) */
+  copyToClipboard: (text: string) => Promise<boolean>;
 }
 
 interface DataHandlerState {
@@ -152,7 +153,11 @@ export function suppressClearScreenSequences(data: string): string {
  * These are responses with format: "\x1B]52;CLIPBOARD;c:<base64data>\x07"
  * Returns an array of PTY responses (non-clipboard responses) and processes clipboard data separately.
  */
-function processClipboardResponses(responses: string[], ptyId: string): string[] {
+function processClipboardResponses(
+  responses: string[],
+  ptyId: string,
+  clipboardWriter: (text: string) => Promise<boolean>
+): string[] {
   const ptyResponses: string[] = [];
   const CLIPBOARD_PREFIX = '\x1B]52;CLIPBOARD;c:';
   const BEL = '\x07';
@@ -188,7 +193,7 @@ function processClipboardResponses(responses: string[], ptyId: string): string[]
       }
       if (decoded.length === 0) continue;
 
-      copyToClipboard(decoded).catch((err: unknown) => {
+      clipboardWriter(decoded).catch((err: unknown) => {
         tracePtyEvent('clipboard-copy-error', {
           ptyId,
           error: err instanceof Error ? err.message : String(err),
@@ -321,7 +326,7 @@ export function createDataHandler(options: DataHandlerOptions) {
     }
   };
 
-  const drainPending = (options?: { force?: boolean }) => {
+  const drainPending = (drainOptions?: { force?: boolean }) => {
     session.pendingNotify = false;
 
     if (session.emulator.isDisposed) {
@@ -334,7 +339,7 @@ export function createDataHandler(options: DataHandlerOptions) {
       return;
     }
 
-    const force = options?.force ?? false;
+    const force = drainOptions?.force ?? false;
     const start = now();
     let batch = '';
     let batchLen = 0;
@@ -414,7 +419,11 @@ export function createDataHandler(options: DataHandlerOptions) {
       if (responses && responses.length > 0) {
         // Process clipboard responses separately (copy to system clipboard)
         // and filter them out from PTY responses
-        const ptyResponses = processClipboardResponses(responses, session.id);
+        const ptyResponses = processClipboardResponses(
+          responses,
+          session.id,
+          options.copyToClipboard
+        );
         for (const response of ptyResponses) {
           tracePtyChunk('emulator-response', response, { ptyId: session.id });
           session.pty.write(response);
