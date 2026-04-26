@@ -1,7 +1,11 @@
 /**
  * Scrollback archiver - spills live scrollback into a disk archive.
  */
-import type { InternalPtySession } from './types';
+/** Minimal session contract for ScrollbackArchiver, avoiding circular dep with types.ts */
+interface ArchiverSession {
+  id: string;
+  scrollbackArchive: ScrollbackArchive;
+}
 import {
   isKittyGraphicsEmulator,
   type ITerminalEmulator,
@@ -166,7 +170,7 @@ export class ScrollbackArchiver {
   private pending = false;
 
   constructor(
-    private session: InternalPtySession,
+    private session: ArchiverSession,
     private liveEmulator: ITerminalEmulator
   ) {}
 

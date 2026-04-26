@@ -4,15 +4,21 @@
  */
 
 import { SCROLLBACK_ARCHIVE_MAX_BYTES_GLOBAL } from '../scrollback-config';
-import type { ArchiveChunk } from './types';
-import type { ScrollbackArchive } from './archive';
+/** Minimal contract for a scrollback archive, breaking circular dep with archive.ts */
+export interface ScrollbackArchiveLike {
+  readonly bytes: number;
+  getOldestChunk(): ArchiveChunk | null;
+  dropOldestChunk(): DropChunkResult | null;
+}
+
+import type { ArchiveChunk, DropChunkResult } from './types';
 
 /**
  * Manages multiple scrollback archives with a global byte limit.
  * Ensures total memory usage stays within configured bounds.
  */
 export class ScrollbackArchiveManager {
-  private archives = new Set<ScrollbackArchive>();
+  private archives = new Set<ScrollbackArchiveLike>();
   private readonly maxBytes: number;
 
   constructor(maxBytes?: number) {
@@ -24,7 +30,7 @@ export class ScrollbackArchiveManager {
    * The manager will track this archive for global limit enforcement.
    * @param archive - Archive to register
    */
-  register(archive: ScrollbackArchive): void {
+  register(archive: ScrollbackArchiveLike): void {
     this.archives.add(archive);
   }
 
@@ -33,7 +39,7 @@ export class ScrollbackArchiveManager {
    * Called when an archive is disposed.
    * @param archive - Archive to unregister
    */
-  unregister(archive: ScrollbackArchive): void {
+  unregister(archive: ScrollbackArchiveLike): void {
     this.archives.delete(archive);
   }
 
@@ -48,7 +54,7 @@ export class ScrollbackArchiveManager {
     }
 
     while (totalBytes > this.maxBytes) {
-      let targetArchive: ScrollbackArchive | null = null;
+      let targetArchive: ScrollbackArchiveLike | null = null;
       let targetChunk: ArchiveChunk | null = null;
 
       // Find the oldest chunk across all archives

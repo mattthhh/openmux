@@ -8,7 +8,11 @@ import type { ITerminalEmulator } from '../../../terminal/emulator-interface';
 import type { TerminalQueryPassthrough } from '../../../terminal/terminal-query-passthrough';
 import type { PtyId } from '../../types';
 import type { ScrollbackArchive } from '../../../terminal/scrollback-archive';
-import type { ScrollbackArchiver } from './scrollback-archiver';
+/** Minimal contract for scrollback archiving, breaking the circular dep with scrollback-archiver.ts */
+export interface ScrollbackArchiverLike {
+  schedule(): void;
+  reset(): void;
+}
 
 /**
  * Internal PTY session representation
@@ -22,7 +26,7 @@ export interface InternalPtySession {
   /** Disk-backed scrollback archive */
   scrollbackArchive: ScrollbackArchive;
   /** Archiver for spilling scrollback to disk */
-  scrollbackArchiver?: ScrollbackArchiver;
+  scrollbackArchiver?: ScrollbackArchiverLike;
   queryPassthrough: TerminalQueryPassthrough;
   kittyRelayDispose?: () => void;
   cols: number;
