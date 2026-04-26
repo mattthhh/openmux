@@ -1,4 +1,4 @@
-import { UpdateError } from '../../effect/errors';
+import type { UpdateError } from '../../effect/errors';
 
 export type FetchFn = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 export type ReadFileFn = (filePath: string) => Promise<string | UpdateError>;

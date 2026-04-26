@@ -14,21 +14,11 @@ import {
 import { removeAggregateSessionMappingForPty } from '../../effect/bridge/aggregate';
 import { subscribeToGitRepoChanges } from '../../effect/services/pty/helpers';
 
-import type { AggregateViewState, PendingPaneCreation, PtyInfo } from './types';
+import type { AggregateViewState, PendingPaneCreation } from './types';
 import { buildPtyIndex } from './filter';
-import {
-  findPendingPaneCreationForLifecycle,
-  getAppendedPaneOrder,
-  getInsertedPaneOrder,
-  removePendingPaneCreations,
-} from './pending';
+import { findPendingPaneCreationForLifecycle, removePendingPaneCreations } from './pending';
 import { clearPreviewState } from './selection';
-import {
-  buildSessionPaneOrderFromAggregateState,
-  getSessionPaneOrder,
-  setSessionPaneOrder,
-  getPendingPaneOrderKey,
-} from './pane-order';
+import { getSessionPaneOrder, setSessionPaneOrder, getPendingPaneOrderKey } from './pane-order';
 import { recomputeMatches, recomputeTree } from './session';
 
 export interface SubscriptionManager {
@@ -130,12 +120,6 @@ export interface LifecycleHandlerDeps {
   onPtyDestroyed?: (ptyId: string) => void;
 }
 
-function buildSessionPaneOrderFromState(
-  state: Pick<AggregateViewState, 'allPtys' | 'sessionPaneOrderIndex'>,
-  sessionId: string
-): Map<string, number> {
-  return buildSessionPaneOrderFromAggregateState(state, sessionId);
-}
 export function createLifecycleHandlers(
   state: AggregateViewState,
   setState: SetStoreFunction<AggregateViewState>,
@@ -154,27 +138,6 @@ export function createLifecycleHandlers(
     params: { ptyId: string; sessionId?: string | null; paneId?: string | null }
   ): PendingPaneCreation | null => {
     return findPendingPaneCreationForLifecycle(aggregateState, params);
-  };
-
-  const removeMatchingPendingInsertions = (
-    aggregateState: AggregateViewState,
-    params: { ptyId: string; sessionId?: string | null; paneId?: string | null }
-  ): void => {
-    const matchingInsertion = findMatchingPendingInsertion(aggregateState, params);
-    if (matchingInsertion) {
-      removePendingPaneCreations(
-        aggregateState,
-        (insertion) => insertion.id === matchingInsertion.id
-      );
-      return;
-    }
-
-    removePendingPaneCreations(
-      aggregateState,
-      (insertion) =>
-        insertion.pendingPtyId === params.ptyId ||
-        (!!params.paneId && insertion.pendingPaneId === params.paneId)
-    );
   };
 
   /**

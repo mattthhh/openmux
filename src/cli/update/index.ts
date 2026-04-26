@@ -3,7 +3,6 @@ import { formatVersion, parseReleaseVersion, createDefaultUpdateIO } from './io'
 import { getPlatformInfo, fetchTargetRelease } from './release';
 import { detectManagedInstall, detectPackageManager, suggestPackageManagerUpdate } from './detect';
 import { installRelease, updateManagedWrapper } from './install';
-import { computeFileSha256, parseChecksumFile, verifyReleaseChecksum } from './install';
 import type { UpdateCommand, CliOutcome, UpdateIO } from './types';
 
 export { getPlatformInfo } from './release';

@@ -1,6 +1,5 @@
 import { produce, type SetStoreFunction } from 'solid-js/store';
 
-import type { SessionMetadata } from '../../../effect/models';
 import { buildPtyIndex } from '../filter';
 import {
   getSessionPaneOrder,
@@ -9,7 +8,7 @@ import {
   setSessionPaneOrder,
 } from '../pane-order';
 import { recomputeMatches, recomputeTree } from '../session';
-import type { AggregateViewState, PtyInfo, SessionLoadState } from '../types';
+import type { AggregateViewState } from '../types';
 import { dedupeAggregatePtysByPane } from '../rows';
 import type { SnapshotResult } from './build-snapshot';
 

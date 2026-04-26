@@ -59,7 +59,7 @@ describe('resolvePendingAggregatePaneFocus', () => {
     // search allPtys so the cursor doesn't jump to a '...' placeholder —
     // this naturally serializes rapid creations and prevents anchoring
     // a second creation off a transient placeholder.
-    const placeholder: PtyInfo = {
+    const _placeholder: PtyInfo = {
       ...createPty({ ptyId: 'pty-new', paneId: 'pane-new', sessionId: 'session-1' }),
       title: '...',
       cwd: '',

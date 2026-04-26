@@ -584,7 +584,6 @@ describe('ScrollbackArchive', () => {
       );
 
       await archive.appendLines(lines);
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const _revision = archive.getRevision();
 
       // Dispose first archive

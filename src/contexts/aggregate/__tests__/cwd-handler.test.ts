@@ -74,7 +74,7 @@ function makeState(ptys: ReturnType<typeof makePty>[] = [makePty()]) {
 
 describe('CWD handler (litmus)', () => {
   it('creates a function', () => {
-    const [_state, setState] = makeState();
+    const [_state_, setState] = makeState();
     const handler = createMetadataChangeHandler(setState);
     expect(typeof handler).toBe('function');
   });

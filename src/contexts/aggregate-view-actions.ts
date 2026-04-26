@@ -16,7 +16,6 @@ import {
   removePendingPaneCreations,
   upsertPendingPaneCreation,
 } from './aggregate-view-pending-insertions';
-import { mergePtyInfoPreservingGitMetadata } from './aggregate/git';
 import {
   getSessionPaneOrder,
   getSessionPaneOrderKey,
@@ -24,17 +23,11 @@ import {
   isPendingPaneOrderKey,
   setSessionPaneOrder,
 } from './aggregate/pane-order';
-import {
-  loadSessionPtysOnDemand as loadSessionPtysOnDemandLegacy,
-  type AggregateService,
-  type PtyMetadata,
-} from '../effect/bridge/aggregate-bridge';
 
 export interface AggregateViewActionsParams {
   state: AggregateViewState;
   setState: SetStoreFunction<AggregateViewState>;
   refreshPtys: () => Promise<void>;
-  loadSessionPtysOnDemand?: AggregateService['loadSessionPtysOnDemand'];
   /** Optional callback when creating a new pane in a session */
   onCreatePaneInSession?: (sessionId: string) => void;
   /** Persist manual aggregate session order */
@@ -44,17 +37,7 @@ export interface AggregateViewActionsParams {
 }
 
 export function createAggregateViewActions(params: AggregateViewActionsParams) {
-  const {
-    state,
-    setState,
-    refreshPtys,
-    loadSessionPtysOnDemand: loadSessionPtysOnDemandFromParams,
-    onCreatePaneInSession,
-    persistSessionOrder,
-  } = params;
-
-  const loadSessionPtysOnDemand =
-    loadSessionPtysOnDemandFromParams ?? loadSessionPtysOnDemandLegacy;
+  const { state, setState, refreshPtys, onCreatePaneInSession, persistSessionOrder } = params;
 
   const getSessionIdForItem = (item: FlattenedTreeItem | undefined): string | null => {
     if (!item) return null;

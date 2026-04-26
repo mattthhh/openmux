@@ -9,7 +9,6 @@ import { createStore } from 'solid-js/store';
 
 describe('title handler (litmus)', () => {
   it('creates a function', () => {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const [_state, setState] = createStore<AggregateViewState>({
       showAggregateView: false,
       filterQuery: '',

@@ -22,7 +22,6 @@ describe('RefreshGuard', () => {
   it('works with await using pattern', async () => {
     const state = createRefreshState();
     {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       await using _guard = new RefreshGuard(state, 'refreshInProgress');
       expect(state.refreshInProgress).toBe(true);
     }

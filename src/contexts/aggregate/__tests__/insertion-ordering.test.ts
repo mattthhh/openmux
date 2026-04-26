@@ -954,7 +954,7 @@ describe('aggregate insertion ordering', () => {
       refreshers,
       lifecycleHandlers,
       setCurrentSessionPtys,
-      getCurrentSessionPtys: _,
+      getCurrentSessionPtys: _getCurrentSessionPtys,
     } = createHarness();
 
     await refreshers.initialLoad();

@@ -12,8 +12,6 @@
 
 import type { SetStoreFunction } from 'solid-js/store';
 
-import { buildPtyIndex } from './filter';
-import { ptyMetadataToInfo } from './pty-info';
 import {
   RefreshGuard,
   type CurrentSessionHints,
@@ -21,9 +19,9 @@ import {
   type PtyOwnership,
   type RefreshState,
 } from './subscriptions';
-import type { AggregateViewState, PtyInfo, SessionLoadState } from './types';
-import { createSuspendedPtyCache, SuspendedPtyCache } from './refresh/suspended-pty-cache';
-import { createBuildSnapshot, type SnapshotResult } from './refresh/build-snapshot';
+import type { AggregateViewState } from './types';
+import { createSuspendedPtyCache, type SuspendedPtyCache } from './refresh/suspended-pty-cache';
+import { createBuildSnapshot } from './refresh/build-snapshot';
 import { applySnapshot } from './refresh/apply-snapshot';
 
 export { ptyMetadataToInfo } from './pty-info';
