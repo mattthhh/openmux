@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.105](https://github.com/monotykamary/openmux/compare/v0.3.104...v0.3.105) (2026-04-28)
+
+
+### Bug Fixes
+
+* **aggregate:** split refreshPtys into fast phase + async git hydration ([08a6561](https://github.com/monotykamary/openmux/commit/08a65618b5eefb0bb219c3a64bd7767f897ba39d))
+
 ### [0.3.104](https://github.com/monotykamary/openmux/compare/v0.3.103...v0.3.104) (2026-04-28)
 
 
