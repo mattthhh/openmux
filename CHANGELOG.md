@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.106](https://github.com/monotykamary/openmux/compare/v0.3.105...v0.3.106) (2026-04-28)
+
+
+### Bug Fixes
+
+* **aggregate:** preserve git metadata through skipGitMetadata refresh ([7d6c912](https://github.com/monotykamary/openmux/commit/7d6c91240e53098345bf2f848fb0007c300b8923))
+* **search:** prevent double q exit and dropped input during fast typing ([5ee126c](https://github.com/monotykamary/openmux/commit/5ee126cf03398546e37a15a6ebdea521bdc7fb9a))
+
 ### [0.3.105](https://github.com/monotykamary/openmux/compare/v0.3.104...v0.3.105) (2026-04-28)
 
 
