@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.104](https://github.com/monotykamary/openmux/compare/v0.3.103...v0.3.104) (2026-04-28)
+
+
+### Refactoring
+
+* **aggregate:** reduce sidebar width from 25% to 20% ([47651b3](https://github.com/monotykamary/openmux/commit/47651b313e9e7667684650255115ef0eb70553d1))
+
 ### [0.3.103](https://github.com/monotykamary/openmux/compare/v0.3.102...v0.3.103) (2026-04-26)
 
 
