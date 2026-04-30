@@ -13,10 +13,12 @@ import { describe, expect, it } from 'bun:test';
 
 import type { SessionMetadata } from '../../../effect/models';
 import type { PtyInfo } from '../types';
-import { dedupeAggregatePtysByPane, isSavedAggregatePtyId, getAggregatePaneKey } from '../rows';
-import { mergePtyInfoPreservingGitMetadata, hasGitMetadata } from '../git';
+import { dedupeAggregatePtysByPane, isSavedAggregatePtyId } from '../rows';
+import { mergePtyInfoPreservingGitMetadata } from '../git';
 import { applySnapshot, applyGitMetadataToPty } from '../refresh/apply-snapshot';
 import type { SnapshotResult } from '../refresh/build-snapshot';
+import type { AggregateViewState } from '../types';
+import { initialState } from '../types';
 
 const sessionMetadata: SessionMetadata = {
   id: 'session-1',
@@ -428,8 +430,8 @@ describe('regression: git metadata must not clear then redraw', () => {
     };
 
     const { createStore: createStoreSolid } = require('solid-js/store');
-    const [state, setState] = createStoreSolid<import('../types').AggregateViewState>({
-      ...require('../types').initialState,
+    const [state, setState] = createStoreSolid<AggregateViewState>({
+      ...initialState,
       showAggregateView: true,
       allSessions: new Map([['session-1', sessionMetadata]]),
       sessionLoadStates: new Map([['session-1', { status: 'loaded', paneCount: 1 }]]),
@@ -505,8 +507,8 @@ describe('regression: git metadata must not clear then redraw', () => {
     };
 
     const { createStore: createStoreSolid } = require('solid-js/store');
-    const [state, setState] = createStoreSolid<import('../types').AggregateViewState>({
-      ...require('../types').initialState,
+    const [state, setState] = createStoreSolid<AggregateViewState>({
+      ...initialState,
       showAggregateView: true,
       allSessions: new Map([['session-1', sessionMetadata]]),
       sessionLoadStates: new Map([['session-1', { status: 'loaded', paneCount: 1 }]]),
@@ -582,8 +584,8 @@ describe('regression: git metadata must not clear then redraw', () => {
     };
 
     const { createStore: createStoreSolid } = require('solid-js/store');
-    const [state, setState] = createStoreSolid<import('../types').AggregateViewState>({
-      ...require('../types').initialState,
+    const [state, setState] = createStoreSolid<AggregateViewState>({
+      ...initialState,
       showAggregateView: true,
       allSessions: new Map([['session-1', sessionMetadata]]),
       sessionLoadStates: new Map([['session-1', { status: 'loaded', paneCount: 1 }]]),
