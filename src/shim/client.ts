@@ -513,10 +513,6 @@ export const subscribeKittyTransmit = (cb: (event: { ptyId: string; sequence: st
   defaultRegistry.subscribeKittyTransmit(cb);
 export const subscribeKittyUpdate = (cb: (event: { ptyId: string }) => void) =>
   defaultRegistry.subscribeKittyUpdate(cb);
-export const subscribeScroll = (ptyId: string, cb: () => void) =>
-  defaultRegistry.subscribeScroll(ptyId, cb);
-export const subscribeState = (ptyId: string, cb: (state: TerminalState) => void) =>
-  defaultRegistry.subscribeState(ptyId, cb);
 export const subscribeToActivity = (cb: (event: { ptyId: string }) => void) =>
   defaultRegistry.subscribeToActivity(cb);
 export const subscribeExit = (ptyId: string, cb: (exitCode: number) => void) =>

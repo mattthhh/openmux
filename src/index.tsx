@@ -57,15 +57,23 @@ async function initializeAndRender(): Promise<StartupError | void> {
   const { copyToClipboard } = await import('./effect/bridge');
 
   function AppWithSetup() {
-    const renderer = useRenderer();
+    const renderer = useRenderer() as unknown as {
+      enableKittyKeyboard(flags: number): void;
+      stdout?: NodeJS.WriteStream & { _handle?: { flush?(): void } | null };
+      realStdoutWrite?: (data: string, cb?: (err?: Error | null) => void) => void;
+    };
 
     onMount(() => {
-      setHostSequenceWriter((sequence) => {
-        const stdout = (renderer as any).stdout ?? process.stdout;
-        const writeOut = (renderer as any).realStdoutWrite ?? stdout.write.bind(stdout);
-        writeOut.call(stdout, sequence);
-        if (stdout.isTTY) {
-          (stdout as any)._handle?.flush?.();
+      setHostSequenceWriter((sequence: string) => {
+        if (renderer.realStdoutWrite) {
+          renderer.realStdoutWrite(sequence);
+        } else {
+          const stdout = renderer.stdout ?? process.stdout;
+          stdout.write(sequence);
+        }
+        const stream = renderer.stdout ?? process.stdout;
+        if (stream.isTTY) {
+          renderer.stdout?._handle?.flush?.();
         }
       });
       renderer.enableKittyKeyboard(3);

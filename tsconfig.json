@@ -10,9 +10,6 @@
     "**/*.smoke.test.tsx"
   ],
   "compilerOptions": {
-    // Effect Language Service
-    "plugins": [{ "name": "@effect/language-service" }],
-
     // Environment setup & latest features
     "lib": ["ESNext", "ESNext.Disposable"],
     "target": "ESNext",
