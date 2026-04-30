@@ -24,6 +24,7 @@ import { resolveAggregatePreviewPtyId } from './components/aggregate/utils';
 import { onShimDetached } from './effect/bridge';
 import { createPaneResizeHandlers, createPasteHandler } from './components/app';
 import { readFromClipboard } from './effect/bridge';
+import { setClipboardPasteHandler, setCopyModeExitCallback } from './terminal/focused-pty-registry';
 import { setupKeyboardRouting } from './components/app/keyboard-routing';
 import { usePtyCreation } from './components/app/pty-creation';
 import { AppOverlays } from './components/app/AppOverlays';
@@ -183,8 +184,8 @@ function AppContent() {
     renderer,
     pasteHandler,
     setUpdateLabel,
-    setClipboardPasteHandler: () => {},
-    setCopyModeExitCallback: () => {},
+    setClipboardPasteHandler,
+    setCopyModeExitCallback,
     readFromClipboard,
     writeToPTY: terminal.writeToPTY,
     onShimDetached,

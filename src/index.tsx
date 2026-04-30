@@ -65,15 +65,14 @@ async function initializeAndRender(): Promise<StartupError | void> {
 
     onMount(() => {
       setHostSequenceWriter((sequence: string) => {
-        if (renderer.realStdoutWrite) {
-          renderer.realStdoutWrite(sequence);
-        } else {
-          const stdout = renderer.stdout ?? process.stdout;
-          stdout.write(sequence);
-        }
-        const stream = renderer.stdout ?? process.stdout;
-        if (stream.isTTY) {
-          renderer.stdout?._handle?.flush?.();
+        // realStdoutWrite is an unbound reference to stdout.write stored by
+        // OpenTUI's constructor (this.realStdoutWrite = stdout.write). It MUST
+        // be called with .call(stdout, ...) so that `this._write` resolves.
+        const stdout = renderer.stdout ?? process.stdout;
+        const writeOut = renderer.realStdoutWrite ?? stdout.write.bind(stdout);
+        writeOut.call(stdout, sequence);
+        if (stdout.isTTY) {
+          (stdout as { _handle?: { flush?(): void } | null })._handle?.flush?.();
         }
       });
       renderer.enableKittyKeyboard(3);
