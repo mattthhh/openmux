@@ -24,6 +24,14 @@ import { setCopyModeExitCallback } from '../../terminal/focused-pty-registry';
 import type { VimInputMode } from '../../core/vim-sequences';
 import type { useConfig } from '../../contexts/ConfigContext';
 import type { useSearch } from '../../contexts/SearchContext';
+import type { LayoutContextValue } from '../../contexts/LayoutContext';
+import type { TerminalContextValue } from '../../contexts/TerminalContext';
+import type { SessionContextValue } from '../../contexts/SessionContext';
+import type { TitleContextValue } from '../../contexts/TitleContext';
+import type { CopyModeContextValue } from '../../contexts/copy-mode/types';
+import type { SelectionContextValue } from '../../contexts/SelectionContext';
+import type { OverlayContextValue } from '../../contexts/OverlayContext';
+import type { AggregateViewState } from '../../contexts/aggregate-view-types';
 import type { KeyboardEvent } from '../../core/keyboard-event';
 
 type VimHandler = {
@@ -33,17 +41,17 @@ type VimHandler = {
 
 export interface AppActionsDeps {
   config: ReturnType<typeof useConfig>;
-  layout: any;
-  terminal: any;
-  session: any;
-  titleContext: any;
-  copyMode: any;
-  selection: any;
+  layout: LayoutContextValue;
+  terminal: TerminalContextValue;
+  session: SessionContextValue;
+  titleContext: TitleContextValue;
+  copyMode: CopyModeContextValue;
+  selection: SelectionContextValue;
   search: ReturnType<typeof useSearch>;
   keyboardState: KeyboardContextValue;
-  overlays: any;
-  aggregateState: any;
-  renderer: any;
+  overlays: OverlayContextValue;
+  aggregateState: AggregateViewState;
+  renderer: { console: { toggle: () => void; getCachedLogs: () => string } };
   openAggregateView: () => void;
   getActivePtyId: () => string | undefined;
   handleNewPane: () => void;
