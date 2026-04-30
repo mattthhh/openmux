@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.108](https://github.com/monotykamary/openmux/compare/v0.3.107...v0.3.108) (2026-04-30)
+
+
+### Bug Fixes
+
+* **paste:** restore clipboard handler registration and bind stdout write context ([5f10499](https://github.com/monotykamary/openmux/commit/5f104993b52a93b9c110a622efbb20da3f27c73f))
+
+
+### Refactoring
+
+* remove delegate boilerplate, type AppActionsDeps, deduplicate selection logic ([85a12c0](https://github.com/monotykamary/openmux/commit/85a12c03582366ea6f7bca38d50ecf76ea7daa04))
+
 ### [0.3.107](https://github.com/monotykamary/openmux/compare/v0.3.106...v0.3.107) (2026-04-30)
 
 
