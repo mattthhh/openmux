@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.107](https://github.com/monotykamary/openmux/compare/v0.3.106...v0.3.107) (2026-04-30)
+
+
+### Bug Fixes
+
+* **aggregate:** replace try-catch with errore.try pattern in filterPtys ([7a47a8a](https://github.com/monotykamary/openmux/commit/7a47a8a2cfbaea2990e33f79dc6cca269fcb1987))
+* **tsconfig:** add ESNext.Disposable to lib for using/await using types ([c67e6d2](https://github.com/monotykamary/openmux/commit/c67e6d23e97a2583badc276e712d7ec4c46defe2))
+
+
+### Tests
+
+* **aggregate:** remove unused imports and dynamic import() types in regression test ([045931c](https://github.com/monotykamary/openmux/commit/045931c8e1d5e88acb82232845a05e17bcfb78d4))
+
+
+### Refactoring
+
+* **app:** extract useAppActions hook to deduplicate action handlers ([53130be](https://github.com/monotykamary/openmux/commit/53130be77e4ef1b36d5246688aa06b140599a895))
+
 ### [0.3.106](https://github.com/monotykamary/openmux/compare/v0.3.105...v0.3.106) (2026-04-28)
 
 
