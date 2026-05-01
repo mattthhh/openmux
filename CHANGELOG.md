@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.110](https://github.com/monotykamary/openmux/compare/v0.3.109...v0.3.110) (2026-05-01)
+
+
+### Bug Fixes
+
+* **pty:** eliminate scrollback duplication from pi full redraws ([742e37a](https://github.com/monotykamary/openmux/commit/742e37a5e6298e32cde8cdbd1b04928c1a271cfc))
+
 ### [0.3.109](https://github.com/monotykamary/openmux/compare/v0.3.108...v0.3.109) (2026-04-30)
 
 ### [0.3.108](https://github.com/monotykamary/openmux/compare/v0.3.107...v0.3.108) (2026-04-30)
