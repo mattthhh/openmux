@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.111](https://github.com/monotykamary/openmux/compare/v0.3.110...v0.3.111) (2026-05-01)
+
+
+### Bug Fixes
+
+* **build:** clean up .tmp files left by upstream builds in vendor dirs ([13c3e24](https://github.com/monotykamary/openmux/commit/13c3e243bd72e0316750ad10b38838b51ddfc2e3))
+
 ### [0.3.110](https://github.com/monotykamary/openmux/compare/v0.3.109...v0.3.110) (2026-05-01)
 
 
