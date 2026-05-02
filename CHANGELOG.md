@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.112](https://github.com/monotykamary/openmux/compare/v0.3.111...v0.3.112) (2026-05-02)
+
+
+### Bug Fixes
+
+* clipboard errors and native inits; test: error class coverage; docs: drop v0.3.0 note ([f001d9f](https://github.com/monotykamary/openmux/commit/f001d9fc8a54475ae6229d4a741a2fe4453b563a))
+
 ### [0.3.111](https://github.com/monotykamary/openmux/compare/v0.3.110...v0.3.111) (2026-05-01)
 
 
