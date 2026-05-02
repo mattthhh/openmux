@@ -5,6 +5,7 @@
 import { dlopen, FFIType } from 'bun:ffi';
 import { basename, dirname, join } from 'path';
 import { existsSync } from 'fs';
+import { GhosttyVtInitError } from '../../effect/errors';
 
 function resolveLibPath(): string {
   const envPath = process.env.GHOSTTY_VT_LIB;
@@ -52,9 +53,10 @@ function resolveLibPath(): string {
     if (existsSync(candidate)) return candidate;
   }
 
-  throw new Error(
-    `libghostty-vt shared library not found.\nChecked:\n  - GHOSTTY_VT_LIB=${envPath ?? '<unset>'}\n  - ${candidates.join('\n  - ')}\n\nSet GHOSTTY_VT_LIB or ensure one of these paths contains the file.`
-  );
+  throw new GhosttyVtInitError({
+    operation: 'resolve-lib',
+    reason: `libghostty-vt shared library not found. Checked: GHOSTTY_VT_LIB=${envPath ?? '<unset>'}; candidates: ${candidates.join(', ')}. Set GHOSTTY_VT_LIB or ensure library is built.`,
+  });
 }
 
 const libPath = resolveLibPath();

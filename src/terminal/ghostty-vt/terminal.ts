@@ -11,6 +11,7 @@ import type {
   GhosttyKittyImageInfo,
   GhosttyKittyPlacement,
 } from './types';
+import { GhosttyVtInitError } from '../../effect/errors';
 
 const CELL_SIZE = 16;
 const CONFIG_SIZE = 4 * 4 + 16 * 4;
@@ -60,13 +61,19 @@ export class GhosttyVtTerminal {
 
       const handle = ghostty.symbols.ghostty_terminal_new_with_config(cols, rows, configBuffer);
       if (!handle) {
-        throw new Error('Failed to create ghostty-vt terminal');
+        throw new GhosttyVtInitError({
+          operation: 'terminal-new-with-config',
+          reason: 'Failed to create ghostty-vt terminal',
+        });
       }
       this.handle = handle;
     } else {
       const handle = ghostty.symbols.ghostty_terminal_new(cols, rows);
       if (!handle) {
-        throw new Error('Failed to create ghostty-vt terminal');
+        throw new GhosttyVtInitError({
+          operation: 'terminal-new',
+          reason: 'Failed to create ghostty-vt terminal',
+        });
       }
       this.handle = handle;
     }
