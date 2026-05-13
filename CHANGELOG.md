@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.113](https://github.com/monotykamary/openmux/compare/v0.3.112...v0.3.113) (2026-05-13)
+
+
+### Bug Fixes
+
+* **test:** replace fixed-delay await with polling loop in host-color-sync test ([1fff694](https://github.com/monotykamary/openmux/commit/1fff6942913419ce5048c60595e2f6d9a6afbd84))
+
 ### [0.3.112](https://github.com/monotykamary/openmux/compare/v0.3.111...v0.3.112) (2026-05-02)
 
 
