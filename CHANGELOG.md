@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.115](https://github.com/monotykamary/openmux/compare/v0.3.114...v0.3.115) (2026-05-19)
+
+
+### Bug Fixes
+
+* **pty:** replace CSI 2J with non-scrolling CSI H + CSI J in pi full redraws ([dd0a011](https://github.com/monotykamary/openmux/commit/dd0a0116d0bfcacb9ac2097ccf7ca32839a6fae0))
+
 ### [0.3.114](https://github.com/monotykamary/openmux/compare/v0.3.113...v0.3.114) (2026-05-18)
 
 ### [0.3.113](https://github.com/monotykamary/openmux/compare/v0.3.112...v0.3.113) (2026-05-13)
