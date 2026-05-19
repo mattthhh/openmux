@@ -56,6 +56,7 @@ const CLEAR_SCREEN_C1_REGEX = /\x9b2J/g;
 // Pi full redraws reach data-handler after sync-mode-parser has already stripped
 // CSI ? 2026 h/l. Normalize the post-sync payload instead of looking for sync markers.
 const CURSOR_HOME_SEQUENCE = '\x1b[H';
+const ERASE_TO_END_OF_SCREEN = '\x1b[J';
 const PI_FULL_REDRAW_PREFIX_REGEX =
   /^(?:\x1b\[2J|\x9b2J)(?:\x1b\[(?:H|1;1H)|\x9b(?:H|1;1H))(?:\x1b\[3J|\x9b3J)/;
 const RAW_PI_SYNC_FULL_REDRAW_START_REGEX =
@@ -114,7 +115,7 @@ function shouldSuppressClearScreen(session: InternalPtySession): boolean {
 }
 
 /**
- * Replace pi's destructive full-redraw prefix with a cursor-home replacement.
+ * Replace pi's destructive full-redraw prefix with a non-scrolling equivalent.
  *
  * sync-mode-parser strips CSI ? 2026 h/l before ready segments reach data-handler, so
  * the real payload we see here starts with CSI 2 J, home, CSI 3 J, then the new frame.
@@ -126,9 +127,12 @@ function shouldSuppressClearScreen(session: InternalPtySession): boolean {
  *
  * Pi's full redraw is a replacement, not a scroll. The new frame (rendered by OpenTUI
  * with explicit cursor positioning) overwrites every visible row without triggering
- * linefeed-based scrolling. By stripping the entire clear prefix (CSI 2J + CSI H +
- * CSI 3J) and replacing it with just cursor-home, the frame content overwrites the
- * existing visible rows in place — no scrollback duplication, no content shift.
+ * linefeed-based scrolling. The original CSI 2J is replaced with CSI H + CSI J (cursor
+ * home then erase-to-end-of-screen): this blanks every visible cell in-place without
+ * triggering ghostty's scrollClear heuristic or pushing anything into scrollback.
+ * CSI 3J (erase scrollback) is dropped — without the scrollClear push there is no
+ * duplicated scrollback content to purge, and clearing it would destroy the user's
+ * genuine scrollback history on every full redraw.
  *
  * Sync-mode-parser's atomic delivery guarantees no intermediate stale state is
  * rendered, so there is no flicker.
@@ -140,7 +144,7 @@ export function normalizePiFullRedrawSegment(segment: string, _terminalRows: num
   if (!match) return segment;
 
   const frame = segment.slice(match[0].length);
-  return `${CURSOR_HOME_SEQUENCE}${frame}`;
+  return `${CURSOR_HOME_SEQUENCE}${ERASE_TO_END_OF_SCREEN}${frame}`;
 }
 
 /**
