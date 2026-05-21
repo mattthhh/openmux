@@ -8,14 +8,12 @@
  * blur effect.
  *
  * This library intercepts write/writev/pwrite on fd 1 and replaces:
- *   \x1b[48;2;13;17;23m  (16 bytes)  →  \x1b[49m  (5 bytes)
+ *   \x1b[48;2;13;17;23m  (16 bytes)  →  \x1b[49m + NUL padding  (16 bytes)
  *
- * The replacement is 11 bytes shorter per occurrence. The buffer is
- * compacted in-place. To preserve caller byte-accounting, write() and
- * writev() return the ORIGINAL byte count (before compaction), not the
- * actual number of bytes sent to the terminal. The host terminal
- * receives the correct visual output; the caller never notices the
- * shrinkage.
+ * The replacement is the SAME length as the sentinel, so write() returns
+ * the correct byte count and the caller's byte-accounting stays accurate.
+ * The 11 NUL padding bytes following ESC[49m are silently ignored by
+ * terminal emulators (NUL is a no-op in VT processing).
  *
  * Uses DYLD interpose (__DATA,__interpose) so that DYLD_INSERT_LIBRARIES
  * correctly overrides write() even in hardened-runtime binaries with the
@@ -30,33 +28,30 @@
 
 /* Sentinel: \x1b[48;2;13;17;23m (16 bytes) */
 static const char SENTINEL[] = "\x1b[48;2;13;17;23m";
-/* Replacement: \x1b[49m — "default background" (5 bytes) */
-static const char REPLACEMENT[] = "\x1b[49m";
+/* Replacement: \x1b[49m (5 bytes) + 11 NUL padding bytes (total 16 bytes)
+ * NUL bytes are no-ops in VT processing — terminals silently ignore them.
+ * Same-length replacement avoids write() byte-count accounting breakage
+ * (no need to lie about the return value, which caused data corruption). */
+static const char REPLACEMENT[] = "\x1b[49m\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00";
 #define SENTINEL_LEN 16
-#define REPLACEMENT_LEN 5
-#define SHRINK_PER_REPLACE (SENTINEL_LEN - REPLACEMENT_LEN) /* 11 */
+#define REPLACEMENT_LEN 16
 
 /**
- * Rewrite sentinel occurrences in a buffer, compacting in-place.
- * Returns the new length of the buffer.
+ * Rewrite sentinel occurrences in a buffer, replacing in-place.
+ * Since SENTINEL_LEN == REPLACEMENT_LEN, the buffer length is unchanged.
+ * Returns the buffer length (unchanged).
  */
 static size_t rewrite_buffer_inplace(char *buf, size_t len) {
-    const char *src = buf;
     const char *end = buf + len;
-    char *dst = buf;
 
-    while (src < end) {
-        if (src <= end - SENTINEL_LEN &&
-            memcmp(src, SENTINEL, SENTINEL_LEN) == 0) {
-            memcpy(dst, REPLACEMENT, REPLACEMENT_LEN);
-            dst += REPLACEMENT_LEN;
-            src += SENTINEL_LEN;
-        } else {
-            *dst++ = *src++;
+    for (char *s = buf; s <= end - SENTINEL_LEN; s++) {
+        if (memcmp(s, SENTINEL, SENTINEL_LEN) == 0) {
+            memcpy(s, REPLACEMENT, REPLACEMENT_LEN);
+            s += SENTINEL_LEN - 1; /* -1 because the for-loop increments s */
         }
     }
 
-    return (size_t)(dst - buf);
+    return len;
 }
 
 /**
@@ -71,18 +66,6 @@ static int contains_sentinel(const char *buf, size_t len) {
     return 0;
 }
 
-/**
- * Count sentinel occurrences in a buffer.
- */
-static int count_sentinels(const char *buf, size_t len) {
-    int count = 0;
-    const char *end = buf + len;
-    for (const char *s = buf; s <= end - SENTINEL_LEN; s++) {
-        if (memcmp(s, SENTINEL, SENTINEL_LEN) == 0) count++;
-    }
-    return count;
-}
-
 static ssize_t rewritten_write(int fd, const void *buf, size_t nbyte) {
     if (fd != 1 || nbyte < SENTINEL_LEN) {
         return write(fd, buf, nbyte);
@@ -92,21 +75,18 @@ static ssize_t rewritten_write(int fd, const void *buf, size_t nbyte) {
         return write(fd, buf, nbyte);
     }
 
-    /* Copy, compact, write */
-    size_t original_len = nbyte;
+    /* Copy, rewrite in-place (same length), write */
     char *tmpbuf = (char *)malloc(nbyte);
     if (!tmpbuf) {
         return write(fd, buf, nbyte);
     }
 
     memcpy(tmpbuf, buf, nbyte);
-    size_t new_len = rewrite_buffer_inplace(tmpbuf, nbyte);
+    rewrite_buffer_inplace(tmpbuf, nbyte);
 
-    ssize_t result = write(fd, tmpbuf, new_len);
+    ssize_t result = write(fd, tmpbuf, nbyte);
     free(tmpbuf);
 
-    /* Return ORIGINAL byte count so caller's accounting stays correct */
-    if (result >= 0) return (ssize_t)original_len;
     return result;
 }
 
@@ -115,30 +95,35 @@ static ssize_t rewritten_writev(int fd, const struct iovec *iov, int iovcnt) {
         return writev(fd, iov, iovcnt);
     }
 
-    /* Calculate total original length and check for sentinel */
+    /* Calculate total original length */
     size_t original_total = 0;
-    int needs_rewrite = 0;
-
     for (int i = 0; i < iovcnt; i++) {
         original_total += iov[i].iov_len;
-        if (!needs_rewrite && iov[i].iov_len >= SENTINEL_LEN) {
-            needs_rewrite = contains_sentinel(
-                (const char *)iov[i].iov_base, iov[i].iov_len);
-        }
     }
 
-    if (!needs_rewrite) {
-        return writev(fd, iov, iovcnt);
+    /*
+     * Always coalesce when there are multiple iovecs, because a sentinel
+     * could straddle iovec boundaries. The previous individual-iovec quick
+     * check missed this case, leading to unreplaced sentinels in the output.
+     */
+    if (iovcnt == 1) {
+        /* Single iovec — no straddling possible, use write() path */
+        if (iov[0].iov_len < SENTINEL_LEN ||
+            !contains_sentinel((const char *)iov[0].iov_base, iov[0].iov_len)) {
+            return writev(fd, iov, iovcnt);
+        }
     }
 
     /*
      * At least one iovec contains the sentinel.
      * Coalesce into a flat buffer (to handle straddling boundaries),
-     * rewrite, write as write(), return original byte count.
+     * rewrite in-place (same length), write as write().
      *
      * We must coalesce because a sentinel could straddle two iovecs.
      * Using write() instead of writev() is fine — the interceptor
      * already serializes all output on fd 1, so atomicity is preserved.
+     * Since the replacement is the same length, the return value
+     * matches original_total and writev() byte-accounting is correct.
      */
     char *flat = (char *)malloc(original_total);
     if (!flat) {
@@ -159,12 +144,11 @@ static ssize_t rewritten_writev(int fd, const struct iovec *iov, int iovcnt) {
         return writev(fd, iov, iovcnt);
     }
 
-    size_t new_len = rewrite_buffer_inplace(flat, original_total);
+    rewrite_buffer_inplace(flat, original_total);
 
-    ssize_t result = write(fd, flat, new_len);
+    ssize_t result = write(fd, flat, original_total);
     free(flat);
 
-    if (result >= 0) return (ssize_t)original_total;
     return result;
 }
 
@@ -177,19 +161,17 @@ static ssize_t rewritten_pwrite(int fd, const void *buf, size_t nbyte, off_t off
         return pwrite(fd, buf, nbyte, offset);
     }
 
-    size_t original_len = nbyte;
     char *tmpbuf = (char *)malloc(nbyte);
     if (!tmpbuf) {
         return pwrite(fd, buf, nbyte, offset);
     }
 
     memcpy(tmpbuf, buf, nbyte);
-    size_t new_len = rewrite_buffer_inplace(tmpbuf, nbyte);
+    rewrite_buffer_inplace(tmpbuf, nbyte);
 
-    ssize_t result = pwrite(fd, tmpbuf, new_len, offset);
+    ssize_t result = pwrite(fd, tmpbuf, nbyte, offset);
     free(tmpbuf);
 
-    if (result >= 0) return (ssize_t)original_len;
     return result;
 }
 

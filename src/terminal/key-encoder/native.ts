@@ -343,7 +343,15 @@ function resolveUnshiftedCodepoint(event: KeyboardEvent): number {
     return event.baseCode;
   }
 
+  // For named keys (like "space", "enter", "tab"), derive the codepoint from
+  // the sequence. The ghostty key encoder needs the unshifted codepoint to
+  // produce correct Kitty protocol sequences (ESC[<cp>...u). Without it, the
+  // encoder falls back to emitting raw UTF-8 text, causing duplicate input on
+  // key release (the release sends the raw character instead of a Kitty release).
   if (event.key.length !== 1) {
+    if (event.sequence && event.sequence.length === 1) {
+      return event.sequence.codePointAt(0) ?? 0;
+    }
     return 0;
   }
 

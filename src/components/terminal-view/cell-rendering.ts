@@ -7,9 +7,11 @@ import { RGBA as RGBAClass } from '@opentui/core';
 /**
  * Sentinel color used for default-bg cells. The native OpenTUI renderer will emit
  * an SGR 48;2;R;G;Bm sequence for this color, which the stdout-rewrite
- * interceptor (libstdout-rewrite.dylib / .so) rewrites to ESC[49m
- * ("default background"). This allows the host terminal's background
- * (with blur/transparency) to show through.
+ * interceptor (libstdout-rewrite.dylib / .so) rewrites to ESC[49m + NUL
+ * padding ("default background"). The replacement is the same 16-byte length
+ * as the sentinel so write() byte-accounting stays accurate — no return-value
+ * lying needed. This allows the host terminal's background (with blur/
+ * transparency) to show through.
  *
  * We use RGB(13,17,23) — GitHub's dark bg — as a sentinel that won't be
  * confused with any real theme color or quantized to a 256-color entry.
@@ -144,8 +146,16 @@ export function getCellColors(
   const realBg = getCachedRGBA(bgR, bgG, bgB);
   // Use default background sentinel when the cell has no explicit bg color.
   // This lets the host terminal's background (with blur/transparency) show through.
-  // The sentinel is rewritten to ESC[49m at the C level by libstdout-rewrite.
-  const isDefaultBg = !!cell.defaultBg;
+  // The sentinel is rewritten to ESC[49m + NUL padding at the C level by libstdout-rewrite.
+  // The replacement is the same 16-byte length so no write() byte-count lie is needed.
+  //
+  // When cell.inverse is true, fg and bg have been swapped above — so the visual
+  // background is the original foreground, which is never a "default background".
+  // Applying the sentinel after inversion would make an inverse-cursor (or any
+  // inverse cell on a default-bg cell) invisible: the post-swap bg (original fg)
+  // gets replaced with transparent, and the fg (original bg = dark) becomes
+  // dark-on-transparent = invisible on dark themes.
+  const isDefaultBg = !cell.inverse && !!cell.defaultBg;
   let bg = isDefaultBg ? DEFAULT_BG_SENTINEL : realBg;
 
   // Apply styling in priority order: cursor > copy selection > selection > current match > other matches
