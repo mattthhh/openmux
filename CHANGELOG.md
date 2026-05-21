@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.117](https://github.com/monotykamary/openmux/compare/v0.3.116...v0.3.117) (2026-05-21)
+
+
+### Features
+
+* propagate host transparency to all layout layers and fix overlay rendering ([4088a5d](https://github.com/monotykamary/openmux/commit/4088a5d535851031ab1912864fb5221e4d50e6a5))
+
+
+### Bug Fixes
+
+* propagate host transparency to scrollback cells via cell_flags ([b366db9](https://github.com/monotykamary/openmux/commit/b366db911ca3ed716564905ba2a904965af49835))
+* resolve three transparency bugs — inverse, rewrite, kitty release ([af72fdd](https://github.com/monotykamary/openmux/commit/af72fdd94dafaf397886226251f54837c63f9beb))
+
 ### [0.3.116](https://github.com/monotykamary/openmux/compare/v0.3.115...v0.3.116) (2026-05-21)
 
 
