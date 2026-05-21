@@ -25,6 +25,9 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <sys/uio.h>
+#ifndef __APPLE__
+#include <dlfcn.h>
+#endif
 
 /* Sentinel: \x1b[48;2;13;17;23m (16 bytes) */
 static const char SENTINEL[] = "\x1b[48;2;13;17;23m";
@@ -66,25 +69,46 @@ static int contains_sentinel(const char *buf, size_t len) {
     return 0;
 }
 
+#ifdef __APPLE__
+#define REAL_WRITE write
+#define REAL_WRITEV writev
+#define REAL_PWRITE pwrite
+#else
+static ssize_t (*real_write)(int, const void *, size_t);
+static ssize_t (*real_writev)(int, const struct iovec *, int);
+static ssize_t (*real_pwrite)(int, const void *, size_t, off_t);
+
+__attribute__((constructor))
+static void init_real_functions(void) {
+    real_write = (ssize_t (*)(int, const void *, size_t))dlsym(RTLD_NEXT, "write");
+    real_writev = (ssize_t (*)(int, const struct iovec *, int))dlsym(RTLD_NEXT, "writev");
+    real_pwrite = (ssize_t (*)(int, const void *, size_t, off_t))dlsym(RTLD_NEXT, "pwrite");
+}
+
+#define REAL_WRITE real_write
+#define REAL_WRITEV real_writev
+#define REAL_PWRITE real_pwrite
+#endif
+
 static ssize_t rewritten_write(int fd, const void *buf, size_t nbyte) {
     if (fd != 1 || nbyte < SENTINEL_LEN) {
-        return write(fd, buf, nbyte);
+        return REAL_WRITE(fd, buf, nbyte);
     }
 
     if (!contains_sentinel((const char *)buf, nbyte)) {
-        return write(fd, buf, nbyte);
+        return REAL_WRITE(fd, buf, nbyte);
     }
 
     /* Copy, rewrite in-place (same length), write */
     char *tmpbuf = (char *)malloc(nbyte);
     if (!tmpbuf) {
-        return write(fd, buf, nbyte);
+        return REAL_WRITE(fd, buf, nbyte);
     }
 
     memcpy(tmpbuf, buf, nbyte);
     rewrite_buffer_inplace(tmpbuf, nbyte);
 
-    ssize_t result = write(fd, tmpbuf, nbyte);
+    ssize_t result = REAL_WRITE(fd, tmpbuf, nbyte);
     free(tmpbuf);
 
     return result;
@@ -92,7 +116,7 @@ static ssize_t rewritten_write(int fd, const void *buf, size_t nbyte) {
 
 static ssize_t rewritten_writev(int fd, const struct iovec *iov, int iovcnt) {
     if (fd != 1 || iovcnt <= 0) {
-        return writev(fd, iov, iovcnt);
+        return REAL_WRITEV(fd, iov, iovcnt);
     }
 
     /* Calculate total original length */
@@ -110,7 +134,7 @@ static ssize_t rewritten_writev(int fd, const struct iovec *iov, int iovcnt) {
         /* Single iovec — no straddling possible, use write() path */
         if (iov[0].iov_len < SENTINEL_LEN ||
             !contains_sentinel((const char *)iov[0].iov_base, iov[0].iov_len)) {
-            return writev(fd, iov, iovcnt);
+            return REAL_WRITEV(fd, iov, iovcnt);
         }
     }
 
@@ -127,7 +151,7 @@ static ssize_t rewritten_writev(int fd, const struct iovec *iov, int iovcnt) {
      */
     char *flat = (char *)malloc(original_total);
     if (!flat) {
-        return writev(fd, iov, iovcnt);
+        return REAL_WRITEV(fd, iov, iovcnt);
     }
 
     size_t off = 0;
@@ -141,12 +165,12 @@ static ssize_t rewritten_writev(int fd, const struct iovec *iov, int iovcnt) {
     /* Also check for sentinel that straddled iovec boundaries */
     if (!contains_sentinel(flat, original_total)) {
         free(flat);
-        return writev(fd, iov, iovcnt);
+        return REAL_WRITEV(fd, iov, iovcnt);
     }
 
     rewrite_buffer_inplace(flat, original_total);
 
-    ssize_t result = write(fd, flat, original_total);
+    ssize_t result = REAL_WRITE(fd, flat, original_total);
     free(flat);
 
     return result;
@@ -154,27 +178,28 @@ static ssize_t rewritten_writev(int fd, const struct iovec *iov, int iovcnt) {
 
 static ssize_t rewritten_pwrite(int fd, const void *buf, size_t nbyte, off_t offset) {
     if (fd != 1 || nbyte < SENTINEL_LEN) {
-        return pwrite(fd, buf, nbyte, offset);
+        return REAL_PWRITE(fd, buf, nbyte, offset);
     }
 
     if (!contains_sentinel((const char *)buf, nbyte)) {
-        return pwrite(fd, buf, nbyte, offset);
+        return REAL_PWRITE(fd, buf, nbyte, offset);
     }
 
     char *tmpbuf = (char *)malloc(nbyte);
     if (!tmpbuf) {
-        return pwrite(fd, buf, nbyte, offset);
+        return REAL_PWRITE(fd, buf, nbyte, offset);
     }
 
     memcpy(tmpbuf, buf, nbyte);
     rewrite_buffer_inplace(tmpbuf, nbyte);
 
-    ssize_t result = pwrite(fd, tmpbuf, nbyte, offset);
+    ssize_t result = REAL_PWRITE(fd, tmpbuf, nbyte, offset);
     free(tmpbuf);
 
     return result;
 }
 
+#ifdef __APPLE__
 typedef struct interpose_s {
     const void *replacement;
     const void *original;
@@ -187,3 +212,16 @@ static const interpose_t interposing_functions[]
         { (const void *)rewritten_writev, (const void *)writev },
         { (const void *)rewritten_pwrite, (const void *)pwrite },
     };
+#else
+ssize_t write(int fd, const void *buf, size_t nbyte) {
+    return rewritten_write(fd, buf, nbyte);
+}
+
+ssize_t writev(int fd, const struct iovec *iov, int iovcnt) {
+    return rewritten_writev(fd, iov, iovcnt);
+}
+
+ssize_t pwrite(int fd, const void *buf, size_t nbyte, off_t offset) {
+    return rewritten_pwrite(fd, buf, nbyte, offset);
+}
+#endif
