@@ -67,6 +67,7 @@ pub fn getScrollbackLine(
                 .flags = 0,
                 .width = 1,
                 .hyperlink_id = 0,
+                .cell_flags = 1, // has_default_bg
             };
             continue;
         }
@@ -85,7 +86,9 @@ pub fn getScrollbackLine(
             .palette => |i| rs.colors.palette[i],
             .rgb => |rgb| rgb,
         };
-        const bg: color.RGB = if (sty.bg(cell, &rs.colors.palette)) |rgb| rgb else rs.colors.background;
+        const bg_result = sty.bg(cell, &rs.colors.palette);
+        const has_default_bg: bool = bg_result == null;
+        const bg: color.RGB = bg_result orelse rs.colors.background;
 
         // Build flags
         var flags: u8 = 0;
@@ -120,6 +123,7 @@ pub fn getScrollbackLine(
             },
             .hyperlink_id = if (cell.hyperlink) 1 else 0,
             .grapheme_len = grapheme_len,
+            .cell_flags = if (has_default_bg) 1 else 0,
         };
     }
     return @intCast(cols);
