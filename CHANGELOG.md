@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.118](https://github.com/monotykamary/openmux/compare/v0.3.117...v0.3.118) (2026-05-21)
+
+
+### Bug Fixes
+
+* use dlsym instead of DYLD interpose in stdout-rewrite on Linux ([1b97a84](https://github.com/monotykamary/openmux/commit/1b97a843e48b3c7a72b4c264945dfb7d408f9d82))
+
 ### [0.3.117](https://github.com/monotykamary/openmux/compare/v0.3.116...v0.3.117) (2026-05-21)
 
 
