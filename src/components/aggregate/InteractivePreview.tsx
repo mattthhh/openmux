@@ -94,6 +94,7 @@ export function InteractivePreview(props: InteractivePreviewProps) {
             alignItems: 'center',
             justifyContent: 'center',
           }}
+          backgroundColor="transparent"
         >
           <text fg={overlaySubtle()}>No terminal selected</text>
         </box>

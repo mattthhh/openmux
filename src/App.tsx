@@ -242,6 +242,7 @@ function AppContent() {
         height: height(),
         flexDirection: 'column',
       }}
+      backgroundColor="transparent"
     >
       {/* Main pane area */}
       <PaneContainer />

@@ -2,15 +2,15 @@
  * App overlay stack extracted from App.
  */
 
+import { Show } from 'solid-js';
 import { useLayout, useOverlays } from '../../contexts';
 import { useSelection } from '../../contexts/SelectionContext';
 import { useAggregateView } from '../../contexts/AggregateViewContext';
-import { DEFAULT_COMMAND_PALETTE_COMMANDS, type CommandPaletteCommand } from '../../core/command-palette';
 import {
-  StatusBar,
-  CopyNotification,
-  ConfirmationDialog,
-} from '../index';
+  DEFAULT_COMMAND_PALETTE_COMMANDS,
+  type CommandPaletteCommand,
+} from '../../core/command-palette';
+import { StatusBar, CopyNotification, ConfirmationDialog } from '../index';
 import { SessionPicker } from '../SessionPicker';
 import { SearchOverlay } from '../SearchOverlay';
 import { AggregateView } from '../AggregateView';
@@ -33,16 +33,22 @@ export function AppOverlays(props: AppOverlaysProps) {
   const { state: aggregateState } = useAggregateView();
   const overlays = useOverlays();
 
+  // Hide the workspace status bar when aggregate view is open — it has its own
+  // footer hints row and rendering both causes overlapping text.
+  const statusBarHidden = () => aggregateState.showAggregateView;
+
   return (
     <>
-      <StatusBar
-        width={props.width}
-        showCommandPalette={overlays.commandPaletteState.show}
-        showPaneRename={overlays.paneRenameState.show}
-        showWorkspaceLabel={overlays.workspaceLabelState.show}
-        overlayVimMode={overlays.overlayVimMode()}
-        updateLabel={overlays.updateLabel()}
-      />
+      <Show when={!statusBarHidden()}>
+        <StatusBar
+          width={props.width}
+          showCommandPalette={overlays.commandPaletteState.show}
+          showPaneRename={overlays.paneRenameState.show}
+          showWorkspaceLabel={overlays.workspaceLabelState.show}
+          overlayVimMode={overlays.overlayVimMode()}
+          updateLabel={overlays.updateLabel()}
+        />
+      </Show>
 
       <AggregateView
         width={props.width}

@@ -3,14 +3,13 @@
  * Uses Effect bridge for PTY operations.
  */
 
-import { createSignal, createEffect, createMemo, on, Show } from 'solid-js';
+import { createSignal, createEffect, on, Show } from 'solid-js';
 import { useRenderer } from '@opentui/solid';
 import { useTerminal } from '../contexts/TerminalContext';
 import { useSelection } from '../contexts/SelectionContext';
 import { useCopyMode } from '../contexts/copy-mode';
 import { useSearch } from '../contexts/SearchContext';
 import { useTheme } from '../contexts/ThemeContext';
-import { getHostBackgroundColor } from '../effect/bridge';
 import { deferMacrotask } from '../core/scheduling';
 import { createTerminalRenderer } from './terminal-view/terminal-renderer';
 import { createTerminalViewState } from './terminal-view/view-state';
@@ -27,10 +26,6 @@ export function TerminalView(props: TerminalViewProps) {
   const terminal = useTerminal();
   const theme = useTheme();
   const kittyPaneKey = `kitty-pane-${nextKittyPaneId++}`;
-  const hostBgColor = createMemo(() => {
-    void terminal.hostColorsVersion;
-    return getHostBackgroundColor();
-  });
   // Get selection state - keep full context to access selectionVersion reactively
   const selection = useSelection();
   const { isCellSelected, getSelection } = selection;

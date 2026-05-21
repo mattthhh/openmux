@@ -359,6 +359,7 @@ export function Pane(props: PaneProps) {
         borderStyle: borderStyleMap[theme.pane.borderStyle] ?? 'single',
         borderColor: borderColor(),
       }}
+      backgroundColor="transparent"
       title={displayTitle()}
       titleAlignment="left"
       onMouseDown={handleMouseDown}

@@ -1,15 +1,12 @@
 export {
   getCellColors,
   renderRow,
+  DEFAULT_BG_SENTINEL,
   type CellRenderingDeps,
   type CellRenderingOptions,
-} from './cell-rendering'
+} from './cell-rendering';
 
-export {
-  renderScrollbar,
-  renderScrollDepth,
-  type ScrollbarOptions,
-} from './scrollbar'
+export { renderScrollbar, renderScrollDepth, type ScrollbarOptions } from './scrollbar';
 
 export {
   fetchRowsForRendering,
@@ -17,10 +14,10 @@ export {
   type RowFetchingOptions,
   type RowFetchResult,
   type PrefetchRequest,
-} from './row-fetching'
+} from './row-fetching';
 
 export {
   guardScrollbackRender,
   type ScrollbackGuardOptions,
   type ScrollbackGuardResult,
-} from './scrollback-guard'
+} from './scrollback-guard';

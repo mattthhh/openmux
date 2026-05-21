@@ -68,6 +68,7 @@ export const ListPane: Component<ListPaneProps> = (props) => {
         // is the only "focused" pane in aggregate view.
         borderColor: colors.theme.pane.borderColor,
       }}
+      backgroundColor="transparent"
       onMouseDrag={(e: OpenTUIMouseEvent) => {
         e.preventDefault();
         ctx.dragHandlers.onUpdateDragTarget(e);
@@ -87,7 +88,7 @@ export const ListPane: Component<ListPaneProps> = (props) => {
         }
       }}
     >
-      <box style={{ flexDirection: 'column' }}>
+      <box style={{ flexDirection: 'column' }} backgroundColor="transparent">
         {/* Scroll up indicator */}
         <Show when={ctx.viewport.showTopIndicator}>
           <box style={{ height: 1, justifyContent: 'center' }}>

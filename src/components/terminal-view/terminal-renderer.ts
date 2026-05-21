@@ -1,7 +1,6 @@
 import type { OptimizedBuffer } from '@opentui/core';
 import { isAtBottom as checkIsAtBottom } from '../../core/scroll-utils';
 import { BLACK, getCachedRGBA, SELECTION_BG } from '../../terminal/rendering';
-import { extractRgb, getDefaultColors, getHostColors } from '../../terminal/terminal-colors';
 import { getKittyGraphicsRenderer } from '../../terminal/kitty-graphics';
 import type { SelectionRange } from '../../core/coordinates';
 import type { SearchMatch } from '../../contexts/search/types';
@@ -12,6 +11,7 @@ import {
   fetchRowsForRendering,
   calculatePrefetchRequest,
   guardScrollbackRender,
+  DEFAULT_BG_SENTINEL,
 } from './index';
 import { resolveThemeColor } from './theme-color';
 import type { TerminalViewProps } from './types';
@@ -73,12 +73,11 @@ export function createTerminalRenderer(params: {
     const kittyRenderer = getKittyGraphicsRenderer();
 
     if (!state) {
-      const colors = getHostColors() ?? getDefaultColors();
-      const rgb = extractRgb(colors.background);
-      const fallbackBg = getCachedRGBA(rgb.r, rgb.g, rgb.b);
+      // Fill with sentinel (transparent) so the host background shows through
+      // even when there is no terminal state yet.
       for (let y = 0; y < height; y++) {
         for (let x = 0; x < width; x++) {
-          buffer.setCell(x + offsetX, y + offsetY, ' ', BLACK, fallbackBg, 0);
+          buffer.setCell(x + offsetX, y + offsetY, ' ', BLACK, DEFAULT_BG_SENTINEL, 0);
         }
       }
       kittyRenderer?.removePane(kittyPaneKey);
@@ -90,8 +89,10 @@ export function createTerminalRenderer(params: {
 
     const rows = Math.min(state.rows, height);
     const cols = Math.min(state.cols, width);
-    const fallbackBgColor = state.cells?.[0]?.[0]?.bg ?? { r: 0, g: 0, b: 0 };
-    const fallbackBg = getCachedRGBA(fallbackBgColor.r, fallbackBgColor.g, fallbackBgColor.b);
+    // Use the sentinel (transparent/default-bg) for padding cells so that
+    // areas without terminal content let the host's background show through.
+    // Real cell colors are applied per-cell by getCellColors().
+    const fallbackBg = DEFAULT_BG_SENTINEL;
     const fallbackFg = BLACK;
 
     const {

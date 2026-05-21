@@ -17,7 +17,7 @@ import { RGBA as RGBAClass } from '@opentui/core';
  * confused with any real theme color or quantized to a 256-color entry.
  * It's dark enough to be invisible but distinct enough in the SGR stream.
  */
-const DEFAULT_BG_SENTINEL = RGBAClass.fromInts(13, 17, 23);
+export const DEFAULT_BG_SENTINEL = RGBAClass.fromInts(13, 17, 23);
 import type { TerminalCell } from '../../core/types';
 import {
   WHITE,

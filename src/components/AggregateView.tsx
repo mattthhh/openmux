@@ -184,7 +184,7 @@ export function AggregateView(props: AggregateViewProps) {
           flexDirection: 'column',
           zIndex: 100,
         }}
-        backgroundColor={hostBgColor()}
+        backgroundColor="transparent"
       >
         <box style={{ flexDirection: 'row', height: layoutDims().contentHeight }}>
           <Show when={!aggregate.state.previewZoomed}>

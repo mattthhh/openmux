@@ -86,6 +86,7 @@ export const PreviewPane: Component<PreviewPaneProps> = (props) => {
         borderStyle: 'single',
         borderColor: borderColor(),
       }}
+      backgroundColor="transparent"
       onMouseDown={handleMouseDown}
       onMouseUp={props.mouseHandlers.handlePreviewMouseUp}
       onMouseMove={props.mouseHandlers.handlePreviewMouseMove}
