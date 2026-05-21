@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.116](https://github.com/monotykamary/openmux/compare/v0.3.115...v0.3.116) (2026-05-21)
+
+
+### Features
+
+* inherit ghostty background blur/transparency for PTY panes ([21250d9](https://github.com/monotykamary/openmux/commit/21250d9fa922bc77dc48dc31f8dc6ba482a9f57f))
+
 ### [0.3.115](https://github.com/monotykamary/openmux/compare/v0.3.114...v0.3.115) (2026-05-19)
 
 
