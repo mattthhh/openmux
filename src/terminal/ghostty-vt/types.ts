@@ -30,6 +30,8 @@ export interface GhosttyCell {
   width: number;
   hyperlink_id: number;
   grapheme_len: number;
+  /** Bit 0: has_default_bg — cell uses terminal default background */
+  cell_flags: number;
 }
 
 export interface GhosttyTerminalConfig {

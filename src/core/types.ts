@@ -95,6 +95,10 @@ export interface TerminalCell {
   char: string;
   fg: { r: number; g: number; b: number };
   bg: { r: number; g: number; b: number };
+  /** If true, this cell uses the terminal default background and the renderer
+   *  should not paint an opaque bg color — allowing host terminal
+   *  transparency/blur to show through. */
+  defaultBg?: boolean;
   bold: boolean;
   italic: boolean;
   underline: boolean;

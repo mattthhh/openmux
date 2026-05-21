@@ -1,3 +1,6 @@
+/** Bit 0 of GhosttyCell.cell_flags: has_default_bg */
+const CELL_FLAG_DEFAULT_BG = 1;
+
 /**
  * Cell conversion utilities for terminal rendering.
  * Converts GhosttyCell format to our internal TerminalCell format.
@@ -53,8 +56,10 @@ export function convertCell(cell: GhosttyCell): TerminalCell {
   // Safely extract colors with validation
   const fg = safeRgb(cell.fg_r, cell.fg_g, cell.fg_b);
   const bg = safeRgb(cell.bg_r, cell.bg_g, cell.bg_b);
+  const defaultBg = (cell.cell_flags & CELL_FLAG_DEFAULT_BG) !== 0;
 
   // Kitty graphics placeholder cells encode image IDs in colors; keep them invisible.
+  // Kitty cells always have a non-default bg (the image renders over it).
   if (cell.codepoint === KITTY_PLACEHOLDER) {
     return {
       char: ' ',
@@ -68,6 +73,7 @@ export function convertCell(cell: GhosttyCell): TerminalCell {
       blink: false,
       dim: false,
       width: 1,
+      defaultBg: false,
     };
   }
 
@@ -86,6 +92,7 @@ export function convertCell(cell: GhosttyCell): TerminalCell {
       blink: false,
       dim: false,
       width: 1,
+      defaultBg,
     };
   }
 
@@ -105,6 +112,7 @@ export function convertCell(cell: GhosttyCell): TerminalCell {
       blink: (cell.flags & CellFlags.BLINK) !== 0,
       dim: (cell.flags & CellFlags.FAINT) !== 0,
       width: 1, // Normalize to width 1 for consistent rendering
+      defaultBg,
     };
   }
 
@@ -123,6 +131,7 @@ export function convertCell(cell: GhosttyCell): TerminalCell {
       blink: false,
       dim: false,
       width: 1,
+      defaultBg,
     };
   }
 
@@ -146,6 +155,7 @@ export function convertCell(cell: GhosttyCell): TerminalCell {
       blink: false,
       dim: false,
       width: 1,
+      defaultBg,
     };
   }
 
@@ -165,6 +175,7 @@ export function convertCell(cell: GhosttyCell): TerminalCell {
     dim: (cell.flags & CellFlags.FAINT) !== 0,
     width: cell.width as 1 | 2,
     hyperlinkId: cell.hyperlink_id,
+    defaultBg,
   };
 }
 
@@ -208,6 +219,7 @@ export function convertLine(
         blink: false,
         dim: false,
         width: 1,
+        defaultBg: true,
       });
     }
   }
@@ -241,6 +253,7 @@ export function createEmptyRow(cols: number, colors: TerminalColors): TerminalCe
       blink: false,
       dim: false,
       width: 1,
+      defaultBg: true,
     });
   }
   return row;

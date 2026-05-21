@@ -22,7 +22,8 @@
  *                bit 6: dim
  * - byte 12:     width (1 or 2)
  * - bytes 13-14: hyperlinkId (u16, little-endian, 0 = none)
- * - byte 15:     padding (reserved)
+ * - byte 15:     cell_flags
+ *                bit 0: defaultBg (cell uses terminal default background)
  */
 
 import type {
@@ -89,8 +90,9 @@ function packCellAt(view: DataView, offset: number, cell: TerminalCell): void {
   // Hyperlink ID (0 = none)
   view.setUint16(offset + 13, cell.hyperlinkId ?? 0, true);
 
-  // Padding (reserved)
-  view.setUint8(offset + 15, 0);
+  // Cell flags (defaultBg at bit 0)
+  const cellFlags = cell.defaultBg ? 1 : 0;
+  view.setUint8(offset + 15, cellFlags);
 }
 
 /**
@@ -128,6 +130,10 @@ function unpackCellAt(view: DataView, offset: number): TerminalCell {
 
   const hyperlinkId = view.getUint16(offset + 13, true);
 
+  // Cell flags (defaultBg)
+  const cellFlags = view.getUint8(offset + 15);
+  const defaultBg = (cellFlags & 1) === 1;
+
   return {
     char,
     fg,
@@ -141,6 +147,7 @@ function unpackCellAt(view: DataView, offset: number): TerminalCell {
     dim,
     width: width === 2 ? 2 : 1,
     hyperlinkId: hyperlinkId > 0 ? hyperlinkId : undefined,
+    defaultBg: defaultBg || undefined,
   };
 }
 

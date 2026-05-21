@@ -346,6 +346,7 @@ export class GhosttyVtTerminal {
         width: 1,
         hyperlink_id: 0,
         grapheme_len: 0,
+        cell_flags: 1, // default bg
       });
     }
   }
@@ -366,6 +367,7 @@ export class GhosttyVtTerminal {
       cell.width = buffer[offset + 11];
       cell.hyperlink_id = view.getUint16(offset + 12, true);
       cell.grapheme_len = buffer[offset + 14];
+      cell.cell_flags = buffer[offset + 15];
     }
   }
 
@@ -386,6 +388,7 @@ export class GhosttyVtTerminal {
         width: buffer[offset + 11],
         hyperlink_id: view.getUint16(offset + 12, true),
         grapheme_len: buffer[offset + 14],
+        cell_flags: buffer[offset + 15],
       });
     }
     return cells;

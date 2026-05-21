@@ -126,7 +126,7 @@ pub fn renderStateGetViewport(
     for (0..rows) |y| {
         // Get the row from the active viewport
         const pin = pages.pin(.{ .active = .{ .y = @intCast(y) } }) orelse {
-            // Row doesn't exist, fill with defaults
+            // Row doesn't exist, fill with defaults (default bg = transparent)
             for (0..cols) |_| {
                 out[idx] = .{
                     .codepoint = 0,
@@ -139,6 +139,7 @@ pub fn renderStateGetViewport(
                     .flags = 0,
                     .width = 1,
                     .hyperlink_id = 0,
+                    .cell_flags = 1, // has_default_bg
                 };
                 idx += 1;
             }
@@ -150,7 +151,7 @@ pub fn renderStateGetViewport(
 
         for (0..cols) |x| {
             if (x >= cells.len) {
-                // Past end of row, fill with default
+                // Past end of row, fill with default (default bg = transparent)
                 out[idx] = .{
                     .codepoint = 0,
                     .fg_r = rs.colors.foreground.r,
@@ -162,6 +163,7 @@ pub fn renderStateGetViewport(
                     .flags = 0,
                     .width = 1,
                     .hyperlink_id = 0,
+                    .cell_flags = 1, // has_default_bg
                 };
                 idx += 1;
                 continue;
@@ -181,7 +183,9 @@ pub fn renderStateGetViewport(
                 .palette => |i| rs.colors.palette[i],
                 .rgb => |rgb| rgb,
             };
-            const bg: color.RGB = if (sty.bg(cell, &rs.colors.palette)) |rgb| rgb else rs.colors.background;
+            const bg_result = sty.bg(cell, &rs.colors.palette);
+            const has_default_bg: bool = bg_result == null;
+            const bg: color.RGB = bg_result orelse rs.colors.background;
 
             // Build flags
             var flags: u8 = 0;
@@ -216,6 +220,7 @@ pub fn renderStateGetViewport(
                 },
                 .hyperlink_id = if (cell.hyperlink) 1 else 0,
                 .grapheme_len = grapheme_len,
+                .cell_flags = if (has_default_bg) 1 else 0,
             };
             idx += 1;
         }

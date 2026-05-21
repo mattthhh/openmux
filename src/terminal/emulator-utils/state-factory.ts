@@ -1,10 +1,15 @@
 /**
  * State Factory - creates default terminal states
  */
-import type { TerminalCell, TerminalState, TerminalScrollState, DirtyTerminalUpdate } from '../../core/types'
-import type { TerminalModes } from '../emulator-interface'
-import type { TerminalColors } from '../terminal-colors'
-import { extractRgb } from '../terminal-colors'
+import type {
+  TerminalCell,
+  TerminalState,
+  TerminalScrollState,
+  DirtyTerminalUpdate,
+} from '../../core/types';
+import type { TerminalModes } from '../emulator-interface';
+import type { TerminalColors } from '../terminal-colors';
+import { extractRgb } from '../terminal-colors';
 
 /**
  * Create default terminal modes
@@ -15,7 +20,7 @@ export function createDefaultModes(): TerminalModes {
     cursorKeyMode: 'normal',
     alternateScreen: false,
     inBandResize: false,
-  }
+  };
 }
 
 /**
@@ -26,7 +31,7 @@ export function createDefaultScrollState(): TerminalScrollState {
     viewportOffset: 0,
     scrollbackLength: 0,
     isAtBottom: true,
-  }
+  };
 }
 
 /**
@@ -38,12 +43,12 @@ export function createEmptyTerminalState(
   colors: TerminalColors,
   modes: TerminalModes
 ): TerminalState {
-  const fg = extractRgb(colors.foreground)
-  const bg = extractRgb(colors.background)
+  const fg = extractRgb(colors.foreground);
+  const bg = extractRgb(colors.background);
 
-  const emptyCells: TerminalCell[][] = []
+  const emptyCells: TerminalCell[][] = [];
   for (let y = 0; y < rows; y++) {
-    const row: TerminalCell[] = []
+    const row: TerminalCell[] = [];
     for (let x = 0; x < cols; x++) {
       row.push({
         char: ' ',
@@ -57,9 +62,10 @@ export function createEmptyTerminalState(
         blink: false,
         dim: false,
         width: 1,
-      })
+        defaultBg: true,
+      });
     }
-    emptyCells.push(row)
+    emptyCells.push(row);
   }
 
   return {
@@ -71,16 +77,16 @@ export function createEmptyTerminalState(
     mouseTracking: modes.mouseTracking,
     cursorKeyMode: modes.cursorKeyMode,
     kittyKeyboardFlags: 0,
-  }
+  };
 }
 
-type CursorStyle = 'block' | 'underline' | 'bar'
+type CursorStyle = 'block' | 'underline' | 'bar';
 
 export interface TerminalCursor {
-  x: number
-  y: number
-  visible: boolean
-  style?: CursorStyle
+  x: number;
+  y: number;
+  visible: boolean;
+  style?: CursorStyle;
 }
 
 /**
@@ -105,5 +111,5 @@ export function createEmptyDirtyUpdate(
     cursorKeyMode: modes.cursorKeyMode,
     kittyKeyboardFlags: 0,
     inBandResize: modes.inBandResize,
-  }
+  };
 }

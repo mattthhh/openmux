@@ -10,7 +10,10 @@ pub const GhosttyCell = extern struct {
     width: u8,
     hyperlink_id: u16,
     grapheme_len: u8 = 0,
-    _pad: u8 = 0,
+    /// Bit 0: has_default_bg — cell uses terminal default background (no explicit bg).
+    /// When set, the renderer should not paint a background color, allowing
+    /// the host terminal's background (with transparency/blur) to show through.
+    cell_flags: u8 = 0,
 };
 
 pub const GhosttyDirty = enum(u8) {

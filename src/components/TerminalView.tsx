@@ -120,7 +120,7 @@ export function TerminalView(props: TerminalViewProps) {
             width: props.width,
             height: props.height,
           }}
-          backgroundColor={hostBgColor()}
+          backgroundColor="transparent"
         />
       }
     >
@@ -129,7 +129,7 @@ export function TerminalView(props: TerminalViewProps) {
           width: props.width,
           height: props.height,
         }}
-        backgroundColor={hostBgColor()}
+        backgroundColor="transparent"
         renderAfter={renderTerminal}
       />
     </Show>

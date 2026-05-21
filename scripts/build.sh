@@ -192,7 +192,26 @@ sign_macos_artifacts() {
     echo "Ad-hoc signing macOS artifacts..."
     # Remove any existing placeholder signature from the binary first (Bun adds an empty one)
     codesign --remove-signature "$DIST_DIR/$BINARY_NAME-bin" 2>/dev/null || true
-    codesign --force --sign "$sign_identity" "$DIST_DIR/$BINARY_NAME-bin"
+
+    # Sign the binary with entitlements allowing DYLD_INSERT_LIBRARIES
+    # (required for the stdout-rewrite interceptor that enables transparent backgrounds)
+    local entitlements_file
+    entitlements_file="$(mktemp /tmp/openmux-entitlements.XXXXXX.plist)"
+    cat > "$entitlements_file" << 'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>com.apple.security.cs.allow-dyld-environment-variables</key>
+    <true/>
+    <key>com.apple.security.cs.disable-library-validation</key>
+    <true/>
+</dict>
+</plist>
+PLIST
+    codesign --force --sign "$sign_identity" --entitlements "$entitlements_file" "$DIST_DIR/$BINARY_NAME-bin"
+    rm -f "$entitlements_file"
+
     codesign --force --sign "$sign_identity" "${targets[@]}"
 }
 
@@ -307,6 +326,9 @@ build() {
         exit 1
     fi
 
+    # Build stdout-rewrite interceptor (rewrites sentinel bg SGR to default bg)
+    build_stdout_rewrite
+
     # Create empty bunfig.toml in dist to prevent parent config from being used
     echo "# openmux runtime config (empty - preload already compiled in)" > "$DIST_DIR/bunfig.toml"
 
@@ -321,9 +343,50 @@ build() {
     echo "Built: $DIST_DIR/$BINARY_NAME"
 }
 
+build_stdout_rewrite() {
+    local src_dir="$PROJECT_DIR/native/stdout-rewrite"
+    local src_file="$src_dir/rewrite.c"
+
+    if [[ ! -f "$src_file" ]]; then
+        echo "Warning: stdout-rewrite source not found at $src_file"
+        return
+    fi
+
+    if [[ "$OS" == "darwin" ]]; then
+        # Uses DYLD __interpose section (requires the entitlement on the binary)
+        cc -dynamiclib -arch arm64 \
+            -o "$DIST_DIR/libstdout-rewrite.dylib" \
+            "$src_file" \
+            -lc
+        if [[ -f "$DIST_DIR/libstdout-rewrite.dylib" ]]; then
+            echo "Built stdout-rewrite interceptor"
+        else
+            echo "Warning: Failed to build stdout-rewrite interceptor"
+        fi
+    elif [[ "$OS" == "linux" ]]; then
+        gcc -shared -fPIC \
+            -o "$DIST_DIR/libstdout-rewrite.so" \
+            "$src_file" \
+            -ldl
+        if [[ -f "$DIST_DIR/libstdout-rewrite.so" ]]; then
+            echo "Built stdout-rewrite interceptor"
+        else
+            echo "Warning: Failed to build stdout-rewrite interceptor"
+        fi
+    fi
+}
+
 create_wrapper() {
     local wrapper_path="$1"
     local version="$2"
+
+    # Determine if stdout-rewrite interceptor exists
+    local has_rewrite=false
+    if [[ "$OS" == "darwin" && -f "$DIST_DIR/libstdout-rewrite.dylib" ]]; then
+        has_rewrite=true
+    elif [[ "$OS" == "linux" && -f "$DIST_DIR/libstdout-rewrite.so" ]]; then
+        has_rewrite=true
+    fi
 
     if [[ "$OS" == "windows" ]]; then
         # Windows batch file
@@ -353,6 +416,15 @@ export GHOSTTY_VT_LIB="\${GHOSTTY_VT_LIB:-\$SCRIPT_DIR/$GHOSTTY_LIB_NAME}"
 export OPENMUX_VERSION="\${OPENMUX_VERSION:-$version}"
 export OPENMUX_ORIGINAL_CWD="\${OPENMUX_ORIGINAL_CWD:-\$(pwd)}"
 cd "\$SCRIPT_DIR"
+# Load stdout-rewrite interceptor for transparent backgrounds
+# (rewrites sentinel SGR 48;2;13;17;23m to ESC[49m "default background")
+if [[ -f "\$SCRIPT_DIR/libstdout-rewrite.$LIB_EXT" ]] && [[ -z "\$OPENMUX_NO_REWRITE" ]]; then
+  if [[ "\$(uname -s)" == "Darwin" ]]; then
+    export DYLD_INSERT_LIBRARIES="\${DYLD_INSERT_LIBRARIES:+\$DYLD_INSERT_LIBRARIES:}\$SCRIPT_DIR/libstdout-rewrite.$LIB_EXT"
+  else
+    export LD_PRELOAD="\${LD_PRELOAD:+\$LD_PRELOAD:}\$SCRIPT_DIR/libstdout-rewrite.$LIB_EXT"
+  fi
+fi
 exec "./openmux-bin" "\$@"
 WRAPPER
         chmod +x "$wrapper_path"
@@ -369,13 +441,19 @@ create_release() {
     echo "Creating release tarball: $tarball_name"
 
     # Create tarball with dist contents (includes empty bunfig.toml for isolation)
-    tar -czf "$tarball_path" -C "$DIST_DIR" \
-        "$BINARY_NAME" \
-        "$BINARY_NAME-bin" \
-        "libzig_pty.$LIB_EXT" \
-        "libzig_git.$LIB_EXT" \
-        "$GHOSTTY_LIB_NAME" \
+    # Note: libstdout-rewrite is optional - include if present
+    local tar_args=(
+        "$BINARY_NAME"
+        "$BINARY_NAME-bin"
+        "libzig_pty.$LIB_EXT"
+        "libzig_git.$LIB_EXT"
+        "$GHOSTTY_LIB_NAME"
         "bunfig.toml"
+    )
+    if [[ -f "$DIST_DIR/libstdout-rewrite.$LIB_EXT" ]]; then
+        tar_args+=("libstdout-rewrite.$LIB_EXT")
+    fi
+    tar -czf "$tarball_path" -C "$DIST_DIR" "${tar_args[@]}"
 
     echo "Created: $tarball_path"
 
@@ -406,6 +484,11 @@ install_binary() {
         cp "$DIST_DIR/$GHOSTTY_LIB_NAME" "$LIB_INSTALL_DIR/$GHOSTTY_LIB_NAME"
     fi
 
+    # Copy stdout-rewrite interceptor
+    if [[ -f "$DIST_DIR/libstdout-rewrite.$LIB_EXT" ]]; then
+        cp "$DIST_DIR/libstdout-rewrite.$LIB_EXT" "$LIB_INSTALL_DIR/libstdout-rewrite.$LIB_EXT"
+    fi
+
     # Copy empty bunfig.toml to prevent parent config from being used
     cp "$DIST_DIR/bunfig.toml" "$LIB_INSTALL_DIR/bunfig.toml"
 
@@ -430,6 +513,14 @@ export ZIG_GIT_LIB="\${ZIG_GIT_LIB:-$LIB_INSTALL_DIR/libzig_git.$LIB_EXT}"
 export GHOSTTY_VT_LIB="\${GHOSTTY_VT_LIB:-$LIB_INSTALL_DIR/$GHOSTTY_LIB_NAME}"
 export OPENMUX_ORIGINAL_CWD="\${OPENMUX_ORIGINAL_CWD:-\$(pwd)}"
 cd "$LIB_INSTALL_DIR"
+# Load stdout-rewrite interceptor for transparent backgrounds
+if [[ -f "$LIB_INSTALL_DIR/libstdout-rewrite.$LIB_EXT" ]] && [[ -z "\$OPENMUX_NO_REWRITE" ]]; then
+  if [[ "\$(uname -s)" == "Darwin" ]]; then
+    export DYLD_INSERT_LIBRARIES="\${DYLD_INSERT_LIBRARIES:+\$DYLD_INSERT_LIBRARIES:}$LIB_INSTALL_DIR/libstdout-rewrite.$LIB_EXT"
+  else
+    export LD_PRELOAD="\${LD_PRELOAD:+\$LD_PRELOAD:}$LIB_INSTALL_DIR/libstdout-rewrite.$LIB_EXT"
+  fi
+fi
 exec "./$BINARY_NAME-bin" "\$@"
 WRAPPER
         chmod +x "$INSTALL_DIR/$BINARY_NAME"
