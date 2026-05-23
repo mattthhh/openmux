@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.119](https://github.com/monotykamary/openmux/compare/v0.3.118...v0.3.119) (2026-05-23)
+
+
+### Bug Fixes
+
+* include libstdout-rewrite interceptor in installer and updater ([1258ca1](https://github.com/monotykamary/openmux/commit/1258ca110df570b7bbacd7174e821bb18525f8ac))
+
 ### [0.3.118](https://github.com/monotykamary/openmux/compare/v0.3.117...v0.3.118) (2026-05-21)
 
 
