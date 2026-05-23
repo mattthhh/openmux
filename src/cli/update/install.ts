@@ -294,6 +294,15 @@ export GHOSTTY_VT_LIB="\${GHOSTTY_VT_LIB:-${installDir}/libghostty-vt.${libExt}}
 export OPENMUX_VERSION="\${OPENMUX_VERSION:-${formattedVersion}}"
 export OPENMUX_ORIGINAL_CWD="\${OPENMUX_ORIGINAL_CWD:-\$(pwd)}"
 cd "${installDir}"
+# Load stdout-rewrite interceptor for transparent backgrounds
+# (rewrites sentinel SGR 48;2;13;17;23m to ESC[49m "default background")
+if [[ -f "${installDir}/libstdout-rewrite.${libExt}" ]] && [[ -z "\$OPENMUX_NO_REWRITE" ]]; then
+  if [[ "\$(uname -s)" == "Darwin" ]]; then
+    export DYLD_INSERT_LIBRARIES="\${DYLD_INSERT_LIBRARIES:+\$DYLD_INSERT_LIBRARIES:}${installDir}/libstdout-rewrite.${libExt}"
+  else
+    export LD_PRELOAD="\${LD_PRELOAD:+\$LD_PRELOAD:}${installDir}/libstdout-rewrite.${libExt}"
+  fi
+fi
 exec "./openmux-bin" "\$@"
 `;
 }
@@ -395,6 +404,8 @@ export async function installRelease(
       `libzig_git.${platformInfo.libExt}`,
       `libghostty-vt.${platformInfo.libExt}`,
     ];
+    // libstdout-rewrite is optional (may not be present in older releases)
+    const stdoutRewritePath = path.join(extractedPath, `libstdout-rewrite.${platformInfo.libExt}`);
 
     for (const requiredFile of requiredFiles) {
       const existsResult = await ensureFileExists(io, path.join(extractedPath, requiredFile));
@@ -439,6 +450,16 @@ export async function installRelease(
       path.join(installDir, `libghostty-vt.${platformInfo.libExt}`)
     );
     if (vtResult instanceof UpdateError) return vtResult;
+
+    const stdoutRewriteResult = await io.access(stdoutRewritePath).catch(() => null);
+    if (stdoutRewriteResult !== null && !(stdoutRewriteResult instanceof UpdateError)) {
+      const rewriteResult = await replaceFileAtomically(
+        io,
+        stdoutRewritePath,
+        path.join(installDir, `libstdout-rewrite.${platformInfo.libExt}`)
+      );
+      if (rewriteResult instanceof UpdateError) return rewriteResult;
+    }
 
     const bunfigPath = path.join(extractedPath, 'bunfig.toml');
     const bunfigResult = await io.access(bunfigPath).catch((e) => {

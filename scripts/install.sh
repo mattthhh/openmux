@@ -112,6 +112,7 @@ download_and_extract() {
     mv "$TMP_DIR/libzig_pty.$LIB_EXT" "$LIB_INSTALL_DIR/"
     mv "$TMP_DIR/libzig_git.$LIB_EXT" "$LIB_INSTALL_DIR/"
     mv "$TMP_DIR/libghostty-vt.$LIB_EXT" "$LIB_INSTALL_DIR/" || true
+    mv "$TMP_DIR/libstdout-rewrite.$LIB_EXT" "$LIB_INSTALL_DIR/" || true
     mv "$TMP_DIR/bunfig.toml" "$LIB_INSTALL_DIR/" || true
     chmod +x "$LIB_INSTALL_DIR/openmux-bin"
 
@@ -124,6 +125,15 @@ export GHOSTTY_VT_LIB="\${GHOSTTY_VT_LIB:-$LIB_INSTALL_DIR/libghostty-vt.$LIB_EX
 export OPENMUX_VERSION="\${OPENMUX_VERSION:-$VERSION}"
 export OPENMUX_ORIGINAL_CWD="\${OPENMUX_ORIGINAL_CWD:-\$(pwd)}"
 cd "$LIB_INSTALL_DIR"
+# Load stdout-rewrite interceptor for transparent backgrounds
+# (rewrites sentinel SGR 48;2;13;17;23m to ESC[49m "default background")
+if [[ -f "$LIB_INSTALL_DIR/libstdout-rewrite.$LIB_EXT" ]] && [[ -z "\$OPENMUX_NO_REWRITE" ]]; then
+  if [[ "\$(uname -s)" == "Darwin" ]]; then
+    export DYLD_INSERT_LIBRARIES="\${DYLD_INSERT_LIBRARIES:+\$DYLD_INSERT_LIBRARIES:}$LIB_INSTALL_DIR/libstdout-rewrite.$LIB_EXT"
+  else
+    export LD_PRELOAD="\${LD_PRELOAD:+\$LD_PRELOAD:}$LIB_INSTALL_DIR/libstdout-rewrite.$LIB_EXT"
+  fi
+fi
 exec "./openmux-bin" "\$@"
 WRAPPER
     chmod +x "$INSTALL_DIR/openmux"
