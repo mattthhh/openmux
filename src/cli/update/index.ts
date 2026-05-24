@@ -3,7 +3,7 @@ import { formatVersion, parseReleaseVersion, createDefaultUpdateIO } from './io'
 import { getPlatformInfo, fetchTargetRelease } from './release';
 import { detectManagedInstall, detectPackageManager, suggestPackageManagerUpdate } from './detect';
 import { installRelease, updateManagedWrapper } from './install';
-import type { UpdateCommand, CliOutcome, UpdateIO } from './types';
+import type { UpdateCommand, CliOutcome, UpdateIO, ManagedInstall } from './types';
 
 export { getPlatformInfo } from './release';
 export { selectLatestRelease } from './release';
@@ -24,6 +24,21 @@ function isAffirmative(answer: string | null): boolean {
 
 function toCliOutcome(exitCode: number): CliOutcome {
   return { kind: 'handled', exitCode };
+}
+
+/** Check whether the wrapper script is missing the stdout-rewrite interceptor block. */
+async function isWrapperStale(io: UpdateIO, install: ManagedInstall): Promise<boolean> {
+  const sentinel = io.platform === 'darwin' ? 'DYLD_INSERT_LIBRARIES' : 'LD_PRELOAD';
+  try {
+    const content = await io.readFile(install.wrapperPath);
+    if (content instanceof Error || typeof content !== 'string') {
+      return true;
+    }
+    return !content.includes(sentinel);
+  } catch {
+    // If we can't read the wrapper, treat it as stale so it gets regenerated
+    return true;
+  }
 }
 
 export async function runUpdateCommand(
@@ -71,8 +86,14 @@ export async function runUpdateCommand(
   }
 
   if (compareSemver(install.value.currentVersion, latestVersion) >= 0) {
-    io.log(`Already up to date (${formatVersion(install.value.currentVersion)}).`);
-    return toCliOutcome(EXIT_SUCCESS);
+    const stale = await isWrapperStale(io, install.value);
+    if (!stale) {
+      io.log(`Already up to date (${formatVersion(install.value.currentVersion)}).`);
+      return toCliOutcome(EXIT_SUCCESS);
+    }
+    // Wrapper is stale — fall through to re-install, which regenerates
+    // the wrapper and copies any missing interceptor libraries.
+    io.log('Repairing stale wrapper for transparent background support...');
   }
 
   if (!command.yes) {

@@ -158,6 +158,13 @@ describe('cli update', () => {
     const install = await makeManagedInstall('1.1.0');
     cleanupRoots.push(install.rootDir);
 
+    // Write a wrapper that includes the interceptor sentinel so
+    // isWrapperStale returns false and we hit the early return.
+    await fs.writeFile(
+      install.wrapperPath,
+      '#!/usr/bin/env bash\nexport LD_PRELOAD="$LIB_DIR/libstdout-rewrite.so"\nexec "./openmux-bin" "$@"\n'
+    );
+
     const logs: string[] = [];
     const result = await runUpdateCommand(
       { kind: 'update', yes: true, prerelease: false },
@@ -184,6 +191,56 @@ describe('cli update', () => {
 
     expect(result.exitCode).toBe(0);
     expect(logs.some((line) => line.includes('Already up to date'))).toBe(true);
+  });
+
+  test('repairs stale wrapper when already up to date', async () => {
+    const install = await makeManagedInstall('1.1.0');
+    cleanupRoots.push(install.rootDir);
+
+    const fetch = vi.fn(async (input: string | URL | Request): Promise<Response> => {
+      const url = String(input);
+      if (url.endsWith('/releases/latest')) {
+        return jsonResponse({
+          tag_name: 'v1.1.0',
+          draft: false,
+          prerelease: false,
+          assets: [
+            {
+              name: 'openmux-v1.1.0-linux-x64.tar.gz',
+              browser_download_url: 'https://example.com/asset',
+            },
+          ],
+        });
+      }
+      if (url === 'https://example.com/asset') {
+        return new Response('archive-bytes', { status: 200 });
+      }
+      return new Response('not found', { status: 404 });
+    });
+
+    const logs: string[] = [];
+    const result = await runUpdateCommand(
+      { kind: 'update', yes: true, prerelease: false },
+      createIoForInstall(
+        install,
+        {
+          fetch,
+          extractTarGz: async (_archivePath, destination) => {
+            await fs.writeFile(path.join(destination, 'openmux-bin'), 'new-bin');
+            await fs.writeFile(path.join(destination, 'libzig_pty.so'), 'new-pty');
+            await fs.writeFile(path.join(destination, 'libzig_git.so'), 'new-git');
+            await fs.writeFile(path.join(destination, 'libghostty-vt.so'), 'new-ghostty');
+            await fs.writeFile(path.join(destination, 'bunfig.toml'), '# bunfig');
+          },
+        },
+        logs
+      )
+    );
+
+    expect(result.exitCode).toBe(0);
+    expect(logs.some((line) => line.includes('Repairing stale wrapper'))).toBe(true);
+    const wrapper = await fs.readFile(install.wrapperPath, 'utf8');
+    expect(wrapper).toContain('LD_PRELOAD');
   });
 
   test('downloads and installs newer release with --yes', async () => {
