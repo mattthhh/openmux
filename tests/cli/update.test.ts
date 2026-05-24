@@ -778,6 +778,13 @@ b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3  openmux-v1.0.0
 
       await fs.writeFile(path.join(install.dataHome, 'package-lock.json'), '{}');
 
+      // Write a wrapper with the interceptor sentinel so isWrapperStale
+      // returns false and we hit the early return.
+      await fs.writeFile(
+        install.wrapperPath,
+        '#!/usr/bin/env bash\nexport LD_PRELOAD="$LIB_DIR/libstdout-rewrite.so"\nexec "./openmux-bin" "$@"\n'
+      );
+
       const logs: string[] = [];
       const result = await runUpdateCommand(
         { kind: 'update', yes: true, prerelease: false },
