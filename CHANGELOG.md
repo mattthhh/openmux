@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.120](https://github.com/monotykamary/openmux/compare/v0.3.119...v0.3.120) (2026-05-24)
+
+
+### Bug Fixes
+
+* **update:** repair stale wrappers missing stdout-rewrite interceptor block ([38929a3](https://github.com/monotykamary/openmux/commit/38929a37e41b00e5f4c877ee06548c3eba7a8d3b))
+
+
+### Tests
+
+* **update:** write LD_PRELOAD wrapper to avoid stale-wrapper fall-through in pm-detection test ([49cb1f9](https://github.com/monotykamary/openmux/commit/49cb1f9295a405ec287e559d78df5804f5fce118))
+
 ### [0.3.119](https://github.com/monotykamary/openmux/compare/v0.3.118...v0.3.119) (2026-05-23)
 
 
