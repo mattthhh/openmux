@@ -20,6 +20,7 @@ import { findPendingPaneCreationForLifecycle, removePendingPaneCreations } from 
 import { selectAfterPtyRemoval } from './selection';
 import { getSessionPaneOrder, setSessionPaneOrder, getPendingPaneOrderKey } from './pane-order';
 import { recomputeMatches, recomputeTree } from './session';
+import { clearGitMetadataInPlace } from './git';
 
 export interface SubscriptionManager {
   lifecycle: (() => void) | null;
@@ -352,6 +353,10 @@ export function createMetadataChangeHandler(
             if (event.cwd !== undefined && pty.cwd !== event.cwd) {
               changed = true;
               pty.cwd = event.cwd;
+              // Clear stale git metadata — the old repo's data no longer applies.
+              // Without this, git metadata bleeds to other directories and stays
+              // permanently because hydrateGitMetadata/applySnapshot never clear it.
+              clearGitMetadataInPlace(pty);
             }
             if (!changed) {
               s.allPtys[allIndex] = pty;
@@ -380,6 +385,8 @@ export function createMetadataChangeHandler(
             if (event.cwd !== undefined && pty.cwd !== event.cwd) {
               changed = true;
               pty.cwd = event.cwd;
+              // Clear stale git metadata — the old repo's data no longer applies.
+              clearGitMetadataInPlace(pty);
             }
             if (!changed) {
               s.matchedPtys[matchedIndex] = pty;

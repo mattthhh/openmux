@@ -19,6 +19,8 @@ import { applySnapshot, applyGitMetadataToPty } from '../refresh/apply-snapshot'
 import type { SnapshotResult } from '../refresh/build-snapshot';
 import type { AggregateViewState } from '../types';
 import { initialState } from '../types';
+import { createMetadataChangeHandler } from '../subscriptions';
+import { hasGitMetadata } from '../git';
 
 const sessionMetadata: SessionMetadata = {
   id: 'session-1',
@@ -607,5 +609,219 @@ describe('regression: git metadata must not clear then redraw', () => {
     expect(state.allPtys[0]!.gitDirty).toBe(true);
     expect(state.allPtys[0]!.gitAhead).toBe(3);
     expect(state.allPtys[0]!.gitRepoKey).toBe('/repo');
+  });
+
+  it('createMetadataChangeHandler clears git metadata when CWD changes', () => {
+    // This is the root cause of the "git metadata bleeds to other PTYs and stays" bug.
+    // When a PTY cds to a different directory, the old repo's git metadata is stale
+    // and must be cleared. Without this, stale metadata survives all subsequent
+    // refreshes because applyGitMetadataSnapshot(pty, undefined) is a no-op.
+
+    const { createStore: createStoreSolid } = require('solid-js/store');
+
+    const ptyWithGit: PtyInfo = {
+      ptyId: 'pty-1',
+      cwd: '/repo-a',
+      foregroundProcess: 'bash',
+      shell: '/bin/bash',
+      title: 'bash',
+      workspaceId: 1,
+      paneId: 'pane-1',
+      sessionId: 'session-1',
+      sessionMetadata,
+      gitBranch: 'main',
+      gitDiffStats: { added: 10, removed: 2, binary: 0 },
+      gitDirty: true,
+      gitStaged: 1,
+      gitUnstaged: 2,
+      gitUntracked: 0,
+      gitConflicted: 0,
+      gitAhead: 7,
+      gitBehind: 0,
+      gitStashCount: 0,
+      gitState: undefined,
+      gitDetached: false,
+      gitRepoKey: '/repo-a',
+      gitIsWorktree: false,
+      gitCommonDir: null,
+    };
+
+    const [state, setState] = createStoreSolid<AggregateViewState>({
+      ...initialState,
+      showAggregateView: true,
+      allPtys: [ptyWithGit],
+      allPtysIndex: new Map([['pty-1', 0]]),
+      allSessions: new Map([['session-1', sessionMetadata]]),
+    });
+
+    const handler = createMetadataChangeHandler(setState);
+
+    // Simulate CWD change event (user ran `cd` to a different directory)
+    handler({ ptyId: 'pty-1', cwd: '/non-git' });
+
+    // CWD should be updated
+    expect(state.allPtys[0]!.cwd).toBe('/non-git');
+
+    // Git metadata must be cleared — old repo's data is stale
+    expect(state.allPtys[0]!.gitBranch).toBeUndefined();
+    expect(state.allPtys[0]!.gitDiffStats).toBeUndefined();
+    expect(state.allPtys[0]!.gitDirty).toBe(false);
+    expect(state.allPtys[0]!.gitStaged).toBe(0);
+    expect(state.allPtys[0]!.gitUnstaged).toBe(0);
+    expect(state.allPtys[0]!.gitAhead).toBeUndefined();
+    expect(state.allPtys[0]!.gitRepoKey).toBeUndefined();
+    expect(hasGitMetadata(state.allPtys[0]!)).toBe(false);
+  });
+
+  it('createMetadataChangeHandler clears git metadata in matchedPtys when CWD changes', () => {
+    const { createStore: createStoreSolid } = require('solid-js/store');
+
+    const ptyWithGit: PtyInfo = {
+      ptyId: 'pty-1',
+      cwd: '/repo-a',
+      foregroundProcess: 'bash',
+      shell: '/bin/bash',
+      title: 'bash',
+      workspaceId: 1,
+      paneId: 'pane-1',
+      sessionId: 'session-1',
+      sessionMetadata,
+      gitBranch: 'feature/x',
+      gitDiffStats: { added: 5, removed: 1, binary: 0 },
+      gitDirty: true,
+      gitStaged: 0,
+      gitUnstaged: 5,
+      gitUntracked: 0,
+      gitConflicted: 1,
+      gitAhead: 2,
+      gitBehind: 0,
+      gitStashCount: 0,
+      gitState: undefined,
+      gitDetached: false,
+      gitRepoKey: '/repo-a',
+      gitIsWorktree: false,
+      gitCommonDir: null,
+    };
+
+    const [state, setState] = createStoreSolid<AggregateViewState>({
+      ...initialState,
+      showAggregateView: true,
+      allPtys: [],
+      allPtysIndex: new Map(),
+      matchedPtys: [ptyWithGit],
+      matchedPtysIndex: new Map([['pty-1', 0]]),
+      allSessions: new Map([['session-1', sessionMetadata]]),
+    });
+
+    const handler = createMetadataChangeHandler(setState);
+
+    // CWD change should also clear git metadata in matchedPtys
+    handler({ ptyId: 'pty-1', cwd: '/some-other-dir' });
+
+    expect(state.matchedPtys[0]!.cwd).toBe('/some-other-dir');
+    expect(hasGitMetadata(state.matchedPtys[0]!)).toBe(false);
+    expect(state.matchedPtys[0]!.gitBranch).toBeUndefined();
+  });
+
+  it('createMetadataChangeHandler does not clear git metadata when CWD stays the same', () => {
+    const { createStore: createStoreSolid } = require('solid-js/store');
+
+    const ptyWithGit: PtyInfo = {
+      ptyId: 'pty-1',
+      cwd: '/repo-a',
+      foregroundProcess: 'bash',
+      shell: '/bin/bash',
+      title: 'bash',
+      workspaceId: 1,
+      paneId: 'pane-1',
+      sessionId: 'session-1',
+      sessionMetadata,
+      gitBranch: 'main',
+      gitDiffStats: { added: 10, removed: 2, binary: 0 },
+      gitDirty: true,
+      gitStaged: 1,
+      gitUnstaged: 2,
+      gitUntracked: 0,
+      gitConflicted: 0,
+      gitAhead: 7,
+      gitBehind: 0,
+      gitStashCount: 0,
+      gitState: undefined,
+      gitDetached: false,
+      gitRepoKey: '/repo-a',
+      gitIsWorktree: false,
+      gitCommonDir: null,
+    };
+
+    const [state, setState] = createStoreSolid<AggregateViewState>({
+      ...initialState,
+      showAggregateView: true,
+      allPtys: [ptyWithGit],
+      allPtysIndex: new Map([['pty-1', 0]]),
+      allSessions: new Map([['session-1', sessionMetadata]]),
+    });
+
+    const handler = createMetadataChangeHandler(setState);
+
+    // Same CWD — git metadata should NOT be cleared
+    handler({ ptyId: 'pty-1', cwd: '/repo-a' });
+
+    expect(state.allPtys[0]!.gitBranch).toBe('main');
+    expect(state.allPtys[0]!.gitDiffStats).toEqual({ added: 10, removed: 2, binary: 0 });
+    expect(state.allPtys[0]!.gitRepoKey).toBe('/repo-a');
+    expect(hasGitMetadata(state.allPtys[0]!)).toBe(true);
+  });
+
+  it('createMetadataChangeHandler clears git metadata when CWD changes to another git repo', () => {
+    // When a PTY cds from one git repo to another, the old metadata is stale.
+    // The next full refresh (hydrateGitMetadata) will fetch fresh metadata
+    // for the new CWD, so clearing now prevents stale display between refreshes.
+
+    const { createStore: createStoreSolid } = require('solid-js/store');
+
+    const ptyWithGit: PtyInfo = {
+      ptyId: 'pty-1',
+      cwd: '/repo-a',
+      foregroundProcess: 'bash',
+      shell: '/bin/bash',
+      title: 'bash',
+      workspaceId: 1,
+      paneId: 'pane-1',
+      sessionId: 'session-1',
+      sessionMetadata,
+      gitBranch: 'main',
+      gitDiffStats: { added: 10, removed: 2, binary: 0 },
+      gitDirty: true,
+      gitStaged: 1,
+      gitUnstaged: 2,
+      gitUntracked: 0,
+      gitConflicted: 0,
+      gitAhead: 7,
+      gitBehind: 0,
+      gitStashCount: 0,
+      gitState: undefined,
+      gitDetached: false,
+      gitRepoKey: '/repo-a',
+      gitIsWorktree: false,
+      gitCommonDir: null,
+    };
+
+    const [state, setState] = createStoreSolid<AggregateViewState>({
+      ...initialState,
+      showAggregateView: true,
+      allPtys: [ptyWithGit],
+      allPtysIndex: new Map([['pty-1', 0]]),
+      allSessions: new Map([['session-1', sessionMetadata]]),
+    });
+
+    const handler = createMetadataChangeHandler(setState);
+
+    // CWD changes to another git repo — stale metadata must be cleared
+    handler({ ptyId: 'pty-1', cwd: '/repo-b' });
+
+    expect(state.allPtys[0]!.cwd).toBe('/repo-b');
+    expect(state.allPtys[0]!.gitBranch).toBeUndefined();
+    expect(state.allPtys[0]!.gitRepoKey).toBeUndefined();
+    expect(hasGitMetadata(state.allPtys[0]!)).toBe(false);
   });
 });
