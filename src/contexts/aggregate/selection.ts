@@ -24,6 +24,8 @@ export function applySelection(state: AggregateViewState, index: number): void {
 
   if (state.selectedPtyId === null) {
     clearPreviewState(state);
+  } else {
+    state.previewMode = true;
   }
 }
 

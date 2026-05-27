@@ -82,6 +82,8 @@ export function createAggregateViewActions(params: AggregateViewActionsParams) {
     s.selectedSessionId = getSessionIdForItem(item);
     if (s.selectedPtyId === null) {
       clearPreviewState(s);
+    } else {
+      s.previewMode = true;
     }
   };
 
