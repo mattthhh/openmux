@@ -473,11 +473,9 @@ export function PtyTreeRow(props: PtyTreeRowProps) {
       if (bold) {
         return (
           <box style={{ height: 1, flexDirection: 'row' }} onMouseDown={handleClick}>
-            <b>
-              <text fg={baseColor} selectable={false}>
-                {text}
-              </text>
-            </b>
+            <text fg={baseColor} selectable={false}>
+              <b>{text}</b>
+            </text>
           </box>
         );
       }
