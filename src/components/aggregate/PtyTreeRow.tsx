@@ -255,8 +255,9 @@ const lastSeenProcess = new Map<string, { name: string; expiresAt: number }>();
 
 /** How long to keep showing a non-shell process after the shell becomes
  *  foreground. Covers brief shell-child alternations (e.g. `for` loops)
- *  but eventually clears when the child truly exits. */
-const PROCESS_CACHE_TTL_MS = 2000;
+ *  but clears quickly once the child truly exits. The shell-child gap
+ *  is typically ~10-50ms so 300ms is a generous margin. */
+const PROCESS_CACHE_TTL_MS = 300;
 
 /** Clear the remembered process for a PTY (on destruction). */
 export function clearLastSeenProcess(ptyId: string): void {
@@ -281,11 +282,18 @@ export function PtyTreeRow(props: PtyTreeRowProps) {
     !hasActiveShimmer(props.pty.ptyId) && hasPostShimmerGlow(props.pty.ptyId)
   );
 
+  // Debounce timer for glow activation — shared across effects below.
+  let glowDebounce: ReturnType<typeof setTimeout> | null = null;
+
   // Disable shimmer when this PTY is selected (being previewed)
   createEffect(() => {
     if (props.isSelected) {
       suppressPtyShimmer(props.pty.ptyId);
       clearPostShimmerGlow(props.pty.ptyId);
+      if (glowDebounce) {
+        clearTimeout(glowDebounce);
+        glowDebounce = null;
+      }
       setGlowActive(false);
     } else {
       unsuppressPtyShimmer(props.pty.ptyId);
@@ -299,33 +307,48 @@ export function PtyTreeRow(props: PtyTreeRowProps) {
     setIsAnimating(hasActiveShimmer(props.pty.ptyId));
   });
 
-  // Effect 2: Detect when shimmer ENDS — defer glow by one frame to avoid
-  // a white flash if new activity immediately restarts the shimmer
+  // Effect 2: Detect when shimmer ENDS — defer glow by 500ms to avoid
+  // a white flash when shimmer pauses briefly then restarts from queued
+  // or new activity.
   createEffect(() => {
     void shimmerStateVersion();
     if (!isAnimating()) return;
     const now = Date.now();
     if (hasActiveShimmer(props.pty.ptyId, now)) return;
     setIsAnimating(false);
-    // Defer glow activation by one frame: if the shimmer restarts before
-    // the next render (from queued or new activity), the glow won't appear.
-    queueMicrotask(() => {
-      if (hasActiveShimmer(props.pty.ptyId)) return; // shimmer restarted
-      if (hasPostShimmerGlow(props.pty.ptyId) && !props.isSelected) {
-        setGlowActive(true);
-      }
-    });
+    // Cancel any pending glow from a previous shimmer end
+    if (glowDebounce) clearTimeout(glowDebounce);
+    // Defer glow: if shimmer restarts within 500ms the timer is cancelled
+    // and the glow never appears, avoiding the white flash.
+    if (hasPostShimmerGlow(props.pty.ptyId) && !props.isSelected) {
+      glowDebounce = setTimeout(() => {
+        glowDebounce = null;
+        // Re-check: shimmer may have restarted during the wait
+        if (hasActiveShimmer(props.pty.ptyId)) return;
+        if (hasPostShimmerGlow(props.pty.ptyId) && !props.isSelected) {
+          setGlowActive(true);
+        }
+      }, 500);
+    }
   });
 
-  // New shimmer starts → cancel any active glow
+  // New shimmer starts → cancel pending glow debounce
   createEffect(() => {
-    if (!isAnimating() || !glowActive()) return;
+    if (!isAnimating()) return;
+    if (glowDebounce) {
+      clearTimeout(glowDebounce);
+      glowDebounce = null;
+    }
     setGlowActive(false);
   });
 
-  // Cleanup: ensure shimmer suppression is removed on unmount
+  // Cleanup: ensure shimmer suppression and glow debounce are removed on unmount
   onCleanup(() => {
     unsuppressPtyShimmer(props.pty.ptyId);
+    if (glowDebounce) {
+      clearTimeout(glowDebounce);
+      glowDebounce = null;
+    }
   });
 
   // Selection colors
