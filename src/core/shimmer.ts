@@ -23,6 +23,11 @@ const ptyStdoutActivity = new Map<string, number[]>();
 /** PTY IDs that should not shimmer (e.g., selected in aggregate view) */
 const suppressedPtyIds = new Set<string>();
 
+/** PTY IDs whose shimmer completed (not suppressed or cleared).
+ *  Maps ptyId → completion timestamp.  Persists until the user
+ *  selects the row (clicks to preview) — no auto-expiry timer. */
+const recentlyCompletedShimmer = new Map<string, number>();
+
 /** Shimmer animation state per PTY - tracks completed sweeps and queued activity */
 interface ShimmerState {
   startTime: number;
@@ -48,6 +53,8 @@ function notifyShimmerStateListeners(): void {
  */
 export function suppressPtyShimmer(ptyId: string): void {
   suppressedPtyIds.add(ptyId);
+  // Suppression is not a natural completion — clear glow state
+  recentlyCompletedShimmer.delete(ptyId);
   // Clear any existing animation state to stop calculations immediately
   if (shimmerStates.delete(ptyId)) {
     notifyShimmerStateListeners();
@@ -187,6 +194,8 @@ export function recordPtyStdoutActivity(ptyId: string, time = Date.now()): void 
     // Don't accumulate multiple queued sweeps - just mark that we need one more
     existingState.hasQueuedActivity = true;
   } else {
+    // New shimmer starting — clear any lingering glow from a previous cycle
+    recentlyCompletedShimmer.delete(ptyId);
     // No animation running - start fresh
     shimmerStates.set(ptyId, {
       startTime: time,
@@ -221,6 +230,7 @@ export function clonePtyStdoutActivity(
   ptyStdoutActivity.set(targetPtyId, [...recent]);
 
   if (suppressedPtyIds.has(targetPtyId)) {
+    recentlyCompletedShimmer.delete(targetPtyId);
     if (shimmerStates.delete(targetPtyId)) {
       notifyShimmerStateListeners();
     }
@@ -235,6 +245,7 @@ export function clonePtyStdoutActivity(
   }
 
   if (recent.length < MIN_OUTPUT_EVENTS_FOR_SHIMMER) {
+    recentlyCompletedShimmer.delete(targetPtyId);
     if (shimmerStates.delete(targetPtyId)) {
       notifyShimmerStateListeners();
     }
@@ -255,6 +266,7 @@ export function clonePtyStdoutActivity(
 
 export function clearPtyStdoutActivity(ptyId: string): void {
   ptyStdoutActivity.delete(ptyId);
+  recentlyCompletedShimmer.delete(ptyId);
   if (shimmerStates.delete(ptyId)) {
     notifyShimmerStateListeners();
   }
@@ -356,6 +368,7 @@ export function getPtyShimmerColor(
 
   // Check max total duration cap (prevents infinite animation with continuous activity)
   if (totalElapsed > MAX_TOTAL_SHIMMER_MS) {
+    recentlyCompletedShimmer.set(ptyId, now);
     shimmerStates.delete(ptyId);
     notifyShimmerStateListeners();
     return undefined;
@@ -373,6 +386,7 @@ export function getPtyShimmerColor(
       state.hasQueuedActivity = false; // Consume the queued activity
     } else if (elapsed > state.duration) {
       // No queued activity and main duration expired - clear state
+      recentlyCompletedShimmer.set(ptyId, now);
       shimmerStates.delete(ptyId);
       notifyShimmerStateListeners();
       return undefined;
@@ -381,6 +395,7 @@ export function getPtyShimmerColor(
 
   // Check if animation has fully expired with no queued activity
   if (elapsed > state.duration && !state.hasQueuedActivity) {
+    recentlyCompletedShimmer.set(ptyId, now);
     shimmerStates.delete(ptyId);
     notifyShimmerStateListeners();
     return undefined;
@@ -431,6 +446,7 @@ export function hasActiveShimmer(ptyId: string, now = Date.now()): boolean {
 
   // Check max total duration cap
   if (totalElapsed > MAX_TOTAL_SHIMMER_MS) {
+    recentlyCompletedShimmer.set(ptyId, now);
     shimmerStates.delete(ptyId);
     notifyShimmerStateListeners();
     return false;
@@ -451,12 +467,32 @@ export function hasActiveShimmer(ptyId: string, now = Date.now()): boolean {
 
   // Check if animation has fully expired
   if (elapsed > state.duration && !state.hasQueuedActivity) {
+    recentlyCompletedShimmer.set(ptyId, now);
     shimmerStates.delete(ptyId);
     notifyShimmerStateListeners();
     return false;
   }
 
   return true;
+}
+
+/**
+ * Check if a PTY's shimmer completed (natural expiration, not suppression).
+ * Persists until explicitly cleared by clearPostShimmerGlow (e.g. on selection)
+ * or clearPtyStdoutActivity (PTY removed).
+ */
+export function hasPostShimmerGlow(ptyId: string): boolean {
+  if (!recentlyCompletedShimmer.has(ptyId)) return false;
+  // Active shimmer overrides glow — don't show both
+  if (shimmerStates.has(ptyId)) return false;
+  return true;
+}
+
+/**
+ * Clear the post-shimmer glow for a PTY (e.g. when the row is selected).
+ */
+export function clearPostShimmerGlow(ptyId: string): void {
+  recentlyCompletedShimmer.delete(ptyId);
 }
 
 export function subscribeToShimmerStateChange(callback: () => void): () => void {

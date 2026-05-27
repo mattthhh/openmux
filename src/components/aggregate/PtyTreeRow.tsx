@@ -18,6 +18,8 @@ import type { AggregateTheme } from '../../core/types';
 import {
   getPtyShimmerColor,
   hasActiveShimmer,
+  hasPostShimmerGlow,
+  clearPostShimmerGlow,
   suppressPtyShimmer,
   unsuppressPtyShimmer,
 } from '../../core/shimmer';
@@ -235,6 +237,9 @@ function ShimmeringLabel(props: ShimmeringLabelProps) {
   );
 }
 
+/** Bright white used for the post-shimmer glow ("something happened here"). */
+const POST_SHIMMER_BRIGHT_FG = '#ffffff';
+
 /**
  * Single line PTY row with shimmer effect for active PTYs
  *
@@ -244,10 +249,20 @@ export function PtyTreeRow(props: PtyTreeRowProps) {
   const shimmerStateVersion = useShimmerStateVersion();
   const [isAnimating, setIsAnimating] = createSignal(hasActiveShimmer(props.pty.ptyId));
 
+  // Post-shimmer glow: bright white text until the user clicks the row to
+  // preview the PTY. No timeout — cleared only by selection.
+  // Initialize from the shimmer module so glow survives remount (session
+  // group expand/collapse destroys and recreates PtyTreeRow instances).
+  const [glowActive, setGlowActive] = createSignal(
+    !hasActiveShimmer(props.pty.ptyId) && hasPostShimmerGlow(props.pty.ptyId)
+  );
+
   // Disable shimmer when this PTY is selected (being previewed)
   createEffect(() => {
     if (props.isSelected) {
       suppressPtyShimmer(props.pty.ptyId);
+      clearPostShimmerGlow(props.pty.ptyId);
+      setGlowActive(false);
     } else {
       unsuppressPtyShimmer(props.pty.ptyId);
     }
@@ -260,16 +275,26 @@ export function PtyTreeRow(props: PtyTreeRowProps) {
     setIsAnimating(hasActiveShimmer(props.pty.ptyId));
   });
 
-  // Effect 2: Detect when shimmer ENDS (animation timeout)
+  // Effect 2: Detect when shimmer ENDS (animation timeout) — activate glow
   createEffect(() => {
     void shimmerStateVersion(); // Track shimmer state changes to detect end
     if (!isAnimating()) return;
     const now = Date.now();
     if (hasActiveShimmer(props.pty.ptyId, now)) return;
     setIsAnimating(false);
+    // Shimmer naturally completed — activate glow until user selects this row
+    if (hasPostShimmerGlow(props.pty.ptyId) && !props.isSelected) {
+      setGlowActive(true);
+    }
   });
 
-  // Cleanup: ensure shimmer suppression is removed when component unmounts
+  // New shimmer starts → cancel any active glow
+  createEffect(() => {
+    if (!isAnimating() || !glowActive()) return;
+    setGlowActive(false);
+  });
+
+  // Cleanup: ensure shimmer suppression is removed on unmount
   onCleanup(() => {
     unsuppressPtyShimmer(props.pty.ptyId);
   });
@@ -278,11 +303,14 @@ export function PtyTreeRow(props: PtyTreeRowProps) {
   const selectionColors = () => props.aggregateTheme.selection;
   const diffColors = () => props.aggregateTheme.diff;
 
-  // Base foreground color
-  const baseFgColor = () =>
-    props.isSelected ? selectionColors().foreground : props.textColors.foreground;
+  // Base foreground color — bright white when post-shimmer glow is active
+  const baseFgColor = () => {
+    if (props.isSelected) return selectionColors().foreground;
+    if (glowActive()) return POST_SHIMMER_BRIGHT_FG;
+    return props.textColors.foreground;
+  };
 
-  // Background color for selection
+  // Background color
   const bgColor = () => (props.isSelected ? selectionColors().background : undefined);
 
   // Muted/subtle colors
