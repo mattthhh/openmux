@@ -82,6 +82,48 @@ fn getBranch(repo: *c.git_repository, dest: [*]u8, dest_len: usize) void {
     }
 }
 
+// Check if a path is effectively ignored by testing each parent directory.
+//
+// libgit2's git_status_list_new has a known bug: directory-level ignore
+// patterns (e.g. ".claude*" matching ".claude/") correctly prevent the
+// directory itself from appearing in the status list, but files INSIDE
+// that directory (e.g. ".claude/skills/autoreview") still appear as
+// untracked. git_status_should_ignore correctly returns "true" for the
+// directory itself but NOT for paths within it.
+//
+// This function works around the bug by checking each parent directory
+// prefix of the given path. If any parent is ignored by
+// git_status_should_ignore, the path is considered effectively ignored.
+fn isEffectivelyIgnored(repo: *c.git_repository, path: [*:0]const u8) bool {
+    var ignored: c_int = 0;
+
+    // Check the full path itself first
+    if (c.git_status_should_ignore(&ignored, repo, path) == 0 and ignored != 0) {
+        return true;
+    }
+
+    // Walk parent directory prefixes
+    var buf: [constants.MAX_CWD_LEN]u8 = undefined;
+    const span = std.mem.span(path);
+    if (span.len >= buf.len) return false;
+    @memcpy(buf[0..span.len], span);
+    buf[span.len] = 0;
+
+    var i: usize = 1; // skip leading '/' or '.'
+    while (i < span.len) : (i += 1) {
+        if (buf[i] == '/') {
+            buf[i] = 0;
+            const prefix: [*:0]const u8 = @ptrCast(&buf);
+            if (c.git_status_should_ignore(&ignored, repo, prefix) == 0 and ignored != 0) {
+                return true;
+            }
+            buf[i] = '/';
+        }
+    }
+
+    return false;
+}
+
 fn computeStatusCounts(repo: *c.git_repository, out: *RepoStatus) void {
     var status_opts: c.git_status_options = undefined;
     _ = c.git_status_options_init(&status_opts, c.GIT_STATUS_OPTIONS_VERSION);
@@ -123,7 +165,18 @@ fn computeStatusCounts(repo: *c.git_repository, out: *RepoStatus) void {
             continue;
         }
 
+        // libgit2 bug workaround: directory-level ignore patterns (e.g.
+        // ".claude*" in core.excludesFile) prevent the directory from
+        // appearing in the status list, but files INSIDE that directory
+        // still show as untracked. Skip entries whose parent directories
+        // are marked as ignored by git_status_should_ignore.
         if ((status & c.GIT_STATUS_WT_NEW) != 0) {
+            const diff_entry = entry.*.index_to_workdir;
+            if (diff_entry != null and diff_entry.*.new_file.path != null) {
+                if (isEffectivelyIgnored(repo, diff_entry.*.new_file.path)) {
+                    continue;
+                }
+            }
             out.untracked += 1;
         }
 

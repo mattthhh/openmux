@@ -158,6 +158,39 @@ fn countBinaryCb(
     return 0;
 }
 
+// Check if a path is effectively ignored by testing each parent directory.
+// See the same function in repo_status.zig for detailed rationale.
+// Duplicated here because each module has its own @cImport namespace;
+// sharing the function across modules would require passing C opaque
+// pointer types across @cImport boundaries, which Zig does not allow.
+fn isEffectivelyIgnored(repo: *c.git_repository, path: [*:0]const u8) bool {
+    var ignored: c_int = 0;
+
+    if (c.git_status_should_ignore(&ignored, repo, path) == 0 and ignored != 0) {
+        return true;
+    }
+
+    var buf: [constants.MAX_CWD_LEN]u8 = undefined;
+    const span = std.mem.span(path);
+    if (span.len >= buf.len) return false;
+    @memcpy(buf[0..span.len], span);
+    buf[span.len] = 0;
+
+    var i: usize = 1;
+    while (i < span.len) : (i += 1) {
+        if (buf[i] == '/') {
+            buf[i] = 0;
+            const prefix: [*:0]const u8 = @ptrCast(&buf);
+            if (c.git_status_should_ignore(&ignored, repo, prefix) == 0 and ignored != 0) {
+                return true;
+            }
+            buf[i] = '/';
+        }
+    }
+
+    return false;
+}
+
 fn computeDiffStats(
     cwd: [*:0]const u8,
     out_added: *c_int,
@@ -223,6 +256,66 @@ fn computeDiffStats(
     }
     defer c.git_diff_free(diff.?);
 
+    // Scan deltas for files that are effectively ignored (libgit2 bug:
+    // directory-level ignore patterns like ".claude*" prevent the directory
+    // from appearing, but files inside still show as diff deltas). For each
+    // such delta, count its line contribution and subtract from the totals.
+    var ignored_added: usize = 0;
+    var ignored_removed: usize = 0;
+    var ignored_binary: c_int = 0;
+
+    const num_deltas = c.git_diff_num_deltas(diff.?);
+    var delta_idx: usize = 0;
+    while (delta_idx < num_deltas) : (delta_idx += 1) {
+        const delta = c.git_diff_get_delta(diff.?, delta_idx);
+        if (delta == null) continue;
+
+        const new_path = delta.*.new_file.path;
+        const old_path = delta.*.old_file.path;
+
+        // Check both new and old paths (renames may have different paths)
+        const new_ignored = new_path != null and isEffectivelyIgnored(repo.?, new_path);
+        const old_ignored = old_path != null and isEffectivelyIgnored(repo.?, old_path);
+        if (!new_ignored and !old_ignored) continue;
+
+        // This delta is effectively ignored. Count its lines.
+        if (delta.*.flags & c.GIT_DIFF_FLAG_BINARY != 0) {
+            ignored_binary += 1;
+            continue;
+        }
+
+        var patch: ?*c.git_patch = null;
+        if (c.git_patch_from_diff(&patch, diff.?, delta_idx) == 0 and patch != null) {
+            var p_add: usize = 0;
+            var p_del: usize = 0;
+            _ = c.git_patch_line_stats(null, &p_add, &p_del, patch.?);
+            ignored_added += p_add;
+            ignored_removed += p_del;
+            c.git_patch_free(patch.?);
+        }
+    }
+
+    // If nothing was effectively ignored, use the fast path
+    if (ignored_added == 0 and ignored_removed == 0 and ignored_binary == 0) {
+        var binary_count: c_int = 0;
+        _ = c.git_diff_foreach(diff.?, null, countBinaryCb, null, null, &binary_count);
+
+        var stats: ?*c.git_diff_stats = null;
+        if (c.git_diff_get_stats(&stats, diff.?) != 0 or stats == null) {
+            return false;
+        }
+        defer c.git_diff_stats_free(stats.?);
+
+        const added = c.git_diff_stats_insertions(stats.?);
+        const removed = c.git_diff_stats_deletions(stats.?);
+
+        out_added.* = @intCast(added);
+        out_removed.* = @intCast(removed);
+        out_binary.* = binary_count;
+        return true;
+    }
+
+    // Slow path: subtract ignored line counts from totals
     var binary_count: c_int = 0;
     _ = c.git_diff_foreach(diff.?, null, countBinaryCb, null, null, &binary_count);
 
@@ -232,12 +325,25 @@ fn computeDiffStats(
     }
     defer c.git_diff_stats_free(stats.?);
 
-    const added = c.git_diff_stats_insertions(stats.?);
-    const removed = c.git_diff_stats_deletions(stats.?);
+    const total_added: usize = c.git_diff_stats_insertions(stats.?);
+    const total_removed: usize = c.git_diff_stats_deletions(stats.?);
 
-    out_added.* = @intCast(added);
-    out_removed.* = @intCast(removed);
-    out_binary.* = binary_count;
+    const effective_added: usize = if (total_added > ignored_added)
+        total_added - ignored_added
+    else
+        0;
+    const effective_removed: usize = if (total_removed > ignored_removed)
+        total_removed - ignored_removed
+    else
+        0;
+    const effective_binary: c_int = if (binary_count > ignored_binary)
+        binary_count - ignored_binary
+    else
+        0;
+
+    out_added.* = @intCast(effective_added);
+    out_removed.* = @intCast(effective_removed);
+    out_binary.* = effective_binary;
     return true;
 }
 
