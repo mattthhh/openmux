@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.126](https://github.com/monotykamary/openmux/compare/v0.3.125...v0.3.126) (2026-05-27)
+
+
+### Features
+
+* **aggregate:** add post-shimmer glow to highlight completed PTY rows ([4de6e52](https://github.com/monotykamary/openmux/commit/4de6e526c681e8f06747fc421c3db4f89e07ea4c))
+
+
+### Bug Fixes
+
+* **aggregate:** debounce foreground process at data layer, not display layer ([eca9745](https://github.com/monotykamary/openmux/commit/eca974556627c27365b8c29857571e39643afd3d))
+* **aggregate:** display-layer process cache with timer clear and bold glow ([335d3ad](https://github.com/monotykamary/openmux/commit/335d3ad000502f19ec96e0bccf976903d6a841b6))
+* **aggregate:** expire process cache and defer glow to prevent white flash ([475ea78](https://github.com/monotykamary/openmux/commit/475ea78e43ce72849d96729101f4dacf0e8e3ea2))
+* **aggregate:** nest <b> inside <text> to avoid orphan text error ([4d4f4c5](https://github.com/monotykamary/openmux/commit/4d4f4c590236d0701cf8921013c264b0898956bb))
+* **aggregate:** shorten process cache TTL and debounce glow by 500ms ([ee6b342](https://github.com/monotykamary/openmux/commit/ee6b342abc8b626b28f67dcd8d9b784386310782))
+* **aggregate:** smooth foreground process at read time, increase glow debounce ([c2895bf](https://github.com/monotykamary/openmux/commit/c2895bf515b357eb24fc401661de9cbd604d915a))
+* **aggregate:** stabilize foreground process display to prevent label flicker ([a74d099](https://github.com/monotykamary/openmux/commit/a74d099354bdcdec62ca84dc1c45e54931723efb))
+* **shimmer:** prevent unsuppressPtyShimmer from restarting shimmer when glow is active ([3edc8f2](https://github.com/monotykamary/openmux/commit/3edc8f2f273358715ec6ec022c4e8fb82c517421))
+
 ### [0.3.125](https://github.com/monotykamary/openmux/compare/v0.3.124...v0.3.125) (2026-05-27)
 
 
