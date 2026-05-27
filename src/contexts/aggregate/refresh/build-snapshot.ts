@@ -80,6 +80,11 @@ export function createBuildSnapshot(deps: BuildSnapshotDeps) {
       // and session-switch races, a PTY may already have moved to another session
       // while the stamped sessionId (or the active-session hint) is still stale.
       // Prefer authoritative ownership resolution over the stamped/current hint.
+      // Track original paneIds (before ownership resolution) for
+      // gap-filling. The disk data's pane identifiers match the original
+      // paneIds from the layout, not the resolved ones.
+      const originalLivePaneIds = new Set(currentSessionPtys.map((p) => p.paneId));
+
       const currentSessionPtysBySession = new Map<string, CurrentSessionPty[]>();
       for (const pty of currentSessionPtys) {
         const ownership = resolvePtyOwnership(pty.ptyId);
@@ -242,9 +247,63 @@ export function createBuildSnapshot(deps: BuildSnapshotDeps) {
             }
           }
 
+          // During a session switch, PTY creation is async (fire-and-forget).
+          // The live path may only find 2/6 PTYs alive. To prevent a (2) → (6)
+          // flash, supplement with saved: entries from the disk-loaded session
+          // data for panes that don't have a live or in-flight PTY yet. As
+          // PTYs come alive they replace their saved: placeholders via
+          // dedupeAggregatePtysByPane on subsequent refreshes.
+          //
+          // Track which paneIds are already covered by live/in-flight PTYs
+          // so we only add saved: gap-fillers for truly missing panes.
+          const coveredPaneIds = new Set<string>();
+          for (const p of provisionalPtys) {
+            if (p.sessionId === sessionId && p.paneId) {
+              coveredPaneIds.add(p.paneId);
+            }
+          }
+          // Include original paneIds from the layout (before resolution) since
+          // those match the disk data's pane identifiers. Ownership resolution
+          // can change a PTY's paneId, leaving the disk paneId un-covered.
+          for (const paneId of originalLivePaneIds) {
+            if (paneId) coveredPaneIds.add(paneId);
+          }
+          if (loadedSession) {
+            const missingPaneRecords = collectSessionPaneRecords(loadedSession).filter(
+              (record) => !coveredPaneIds.has(record.paneId)
+            );
+            for (const paneRecord of missingPaneRecords) {
+              const savedPtyId = getSavedAggregatePtyId(sessionId, paneRecord.paneId);
+              const previousPanePty = previousPanePtyByKey.get(
+                getAggregatePaneKey(sessionId, paneRecord.paneId) ?? ''
+              );
+              if (previousPanePty && previousPanePty.ptyId !== savedPtyId) {
+                clonePtyStdoutActivity(previousPanePty.ptyId, savedPtyId);
+              }
+              provisionalPtys.push(
+                buildSavedPaneInfo({
+                  sessionId,
+                  sessionMetadata: session,
+                  paneId: paneRecord.paneId,
+                  workspaceId: paneRecord.workspaceId,
+                  cwd: paneRecord.cwd,
+                  title: paneRecord.title,
+                  existing: previousPanePty,
+                })
+              );
+            }
+          }
+
+          // Use the authoritative pane count: if the disk data is available,
+          // it has the full list. Otherwise fall back to the number of PTYs
+          // we actually produced (live + in-flight + saved supplements).
+          const totalPaneCount = loadedSession
+            ? collectSessionPaneRecords(loadedSession).length
+            : provisionalPtys.filter((p) => p.sessionId === sessionId).length;
+
           sessionLoadStates.set(sessionId, {
             status: 'loaded',
-            paneCount: currentLivePtysForSession.length,
+            paneCount: totalPaneCount,
             lastActiveWorkspaceId: currentSessionHints.lastActiveWorkspaceId,
             focusedPaneId: currentSessionHints.focusedPaneId,
           });

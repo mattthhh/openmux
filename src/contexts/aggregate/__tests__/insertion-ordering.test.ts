@@ -938,7 +938,7 @@ describe('aggregate insertion ordering', () => {
 
     await refreshersWithDeletedQuickPty.initialLoad();
 
-    expect(state.allPtys.map((pty) => pty.ptyId)).toEqual(['pty-1']);
+    expect(state.allPtys.map((pty) => pty.ptyId)).toEqual(['pty-1', 'saved:session-1:pane-2']);
     expect(state.recentlyAddedPtyIds.has('pty-deleted')).toBe(false);
   });
 

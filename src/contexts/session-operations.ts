@@ -21,6 +21,7 @@ import {
   loadSessionData,
   switchToSession,
 } from '../effect/bridge';
+import { setPendingSessionSave } from '../effect/bridge/app-coordinator-bridge';
 import {
   SessionStorageError,
   SessionNotFoundError,
@@ -189,7 +190,7 @@ export function createSessionOperations(params: SessionOperationsParams) {
       const activeWorkspaceId = getActiveWorkspaceId();
       if (!options.skipSave && shouldPersistSession(workspaces)) {
         const workspacesSnapshot = snapshotWorkspaces(workspaces);
-        void saveCurrentSession(
+        const savePromise = saveCurrentSession(
           state.activeSession,
           workspacesSnapshot,
           activeWorkspaceId,
@@ -202,6 +203,10 @@ export function createSessionOperations(params: SessionOperationsParams) {
             );
           }
         });
+        // Register the save so aggregate view refreshes await it before
+        // reading this session from disk — prevents stale-disk-data flash.
+        setPendingSessionSave(state.activeSessionId, savePromise);
+        void savePromise;
       }
 
       if (!options.skipBeforeSwitch) {
