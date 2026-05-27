@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.121](https://github.com/monotykamary/openmux/compare/v0.3.120...v0.3.121) (2026-05-27)
+
+
+### Features
+
+* add diff opener overlay with git diff and branch comparison (alt+d) ([03e1286](https://github.com/monotykamary/openmux/commit/03e128684ca729c6585f186429180513484762f7))
+* add file opener overlay with fuzzy find (alt+o) ([18ae28a](https://github.com/monotykamary/openmux/commit/18ae28a3f68a2673f275ea00bb31f848ba7350ec))
+* **command-palette:** add aggregate view context awareness ([ad10798](https://github.com/monotykamary/openmux/commit/ad10798b8884e51f2e5995a48fd4c9034b2649a0))
+* **command-palette:** bridge aggregate state manager actions via signal ([31d29ee](https://github.com/monotykamary/openmux/commit/31d29ee018da583c27f6371fc9eaba5a8da13d3e))
+* **diff-opener:** add fzf preview-fg gray tint for line numbers ([8845919](https://github.com/monotykamary/openmux/commit/8845919e5a78f64db64c9b7ecd51c76d029e0bcb)), closes [#707880](https://github.com/monotykamary/openmux/issues/707880)
+* **diff-opener:** add last commit target and parallelize discovery ([cbf7869](https://github.com/monotykamary/openmux/commit/cbf78691f212a79aa635f53e2b34fb96bdcc775d))
+
+
+### Bug Fixes
+
+* auto-enter preview mode when a PTY is selected in aggregate view ([8539102](https://github.com/monotykamary/openmux/commit/85391029d21147a7f66f3bbadec9d25e769a76d6))
+* useInvoker CWD for file opener and cap visible results ([78dcebb](https://github.com/monotykamary/openmux/commit/78dcebb8c5701c0f6e17e96b85d229cd8d073814))
+* **zig-git:** skip files in ignored directories from status and diff counts ([7d9c997](https://github.com/monotykamary/openmux/commit/7d9c9977a25f1efa72d067e1fff497739f8afbea))
+
+
+### Refactoring
+
+* **aggregate:** remove implicit PTY filter-by-typing from aggregate view ([03bb9b8](https://github.com/monotykamary/openmux/commit/03bb9b85ea15002f06e0012f46e884cd77653530))
+
 ### [0.3.120](https://github.com/monotykamary/openmux/compare/v0.3.119...v0.3.120) (2026-05-24)
 
 
