@@ -99,22 +99,26 @@ function getProcessDisplayName(pty: PtyInfo): string | null {
   const processName = getProcessBaseName(pty.foregroundProcess);
   const normalizedProcessName = processName.toLowerCase();
   const shellName = normalizeProcessName(pty.shell);
-
-  if (!processName) {
-    return lastSeenProcess.get(pty.ptyId) ?? null;
-  }
+  const now = Date.now();
 
   const isShell =
     KNOWN_SHELLS.has(normalizedProcessName) || (shellName && normalizedProcessName === shellName);
 
-  if (isShell) {
-    // Shell is foreground — keep showing the last non-shell process
-    return lastSeenProcess.get(pty.ptyId) ?? null;
+  // Non-shell process — remember it and return it
+  if (processName && !isShell) {
+    lastSeenProcess.set(pty.ptyId, { name: processName, expiresAt: now + PROCESS_CACHE_TTL_MS });
+    return processName;
   }
 
-  // Non-shell process — remember it and return it
-  lastSeenProcess.set(pty.ptyId, processName);
-  return processName;
+  // Shell or empty foreground — return cached process if not expired
+  const cached = lastSeenProcess.get(pty.ptyId);
+  if (cached && now < cached.expiresAt) {
+    return cached.name;
+  }
+
+  // Cache expired or absent — clear stale entry
+  if (cached) lastSeenProcess.delete(pty.ptyId);
+  return null;
 }
 
 /**
@@ -243,8 +247,16 @@ function ShimmeringLabel(props: ShimmeringLabelProps) {
 /** Per-PTY memory of the last seen non-shell foreground process.
  *  Stabilizes the process display so that brief returns to the shell
  *  (e.g. between `sleep` calls in a `for` loop) don't cause the
- *  "(sleep)" label to flicker in and out. */
-const lastSeenProcess = new Map<string, string>();
+ *  "(sleep)" label to flicker in and out.
+ *
+ *  The cache expires after PROCESS_CACHE_TTL_MS when the foreground
+ *  stays as the shell, meaning the child process has truly exited. */
+const lastSeenProcess = new Map<string, { name: string; expiresAt: number }>();
+
+/** How long to keep showing a non-shell process after the shell becomes
+ *  foreground. Covers brief shell-child alternations (e.g. `for` loops)
+ *  but eventually clears when the child truly exits. */
+const PROCESS_CACHE_TTL_MS = 2000;
 
 /** Clear the remembered process for a PTY (on destruction). */
 export function clearLastSeenProcess(ptyId: string): void {
@@ -287,17 +299,22 @@ export function PtyTreeRow(props: PtyTreeRowProps) {
     setIsAnimating(hasActiveShimmer(props.pty.ptyId));
   });
 
-  // Effect 2: Detect when shimmer ENDS (animation timeout) — activate glow
+  // Effect 2: Detect when shimmer ENDS — defer glow by one frame to avoid
+  // a white flash if new activity immediately restarts the shimmer
   createEffect(() => {
-    void shimmerStateVersion(); // Track shimmer state changes to detect end
+    void shimmerStateVersion();
     if (!isAnimating()) return;
     const now = Date.now();
     if (hasActiveShimmer(props.pty.ptyId, now)) return;
     setIsAnimating(false);
-    // Shimmer naturally completed — activate glow until user selects this row
-    if (hasPostShimmerGlow(props.pty.ptyId) && !props.isSelected) {
-      setGlowActive(true);
-    }
+    // Defer glow activation by one frame: if the shimmer restarts before
+    // the next render (from queued or new activity), the glow won't appear.
+    queueMicrotask(() => {
+      if (hasActiveShimmer(props.pty.ptyId)) return; // shimmer restarted
+      if (hasPostShimmerGlow(props.pty.ptyId) && !props.isSelected) {
+        setGlowActive(true);
+      }
+    });
   });
 
   // New shimmer starts → cancel any active glow
