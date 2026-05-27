@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.124](https://github.com/monotykamary/openmux/compare/v0.3.123...v0.3.124) (2026-05-27)
+
+
+### Bug Fixes
+
+* **zig-pty:** increase async spawn test timeouts for CI stability ([d6a5a32](https://github.com/monotykamary/openmux/commit/d6a5a32435a8ac2f0d24eb46771b965a40d93032))
+* **zig-pty:** replace polling sleeps with drain primitive and exponential backoff ([412d1f3](https://github.com/monotykamary/openmux/commit/412d1f3327bfb3e0917784304572e3eabbfa175e))
+
 ### [0.3.123](https://github.com/monotykamary/openmux/compare/v0.3.122...v0.3.123) (2026-05-27)
 
 ### [0.3.122](https://github.com/monotykamary/openmux/compare/v0.3.121...v0.3.122) (2026-05-27)
