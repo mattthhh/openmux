@@ -6,10 +6,7 @@ import { Show } from 'solid-js';
 import { useLayout, useOverlays } from '../../contexts';
 import { useSelection } from '../../contexts/SelectionContext';
 import { useAggregateView } from '../../contexts/AggregateViewContext';
-import {
-  DEFAULT_COMMAND_PALETTE_COMMANDS,
-  type CommandPaletteCommand,
-} from '../../core/command-palette';
+import { type CommandPaletteCommand } from '../../core/command-palette';
 import { StatusBar, CopyNotification, ConfirmationDialog } from '../index';
 import { SessionPicker } from '../SessionPicker';
 import { SearchOverlay } from '../SearchOverlay';
@@ -23,6 +20,7 @@ import { calculateLayoutDimensions } from '../aggregate';
 interface AppOverlaysProps {
   width: number;
   height: number;
+  commands: CommandPaletteCommand[];
   onCommandPaletteExecute: (command: CommandPaletteCommand) => void;
   onToggleConsole?: () => void;
 }
@@ -80,7 +78,7 @@ export function AppOverlays(props: AppOverlaysProps) {
       <CommandPalette
         width={props.width}
         height={props.height}
-        commands={DEFAULT_COMMAND_PALETTE_COMMANDS}
+        commands={props.commands}
         state={overlays.commandPaletteState}
         setState={overlays.setCommandPaletteState}
         onExecute={props.onCommandPaletteExecute}

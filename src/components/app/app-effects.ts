@@ -4,7 +4,7 @@
 
 import { createEffect, onCleanup } from 'solid-js';
 import type { PasteEvent, CliRenderer } from '@opentui/core';
-import { DEFAULT_COMMAND_PALETTE_COMMANDS } from '../../core/command-palette';
+import { getCommandsForContext } from '../../core/command-palette';
 import { checkForUpdateLabel } from '../../core/update-checker';
 import { setupClipboardAndShimBridge } from './clipboard-bridge';
 import { setupFocusedPtyRegistry, setupHostFocusTracking } from './focus-tracking';
@@ -44,7 +44,8 @@ export function setupAppEffects(deps: AppEffectsDeps): void {
 
   setupOverlayClipRects({
     ...(overlayDeps as Omit<OverlayClipDeps, 'commandPaletteCommands'>),
-    commandPaletteCommands: DEFAULT_COMMAND_PALETTE_COMMANDS,
+    commandPaletteCommands: () =>
+      getCommandsForContext(overlayDeps.aggregateState.showAggregateView),
   });
 
   setupClipboardAndShimBridge({

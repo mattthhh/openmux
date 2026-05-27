@@ -71,7 +71,7 @@ export function setupOverlayClipRects(params: {
     previewZoomed: boolean;
   };
   commandPaletteState: CommandPaletteState;
-  commandPaletteCommands: CommandPaletteCommand[];
+  commandPaletteCommands: CommandPaletteCommand[] | (() => CommandPaletteCommand[]);
   paneRenameState: PaneRenameState;
   workspaceLabelState: WorkspaceLabelState;
   confirmationVisible: () => boolean;
@@ -135,7 +135,16 @@ export function setupOverlayClipRects(params: {
         layout.state.workspaces
       )
     );
-    pushRect(getCommandPaletteRect(w, h, commandPaletteState, commandPaletteCommands));
+    pushRect(
+      getCommandPaletteRect(
+        w,
+        h,
+        commandPaletteState,
+        typeof commandPaletteCommands === 'function'
+          ? commandPaletteCommands()
+          : commandPaletteCommands
+      )
+    );
     pushRect(getPaneRenameRect(w, h, paneRenameState));
     pushRect(getWorkspaceLabelRect(w, h, workspaceLabelState));
     pushRect(getSearchOverlayRect(w, h, Boolean(search.searchState)));

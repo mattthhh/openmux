@@ -34,6 +34,29 @@ import type { OverlayContextValue } from '../../contexts/OverlayContext';
 import type { AggregateViewState } from '../../contexts/aggregate-view-types';
 import type { KeyboardEvent } from '../../core/keyboard-event';
 
+/** Callbacks for aggregate-view-scoped actions. */
+export interface AggregateCommandActions {
+  togglePreviewZoom: () => void;
+  handleNewPaneInSession: () => Promise<void>;
+  handleJumpToPty: () => Promise<boolean>;
+  killSelectedPty: (ptyId: string) => void;
+  navigateUp: () => void;
+  navigateDown: () => void;
+  navigateToPrevPty: () => void;
+  navigateToNextPty: () => void;
+  toggleShowInactive: () => void;
+  openPtyPicker: () => void;
+  toggleSessionExpanded: (sessionId: string) => void;
+  expandAllSessions: () => void;
+  collapseAllSessions: () => void;
+  enterPreviewSearch: () => Promise<void>;
+  enterPreviewCopyMode: () => void;
+  renameSelectedPty: () => void;
+  pasteToPreviewPty: () => void;
+  getSelectedPtyId: () => string | null;
+  closeAggregateView: () => void;
+}
+
 type VimHandler = {
   handleCombo: (combo: string) => { action: string | null; pending: boolean };
   reset: () => void;
@@ -51,6 +74,7 @@ export interface AppActionsDeps {
   keyboardState: KeyboardContextValue;
   overlays: OverlayContextValue;
   aggregateState: AggregateViewState;
+  aggregateActions: AggregateCommandActions;
   renderer: { console: { toggle: () => void; getCachedLogs: () => string } };
   openAggregateView: () => void;
   getActivePtyId: () => string | undefined;
@@ -96,6 +120,7 @@ export function useAppActions(deps: AppActionsDeps): {
     keyboardState,
     overlays,
     aggregateState,
+    aggregateActions,
     renderer,
     openAggregateView,
     getActivePtyId,
@@ -216,9 +241,58 @@ export function useAppActions(deps: AppActionsDeps): {
     getVimHandler: copyModeVimState.getCopyVimHandler,
   });
 
+  const executeAggregateCommandAction = (action: string): boolean => {
+    switch (action) {
+      case 'aggregate.zoom':
+        aggregateActions.togglePreviewZoom();
+        return true;
+      case 'aggregate.new.pane':
+        void aggregateActions.handleNewPaneInSession();
+        return true;
+      case 'aggregate.kill': {
+        const ptyId = aggregateActions.getSelectedPtyId();
+        if (ptyId) aggregateActions.killSelectedPty(ptyId);
+        return true;
+      }
+      case 'aggregate.search':
+        void aggregateActions.enterPreviewSearch();
+        return true;
+      case 'aggregate.copy':
+        aggregateActions.enterPreviewCopyMode();
+        return true;
+      case 'aggregate.rename':
+        aggregateActions.renameSelectedPty();
+        return true;
+      case 'aggregate.paste':
+        aggregateActions.pasteToPreviewPty();
+        return true;
+      case 'aggregate.toggle.scope':
+        aggregateActions.toggleShowInactive();
+        return true;
+      case 'aggregate.toggle.picker':
+        aggregateActions.openPtyPicker();
+        return true;
+      case 'aggregate.jump':
+        void aggregateActions.handleJumpToPty();
+        return true;
+      case 'aggregate.expand.all':
+        aggregateActions.expandAllSessions();
+        return true;
+      case 'aggregate.collapse.all':
+        aggregateActions.collapseAllSessions();
+        return true;
+      case 'aggregate.toggle':
+        aggregateActions.closeAggregateView();
+        return true;
+      default:
+        return false;
+    }
+  };
+
   const executeCommandAction = (action: string) => {
-    if (aggregateState.showAggregateView && aggregateState.previewMode && action === 'pane.zoom') {
-      return;
+    // When aggregate view is open, route aggregate-scoped actions first
+    if (aggregateState.showAggregateView) {
+      if (executeAggregateCommandAction(action)) return;
     }
 
     handleNormalModeAction(

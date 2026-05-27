@@ -20,7 +20,7 @@ import { useAggregateView } from './contexts/AggregateViewContext';
 import { useTitle } from './contexts/TitleContext';
 import { PaneContainer } from './components';
 import { getFocusedPtyId } from './core/workspace-utils';
-import { resolveAggregatePreviewPtyId } from './components/aggregate/utils';
+import { resolveAggregatePreviewPtyId, findPtyLocation } from './components/aggregate/utils';
 import { onShimDetached } from './effect/bridge';
 import { createPaneResizeHandlers, createPasteHandler } from './components/app';
 import { readFromClipboard } from './effect/bridge';
@@ -28,6 +28,8 @@ import { setClipboardPasteHandler, setCopyModeExitCallback } from './terminal/fo
 import { setupKeyboardRouting } from './components/app/keyboard-routing';
 import { usePtyCreation } from './components/app/pty-creation';
 import { AppOverlays } from './components/app/AppOverlays';
+import { getCommandsForContext } from './core/command-palette';
+import type { AggregateCommandActions } from './components/app/app-actions';
 import {
   createKittyGraphicsBridge,
   type RendererWithNative,
@@ -122,6 +124,68 @@ function AppContent() {
     splitPane: layout.splitPane,
   });
 
+  // Aggregate view command palette actions — bridges aggregate-view context
+  // methods into the executeCommandAction routing so the command palette can
+  // act on the aggregate-selected PTY instead of the workspace focused pane.
+  const aggregateCommandActions: AggregateCommandActions = {
+    togglePreviewZoom: aggregateView.togglePreviewZoom,
+    handleNewPaneInSession: () => Promise.resolve(), // replaced below by state manager
+    handleJumpToPty: () => Promise.resolve(false), // replaced below by state manager
+    killSelectedPty: (ptyId: string) => overlays.confirmationHandlers.handleRequestKillPty(ptyId),
+    navigateUp: aggregateView.navigateUp,
+    navigateDown: aggregateView.navigateDown,
+    navigateToPrevPty: aggregateView.navigateToPrevPty,
+    navigateToNextPty: aggregateView.navigateToNextPty,
+    toggleShowInactive: aggregateView.toggleShowInactive,
+    openPtyPicker: aggregateView.openPtyPicker,
+    toggleSessionExpanded: aggregateView.toggleSessionExpanded,
+    expandAllSessions: aggregateView.expandAllSessions,
+    collapseAllSessions: aggregateView.collapseAllSessions,
+    enterPreviewSearch: async () => {
+      const ptyId = resolveAggregatePreviewPtyId({
+        selectedPtyId: aggregateView.state.selectedPtyId,
+        selectedIndex: aggregateView.state.selectedIndex,
+        flattenedTree: aggregateView.state.flattenedTree,
+        activeSessionId: session.state.activeSessionId,
+        workspaces: layout.state.workspaces,
+      });
+      if (!ptyId) return;
+      selection.clearAllSelections();
+      await search.enterSearchMode(ptyId);
+      keyboardState.enterSearchMode();
+    },
+    enterPreviewCopyMode: () => {
+      const ptyId = resolveAggregatePreviewPtyId({
+        selectedPtyId: aggregateView.state.selectedPtyId,
+        selectedIndex: aggregateView.state.selectedIndex,
+        flattenedTree: aggregateView.state.flattenedTree,
+        activeSessionId: session.state.activeSessionId,
+        workspaces: layout.state.workspaces,
+      });
+      if (!ptyId) return;
+      selection.clearAllSelections();
+      keyboardState.enterCopyMode();
+      copyMode.enterCopyMode(ptyId, (id) => terminal.getTerminalStateSync(id));
+    },
+    renameSelectedPty: () => {
+      const ptyId = aggregateView.state.selectedPtyId;
+      if (!ptyId) return;
+      // Resolve PTY to pane ID — prefer current session layout, then aggregate tree
+      const loc = findPtyLocation(ptyId, layout.state.workspaces);
+      const paneId = loc?.paneId;
+      if (!paneId) return;
+      const currentTitle = titleContext.getTitle(paneId) ?? 'shell';
+      overlays.setPaneRenameState({
+        show: true,
+        paneId,
+        value: currentTitle,
+      });
+    },
+    pasteToPreviewPty: () => terminal.pasteToFocused(),
+    getSelectedPtyId: () => aggregateView.state.selectedPtyId,
+    closeAggregateView: aggregateView.closeAggregateView,
+  };
+
   // Single source of truth for all action handlers
   const appActions = useAppActions({
     config,
@@ -135,6 +199,7 @@ function AppContent() {
     keyboardState,
     overlays,
     aggregateState: aggregateView.state,
+    aggregateActions: aggregateCommandActions,
     renderer,
     openAggregateView: aggregateView.openAggregateView,
     getActivePtyId,
@@ -250,6 +315,7 @@ function AppContent() {
       <AppOverlays
         width={width()}
         height={height()}
+        commands={getCommandsForContext(aggregateView.state.showAggregateView)}
         onCommandPaletteExecute={appActions.handleCommandPaletteExecute}
         onToggleConsole={appActions.actions.onToggleConsole!}
       />

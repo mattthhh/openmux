@@ -230,7 +230,165 @@ const WORKSPACE_COMMANDS: CommandPaletteCommand[] = Array.from({ length: 9 }, (_
   };
 });
 
+const AGGREGATE_VIEW_COMMANDS: CommandPaletteCommand[] = [
+  {
+    id: 'aggregate.new.pane',
+    title: 'New pane in session',
+    description: "Create a new pane in the selected PTY's session",
+    action: 'aggregate.new.pane',
+    keywords: ['new', 'pane', 'session', 'split'],
+  },
+  {
+    id: 'aggregate.kill',
+    title: 'Kill selected PTY',
+    description: 'Kill the selected terminal session',
+    action: 'aggregate.kill',
+    keywords: ['kill', 'close', 'pty', 'terminal'],
+  },
+  {
+    id: 'aggregate.zoom',
+    title: 'Toggle preview zoom',
+    description: 'Zoom or unzoom the preview pane',
+    action: 'aggregate.zoom',
+    keywords: ['zoom', 'preview', 'pane'],
+  },
+  {
+    id: 'aggregate.search',
+    title: 'Search selected PTY scrollback',
+    description: 'Search the scrollback of the selected PTY',
+    action: 'aggregate.search',
+    keywords: ['search', 'find', 'scrollback'],
+  },
+  {
+    id: 'aggregate.copy',
+    title: 'Copy mode on selected PTY',
+    description: 'Enter copy mode for the selected PTY',
+    action: 'aggregate.copy',
+    keywords: ['copy', 'select', 'scrollback', 'vim'],
+  },
+  {
+    id: 'aggregate.rename',
+    title: 'Rename selected PTY',
+    description: 'Rename the selected terminal pane',
+    action: 'aggregate.rename',
+    keywords: ['rename', 'name', 'title', 'pty'],
+  },
+  {
+    id: 'aggregate.paste',
+    title: 'Paste to selected PTY',
+    description: 'Paste from clipboard to the selected PTY',
+    action: 'aggregate.paste',
+    keywords: ['paste', 'clipboard'],
+  },
+  {
+    id: 'aggregate.toggle.scope',
+    title: 'Toggle inactive PTYs',
+    description: 'Show or hide inactive terminals',
+    action: 'aggregate.toggle.scope',
+    keywords: ['inactive', 'toggle', 'scope', 'show', 'hide'],
+  },
+  {
+    id: 'aggregate.toggle.picker',
+    title: 'Toggle PTY picker',
+    description: 'Open the PTY quick-switch picker',
+    action: 'aggregate.toggle.picker',
+    keywords: ['picker', 'switch', 'alt-tab'],
+  },
+  {
+    id: 'aggregate.jump',
+    title: 'Jump to PTY',
+    description: 'Jump to the selected PTY in its workspace',
+    action: 'aggregate.jump',
+    keywords: ['jump', 'goto', 'focus', 'tab'],
+  },
+  {
+    id: 'aggregate.expand.all',
+    title: 'Expand all sessions',
+    description: 'Expand all session groups in the tree',
+    action: 'aggregate.expand.all',
+    keywords: ['expand', 'all', 'sessions', 'tree'],
+  },
+  {
+    id: 'aggregate.collapse.all',
+    title: 'Collapse all sessions',
+    description: 'Collapse all session groups in the tree',
+    action: 'aggregate.collapse.all',
+    keywords: ['collapse', 'all', 'sessions', 'tree'],
+  },
+
+  // Global actions that work in both contexts
+  {
+    id: 'aggregate.toggle',
+    title: 'Close aggregate view',
+    action: 'aggregate.toggle',
+    keywords: ['aggregate', 'close', 'exit'],
+  },
+  {
+    id: 'aggregate.session.picker',
+    title: 'Session picker',
+    description: 'Open the session picker',
+    action: 'session.picker.toggle',
+    keywords: ['session', 'picker'],
+  },
+  {
+    id: 'aggregate.console.toggle',
+    title: 'Toggle debug console',
+    description: 'Show or hide the debug console',
+    action: 'console.toggle',
+    keywords: ['console', 'debug'],
+  },
+  {
+    id: 'aggregate.console.dump',
+    title: 'Dump console logs to temp directory',
+    description: 'Save all console logs to a file in the system temp directory',
+    action: 'console.dump',
+    keywords: ['console', 'logs', 'dump', 'save', 'tmp', 'temp', 'debug'],
+  },
+  {
+    id: 'aggregate.keyboard.vim.toggle',
+    title: 'Toggle overlay vim mode',
+    description: 'Enable or disable vim keybindings in overlays',
+    action: 'keyboard.vim.toggle',
+    keywords: ['vim', 'keyboard', 'overlays'],
+  },
+  {
+    id: 'aggregate.keyboard.prefix-only.toggle',
+    title: 'Toggle prefix-only mode',
+    description: 'Enable or disable non-prefix shortcuts (Alt+keys)',
+    action: 'keyboard.prefix-only.toggle',
+    keywords: ['prefix', 'keybindings', 'alt', 'shortcuts', 'keyboard'],
+  },
+  {
+    id: 'aggregate.theme.refresh',
+    title: 'Refresh host theme',
+    description: 'Re-query host terminal colors',
+    action: 'theme.refresh',
+    keywords: ['theme', 'colors', 'appearance', 'refresh'],
+  },
+  {
+    id: 'aggregate.app.quit',
+    title: 'Quit openmux',
+    description: 'Exit and terminate all panes',
+    action: 'app.quit',
+    keywords: ['quit', 'exit'],
+  },
+  {
+    id: 'aggregate.app.detach',
+    title: 'Detach',
+    description: 'Detach the current client',
+    action: 'app.detach',
+    keywords: ['detach'],
+  },
+];
+
 export const DEFAULT_COMMAND_PALETTE_COMMANDS: CommandPaletteCommand[] = [
   ...BASE_COMMANDS,
   ...WORKSPACE_COMMANDS,
 ];
+
+export const AGGREGATE_VIEW_PALETTE_COMMANDS: CommandPaletteCommand[] = AGGREGATE_VIEW_COMMANDS;
+
+/** Return the appropriate command list for the current view context. */
+export function getCommandsForContext(aggregateOpen: boolean): CommandPaletteCommand[] {
+  return aggregateOpen ? AGGREGATE_VIEW_COMMANDS : DEFAULT_COMMAND_PALETTE_COMMANDS;
+}
