@@ -10,7 +10,7 @@ import { type CommandPaletteCommand } from '../../core/command-palette';
 import { StatusBar, CopyNotification, ConfirmationDialog } from '../index';
 import { SessionPicker } from '../SessionPicker';
 import { SearchOverlay } from '../SearchOverlay';
-import { AggregateView } from '../AggregateView';
+import { AggregateView, type AggregateStateActions } from '../AggregateView';
 import { CommandPalette } from '../CommandPalette';
 import { PaneRenameOverlay } from '../PaneRenameOverlay';
 import { WorkspaceLabelOverlay } from '../WorkspaceLabelOverlay';
@@ -23,6 +23,8 @@ interface AppOverlaysProps {
   commands: CommandPaletteCommand[];
   onCommandPaletteExecute: (command: CommandPaletteCommand) => void;
   onToggleConsole?: () => void;
+  /** Called when the aggregate state manager initializes with its action methods. */
+  onAggregateActionsReady?: (actions: AggregateStateActions) => void;
 }
 
 export function AppOverlays(props: AppOverlaysProps) {
@@ -57,6 +59,7 @@ export function AppOverlays(props: AppOverlaysProps) {
         onToggleCommandPalette={overlays.toggleCommandPalette}
         onToggleConsole={props.onToggleConsole}
         onVimModeChange={overlays.setAggregateVimMode}
+        onActionsReady={props.onAggregateActionsReady}
       />
 
       <SessionPicker

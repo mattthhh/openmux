@@ -3,6 +3,7 @@
  */
 
 import { useTerminalDimensions, useRenderer } from '@opentui/solid';
+import { createSignal } from 'solid-js';
 import { useAppActions } from './components/app/app-actions';
 import {
   useConfig,
@@ -127,10 +128,21 @@ function AppContent() {
   // Aggregate view command palette actions — bridges aggregate-view context
   // methods into the executeCommandAction routing so the command palette can
   // act on the aggregate-selected PTY instead of the workspace focused pane.
+  //
+  // The state manager's methods (handleNewPaneInSession, handleJumpToPty) are
+  // only available once AggregateView mounts. We use a signal so the command
+  // palette resolves to the real implementation at call time — the AggregateView
+  // writes the actions into this signal via onActionsReady.
+  const [aggregateStateActions, setAggregateStateActions] = createSignal<{
+    handleNewPaneInSession: () => Promise<void>;
+    handleJumpToPty: () => Promise<boolean>;
+  } | null>(null);
+
   const aggregateCommandActions: AggregateCommandActions = {
     togglePreviewZoom: aggregateView.togglePreviewZoom,
-    handleNewPaneInSession: () => Promise.resolve(), // replaced below by state manager
-    handleJumpToPty: () => Promise.resolve(false), // replaced below by state manager
+    handleNewPaneInSession: () =>
+      aggregateStateActions()?.handleNewPaneInSession() ?? Promise.resolve(),
+    handleJumpToPty: () => aggregateStateActions()?.handleJumpToPty() ?? Promise.resolve(false),
     killSelectedPty: (ptyId: string) => overlays.confirmationHandlers.handleRequestKillPty(ptyId),
     navigateUp: aggregateView.navigateUp,
     navigateDown: aggregateView.navigateDown,
@@ -318,6 +330,7 @@ function AppContent() {
         commands={getCommandsForContext(aggregateView.state.showAggregateView)}
         onCommandPaletteExecute={appActions.handleCommandPaletteExecute}
         onToggleConsole={appActions.actions.onToggleConsole!}
+        onAggregateActionsReady={setAggregateStateActions}
       />
     </box>
   );

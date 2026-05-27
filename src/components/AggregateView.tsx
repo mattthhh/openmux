@@ -42,6 +42,12 @@ import {
 
 import { getFocusedPtyId } from '../core/workspace-utils';
 
+/** Actions exposed by AggregateStateManager for external consumers (e.g. command palette). */
+export interface AggregateStateActions {
+  handleJumpToPty: () => Promise<boolean>;
+  handleNewPaneInSession: () => Promise<void>;
+}
+
 interface AggregateViewProps {
   width: number;
   height: number;
@@ -51,6 +57,8 @@ interface AggregateViewProps {
   onToggleCommandPalette?: () => void;
   onToggleConsole?: () => void;
   onVimModeChange?: (mode: 'normal' | 'insert') => void;
+  /** Called once after the state manager initializes with its action methods. */
+  onActionsReady?: (actions: AggregateStateActions) => void;
 }
 
 export function AggregateView(props: AggregateViewProps) {
@@ -69,6 +77,16 @@ export function AggregateView(props: AggregateViewProps) {
 
   // State manager (handles autoswitch, pane creation, and jump effects)
   const stateManager = AggregateStateManager();
+
+  // Expose state manager actions to parent (e.g. command palette) once available
+  createEffect(() => {
+    if (aggregate.state.showAggregateView) {
+      props.onActionsReady?.({
+        handleJumpToPty: stateManager.handleJumpToPty,
+        handleNewPaneInSession: stateManager.handleNewPaneInSession,
+      });
+    }
+  });
 
   // Controllers (keyboard controller owns vim, preview support, prefix/copy mode state)
   const kbCtrl = AggregateKeyboardController({
