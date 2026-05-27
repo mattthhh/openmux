@@ -6,30 +6,38 @@ const exports = @import("../ffi/exports.zig");
 const constants = @import("../util/constants.zig");
 const sleep_util = @import("../util/sleep.zig");
 
-fn waitForSpawnDrain() !void {
-    var attempts: usize = 0;
-    while (attempts < 300) : (attempts += 1) {
-        const request_id = exports.bun_pty_spawn_async("true", "", "", 80, 24);
-        if (request_id < 0) {
-            sleep_util.sleepMilliseconds(50);
-            continue;
-        }
+const DRAIN_TIMEOUT_MS: u64 = 10_000;
+const POLL_TIMEOUT_MS: u64 = 15_000;
 
-        var handle: c_int = constants.SPAWN_PENDING;
-        var iterations: usize = 0;
-        while (handle == constants.SPAWN_PENDING and iterations < 300) : (iterations += 1) {
-            handle = exports.bun_pty_spawn_poll(request_id);
-            if (handle == constants.SPAWN_PENDING) {
-                sleep_util.sleepMilliseconds(50);
-            }
-        }
-
-        try std.testing.expect(handle > 0);
-        exports.bun_pty_close(handle);
-        return;
+/// Poll an async spawn request until it reaches a terminal state.
+/// Uses exponential backoff: starts at 1ms, caps at 200ms.
+/// Returns the handle on success, or SPAWN_ERROR/SPAWN_PENDING on failure/timeout.
+fn pollUntilComplete(request_id: c_int, timeout_ms: u64) c_int {
+    var wait_ms: u64 = 1;
+    var elapsed: u64 = 0;
+    while (elapsed < timeout_ms) : ({
+        elapsed += wait_ms;
+        wait_ms = @min(wait_ms * 2, 200);
+    }) {
+        const result = exports.bun_pty_spawn_poll(request_id);
+        if (result != constants.SPAWN_PENDING) return result;
+        sleep_util.sleepMilliseconds(@intCast(wait_ms));
     }
+    return constants.SPAWN_PENDING;
+}
 
-    try std.testing.expect(false);
+/// Drain all in-flight spawn requests, then verify the system can
+/// successfully spawn a new PTY. This is the gold-standard check
+/// that the async spawn subsystem is fully idle and functional.
+fn drainAndWaitForFunctional() !void {
+    try std.testing.expect(exports.bun_pty_spawn_drain(@intCast(DRAIN_TIMEOUT_MS)));
+
+    const request_id = exports.bun_pty_spawn_async("true", "", "", 80, 24);
+    try std.testing.expect(request_id >= 0);
+
+    const handle = pollUntilComplete(request_id, POLL_TIMEOUT_MS);
+    try std.testing.expect(handle > 0);
+    exports.bun_pty_close(handle);
 }
 
 // ============================================================================
@@ -40,16 +48,7 @@ test "async spawn basic flow" {
     const request_id = exports.bun_pty_spawn_async("echo async", "", "", 80, 24);
     try std.testing.expect(request_id >= 0);
 
-    // Poll until complete
-    var handle: c_int = constants.SPAWN_PENDING;
-    var iterations: usize = 0;
-    while (handle == constants.SPAWN_PENDING and iterations < 300) : (iterations += 1) {
-        handle = exports.bun_pty_spawn_poll(request_id);
-        if (handle == constants.SPAWN_PENDING) {
-            sleep_util.sleepMilliseconds(50);
-        }
-    }
-
+    const handle = pollUntilComplete(request_id, POLL_TIMEOUT_MS);
     try std.testing.expect(handle > 0);
     exports.bun_pty_close(handle);
 }
@@ -58,15 +57,7 @@ test "async spawn with cwd" {
     const request_id = exports.bun_pty_spawn_async("pwd", "/tmp", "", 80, 24);
     try std.testing.expect(request_id >= 0);
 
-    var handle: c_int = constants.SPAWN_PENDING;
-    var iterations: usize = 0;
-    while (handle == constants.SPAWN_PENDING and iterations < 300) : (iterations += 1) {
-        handle = exports.bun_pty_spawn_poll(request_id);
-        if (handle == constants.SPAWN_PENDING) {
-            sleep_util.sleepMilliseconds(50);
-        }
-    }
-
+    const handle = pollUntilComplete(request_id, POLL_TIMEOUT_MS);
     try std.testing.expect(handle > 0);
 
     // Wait for output and verify
@@ -86,17 +77,13 @@ test "async spawn with cwd" {
 // ============================================================================
 
 test "async spawn cancel before completion" {
-    // Start async spawn
     const request_id = exports.bun_pty_spawn_async("sleep 10", "", "", 80, 24);
     try std.testing.expect(request_id >= 0);
 
-    // Small delay to ensure request is queued before cancel
-    sleep_util.sleepMilliseconds(50);
-
-    // Cancel immediately (may or may not have completed)
+    // Cancel immediately (races with spawn thread — either outcome is valid)
     exports.bun_pty_spawn_cancel(request_id);
 
-    // Polling after cancel should return error
+    // Poll should return error (cancelled or already freed)
     const result = exports.bun_pty_spawn_poll(request_id);
     try std.testing.expectEqual(constants.SPAWN_ERROR, result);
 }
@@ -105,20 +92,16 @@ test "async spawn cancel after completion" {
     const request_id = exports.bun_pty_spawn_async("echo done", "", "", 80, 24);
     try std.testing.expect(request_id >= 0);
 
-    // Wait for completion
-    var iterations: usize = 0;
-    while (iterations < 300) : (iterations += 1) {
-        const result = exports.bun_pty_spawn_poll(request_id);
-        if (result != constants.SPAWN_PENDING) break;
-        sleep_util.sleepMilliseconds(50);
-    }
+    // Wait for the spawn to complete
+    const result = pollUntilComplete(request_id, POLL_TIMEOUT_MS);
+    try std.testing.expect(result > 0);
 
-    // Now cancel - should clean up the handle
+    // Now cancel the already-completed request — should close the handle cleanly
     exports.bun_pty_spawn_cancel(request_id);
 
-    // Polling again should return error (already freed)
-    const result = exports.bun_pty_spawn_poll(request_id);
-    try std.testing.expectEqual(constants.SPAWN_ERROR, result);
+    // Polling again should return error (slot was freed by cancel)
+    const after = exports.bun_pty_spawn_poll(request_id);
+    try std.testing.expectEqual(constants.SPAWN_ERROR, after);
 }
 
 // ============================================================================
@@ -145,27 +128,17 @@ test "multiple concurrent async spawns" {
     var request_ids: [4]c_int = undefined;
     var handles: [4]c_int = undefined;
 
-    // Start multiple async spawns
     for (&request_ids, 0..) |*rid, i| {
         rid.* = exports.bun_pty_spawn_async("echo test", "", "", 80, 24);
         try std.testing.expect(rid.* >= 0);
         _ = i;
     }
 
-    // Wait for all to complete
     for (&handles, 0..) |*h, i| {
-        var iterations: usize = 0;
-        h.* = constants.SPAWN_PENDING;
-        while (h.* == constants.SPAWN_PENDING and iterations < 300) : (iterations += 1) {
-            h.* = exports.bun_pty_spawn_poll(request_ids[i]);
-            if (h.* == constants.SPAWN_PENDING) {
-                sleep_util.sleepMilliseconds(50);
-            }
-        }
+        h.* = pollUntilComplete(request_ids[i], POLL_TIMEOUT_MS);
         try std.testing.expect(h.* > 0);
     }
 
-    // Close all
     for (handles) |h| {
         exports.bun_pty_close(h);
     }
@@ -176,31 +149,29 @@ test "multiple concurrent async spawns" {
 // ============================================================================
 
 test "cancel race: concurrent cancel and poll" {
-    // This test exercises the race between cancel and the spawn thread completing.
-    // The fix uses atomic CAS to safely handle this race.
     var i: usize = 0;
     while (i < 20) : (i += 1) {
         const request_id = exports.bun_pty_spawn_async("echo race", "", "", 80, 24);
         try std.testing.expect(request_id >= 0);
 
-        // Small delay to let the request be queued before racing
-        sleep_util.sleepMilliseconds(10);
-
-        // Race: try to cancel while spawn might be completing
-        // This should not corrupt state or leak handles
+        // Race: try to cancel while spawn might be completing.
+        // This should not corrupt state or leak handles.
         exports.bun_pty_spawn_cancel(request_id);
 
         // Poll should return error (cancelled or already freed)
         const result = exports.bun_pty_spawn_poll(request_id);
         try std.testing.expectEqual(constants.SPAWN_ERROR, result);
     }
+
+    // Verify system is still in a good state after the race
+    try drainAndWaitForFunctional();
 }
 
 test "cancel race: double cancel is safe" {
     const request_id = exports.bun_pty_spawn_async("sleep 10", "", "", 80, 24);
     try std.testing.expect(request_id >= 0);
 
-    // Cancel twice - should not crash or corrupt state
+    // Cancel twice — should not crash or corrupt state
     exports.bun_pty_spawn_cancel(request_id);
     exports.bun_pty_spawn_cancel(request_id);
 
@@ -210,101 +181,74 @@ test "cancel race: double cancel is safe" {
 }
 
 test "cancel race: rapid spawn cancel cycles" {
-    // Stress test: rapid spawn/cancel to trigger race conditions
     var i: usize = 0;
     while (i < 30) : (i += 1) {
         const request_id = exports.bun_pty_spawn_async("true", "", "", 80, 24);
         if (request_id >= 0) {
-            // Immediately cancel - races with spawn thread
             exports.bun_pty_spawn_cancel(request_id);
         }
     }
 
-    // Give time for any pending spawns to complete and clean up
-    sleep_util.sleepMilliseconds(1000);
+    // Drain all in-flight requests to verify the system recovers cleanly
+    try std.testing.expect(exports.bun_pty_spawn_drain(@intCast(DRAIN_TIMEOUT_MS)));
 }
 
 test "cancelled requests free slots for reuse" {
-    var initial_ids: [constants.MAX_SPAWN_REQUESTS]c_int = undefined;
+    // Drain first to ensure a clean starting state
+    try std.testing.expect(exports.bun_pty_spawn_drain(@intCast(DRAIN_TIMEOUT_MS)));
 
+    var initial_ids: [constants.MAX_SPAWN_REQUESTS]c_int = undefined;
     for (&initial_ids) |*rid| {
         rid.* = exports.bun_pty_spawn_async("true", "", "", 80, 24);
         try std.testing.expect(rid.* >= 0);
     }
 
+    // Cancel all — sets state to cancelled but doesn't free slots immediately.
+    // The spawn thread will free them as it processes each cancellation.
     for (initial_ids) |rid| {
         exports.bun_pty_spawn_cancel(rid);
     }
 
-    // Wait for the spawn thread to process cancellations and free slots.
-    // Cancelled slots are freed by the spawn thread, not immediately by cancel,
-    // so we need to give it time on slower machines.
-    sleep_util.sleepMilliseconds(1000);
+    // Wait for the spawn thread to process all cancellations and free all slots.
+    // This is the critical step that replaces the fragile sleep-based waiting.
+    try std.testing.expect(exports.bun_pty_spawn_drain(@intCast(DRAIN_TIMEOUT_MS)));
 
-    var attempts: usize = 0;
-    while (attempts < 300) : (attempts += 1) {
-        var new_ids: [constants.MAX_SPAWN_REQUESTS]c_int = undefined;
-        var allocated: usize = 0;
-
-        for (&new_ids) |*rid| {
-            const request_id = exports.bun_pty_spawn_async("true", "", "", 80, 24);
-            if (request_id < 0) break;
-            rid.* = request_id;
-            allocated += 1;
-        }
-
-        if (allocated == constants.MAX_SPAWN_REQUESTS) {
-            for (new_ids) |rid| {
-                exports.bun_pty_spawn_cancel(rid);
-            }
-            try waitForSpawnDrain();
-            return;
-        }
-
-        for (new_ids[0..allocated]) |rid| {
-            exports.bun_pty_spawn_cancel(rid);
-        }
-
-        sleep_util.sleepMilliseconds(50);
+    // All 64 slots should now be free — re-allocate them all
+    var new_ids: [constants.MAX_SPAWN_REQUESTS]c_int = undefined;
+    for (&new_ids) |*rid| {
+        rid.* = exports.bun_pty_spawn_async("true", "", "", 80, 24);
+        try std.testing.expect(rid.* >= 0);
     }
 
-    try std.testing.expect(false);
+    // Clean up: cancel and drain
+    for (new_ids) |rid| {
+        exports.bun_pty_spawn_cancel(rid);
+    }
+    try drainAndWaitForFunctional();
 }
 
 test "cancel race: concurrent spawns with interleaved cancels" {
-    // Use fewer concurrent spawns than MAX to leave headroom for slot allocation
+    try drainAndWaitForFunctional();
+
     const spawn_count: usize = 8;
-
-    // Drain any pending slots from previous tests
-    try waitForSpawnDrain();
-
     var request_ids: [spawn_count]c_int = undefined;
 
-    // Start multiple async spawns
     for (&request_ids) |*rid| {
         rid.* = exports.bun_pty_spawn_async("echo interleave", "", "", 80, 24);
         try std.testing.expect(rid.* >= 0);
     }
 
-    // Cancel every other one immediately (racing with spawn thread)
+    // Cancel every other one (racing with spawn thread)
     for (request_ids, 0..) |rid, i| {
         if (i % 2 == 0) {
             exports.bun_pty_spawn_cancel(rid);
         }
     }
 
-    // Poll the non-cancelled ones
+    // Poll the non-cancelled ones until they complete
     for (request_ids, 0..) |rid, i| {
         if (i % 2 == 1) {
-            var iterations: usize = 0;
-            var handle: c_int = constants.SPAWN_PENDING;
-            while (handle == constants.SPAWN_PENDING and iterations < 300) : (iterations += 1) {
-                handle = exports.bun_pty_spawn_poll(rid);
-                if (handle == constants.SPAWN_PENDING) {
-                    sleep_util.sleepMilliseconds(50);
-                }
-            }
-            // Should complete successfully
+            const handle = pollUntilComplete(rid, POLL_TIMEOUT_MS);
             try std.testing.expect(handle > 0);
             exports.bun_pty_close(handle);
         }
@@ -320,14 +264,10 @@ test "cancel race: concurrent spawns with interleaved cancels" {
 }
 
 test "cancel race: cancel from multiple threads" {
-    // Drain any pending slots from previous tests
-    try waitForSpawnDrain();
+    try drainAndWaitForFunctional();
 
     const request_id = exports.bun_pty_spawn_async("sleep 10", "", "", 80, 24);
     try std.testing.expect(request_id >= 0);
-
-    // Small delay to ensure request is queued before racing
-    sleep_util.sleepMilliseconds(50);
 
     // Spawn multiple threads that all try to cancel the same request
     var threads: [4]std.Thread = undefined;
@@ -336,14 +276,12 @@ test "cancel race: cancel from multiple threads" {
     for (&threads) |*t| {
         t.* = std.Thread.spawn(.{}, struct {
             fn run(rid: c_int) void {
-                // All threads race to cancel
                 exports.bun_pty_spawn_cancel(rid);
             }
         }.run, .{request_id}) catch continue;
         started += 1;
     }
 
-    // Wait for all threads
     for (threads[0..started]) |t| {
         t.join();
     }

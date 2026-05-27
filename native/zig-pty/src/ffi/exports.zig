@@ -49,6 +49,10 @@ pub fn bun_pty_spawn_cancel(request_id: c_int) void {
     spawn_ops.spawnCancel(request_id);
 }
 
+pub fn bun_pty_spawn_drain(timeout_ms: c_int) bool {
+    return spawn_ops.spawnDrain(timeout_ms);
+}
+
 // ============================================================================
 // PTY Operations
 // ============================================================================

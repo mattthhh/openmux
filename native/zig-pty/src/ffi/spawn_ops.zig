@@ -136,7 +136,12 @@ pub fn spawnPoll(request_id: c_int) c_int {
     }
 }
 
-/// Cancel a pending async spawn request.
+/// Wait until all spawn request slots are free (no in-flight requests).
+/// Returns true if all slots drained within timeout_ms, false if timed out.
+pub fn spawnDrain(timeout_ms: c_int) bool {
+    if (timeout_ms <= 0) return false;
+    return async_spawn.drainSpawnQueue(@intCast(timeout_ms));
+}
 /// If spawn already completed, the PTY handle is closed.
 /// Safe to call multiple times.
 pub fn spawnCancel(request_id: c_int) void {

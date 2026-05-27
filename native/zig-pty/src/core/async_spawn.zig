@@ -6,6 +6,7 @@ const constants = @import("../util/constants.zig");
 const spawn_module = @import("spawn.zig");
 const handle_registry = @import("handle_registry.zig");
 const pty_io = @import("../io.zig");
+const sleep_util = @import("../util/sleep.zig");
 
 pub const SpawnState = enum(u8) {
     pending,
@@ -182,4 +183,36 @@ pub fn signalSpawnQueue() void {
     const io = pty_io.get();
     _ = spawn_queue_count.fetchAdd(1, .release);
     spawn_queue_cond.signal(io);
+}
+
+/// Wait until all spawn request slots are free (no in-flight requests).
+/// Uses exponential backoff: starts at 1ms, caps at 100ms.
+/// Returns true if all slots are free within timeout_ms, false otherwise.
+/// Wakes the spawn thread each iteration so cancelled slots get processed.
+pub fn drainSpawnQueue(timeout_ms: u64) bool {
+    var wait_ms: u64 = 1;
+    var elapsed: u64 = 0;
+    while (elapsed < timeout_ms) : ({
+        elapsed += wait_ms;
+        wait_ms = @min(wait_ms * 2, 100);
+    }) {
+        // Check if all slots are free
+        var all_free = true;
+        for (&spawn_request_used) |*used| {
+            if (used.load(.acquire)) {
+                all_free = false;
+                break;
+            }
+        }
+        if (all_free) return true;
+
+        // Wake the spawn thread in case it's sleeping and has cancelled work to process
+        const io = pty_io.get();
+        spawn_queue_mutex.lock(io) catch unreachable;
+        spawn_queue_cond.signal(io);
+        spawn_queue_mutex.unlock(io);
+
+        sleep_util.sleepMilliseconds(@intCast(wait_ms));
+    }
+    return false;
 }
