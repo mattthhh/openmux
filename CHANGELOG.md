@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.125](https://github.com/monotykamary/openmux/compare/v0.3.124...v0.3.125) (2026-05-27)
+
+
+### Bug Fixes
+
+* **zig-pty:** deterministically free cancelled slots in drain ([4bc7127](https://github.com/monotykamary/openmux/commit/4bc7127f9f012921569af29947b547d707560550))
+
 ### [0.3.124](https://github.com/monotykamary/openmux/compare/v0.3.123...v0.3.124) (2026-05-27)
 
 
