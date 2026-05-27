@@ -100,6 +100,21 @@ pub fn deinitSpawnThread() void {
     }
 }
 
+/// Atomically claim a slot for freeing. Uses CAS on used[i] so only
+/// one of the spawn thread, cancel, or drain actually frees the slot
+/// and decrements queue_count. Returns true if we claimed it.
+fn tryFreeSlot(id: u32) bool {
+    if (id >= constants.MAX_SPAWN_REQUESTS) return false;
+    if (spawn_request_used[id].cmpxchgStrong(true, false, .acq_rel, .acquire)) |_| {
+        // Someone else already freed it
+        return false;
+    }
+    // We won the CAS - clean up the rest
+    spawn_requests[id].state.store(.failed, .release);
+    spawn_requests[id].result_handle.store(0, .release);
+    return true;
+}
+
 fn spawnThreadLoop() void {
     pty_io.initThreadIo();
     const io = pty_io.get();
@@ -120,8 +135,10 @@ fn spawnThreadLoop() void {
 
             const state = req.state.load(.acquire);
             if (state == .cancelled) {
-                freeSpawnRequest(@intCast(i));
-                _ = spawn_queue_count.fetchSub(1, .release);
+                // Cancel already decremented queue_count, so only try to free
+                // the slot (without another decrement). If someone else already
+                // freed it (drain), that's fine.
+                _ = tryFreeSlot(@intCast(i));
                 continue;
             }
             if (state != .pending) continue;
@@ -134,23 +151,23 @@ fn spawnThreadLoop() void {
             const result = spawn_module.spawnPty(cmd_ptr, cwd_ptr, env_ptr, req.cols, req.rows);
 
             // Atomically try to transition from pending to complete/failed.
-            // If this fails, spawnCancel already set state to cancelled.
+            // If this fails, spawnCancel already set state to cancelled
+            // (and decremented queue_count).
             const new_state: SpawnState = if (result >= 0) .complete else .failed;
 
             if (req.state.cmpxchgStrong(.pending, new_state, .acq_rel, .acquire)) |_| {
                 // CAS failed - request was cancelled while we were spawning.
-                // Clean up the PTY handle if spawn succeeded, then free the slot.
-                // (Cancel doesn't free pending slots - we do it here after noticing cancelled)
+                // Cancel already decremented queue_count. Clean up the PTY
+                // handle if spawn succeeded, then free the slot.
                 if (result >= 0) {
                     handle_registry.removeHandle(@intCast(result));
                 }
-                freeSpawnRequest(@intCast(i));
+                _ = tryFreeSlot(@intCast(i));
             } else {
                 // CAS succeeded - store result for caller to retrieve via spawnPoll
                 req.result_handle.store(result, .release);
+                _ = spawn_queue_count.fetchSub(1, .release);
             }
-
-            _ = spawn_queue_count.fetchSub(1, .release);
         }
     }
 }
@@ -185,10 +202,21 @@ pub fn signalSpawnQueue() void {
     spawn_queue_cond.signal(io);
 }
 
+/// Decrement spawn_queue_count for a cancelled slot. Called by
+/// spawnCancel when it successfully transitions pending→cancelled,
+/// and by drainSpawnQueue when it frees a cancelled slot that
+/// the spawn thread hasn't processed yet.
+pub fn decSpawnQueueCount() void {
+    _ = spawn_queue_count.fetchSub(1, .release);
+}
+
 /// Wait until all spawn request slots are free (no in-flight requests).
 /// Uses exponential backoff: starts at 1ms, caps at 100ms.
 /// Returns true if all slots are free within timeout_ms, false otherwise.
-/// Wakes the spawn thread each iteration so cancelled slots get processed.
+///
+/// Directly frees cancelled slots instead of relying on the spawn thread
+/// to process them. This is critical on slow CI runners where the spawn
+/// thread may not iterate fast enough to clean up cancelled slots.
 pub fn drainSpawnQueue(timeout_ms: u64) bool {
     var wait_ms: u64 = 1;
     var elapsed: u64 = 0;
@@ -196,7 +224,21 @@ pub fn drainSpawnQueue(timeout_ms: u64) bool {
         elapsed += wait_ms;
         wait_ms = @min(wait_ms * 2, 100);
     }) {
-        // Check if all slots are free
+        // First pass: directly free any cancelled slots. Cancel sets their
+        // state to cancelled but doesn't free the slot or decrement the
+        // queue count. We do that here so we don't rely on the spawn thread
+        // to notice and process them.
+        for (&spawn_requests, 0..) |*req, i| {
+            if (!spawn_request_used[i].load(.acquire)) continue;
+            if (req.state.load(.acquire) == .cancelled) {
+                // tryFreeSlot uses CAS on used[i] - only the winner frees
+                if (tryFreeSlot(@intCast(i))) {
+                    _ = spawn_queue_count.fetchSub(1, .release);
+                }
+            }
+        }
+
+        // Second pass: check if all slots are now free
         var all_free = true;
         for (&spawn_request_used) |*used| {
             if (used.load(.acquire)) {
@@ -206,7 +248,7 @@ pub fn drainSpawnQueue(timeout_ms: u64) bool {
         }
         if (all_free) return true;
 
-        // Wake the spawn thread in case it's sleeping and has cancelled work to process
+        // Wake the spawn thread in case it's sleeping with pending work
         const io = pty_io.get();
         spawn_queue_mutex.lock(io) catch unreachable;
         spawn_queue_cond.signal(io);

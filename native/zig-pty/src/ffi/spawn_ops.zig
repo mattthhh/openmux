@@ -150,13 +150,14 @@ pub fn spawnCancel(request_id: c_int) void {
     const req = async_spawn.getSpawnRequest(@intCast(request_id)) orelse return;
 
     // Try to atomically transition from pending to cancelled.
-    // This prevents the race where we free the slot while spawn thread is still using it.
     if (req.state.cmpxchgStrong(.pending, .cancelled, .acq_rel, .acquire)) |old_state| {
         // CAS failed - request already transitioned to complete/failed/cancelled.
-        // Handle based on what state it's in.
         switch (old_state) {
             .complete => {
-                // Spawn completed - close the handle to avoid leaking
+                // Spawn completed - close the handle to avoid leaking.
+                // The spawn thread already decremented queue_count, so we just
+                // free the slot. Use freeSpawnRequest (ours to free since the
+                // spawn thread already handed it off to us via .complete state).
                 const handle = req.result_handle.load(.acquire);
                 if (handle > 0) {
                     handle_registry.removeHandle(@intCast(handle));
@@ -164,15 +165,20 @@ pub fn spawnCancel(request_id: c_int) void {
                 async_spawn.freeSpawnRequest(@intCast(request_id));
             },
             .failed => {
-                // Spawn failed - just free the slot
+                // Spawn failed - the spawn thread already decremented queue_count,
+                // so just free the slot.
                 async_spawn.freeSpawnRequest(@intCast(request_id));
             },
             .cancelled => {
-                // Already cancelled - nothing to do
+                // Already cancelled - nothing to do.
             },
             .pending => unreachable, // CAS would have succeeded
         }
+    } else {
+        // CAS succeeded: pending -> cancelled.
+        // We cancelled it before the spawn thread processed it, so WE own
+        // the queue_count decrement. The slot will be freed by drain or the
+        // spawn thread using tryFreeSlot (which coordinates via CAS on used[i]).
+        async_spawn.decSpawnQueueCount();
     }
-    // If CAS succeeded (pending -> cancelled), DON'T free the slot here.
-    // The spawn thread will free it after noticing the cancelled state.
 }
