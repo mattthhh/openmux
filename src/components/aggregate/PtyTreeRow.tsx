@@ -282,9 +282,10 @@ export function PtyTreeRow(props: PtyTreeRowProps) {
     setIsAnimating(hasActiveShimmer(props.pty.ptyId));
   });
 
-  // Effect 2: Detect when shimmer ENDS — defer glow by 500ms to avoid
+  // Effect 2: Detect when shimmer ENDS — defer glow by 1s to avoid
   // a white flash when shimmer pauses briefly then restarts from queued
-  // or new activity.
+  // or new activity. The 1s window covers the gap between shimmer
+  // cycles so the glow only activates when shimmer is truly done.
   createEffect(() => {
     void shimmerStateVersion();
     if (!isAnimating()) return;
@@ -303,7 +304,7 @@ export function PtyTreeRow(props: PtyTreeRowProps) {
         if (hasPostShimmerGlow(props.pty.ptyId) && !props.isSelected) {
           setGlowActive(true);
         }
-      }, 500);
+      }, 1000);
     }
   });
 

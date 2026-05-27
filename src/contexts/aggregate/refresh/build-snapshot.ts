@@ -8,6 +8,7 @@ import { getGlobalGitMetadataCache } from '../../git-metadata-cache';
 import { getGitDiffStats, getGitInfo } from '../../../effect/services/pty/helpers';
 
 import { applyGitMetadataSnapshot } from '../git';
+import { smoothForegroundProcess } from '../subscriptions';
 import { ptyMetadataToInfo } from '../pty-info';
 import {
   type CurrentSessionHints,
@@ -428,7 +429,11 @@ export function createBuildSnapshot(deps: BuildSnapshotDeps) {
             ...pty,
             ptyId: suspended.metadata.ptyId,
             cwd: suspended.metadata.cwd || pty.cwd,
-            foregroundProcess: suspended.metadata.foregroundProcess ?? pty.foregroundProcess,
+            foregroundProcess: smoothForegroundProcess(
+              suspended.metadata.ptyId ?? pty.ptyId,
+              suspended.metadata.foregroundProcess ?? pty.foregroundProcess,
+              suspended.metadata.shell ?? pty.shell
+            ),
             shell: suspended.metadata.shell ?? pty.shell,
             title: suspended.metadata.title ?? pty.title,
           };

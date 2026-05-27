@@ -7,6 +7,7 @@ import type { PtyInfo } from '../types';
 import { getSavedAggregatePtyId } from '../rows';
 import { hasGitMetadata } from '../git';
 import type { CurrentSessionPty } from '../subscriptions';
+import { smoothForegroundProcess } from '../subscriptions';
 
 export function collectSerializedPaneIds(
   node: SerializedLayoutNode | null | undefined,
@@ -150,7 +151,13 @@ export function buildSavedPaneInfo(params: {
   return {
     ptyId: getSavedAggregatePtyId(sessionId, paneId),
     cwd,
-    foregroundProcess: existing?.foregroundProcess,
+    foregroundProcess: existing
+      ? smoothForegroundProcess(
+          getSavedAggregatePtyId(sessionId, paneId),
+          existing.foregroundProcess,
+          existing.shell
+        )
+      : undefined,
     shell: existing?.shell,
     workspaceId,
     paneId,
