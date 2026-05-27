@@ -101,16 +101,19 @@ function getProcessDisplayName(pty: PtyInfo): string | null {
   const shellName = normalizeProcessName(pty.shell);
 
   if (!processName) {
-    return null;
+    return lastSeenProcess.get(pty.ptyId) ?? null;
   }
 
-  if (
-    KNOWN_SHELLS.has(normalizedProcessName) ||
-    (shellName && normalizedProcessName === shellName)
-  ) {
-    return null;
+  const isShell =
+    KNOWN_SHELLS.has(normalizedProcessName) || (shellName && normalizedProcessName === shellName);
+
+  if (isShell) {
+    // Shell is foreground — keep showing the last non-shell process
+    return lastSeenProcess.get(pty.ptyId) ?? null;
   }
 
+  // Non-shell process — remember it and return it
+  lastSeenProcess.set(pty.ptyId, processName);
   return processName;
 }
 
@@ -237,7 +240,16 @@ function ShimmeringLabel(props: ShimmeringLabelProps) {
   );
 }
 
-/** Bright white used for the post-shimmer glow ("something happened here"). */
+/** Per-PTY memory of the last seen non-shell foreground process.
+ *  Stabilizes the process display so that brief returns to the shell
+ *  (e.g. between `sleep` calls in a `for` loop) don't cause the
+ *  "(sleep)" label to flicker in and out. */
+const lastSeenProcess = new Map<string, string>();
+
+/** Clear the remembered process for a PTY (on destruction). */
+export function clearLastSeenProcess(ptyId: string): void {
+  lastSeenProcess.delete(ptyId);
+}
 const POST_SHIMMER_BRIGHT_FG = '#ffffff';
 
 /**
