@@ -71,6 +71,12 @@ export function unsuppressPtyShimmer(ptyId: string): void {
     return;
   }
 
+  // If shimmer already completed naturally (glow is active), don't restart
+  // it from stale activity timestamps. The user hasn't viewed the PTY yet.
+  if (recentlyCompletedShimmer.has(ptyId)) {
+    return;
+  }
+
   const recent = prunePtyStdoutActivity(ptyId);
   if (recent.length < MIN_OUTPUT_EVENTS_FOR_SHIMMER) {
     return;

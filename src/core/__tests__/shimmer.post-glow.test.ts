@@ -170,4 +170,38 @@ describe('post-shimmer glow', () => {
     clearPostShimmerGlow('pty-1');
     expect(hasPostShimmerGlow('pty-1')).toBe(false);
   });
+
+  it('unsuppressPtyShimmer does not restart shimmer when glow is active', () => {
+    const baseTime = 10000;
+    recordPtyStdoutActivity('pty-1', baseTime);
+    recordPtyStdoutActivity('pty-1', baseTime + 100);
+
+    driveShimmerCompletion('pty-1', baseTime);
+    expect(hasPostShimmerGlow('pty-1')).toBe(true);
+    expect(hasActiveShimmer('pty-1')).toBe(false);
+
+    // Simulate PtyTreeRow remount: suppress (cleanup) then unsuppress (effect)
+    suppressPtyShimmer('pty-1');
+    expect(hasPostShimmerGlow('pty-1')).toBe(false); // suppress clears glow
+
+    // Restore glow state manually (simulating what happen without suppress)
+    // The real scenario: component unmounts (onCleanup calls unsuppress),
+    // then remounts (selection effect calls unsuppress again)
+    clearPostShimmerGlow('pty-1');
+
+    // Now test the direct case: glow present, unsuppress should not restart shimmer
+    // First, set up glow again by completing shimmer
+    clearPtyStdoutActivity('pty-1');
+    unsuppressPtyShimmer('pty-1');
+    recordPtyStdoutActivity('pty-1', baseTime);
+    recordPtyStdoutActivity('pty-1', baseTime + 100);
+    driveShimmerCompletion('pty-1', baseTime);
+    expect(hasPostShimmerGlow('pty-1')).toBe(true);
+
+    // unsuppress should NOT start a new shimmer despite stale activity data
+    unsuppressPtyShimmer('pty-1');
+    expect(hasActiveShimmer('pty-1')).toBe(false);
+    // Glow should still be present
+    expect(hasPostShimmerGlow('pty-1')).toBe(true);
+  });
 });
