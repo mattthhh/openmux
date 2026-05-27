@@ -22,94 +22,6 @@ import { getSessionPaneOrder, setSessionPaneOrder, getPendingPaneOrderKey } from
 import { recomputeMatches, recomputeTree } from './session';
 import { clearGitMetadataInPlace } from './git';
 
-/** Known shell names — used by the foreground process smoothing to
- *  detect when a non-shell child (e.g. `sleep`) is replaced by the
- *  shell briefly between iterations of a loop. */
-const KNOWN_SHELLS = new Set([
-  'sh',
-  'bash',
-  'zsh',
-  'fish',
-  'dash',
-  'ksh',
-  'tcsh',
-  'csh',
-  'nu',
-  'pwsh',
-  'powershell',
-]);
-
-function getProcessBaseName(name: string | undefined): string {
-  const raw = name?.trim();
-  if (!raw) return '';
-  return raw.split('/').filter(Boolean).pop() ?? raw;
-}
-
-function isShellProcess(processName: string | undefined, shellName: string | undefined): boolean {
-  if (!processName) return false;
-  const base = getProcessBaseName(processName).toLowerCase();
-  if (KNOWN_SHELLS.has(base)) return true;
-  if (shellName) {
-    const shellBase = getProcessBaseName(shellName).toLowerCase();
-    if (base === shellBase) return true;
-  }
-  return false;
-}
-
-/** Per-PTY "last stable foreground process" tracking.
- *
- *  zig-pty rapidly alternates the foreground process between a child
- *  (e.g. `sleep`) and the shell during loops like:
- *    for i in 1 2 3; do sleep 1; done
- *
- *  This causes the displayed process name to flicker. The fix: when
- *  we see a non-shell process, remember it. When we see the shell, keep
- *  the last non-shell name for FOREGROUND_PROCESS_HOLD_MS. This way the
- *  display never flickers during loops, but clears promptly when the
- *  child truly exits.
- *
- *  Used by both the metadata change handler AND the snapshot builder
- *  so that refreshes (which bypass the subscription) are also smoothed. */
-const stableForeground = new Map<string, { name: string; expiresAt: number }>();
-const FOREGROUND_PROCESS_HOLD_MS = 500;
-
-/**
- * Smooth a raw foreground process value. Returns a stable process name
- * that doesn't flicker during shell-child alternation.
- *
- * - If `rawProcess` is a non-shell, remember it and return it.
- * - If `rawProcess` is the shell or undefined, return the last remembered
- *   non-shell name if it hasn't expired yet, otherwise undefined.
- */
-export function smoothForegroundProcess(
-  ptyId: string,
-  rawProcess: string | undefined,
-  shellName: string | undefined
-): string | undefined {
-  const now = Date.now();
-
-  // Non-shell process: remember it and return it
-  if (rawProcess && !isShellProcess(rawProcess, shellName)) {
-    stableForeground.set(ptyId, { name: rawProcess, expiresAt: now + FOREGROUND_PROCESS_HOLD_MS });
-    return rawProcess;
-  }
-
-  // Shell or empty: return cached non-shell if not expired
-  const cached = stableForeground.get(ptyId);
-  if (cached && now < cached.expiresAt) {
-    return cached.name;
-  }
-
-  // Cache expired or absent
-  if (cached) stableForeground.delete(ptyId);
-  return undefined;
-}
-
-/** Clear the stable foreground process for a PTY (on destruction). */
-export function clearStableForegroundProcess(ptyId: string): void {
-  stableForeground.delete(ptyId);
-}
-
 export interface SubscriptionManager {
   lifecycle: (() => void) | null;
   metadataChanges: (() => void) | null;
@@ -435,22 +347,12 @@ export function createMetadataChangeHandler(
               event.foregroundProcess !== undefined &&
               pty.foregroundProcess !== event.foregroundProcess
             ) {
-              const smoothed = smoothForegroundProcess(
-                event.ptyId,
-                event.foregroundProcess,
-                pty.shell
-              );
-              if (pty.foregroundProcess !== smoothed) {
-                changed = true;
-                pty.foregroundProcess = smoothed;
-              }
+              changed = true;
+              pty.foregroundProcess = event.foregroundProcess;
             }
             if (event.cwd !== undefined && pty.cwd !== event.cwd) {
               changed = true;
               pty.cwd = event.cwd;
-              // Clear stale git metadata — the old repo's data no longer applies.
-              // Without this, git metadata bleeds to other directories and stays
-              // permanently because hydrateGitMetadata/applySnapshot never clear it.
               clearGitMetadataInPlace(pty);
             }
             if (!changed) {
@@ -474,15 +376,8 @@ export function createMetadataChangeHandler(
               event.foregroundProcess !== undefined &&
               pty.foregroundProcess !== event.foregroundProcess
             ) {
-              const smoothed = smoothForegroundProcess(
-                event.ptyId,
-                event.foregroundProcess,
-                pty.shell
-              );
-              if (pty.foregroundProcess !== smoothed) {
-                changed = true;
-                pty.foregroundProcess = smoothed;
-              }
+              changed = true;
+              pty.foregroundProcess = event.foregroundProcess;
             }
             if (event.cwd !== undefined && pty.cwd !== event.cwd) {
               changed = true;

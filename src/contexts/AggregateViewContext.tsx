@@ -46,7 +46,7 @@ import {
 } from '../effect/bridge/session-bridge';
 import { getSessionCwd as getStoredSessionCwd } from '../effect/bridge';
 import { getAggregateSessionForPty } from '../effect/bridge/aggregate/cache/session-pty-cache';
-import { clearStableForegroundProcess } from './aggregate/subscriptions';
+import { clearLastSeenProcess } from '../components/aggregate/PtyTreeRow';
 
 const AggregateViewContext = createContext<AggregateViewContextValue | null>(null);
 
@@ -196,7 +196,7 @@ export function AggregateViewProvider(props: AggregateViewProviderProps) {
     refreshActiveSession,
     onPtyDestroyed: (ptyId) => {
       suspendedPtyCache.invalidateByPtyId(ptyId);
-      clearStableForegroundProcess(ptyId);
+      clearLastSeenProcess(ptyId);
     },
   });
 

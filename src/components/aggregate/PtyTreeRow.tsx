@@ -95,23 +95,69 @@ function normalizeProcessName(name: string | undefined): string {
   return getProcessBaseName(name).toLowerCase();
 }
 
+/** Per-PTY memory of the last seen non-shell foreground process.
+ *
+ *  zig-pty alternates rapidly between child and shell during loops:
+ *    for i in 1 2 3; do sleep 1; done  →  bash↔sleep↔bash↔sleep
+ *
+ *  This causes the process name to flicker in the display. We smooth it
+ *  by remembering the last non-shell process and keeping it visible
+ *  when the shell briefly becomes foreground.
+ *
+ *  The cache is cleared by a timer: when the foreground becomes the
+ *  shell, we start a 500ms clear timer. If the child comes back before
+ *  it fires (loop iteration), the timer is cancelled. When the child
+ *  truly exits, the timer fires and the cache is deleted.
+ *
+ *  Module-level so it survives component remount (session group switch). */
+const lastSeenProcess = new Map<
+  string,
+  { name: string; clearTimer: ReturnType<typeof setTimeout> | null }
+>();
+
+const PROCESS_CLEAR_DELAY_MS = 500;
+
+/** Clear the remembered process for a PTY (on destruction). */
+export function clearLastSeenProcess(ptyId: string): void {
+  const entry = lastSeenProcess.get(ptyId);
+  if (entry?.clearTimer) clearTimeout(entry.clearTimer);
+  lastSeenProcess.delete(ptyId);
+}
+
 function getProcessDisplayName(pty: PtyInfo): string | null {
   const processName = getProcessBaseName(pty.foregroundProcess);
   const normalizedProcessName = processName.toLowerCase();
   const shellName = normalizeProcessName(pty.shell);
 
-  if (!processName) {
-    return null;
-  }
-
-  if (
+  const isShell =
+    !processName ||
     KNOWN_SHELLS.has(normalizedProcessName) ||
-    (shellName && normalizedProcessName === shellName)
-  ) {
-    return null;
+    (shellName && normalizedProcessName === shellName);
+
+  if (!isShell && processName) {
+    // Non-shell process: remember it, cancel any pending clear timer
+    const entry = lastSeenProcess.get(pty.ptyId);
+    if (entry?.clearTimer) {
+      clearTimeout(entry.clearTimer);
+      entry.clearTimer = null;
+    }
+    lastSeenProcess.set(pty.ptyId, { name: processName, clearTimer: null });
+    return processName;
   }
 
-  return processName;
+  // Shell or empty foreground: return cached name if available
+  const cached = lastSeenProcess.get(pty.ptyId);
+  if (cached) {
+    // Start a clear timer if one isn't already running
+    if (!cached.clearTimer) {
+      cached.clearTimer = setTimeout(() => {
+        lastSeenProcess.delete(pty.ptyId);
+      }, PROCESS_CLEAR_DELAY_MS);
+    }
+    return cached.name;
+  }
+
+  return null;
 }
 
 /**
@@ -237,8 +283,10 @@ function ShimmeringLabel(props: ShimmeringLabelProps) {
   );
 }
 
-/** Bright white used for the post-shimmer glow ("something happened here"). */
-const POST_SHIMMER_BRIGHT_FG = '#ffffff';
+/** Debounce before activating post-shimmer glow.
+ *  Covers the gap between shimmer cycles so the glow only activates
+ *  when shimmer is truly done, preventing a white flash. */
+const GLOW_DEBOUNCE_MS = 1500;
 
 /**
  * Single line PTY row with shimmer effect for active PTYs
@@ -282,10 +330,9 @@ export function PtyTreeRow(props: PtyTreeRowProps) {
     setIsAnimating(hasActiveShimmer(props.pty.ptyId));
   });
 
-  // Effect 2: Detect when shimmer ENDS — defer glow by 1s to avoid
-  // a white flash when shimmer pauses briefly then restarts from queued
-  // or new activity. The 1s window covers the gap between shimmer
-  // cycles so the glow only activates when shimmer is truly done.
+  // Effect 2: Detect when shimmer ENDS — defer glow to avoid
+  // a flash when shimmer pauses briefly then restarts from queued
+  // or new activity.
   createEffect(() => {
     void shimmerStateVersion();
     if (!isAnimating()) return;
@@ -294,8 +341,8 @@ export function PtyTreeRow(props: PtyTreeRowProps) {
     setIsAnimating(false);
     // Cancel any pending glow from a previous shimmer end
     if (glowDebounce) clearTimeout(glowDebounce);
-    // Defer glow: if shimmer restarts within 500ms the timer is cancelled
-    // and the glow never appears, avoiding the white flash.
+    // Defer glow: if shimmer restarts before the timer fires it is
+    // cancelled and the glow never appears, avoiding the flash.
     if (hasPostShimmerGlow(props.pty.ptyId) && !props.isSelected) {
       glowDebounce = setTimeout(() => {
         glowDebounce = null;
@@ -304,7 +351,7 @@ export function PtyTreeRow(props: PtyTreeRowProps) {
         if (hasPostShimmerGlow(props.pty.ptyId) && !props.isSelected) {
           setGlowActive(true);
         }
-      }, 1000);
+      }, GLOW_DEBOUNCE_MS);
     }
   });
 
@@ -331,12 +378,14 @@ export function PtyTreeRow(props: PtyTreeRowProps) {
   const selectionColors = () => props.aggregateTheme.selection;
   const diffColors = () => props.aggregateTheme.diff;
 
-  // Base foreground color — bright white when post-shimmer glow is active
+  // Base foreground color
   const baseFgColor = () => {
     if (props.isSelected) return selectionColors().foreground;
-    if (glowActive()) return POST_SHIMMER_BRIGHT_FG;
     return props.textColors.foreground;
   };
+
+  // Whether to render the label in bold (post-shimmer glow)
+  const isBoldGlow = () => glowActive() && !props.isSelected;
 
   // Background color
   const bgColor = () => (props.isSelected ? selectionColors().background : undefined);
@@ -418,8 +467,20 @@ export function PtyTreeRow(props: PtyTreeRowProps) {
   const renderLabel = createMemo(() => {
     const text = displayLabel();
     const baseColor = baseFgColor();
+    const bold = isBoldGlow();
 
     if (!isAnimating()) {
+      if (bold) {
+        return (
+          <box style={{ height: 1, flexDirection: 'row' }} onMouseDown={handleClick}>
+            <b>
+              <text fg={baseColor} selectable={false}>
+                {text}
+              </text>
+            </b>
+          </box>
+        );
+      }
       return (
         <box style={{ height: 1, flexDirection: 'row' }} onMouseDown={handleClick}>
           <text fg={baseColor} selectable={false}>
