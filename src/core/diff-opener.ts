@@ -6,7 +6,7 @@ export class DiffDiscoveryError extends errore.createTaggedError({
   message: 'Diff discovery failed: $reason',
 }) {}
 
-export type DiffTargetType = 'unstaged' | 'staged' | 'branch';
+export type DiffTargetType = 'unstaged' | 'staged' | 'lastCommit' | 'branch';
 
 export interface DiffTarget {
   /** Display label */
@@ -73,27 +73,39 @@ function sortBranches(branches: string[]): string[] {
 export async function discoverDiffTargets(rootDir: string): Promise<DiffTarget[]> {
   const targets: DiffTarget[] = [];
 
-  // Built-in diff modes
-  const unstagedCount = await getChangedFileCount(rootDir, '');
+  // Fire all independent queries in parallel
+  const [unstagedResult, stagedResult, lastCommitResult, branches] = await Promise.all([
+    getChangedFileCount(rootDir, ''),
+    getChangedFileCount(rootDir, '--cached'),
+    getChangedFileCount(rootDir, 'HEAD~1'),
+    getLocalBranches(rootDir),
+  ]);
+
   targets.push({
     label: 'Unstaged changes',
     type: 'unstaged',
     diffArgs: '',
-    fileCount: unstagedCount,
+    fileCount: unstagedResult,
     isSeparator: false,
   });
 
-  const stagedCount = await getChangedFileCount(rootDir, '--cached');
   targets.push({
     label: 'Staged changes',
     type: 'staged',
     diffArgs: '--cached',
-    fileCount: stagedCount,
+    fileCount: stagedResult,
     isSeparator: false,
   });
 
-  // Branch comparison
-  const branches = await getLocalBranches(rootDir);
+  targets.push({
+    label: 'Last commit',
+    type: 'lastCommit',
+    diffArgs: 'HEAD~1',
+    fileCount: lastCommitResult,
+    isSeparator: false,
+  });
+
+  // Branch comparison — fire all counts in parallel
   if (branches.length > 0) {
     targets.push({
       label: '',
@@ -103,13 +115,14 @@ export async function discoverDiffTargets(rootDir: string): Promise<DiffTarget[]
     });
 
     const sorted = sortBranches(branches);
-    for (const branch of sorted) {
-      const count = await getChangedFileCount(rootDir, branch);
+    const counts = await Promise.all(sorted.map((b) => getChangedFileCount(rootDir, b)));
+
+    for (let i = 0; i < sorted.length; i++) {
       targets.push({
-        label: branch,
+        label: sorted[i]!,
         type: 'branch',
-        diffArgs: branch,
-        fileCount: count,
+        diffArgs: sorted[i]!,
+        fileCount: counts[i],
         isSeparator: false,
       });
     }

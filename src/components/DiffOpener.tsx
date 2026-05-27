@@ -424,6 +424,7 @@ function fitLine(text: string, width: number): string {
 
 const DIFF_ICON = '\uF4A0';
 const BRANCH_ICON = '\uE725';
+const COMMIT_ICON = '\uF417';
 
 function DiffRow(props: DiffRowProps) {
   if (props.target.isSeparator) {
@@ -434,7 +435,12 @@ function DiffRow(props: DiffRowProps) {
   const fg = () => (props.isSelected ? props.selection.foreground : props.colors.foreground);
   const bg = () => (props.isSelected ? props.selection.background : undefined);
 
-  const icon = props.target.type === 'branch' ? BRANCH_ICON : DIFF_ICON;
+  const icon =
+    props.target.type === 'branch'
+      ? BRANCH_ICON
+      : props.target.type === 'lastCommit'
+        ? COMMIT_ICON
+        : DIFF_ICON;
   const label = props.target.label;
   const countStr = props.target.fileCount !== undefined ? ` (${props.target.fileCount})` : '';
   const fullLine = fitLine(`  ${icon} ${label}${countStr}`, props.maxWidth);
