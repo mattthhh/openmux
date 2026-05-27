@@ -140,6 +140,7 @@ function AppContent() {
     handleOpenFileInSession: (entry: {
       absolutePath: string;
       isFolderAction: boolean;
+      rootDir?: string;
     }) => Promise<void>;
   } | null>(null);
 

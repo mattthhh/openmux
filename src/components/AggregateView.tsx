@@ -49,6 +49,7 @@ export interface AggregateStateActions {
   handleOpenFileInSession: (entry: {
     absolutePath: string;
     isFolderAction: boolean;
+    rootDir?: string;
   }) => Promise<void>;
 }
 

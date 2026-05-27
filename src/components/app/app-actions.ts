@@ -44,6 +44,7 @@ export interface AggregateCommandActions {
   handleOpenFileInSession: (entry: {
     absolutePath: string;
     isFolderAction: boolean;
+    rootDir?: string;
   }) => Promise<void>;
   killSelectedPty: (ptyId: string) => void;
   navigateUp: () => void;
@@ -243,7 +244,10 @@ export function useAppActions(deps: AppActionsDeps): {
     // pending insertions, autoswitch, and editor command injection
     // while staying in the aggregate view.
     if (aggregateState.showAggregateView) {
-      void aggregateActions.handleOpenFileInSession(entry);
+      void aggregateActions.handleOpenFileInSession({
+        ...entry,
+        rootDir: overlays.fileOpenerState.rootDir || process.cwd(),
+      });
       return;
     }
 
@@ -251,7 +255,9 @@ export function useAppActions(deps: AppActionsDeps): {
     const fileOpenerSettings = config.config().fileOpener;
     const commandParts = buildEditorCommand(fileOpenerSettings, entry.absolutePath);
     const fullCommand = `${fileOpenerSettings.editor} ${commandParts.join(' ')}`;
-    const cwd = path.dirname(entry.absolutePath);
+    // Use the rootDir (where the file opener was invoked) as CWD,
+    // not the directory containing the file
+    const cwd = overlays.fileOpenerState.rootDir || process.cwd();
 
     const result = await terminal.createPaneWithPTY(cwd);
     if (!result) return;

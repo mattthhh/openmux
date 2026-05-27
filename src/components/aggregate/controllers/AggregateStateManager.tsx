@@ -6,7 +6,6 @@
  */
 
 import { createEffect, onCleanup, createSignal } from 'solid-js';
-import path from 'node:path';
 import { loadSessionData } from '../../../effect/bridge';
 import { getFocusedPtyId } from '../../../core/workspace-utils';
 import { useConfig } from '../../../contexts/ConfigContext';
@@ -565,6 +564,7 @@ export function AggregateStateManager() {
   const handleOpenFileInSession = async (entry: {
     absolutePath: string;
     isFolderAction: boolean;
+    rootDir?: string;
   }): Promise<void> => {
     if (entry.isFolderAction) return;
 
@@ -606,8 +606,9 @@ export function AggregateStateManager() {
     aggregate.upsertPendingPaneCreation(pendingInsertion);
 
     let targetWorkspaceId = layoutState.activeWorkspaceId;
-    // CWD is the directory containing the file
-    const targetCwd = path.dirname(entry.absolutePath);
+    // Use the rootDir (where the file opener was invoked) as CWD,
+    // not the directory containing the file
+    const targetCwd = entry.rootDir || process.cwd();
 
     if (targetSessionId === sessionState.activeSessionId) {
       if (currentPtyId) {

@@ -250,7 +250,8 @@ export function FileOpener(props: FileOpenerProps) {
 
   const listHeight = () => {
     if (!showResults()) return 0;
-    const maxRows = Math.max(1, props.height - 7);
+    const maxVisible = 15;
+    const maxRows = Math.min(Math.max(1, props.height - 7), maxVisible);
     const rowCount = resultCount();
     return Math.min(Math.max(1, rowCount), maxRows);
   };
