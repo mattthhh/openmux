@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.122](https://github.com/monotykamary/openmux/compare/v0.3.121...v0.3.122) (2026-05-27)
+
+
+### Bug Fixes
+
+* **aggregate:** clear git metadata when PTY CWD changes to prevent cross-repo bleed ([f72430b](https://github.com/monotykamary/openmux/commit/f72430be61475dcf3de69d33c41e63d963cff664))
+* **aggregate:** prevent stale PTY count flash during session switch ([c326774](https://github.com/monotykamary/openmux/commit/c32677486556240ef58076454d7baa54d564db63))
+
 ### [0.3.121](https://github.com/monotykamary/openmux/compare/v0.3.120...v0.3.121) (2026-05-27)
 
 
