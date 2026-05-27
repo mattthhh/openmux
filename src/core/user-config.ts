@@ -68,7 +68,7 @@ export interface DiffOpenerSettings {
 export const DEFAULT_DIFF_OPENER_SETTINGS: DiffOpenerSettings = {
   command: 'git diff $DIFF_ARGS --color=always | less -R',
   fzfCommand:
-    'git diff $DIFF_ARGS --name-only | fzf -m --ansi --layout=reverse --preview-window=right,75% --preview \'git diff $DIFF_ARGS --color=always -- {-1} | nl -ba -w4 -s" │ "\'',
+    'git diff $DIFF_ARGS --name-only | fzf -m --ansi --layout=reverse --color=preview-fg:#707880 --preview-window=right,75% --preview \'git diff $DIFF_ARGS --color=always -- {-1} | nl -ba -w4 -s" │ "\'',
   preferFzf: true,
 };
 
