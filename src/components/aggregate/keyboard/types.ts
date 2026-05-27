@@ -99,6 +99,7 @@ export interface GlobalDeps {
   onDetach?: () => void;
   onToggleCommandPalette?: () => void;
   onToggleFileOpener?: () => void;
+  onToggleDiffOpener?: () => void;
   onToggleConsole?: () => void;
   onPaste?: () => void;
 }

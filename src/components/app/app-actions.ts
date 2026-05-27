@@ -10,6 +10,7 @@ import { createEffect } from 'solid-js';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import { execFile } from 'node:child_process';
 import * as errore from 'errore';
 import { FileSystemError } from '../../effect/errors';
 import { getFocusedPane, getFocusedPtyId } from '../../core/workspace-utils';
@@ -18,6 +19,7 @@ import { handleNormalModeAction } from '../../contexts/keyboard/handlers';
 import type { KeyboardContextValue, KeyboardHandlerOptions } from '../../contexts/keyboard/types';
 import type { CommandPaletteCommand } from '../../core/command-palette';
 import { openInFileManager, buildEditorCommand } from '../../core/file-opener';
+import { buildDiffCommand, type DiffTarget } from '../../core/diff-opener';
 import { createSearchVimState } from './search-vim';
 import { createCopyModeVimState } from './copy-mode-vim';
 import { createCopyModeKeyHandler } from './copy-mode-keyboard';
@@ -46,6 +48,11 @@ export interface AggregateCommandActions {
     isFolderAction: boolean;
     rootDir?: string;
   }) => Promise<void>;
+  handleOpenDiffInSession: (
+    target: DiffTarget,
+    rootDir: string,
+    fullCommand: string
+  ) => Promise<void>;
   killSelectedPty: (ptyId: string) => void;
   navigateUp: () => void;
   navigateDown: () => void;
@@ -100,6 +107,10 @@ export function useAppActions(deps: AppActionsDeps): {
   handleFileOpenerSelect(entry: FileEntry): Promise<void>;
   /** Toggle file opener */
   handleToggleFileOpener(): void;
+  /** Handle diff opener selection */
+  handleDiffOpenerSelect(target: DiffTarget): Promise<void>;
+  /** Toggle diff opener */
+  handleToggleDiffOpener(): void;
   /** Paste from clipboard */
   handlePaste(): void;
   /** Enter search mode */
@@ -265,6 +276,68 @@ export function useAppActions(deps: AppActionsDeps): {
     terminal.writeToPTY(result.ptyId, `${fullCommand}\n`);
   };
 
+  const handleToggleDiffOpener = async () => {
+    if (overlays.diffOpenerState.show) {
+      overlays.closeDiffOpener();
+      return;
+    }
+
+    // In aggregate view, resolve CWD from the selected PTY
+    if (aggregateState.showAggregateView) {
+      const ptyId = aggregateActions.getSelectedPtyId();
+      if (ptyId) {
+        const cwd = await terminal.getSessionCwd(ptyId).catch(() => null);
+        if (cwd) {
+          overlays.openDiffOpener(cwd);
+          return;
+        }
+      }
+    }
+
+    const cwd = await terminal.getFocusedCwd().catch(() => null);
+    const rootDir = cwd ?? process.env.OPENMUX_ORIGINAL_CWD ?? process.cwd();
+    overlays.openDiffOpener(rootDir);
+  };
+
+  const handleDiffOpenerSelect = async (target: DiffTarget) => {
+    if (target.isSeparator) return;
+
+    const settings = config.config().diffOpener;
+    const cwd = overlays.diffOpenerState.rootDir || process.cwd();
+
+    // Check if fzf is available and preferred
+    let useFzf = settings.preferFzf;
+    if (useFzf) {
+      const fzfCheck = await errore.tryAsync<string, Error>({
+        try: () =>
+          new Promise<string>((resolve, reject) => {
+            execFile('which', ['fzf'], (err, stdout) => {
+              if (err) reject(err);
+              else resolve(stdout);
+            });
+          }),
+        catch: () => new Error('fzf not found'),
+      });
+      useFzf = !(fzfCheck instanceof Error);
+    }
+
+    const commandTemplate = useFzf ? settings.fzfCommand : settings.command;
+    const fullCommand = buildDiffCommand(commandTemplate, target);
+
+    // In aggregate view, delegate to the state manager which handles
+    // pending insertions, autoswitch, and diff command injection
+    // while staying in the aggregate view.
+    if (aggregateState.showAggregateView) {
+      void aggregateActions.handleOpenDiffInSession(target, cwd, fullCommand);
+      return;
+    }
+
+    const result = await terminal.createPaneWithPTY(cwd);
+    if (!result) return;
+
+    terminal.writeToPTY(result.ptyId, `${fullCommand}\n`);
+  };
+
   const searchVimState = createSearchVimState({ config, search });
   const copyModeVimState = createCopyModeVimState({
     config,
@@ -392,6 +465,7 @@ export function useAppActions(deps: AppActionsDeps): {
     onToggleAggregateView: openAggregateView,
     onToggleCommandPalette: overlays.toggleCommandPalette,
     onToggleFileOpener: handleToggleFileOpener,
+    onToggleDiffOpener: handleToggleDiffOpener,
     onToggleVimMode: handleToggleVimMode,
     onTogglePrefixOnly: handleTogglePrefixOnly,
     onRefreshHostColors: handleRefreshHostColors,
@@ -405,6 +479,8 @@ export function useAppActions(deps: AppActionsDeps): {
     handleCommandPaletteExecute,
     handleFileOpenerSelect,
     handleToggleFileOpener,
+    handleDiffOpenerSelect,
+    handleToggleDiffOpener,
     handlePaste,
     handleEnterSearch,
     handleEnterCopyMode,

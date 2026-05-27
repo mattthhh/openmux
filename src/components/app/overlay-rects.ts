@@ -7,6 +7,7 @@ import { calculateLayoutDimensions } from '../aggregate';
 import type { PaneRenameState } from '../PaneRenameOverlay';
 import type { WorkspaceLabelState } from '../WorkspaceLabelOverlay';
 import type { FileOpenerState } from '../FileOpener';
+import type { DiffOpenerState } from '../DiffOpener';
 
 type CopyNotificationState = {
   visible: boolean;
@@ -209,6 +210,33 @@ export function getFileOpenerRect(
   } else if (state.files.length > 0) {
     const resultCount = state.files.length;
     const maxListRows = Math.max(1, height - 7);
+    const listRows = Math.min(Math.max(1, resultCount), maxListRows);
+    overlayHeight = Math.max(0, Math.min(listRows + 3, height - 4));
+  }
+
+  const overlayX = Math.floor((width - overlayWidth) / 2);
+  const desiredCommandY = Math.floor(height * 0.15);
+  const desired = Math.max(0, desiredCommandY - 1);
+  const maxY = Math.max(0, height - overlayHeight);
+  const overlayY = Math.min(desired, maxY);
+  return { x: overlayX, y: overlayY, width: overlayWidth, height: overlayHeight };
+}
+
+export function getDiffOpenerRect(
+  width: number,
+  height: number,
+  state: DiffOpenerState
+): Rectangle | null {
+  if (!state.show) return null;
+  const overlayWidth = Math.max(0, Math.min(70, width - 4));
+
+  let overlayHeight = 3;
+  if (state.loading) {
+    overlayHeight = 3;
+  } else if (state.targets.length > 0) {
+    const resultCount = state.targets.length;
+    const maxVisible = 15;
+    const maxListRows = Math.min(Math.max(1, height - 7), maxVisible);
     const listRows = Math.min(Math.max(1, resultCount), maxListRows);
     overlayHeight = Math.max(0, Math.min(listRows + 3, height - 4));
   }

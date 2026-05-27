@@ -227,6 +227,7 @@ export function resolveKeybindings(config: KeybindingsConfig): ResolvedKeybindin
     search: resolveKeybindingMap(config.search),
     commandPalette: resolveKeybindingMap(config.commandPalette),
     fileOpener: resolveKeybindingMap(config.fileOpener),
+    diffOpener: resolveKeybindingMap(config.diffOpener),
     templateOverlay: {
       apply: resolveKeybindingMap(config.templateOverlay.apply),
       save: resolveKeybindingMap(config.templateOverlay.save),

@@ -24,6 +24,7 @@ import type { CommandPaletteState } from '../components/CommandPalette';
 import type { PaneRenameState } from '../components/PaneRenameOverlay';
 import type { WorkspaceLabelState } from '../components/WorkspaceLabelOverlay';
 import type { FileOpenerState } from '../components/FileOpener';
+import type { DiffOpenerState } from '../components/DiffOpener';
 import type { VimInputMode } from '../core/vim-sequences';
 import { getFocusedPtyId } from '../core/workspace-utils';
 import { shutdownShim, disposeRuntime } from '../effect/bridge';
@@ -43,10 +44,17 @@ export interface OverlayContextValue {
   openFileOpener: (rootDir: string) => void;
   closeFileOpener: () => void;
   toggleFileOpener: () => void;
+  diffOpenerState: DiffOpenerState;
+  setDiffOpenerState: SetStoreFunction<DiffOpenerState>;
+  openDiffOpener: (rootDir: string) => void;
+  closeDiffOpener: () => void;
+  toggleDiffOpener: () => void;
   commandPaletteVimMode: Accessor<VimInputMode>;
   setCommandPaletteVimMode: (mode: VimInputMode) => void;
   fileOpenerVimMode: Accessor<VimInputMode>;
   setFileOpenerVimMode: (mode: VimInputMode) => void;
+  diffOpenerVimMode: Accessor<VimInputMode>;
+  setDiffOpenerVimMode: (mode: VimInputMode) => void;
   paneRenameVimMode: Accessor<VimInputMode>;
   setPaneRenameVimMode: (mode: VimInputMode) => void;
   workspaceLabelVimMode: Accessor<VimInputMode>;
@@ -110,6 +118,7 @@ export function OverlayProvider(props: ParentProps) {
     paneRenameState: overlayState.paneRenameState,
     workspaceLabelState: overlayState.workspaceLabelState,
     fileOpenerState: overlayState.fileOpenerState,
+    diffOpenerState: overlayState.diffOpenerState,
     session,
     sessionState,
     aggregateState,
@@ -117,6 +126,7 @@ export function OverlayProvider(props: ParentProps) {
     search,
     commandPaletteVimMode: overlayState.commandPaletteVimMode,
     fileOpenerVimMode: overlayState.fileOpenerVimMode,
+    diffOpenerVimMode: overlayState.diffOpenerVimMode,
     paneRenameVimMode: overlayState.paneRenameVimMode,
     workspaceLabelVimMode: overlayState.workspaceLabelVimMode,
     sessionPickerVimMode: overlayState.sessionPickerVimMode,

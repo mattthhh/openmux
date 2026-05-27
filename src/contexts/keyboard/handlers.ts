@@ -131,6 +131,9 @@ export function handleNormalModeAction(
     case 'file.opener.toggle':
       options.onToggleFileOpener?.();
       return true;
+    case 'diff.opener.toggle':
+      options.onToggleDiffOpener?.();
+      return true;
     case 'keyboard.vim.toggle':
       options.onToggleVimMode?.();
       return true;
@@ -282,6 +285,10 @@ export function handlePrefixModeAction(
       return true;
     case 'file.opener.toggle':
       options.onToggleFileOpener?.();
+      exitPrefix();
+      return true;
+    case 'diff.opener.toggle':
+      options.onToggleDiffOpener?.();
       exitPrefix();
       return true;
     case 'keyboard.vim.toggle':

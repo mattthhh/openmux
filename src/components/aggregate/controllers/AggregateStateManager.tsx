@@ -10,6 +10,7 @@ import { loadSessionData } from '../../../effect/bridge';
 import { getFocusedPtyId } from '../../../core/workspace-utils';
 import { useConfig } from '../../../contexts/ConfigContext';
 import { buildEditorCommand } from '../../../core/file-opener';
+import { type DiffTarget } from '../../../core/diff-opener';
 import { useLayout } from '../../../contexts/LayoutContext';
 import { useSession } from '../../../contexts/SessionContext';
 import { useTerminal } from '../../../contexts/TerminalContext';
@@ -662,11 +663,113 @@ export function AggregateStateManager() {
     writeToEditor(createdPane.ptyId, entry.absolutePath);
   };
 
+  // Open a diff view in the selected PTY's session, creating a new pane.
+  // Follows the same autoswitch pattern as handleNewPaneInSession.
+  const handleOpenDiffInSession = async (
+    target: DiffTarget,
+    rootDir: string,
+    fullCommand: string
+  ): Promise<void> => {
+    if (target.isSeparator) return;
+
+    const currentSessionId = selectedSessionId();
+    const currentPtyId = selectedPtyId();
+
+    if (!currentSessionId && !currentPtyId) return;
+
+    const selectedPty = currentPtyId
+      ? (aggregate.state.allPtys[aggregate.state.allPtysIndex.get(currentPtyId) ?? -1] ?? null)
+      : null;
+
+    const targetSessionId =
+      currentSessionId ??
+      findSessionForPty(currentPtyId!)?.sessionId ??
+      sessionState.activeSessionId;
+    if (!targetSessionId) return;
+
+    const pendingInsertionId = crypto.randomUUID();
+    const pendingInsertion: PendingPaneCreation = {
+      id: pendingInsertionId,
+      sessionId: targetSessionId,
+      insertAfterPtyId: currentPtyId,
+      insertAfterPaneId: selectedPty?.paneId ?? null,
+      pendingPtyId: null,
+      pendingPaneId: null,
+      sortOrderHint: getNextPendingPaneCreationOrder(
+        {
+          allPtys: aggregate.state.allPtys,
+          sessionPaneOrderIndex: aggregate.state.sessionPaneOrderIndex,
+          pendingPaneCreations: aggregate.state.pendingPaneCreations,
+        },
+        {
+          sessionId: targetSessionId,
+          insertAfterPaneId: selectedPty?.paneId ?? null,
+        }
+      ),
+    };
+    aggregate.upsertPendingPaneCreation(pendingInsertion);
+
+    const targetCwd = rootDir || process.cwd();
+    let targetWorkspaceId = layoutState.activeWorkspaceId;
+
+    if (targetSessionId === sessionState.activeSessionId) {
+      if (currentPtyId) {
+        const location = findPtyLocation(currentPtyId, layoutState.workspaces);
+        if (location) {
+          targetWorkspaceId = location.workspaceId;
+        }
+      }
+    } else {
+      const sessionData = await loadSessionData(targetSessionId);
+      if (sessionData instanceof Error) {
+        aggregate.removePendingPaneCreation(pendingInsertionId);
+        console.error('Failed to load session:', sessionData.message);
+        return;
+      }
+      targetWorkspaceId = sessionData.activeWorkspaceId;
+
+      const switched = await switchToSessionWithData(targetSessionId, sessionData);
+      if (!switched) {
+        aggregate.removePendingPaneCreation(pendingInsertionId);
+        return;
+      }
+    }
+
+    switchWorkspace(targetWorkspaceId);
+    setLayoutMode('stacked');
+    const createdPane = await createPaneWithPTY(targetCwd, 'shell', {
+      onCreated: (created) => {
+        aggregate.upsertPendingPaneCreation({
+          ...pendingInsertion,
+          pendingPtyId: created.ptyId,
+          pendingPaneId: created.paneId,
+        });
+      },
+    });
+
+    if (!createdPane) {
+      aggregate.removePendingPaneCreation(pendingInsertionId);
+      return;
+    }
+
+    aggregate.upsertPendingPaneCreation({
+      ...pendingInsertion,
+      pendingPtyId: createdPane.ptyId,
+      pendingPaneId: createdPane.paneId,
+    });
+
+    setPendingPaneFocus({ sessionId: targetSessionId, paneId: createdPane.paneId });
+
+    // Send the diff command to the new PTY
+    writeToPTY(createdPane.ptyId, `${fullCommand}\n`);
+  };
+
   // Return public API for use by other controllers
   return {
     handleJumpToPty,
     handleNewPaneInSession,
     handleOpenFileInSession,
+    handleOpenDiffInSession,
     pendingPaneFocus,
     setPendingPaneFocus,
     aggregateCopyModeActive,

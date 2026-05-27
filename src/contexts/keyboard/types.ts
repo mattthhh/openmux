@@ -42,4 +42,5 @@ export interface KeyboardHandlerOptions {
   onRefreshHostColors?: () => void;
   onTogglePrefixOnly?: () => void;
   onToggleFileOpener?: () => void;
+  onToggleDiffOpener?: () => void;
 }

@@ -155,6 +155,13 @@ const BASE_COMMANDS: CommandPaletteCommand[] = [
     keywords: ['file', 'open', 'find', 'fuzzy', 'nvim', 'vim', 'editor'],
   },
   {
+    id: 'diff.opener.toggle',
+    title: 'View diff',
+    description: 'Compare unstaged or staged changes, or diff against branches',
+    action: 'diff.opener.toggle',
+    keywords: ['diff', 'git', 'branch', 'unstaged', 'staged', 'compare'],
+  },
+  {
     id: 'template.overlay.toggle',
     title: 'Templates',
     description: 'Open the templates overlay',
@@ -343,6 +350,13 @@ const AGGREGATE_VIEW_COMMANDS: CommandPaletteCommand[] = [
     description: 'Fuzzy find and open a file in the editor',
     action: 'file.opener.toggle',
     keywords: ['file', 'open', 'find', 'fuzzy', 'nvim', 'vim', 'editor'],
+  },
+  {
+    id: 'aggregate.diff.opener',
+    title: 'View diff',
+    description: 'Compare unstaged or staged changes, or diff against branches',
+    action: 'diff.opener.toggle',
+    keywords: ['diff', 'git', 'branch', 'unstaged', 'staged', 'compare'],
   },
   {
     id: 'aggregate.console.toggle',

@@ -43,6 +43,7 @@ import { AppProviders } from './components/app/AppProviders';
 import {
   getCommandPaletteRect,
   getFileOpenerRect,
+  getDiffOpenerRect,
   getPaneRenameRect,
   getWorkspaceLabelRect,
   getConfirmationRect,
@@ -142,6 +143,11 @@ function AppContent() {
       isFolderAction: boolean;
       rootDir?: string;
     }) => Promise<void>;
+    handleOpenDiffInSession: (
+      target: import('./core/diff-opener').DiffTarget,
+      rootDir: string,
+      fullCommand: string
+    ) => Promise<void>;
   } | null>(null);
 
   const aggregateCommandActions: AggregateCommandActions = {
@@ -151,6 +157,9 @@ function AppContent() {
     handleJumpToPty: () => aggregateStateActions()?.handleJumpToPty() ?? Promise.resolve(false),
     handleOpenFileInSession: (entry) =>
       aggregateStateActions()?.handleOpenFileInSession(entry) ?? Promise.resolve(),
+    handleOpenDiffInSession: (target, rootDir, fullCommand) =>
+      aggregateStateActions()?.handleOpenDiffInSession(target, rootDir, fullCommand) ??
+      Promise.resolve(),
     killSelectedPty: (ptyId: string) => overlays.confirmationHandlers.handleRequestKillPty(ptyId),
     navigateUp: aggregateView.navigateUp,
     navigateDown: aggregateView.navigateDown,
@@ -255,6 +264,7 @@ function AppContent() {
     aggregateState: aggregateView.state,
     commandPaletteState: overlays.commandPaletteState,
     fileOpenerState: overlays.fileOpenerState,
+    diffOpenerState: overlays.diffOpenerState,
     paneRenameState: overlays.paneRenameState,
     workspaceLabelState: overlays.workspaceLabelState,
     confirmationVisible: () => confirmationState().visible,
@@ -263,6 +273,7 @@ function AppContent() {
     getTemplateOverlayRect,
     getCommandPaletteRect,
     getFileOpenerRect,
+    getDiffOpenerRect,
     getPaneRenameRect,
     getWorkspaceLabelRect,
     getSearchOverlayRect,
@@ -341,6 +352,8 @@ function AppContent() {
         onCommandPaletteExecute={appActions.handleCommandPaletteExecute}
         onFileOpenerSelect={appActions.handleFileOpenerSelect}
         onToggleFileOpener={appActions.handleToggleFileOpener}
+        onDiffOpenerSelect={appActions.handleDiffOpenerSelect}
+        onToggleDiffOpener={appActions.handleToggleDiffOpener}
         onToggleConsole={appActions.actions.onToggleConsole!}
         onAggregateActionsReady={setAggregateStateActions}
       />

@@ -5,6 +5,7 @@ import type { CommandPaletteState } from '../../../src/components/CommandPalette
 import type { PaneRenameState } from '../../../src/components/PaneRenameOverlay';
 import type { WorkspaceLabelState } from '../../../src/components/WorkspaceLabelOverlay';
 import type { FileOpenerState } from '../../../src/components/FileOpener';
+import type { DiffOpenerState } from '../../../src/components/DiffOpener';
 import type { SessionState } from '../../../src/core/operations/session-actions';
 import type { VimInputMode } from '../../../src/core/vim-sequences';
 import type { useConfig } from '../../../src/contexts/ConfigContext';
@@ -36,6 +37,14 @@ const createDeps = (vimMode: 'off' | 'overlays') => {
     rootDir: '',
     loading: false,
   } as FileOpenerState;
+  const diffOpenerState = {
+    show: false,
+    query: '',
+    selectedIndex: 0,
+    targets: [],
+    rootDir: '',
+    loading: false,
+  } as DiffOpenerState;
   const sessionState = { showSessionPicker: false } as SessionState;
   const session = { showTemplateOverlay: false } as SessionContextValue;
   const aggregateState = { showAggregateView: false };
@@ -49,6 +58,7 @@ const createDeps = (vimMode: 'off' | 'overlays') => {
   const templateOverlayVimMode = () => 'normal' as VimInputMode;
   const aggregateVimMode = () => 'normal' as VimInputMode;
   const fileOpenerVimMode = () => 'normal' as VimInputMode;
+  const diffOpenerVimMode = () => 'normal' as VimInputMode;
 
   return {
     config: buildConfig(vimMode),
@@ -57,6 +67,7 @@ const createDeps = (vimMode: 'off' | 'overlays') => {
     paneRenameState,
     workspaceLabelState,
     fileOpenerState,
+    diffOpenerState,
     sessionState,
     session,
     aggregateState,
@@ -64,6 +75,7 @@ const createDeps = (vimMode: 'off' | 'overlays') => {
     search,
     commandPaletteVimMode,
     fileOpenerVimMode,
+    diffOpenerVimMode,
     paneRenameVimMode,
     workspaceLabelVimMode,
     sessionPickerVimMode,
@@ -80,6 +92,7 @@ function buildOverlayVimMode(deps: ReturnType<typeof createDeps>) {
     paneRenameState: deps.paneRenameState,
     workspaceLabelState: deps.workspaceLabelState,
     fileOpenerState: deps.fileOpenerState,
+    diffOpenerState: deps.diffOpenerState,
     session: deps.session,
     sessionState: deps.sessionState,
     aggregateState: deps.aggregateState,
@@ -87,6 +100,7 @@ function buildOverlayVimMode(deps: ReturnType<typeof createDeps>) {
     search: deps.search,
     commandPaletteVimMode: deps.commandPaletteVimMode,
     fileOpenerVimMode: deps.fileOpenerVimMode,
+    diffOpenerVimMode: deps.diffOpenerVimMode,
     paneRenameVimMode: deps.paneRenameVimMode,
     workspaceLabelVimMode: deps.workspaceLabelVimMode,
     sessionPickerVimMode: deps.sessionPickerVimMode,

@@ -9,6 +9,7 @@
 import { Show, createEffect, createMemo } from 'solid-js';
 import type { MouseEvent as OpentuiMouseEvent } from '@opentui/core';
 import { useAggregateView } from '../contexts/AggregateViewContext';
+import type { DiffTarget } from '../core/diff-opener';
 import { useSession } from '../contexts/SessionContext';
 import { useTerminal } from '../contexts/TerminalContext';
 import { useConfig } from '../contexts/ConfigContext';
@@ -51,6 +52,11 @@ export interface AggregateStateActions {
     isFolderAction: boolean;
     rootDir?: string;
   }) => Promise<void>;
+  handleOpenDiffInSession: (
+    target: DiffTarget,
+    rootDir: string,
+    fullCommand: string
+  ) => Promise<void>;
 }
 
 interface AggregateViewProps {
@@ -61,6 +67,7 @@ interface AggregateViewProps {
   onRequestKillPty?: (ptyId: string) => void;
   onToggleCommandPalette?: () => void;
   onToggleFileOpener?: () => void;
+  onToggleDiffOpener?: () => void;
   onToggleConsole?: () => void;
   onVimModeChange?: (mode: 'normal' | 'insert') => void;
   /** Called once after the state manager initializes with its action methods. */
@@ -91,6 +98,7 @@ export function AggregateView(props: AggregateViewProps) {
         handleJumpToPty: stateManager.handleJumpToPty,
         handleNewPaneInSession: stateManager.handleNewPaneInSession,
         handleOpenFileInSession: stateManager.handleOpenFileInSession,
+        handleOpenDiffInSession: stateManager.handleOpenDiffInSession,
       });
     }
   });
@@ -103,6 +111,7 @@ export function AggregateView(props: AggregateViewProps) {
     onRequestKillPty: props.onRequestKillPty,
     onToggleCommandPalette: props.onToggleCommandPalette,
     onToggleFileOpener: props.onToggleFileOpener,
+    onToggleDiffOpener: props.onToggleDiffOpener,
     onToggleConsole: props.onToggleConsole,
     stateManagerOverrides: {
       handleJumpToPty: stateManager.handleJumpToPty,

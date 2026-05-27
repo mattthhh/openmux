@@ -9,6 +9,7 @@ import { createCommandPaletteState } from './command-palette-state';
 import type { PaneRenameState } from '../PaneRenameOverlay';
 import type { WorkspaceLabelState } from '../WorkspaceLabelOverlay';
 import type { FileOpenerState } from '../FileOpener';
+import type { DiffOpenerState } from '../DiffOpener';
 
 /**
  * Factory for creating vim mode signal pairs for overlays
@@ -45,6 +46,15 @@ export function createOverlayState() {
     loading: false,
   });
 
+  const [diffOpenerState, setDiffOpenerState] = createStore<DiffOpenerState>({
+    show: false,
+    query: '',
+    selectedIndex: 0,
+    targets: [],
+    rootDir: '',
+    loading: false,
+  });
+
   // Vim mode state for each overlay using factory
   const commandPaletteVim = createVimModeState('commandPalette');
   const paneRenameVim = createVimModeState('paneRename');
@@ -53,6 +63,7 @@ export function createOverlayState() {
   const templateOverlayVim = createVimModeState('templateOverlay');
   const aggregateVim = createVimModeState('aggregate');
   const fileOpenerVim = createVimModeState('fileOpener');
+  const diffOpenerVim = createVimModeState('diffOpener');
 
   const [updateLabel, setUpdateLabel] = createSignal<string | null>(null);
 
@@ -88,6 +99,37 @@ export function createOverlayState() {
     }
   };
 
+  const openDiffOpener = (rootDir: string) => {
+    setDiffOpenerState({
+      show: true,
+      query: '',
+      selectedIndex: 0,
+      targets: [],
+      rootDir,
+      loading: true,
+    });
+  };
+
+  const closeDiffOpener = () => {
+    setDiffOpenerState({
+      show: false,
+      query: '',
+      selectedIndex: 0,
+      targets: [],
+      rootDir: '',
+      loading: false,
+    });
+  };
+
+  const toggleDiffOpener = () => {
+    if (diffOpenerState.show) {
+      closeDiffOpener();
+    } else {
+      const cwd = process.env.OPENMUX_ORIGINAL_CWD ?? process.cwd();
+      openDiffOpener(cwd);
+    }
+  };
+
   return {
     ...commandPalette,
     paneRenameState,
@@ -108,6 +150,8 @@ export function createOverlayState() {
     setAggregateVimMode: aggregateVim.setter,
     fileOpenerVimMode: fileOpenerVim.getter,
     setFileOpenerVimMode: fileOpenerVim.setter,
+    diffOpenerVimMode: diffOpenerVim.getter,
+    setDiffOpenerVimMode: diffOpenerVim.setter,
     updateLabel,
     setUpdateLabel,
     fileOpenerState,
@@ -115,5 +159,10 @@ export function createOverlayState() {
     openFileOpener,
     closeFileOpener,
     toggleFileOpener,
+    diffOpenerState,
+    setDiffOpenerState,
+    openDiffOpener,
+    closeDiffOpener,
+    toggleDiffOpener,
   };
 }

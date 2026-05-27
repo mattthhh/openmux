@@ -4,6 +4,7 @@ import type { CommandPaletteState } from '../CommandPalette';
 import type { PaneRenameState } from '../PaneRenameOverlay';
 import type { WorkspaceLabelState } from '../WorkspaceLabelOverlay';
 import type { FileOpenerState } from '../FileOpener';
+import type { DiffOpenerState } from '../DiffOpener';
 import type { SessionState } from '../../core/operations/session-actions';
 import type { TemplateSession } from '../../effect/models';
 import type { CommandPaletteCommand } from '../../core/command-palette';
@@ -52,6 +53,7 @@ type CopyNotificationRectFn = (
 ) => Rectangle | null;
 
 type FileOpenerRectFn = (width: number, height: number, state: FileOpenerState) => Rectangle | null;
+type DiffOpenerRectFn = (width: number, height: number, state: DiffOpenerState) => Rectangle | null;
 
 export function setupOverlayClipRects(params: {
   getWidth: () => number;
@@ -76,6 +78,7 @@ export function setupOverlayClipRects(params: {
   commandPaletteState: CommandPaletteState;
   commandPaletteCommands: CommandPaletteCommand[] | (() => CommandPaletteCommand[]);
   fileOpenerState: FileOpenerState;
+  diffOpenerState: DiffOpenerState;
   paneRenameState: PaneRenameState;
   workspaceLabelState: WorkspaceLabelState;
   confirmationVisible: () => boolean;
@@ -87,6 +90,7 @@ export function setupOverlayClipRects(params: {
   getTemplateOverlayRect: TemplateOverlayRectFn;
   getCommandPaletteRect: CommandPaletteRectFn;
   getFileOpenerRect: FileOpenerRectFn;
+  getDiffOpenerRect: DiffOpenerRectFn;
   getPaneRenameRect: PaneRenameRectFn;
   getWorkspaceLabelRect: WorkspaceLabelRectFn;
   getSearchOverlayRect: SearchOverlayRectFn;
@@ -105,6 +109,7 @@ export function setupOverlayClipRects(params: {
     commandPaletteState,
     commandPaletteCommands,
     fileOpenerState,
+    diffOpenerState,
     paneRenameState,
     workspaceLabelState,
     confirmationVisible,
@@ -113,6 +118,7 @@ export function setupOverlayClipRects(params: {
     getTemplateOverlayRect,
     getCommandPaletteRect,
     getFileOpenerRect,
+    getDiffOpenerRect,
     getPaneRenameRect,
     getWorkspaceLabelRect,
     getSearchOverlayRect,
@@ -153,6 +159,7 @@ export function setupOverlayClipRects(params: {
       )
     );
     pushRect(getFileOpenerRect(w, h, fileOpenerState));
+    pushRect(getDiffOpenerRect(w, h, diffOpenerState));
     pushRect(getPaneRenameRect(w, h, paneRenameState));
     pushRect(getWorkspaceLabelRect(w, h, workspaceLabelState));
     pushRect(getSearchOverlayRect(w, h, Boolean(search.searchState)));

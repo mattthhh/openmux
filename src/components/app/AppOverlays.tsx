@@ -8,12 +8,14 @@ import { useSelection } from '../../contexts/SelectionContext';
 import { useAggregateView } from '../../contexts/AggregateViewContext';
 import { type CommandPaletteCommand } from '../../core/command-palette';
 import type { FileEntry } from '../../core/file-opener';
+import type { DiffTarget } from '../../core/diff-opener';
 import { StatusBar, CopyNotification, ConfirmationDialog } from '../index';
 import { SessionPicker } from '../SessionPicker';
 import { SearchOverlay } from '../SearchOverlay';
 import { AggregateView, type AggregateStateActions } from '../AggregateView';
 import { CommandPalette } from '../CommandPalette';
 import { FileOpener } from '../FileOpener';
+import { DiffOpener } from '../DiffOpener';
 import { PaneRenameOverlay } from '../PaneRenameOverlay';
 import { WorkspaceLabelOverlay } from '../WorkspaceLabelOverlay';
 import { TemplateOverlay } from '../TemplateOverlay';
@@ -26,6 +28,8 @@ interface AppOverlaysProps {
   onCommandPaletteExecute: (command: CommandPaletteCommand) => void;
   onFileOpenerSelect: (entry: FileEntry) => void;
   onToggleFileOpener?: () => void;
+  onDiffOpenerSelect: (target: DiffTarget) => void;
+  onToggleDiffOpener?: () => void;
   onToggleConsole?: () => void;
   /** Called when the aggregate state manager initializes with its action methods. */
   onAggregateActionsReady?: (actions: AggregateStateActions) => void;
@@ -62,6 +66,7 @@ export function AppOverlays(props: AppOverlaysProps) {
         onRequestKillPty={overlays.confirmationHandlers.handleRequestKillPty}
         onToggleCommandPalette={overlays.toggleCommandPalette}
         onToggleFileOpener={props.onToggleFileOpener ?? overlays.toggleFileOpener}
+        onToggleDiffOpener={props.onToggleDiffOpener ?? overlays.toggleDiffOpener}
         onToggleConsole={props.onToggleConsole}
         onVimModeChange={overlays.setAggregateVimMode}
         onActionsReady={props.onAggregateActionsReady}
@@ -100,6 +105,15 @@ export function AppOverlays(props: AppOverlaysProps) {
         setState={overlays.setFileOpenerState}
         onSelect={props.onFileOpenerSelect}
         onVimModeChange={overlays.setFileOpenerVimMode}
+      />
+
+      <DiffOpener
+        width={props.width}
+        height={props.height}
+        state={overlays.diffOpenerState}
+        setState={overlays.setDiffOpenerState}
+        onSelect={props.onDiffOpenerSelect}
+        onVimModeChange={overlays.setDiffOpenerVimMode}
       />
 
       <PaneRenameOverlay

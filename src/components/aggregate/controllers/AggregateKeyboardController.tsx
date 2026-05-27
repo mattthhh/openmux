@@ -33,6 +33,7 @@ export interface AggregateKeyboardControllerProps {
   onRequestKillPty?: (ptyId: string) => void;
   onToggleCommandPalette?: () => void;
   onToggleFileOpener?: () => void;
+  onToggleDiffOpener?: () => void;
   onToggleConsole?: () => void;
   /** State manager overrides for jump/new pane operations */
   stateManagerOverrides?: {
@@ -206,6 +207,7 @@ export function AggregateKeyboardController(props: AggregateKeyboardControllerPr
     onToggleSessionPicker: session.togglePicker,
     onToggleCommandPalette: props.onToggleCommandPalette,
     onToggleFileOpener: props.onToggleFileOpener,
+    onToggleDiffOpener: props.onToggleDiffOpener,
     onToggleConsole: props.onToggleConsole,
     onRequestQuit: props.onRequestQuit,
     onDetach: props.onDetach,

@@ -21,6 +21,7 @@ export interface KeybindingsConfig {
   search: KeybindingMap;
   commandPalette: KeybindingMap;
   fileOpener: KeybindingMap;
+  diffOpener: KeybindingMap;
   templateOverlay: {
     apply: KeybindingMap;
     save: KeybindingMap;
@@ -55,6 +56,7 @@ export interface ResolvedKeybindings {
   search: ResolvedKeybindingMap;
   commandPalette: ResolvedKeybindingMap;
   fileOpener: ResolvedKeybindingMap;
+  diffOpener: ResolvedKeybindingMap;
   templateOverlay: {
     apply: ResolvedKeybindingMap;
     save: ResolvedKeybindingMap;

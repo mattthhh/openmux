@@ -56,12 +56,29 @@ export const DEFAULT_FILE_OPENER_SETTINGS: FileOpenerSettings = {
   maxFiles: 5000,
 };
 
+export interface DiffOpenerSettings {
+  /** Command template to view diffs. $DIFF_ARGS is replaced with the git diff arguments. */
+  command: string;
+  /** Command template using fzf for interactive file selection. $DIFF_ARGS is replaced. Requires fzf. */
+  fzfCommand: string;
+  /** Whether to prefer fzf when available (default: true) */
+  preferFzf: boolean;
+}
+
+export const DEFAULT_DIFF_OPENER_SETTINGS: DiffOpenerSettings = {
+  command: 'git diff $DIFF_ARGS --color=always | less -R',
+  fzfCommand:
+    'git diff $DIFF_ARGS --name-only | fzf -m --ansi --layout=reverse --preview-window=right,75% --preview \'git diff $DIFF_ARGS --color=always -- {-1} | nl -ba -w4 -s" │ "\'',
+  preferFzf: true,
+};
+
 export interface UserConfig {
   layout: LayoutSettings;
   theme: Theme;
   session: SessionSettings;
   keyboard: KeyboardSettings;
   fileOpener: FileOpenerSettings;
+  diffOpener: DiffOpenerSettings;
   keybindings: KeybindingsConfig;
 }
 
@@ -86,6 +103,7 @@ export const DEFAULT_USER_CONFIG: UserConfig = {
     prefixOnly: false,
   },
   fileOpener: DEFAULT_FILE_OPENER_SETTINGS,
+  diffOpener: DEFAULT_DIFF_OPENER_SETTINGS,
   keybindings: DEFAULT_KEYBINDINGS,
 };
 
@@ -201,6 +219,7 @@ function mergeKeybindings(
     search: mergeKeybindingMap(base.search, overrides.search),
     commandPalette: mergeKeybindingMap(base.commandPalette, overrides.commandPalette),
     fileOpener: mergeKeybindingMap(base.fileOpener, overrides.fileOpener),
+    diffOpener: mergeKeybindingMap(base.diffOpener, overrides.diffOpener),
     templateOverlay: {
       apply: mergeKeybindingMap(base.templateOverlay.apply, overrides.templateOverlay?.apply),
       save: mergeKeybindingMap(base.templateOverlay.save, overrides.templateOverlay?.save),
@@ -278,6 +297,11 @@ function mergeUserConfig(base: UserConfig, overrides?: Partial<UserConfig>): Use
       editor: overrides.fileOpener?.editor ?? base.fileOpener.editor,
       editorArgs: overrides.fileOpener?.editorArgs ?? base.fileOpener.editorArgs,
       maxFiles: overrides.fileOpener?.maxFiles ?? base.fileOpener.maxFiles,
+    },
+    diffOpener: {
+      command: overrides.diffOpener?.command ?? base.diffOpener.command,
+      fzfCommand: overrides.diffOpener?.fzfCommand ?? base.diffOpener.fzfCommand,
+      preferFzf: overrides.diffOpener?.preferFzf ?? base.diffOpener.preferFzf,
     },
     keybindings: mergeKeybindings(base.keybindings, overrides.keybindings),
   };

@@ -3,6 +3,7 @@ import type { CommandPaletteState } from '../CommandPalette';
 import type { PaneRenameState } from '../PaneRenameOverlay';
 import type { WorkspaceLabelState } from '../WorkspaceLabelOverlay';
 import type { FileOpenerState } from '../FileOpener';
+import type { DiffOpenerState } from '../DiffOpener';
 import type { VimInputMode } from '../../core/vim-sequences';
 import type { SearchContextValue } from '../../contexts/search/types';
 import type { SessionState } from '../../core/operations/session-actions';
@@ -17,6 +18,7 @@ export function createOverlayVimMode(params: {
   paneRenameState: PaneRenameState;
   workspaceLabelState: WorkspaceLabelState;
   fileOpenerState: FileOpenerState;
+  diffOpenerState: DiffOpenerState;
   session: ReturnType<typeof useSession>;
   sessionState: SessionState;
   aggregateState: { showAggregateView: boolean };
@@ -24,6 +26,7 @@ export function createOverlayVimMode(params: {
   search: SearchContextValue;
   commandPaletteVimMode: Accessor<VimInputMode>;
   fileOpenerVimMode: Accessor<VimInputMode>;
+  diffOpenerVimMode: Accessor<VimInputMode>;
   paneRenameVimMode: Accessor<VimInputMode>;
   workspaceLabelVimMode: Accessor<VimInputMode>;
   sessionPickerVimMode: Accessor<VimInputMode>;
@@ -37,6 +40,7 @@ export function createOverlayVimMode(params: {
     paneRenameState,
     workspaceLabelState,
     fileOpenerState,
+    diffOpenerState,
     session,
     sessionState,
     aggregateState,
@@ -44,6 +48,7 @@ export function createOverlayVimMode(params: {
     search,
     commandPaletteVimMode,
     fileOpenerVimMode,
+    diffOpenerVimMode,
     paneRenameVimMode,
     workspaceLabelVimMode,
     sessionPickerVimMode,
@@ -56,6 +61,7 @@ export function createOverlayVimMode(params: {
     if (confirmationVisible()) return null;
     if (commandPaletteState.show) return commandPaletteVimMode();
     if (fileOpenerState.show) return fileOpenerVimMode();
+    if (diffOpenerState.show) return diffOpenerVimMode();
     if (paneRenameState.show) return paneRenameVimMode();
     if (workspaceLabelState.show) return workspaceLabelVimMode();
     if (session.showTemplateOverlay) return templateOverlayVimMode();
