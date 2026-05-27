@@ -22,6 +22,49 @@ import { getSessionPaneOrder, setSessionPaneOrder, getPendingPaneOrderKey } from
 import { recomputeMatches, recomputeTree } from './session';
 import { clearGitMetadataInPlace } from './git';
 
+/** Known shell names — used by the foreground process debounce to detect
+ *  when a non-shell child (e.g. `sleep`) is replaced by the shell briefly
+ *  between iterations of a loop like `for i in 1 2 3; do sleep 1; done`. */
+const KNOWN_SHELLS = new Set([
+  'sh',
+  'bash',
+  'zsh',
+  'fish',
+  'dash',
+  'ksh',
+  'tcsh',
+  'csh',
+  'nu',
+  'pwsh',
+  'powershell',
+]);
+
+function getProcessBaseName(name: string | undefined): string {
+  const raw = name?.trim();
+  if (!raw) return '';
+  return raw.split('/').filter(Boolean).pop() ?? raw;
+}
+
+function isShellProcess(processName: string | undefined, shellName: string | undefined): boolean {
+  if (!processName) return false;
+  const base = getProcessBaseName(processName).toLowerCase();
+  if (KNOWN_SHELLS.has(base)) return true;
+  if (shellName) {
+    const shellBase = getProcessBaseName(shellName).toLowerCase();
+    if (base === shellBase) return true;
+  }
+  return false;
+}
+
+/** Per-PTY debounce timers for foreground process updates.
+ *  When a non-shell process (e.g. `sleep`) is replaced by the shell,
+ *  we delay the update for FOREGROUND_PROCESS_DEBOUNCE_MS. If the
+ *  non-shell process comes back within that window (shell↔child
+ *  alternation in a loop), the update is cancelled and the display
+ *  never flickers. */
+const foregroundProcessDebounce = new Map<string, ReturnType<typeof setTimeout>>();
+const FOREGROUND_PROCESS_DEBOUNCE_MS = 500;
+
 export interface SubscriptionManager {
   lifecycle: (() => void) | null;
   metadataChanges: (() => void) | null;
@@ -326,6 +369,26 @@ export interface MetadataChangeEvent {
   cwd?: string;
 }
 
+/** Apply a foreground process update to a single PtyInfo in the store.
+ *  Returns true if the value actually changed. */
+function applyForegroundProcess(
+  pty: { foregroundProcess: string | undefined; shell: string | undefined },
+  newProcess: string | undefined
+): boolean {
+  if (pty.foregroundProcess === newProcess) return false;
+  pty.foregroundProcess = newProcess;
+  return true;
+}
+
+/** Clear the debounce timer for a PTY. */
+export function clearForegroundProcessDebounce(ptyId: string): void {
+  const timer = foregroundProcessDebounce.get(ptyId);
+  if (timer !== undefined) {
+    clearTimeout(timer);
+    foregroundProcessDebounce.delete(ptyId);
+  }
+}
+
 export function createMetadataChangeHandler(
   setState: SetStoreFunction<AggregateViewState>
 ): (event: MetadataChangeEvent) => void {
@@ -347,8 +410,52 @@ export function createMetadataChangeHandler(
               event.foregroundProcess !== undefined &&
               pty.foregroundProcess !== event.foregroundProcess
             ) {
-              changed = true;
-              pty.foregroundProcess = event.foregroundProcess;
+              // Debounce: when a non-shell process is being replaced by the shell,
+              // delay the update. The child often comes back within milliseconds
+              // (shell-child alternation in loops). If it does, cancel the update.
+              const newProc = event.foregroundProcess;
+              const revertingToShell = isShellProcess(newProc, pty.shell);
+              const hadNonShell =
+                pty.foregroundProcess != null && !isShellProcess(pty.foregroundProcess, pty.shell);
+
+              if (revertingToShell && hadNonShell) {
+                // Cancel any existing debounce for this PTY
+                const existing = foregroundProcessDebounce.get(event.ptyId);
+                if (existing) clearTimeout(existing);
+
+                // Schedule the shell update after debounce
+                foregroundProcessDebounce.set(
+                  event.ptyId,
+                  setTimeout(() => {
+                    foregroundProcessDebounce.delete(event.ptyId);
+                    setState(
+                      produce((s2) => {
+                        let changed2 = false;
+                        const ai = s2.allPtysIndex.get(event.ptyId);
+                        if (ai !== undefined && s2.allPtys[ai]) {
+                          changed2 = applyForegroundProcess(s2.allPtys[ai], newProc) || changed2;
+                        }
+                        const mi = s2.matchedPtysIndex.get(event.ptyId);
+                        if (mi !== undefined && s2.matchedPtys[mi]) {
+                          changed2 =
+                            applyForegroundProcess(s2.matchedPtys[mi], newProc) || changed2;
+                        }
+                        if (changed2) recomputeTree(s2);
+                      })
+                    );
+                  }, FOREGROUND_PROCESS_DEBOUNCE_MS)
+                );
+                // Skip the immediate update — debounced version will handle it
+              } else {
+                // Non-shell came back or different non-shell — apply immediately
+                // and cancel any pending debounce (the child is back)
+                const existing = foregroundProcessDebounce.get(event.ptyId);
+                if (existing) {
+                  clearTimeout(existing);
+                  foregroundProcessDebounce.delete(event.ptyId);
+                }
+                changed = applyForegroundProcess(pty, newProc);
+              }
             }
             if (event.cwd !== undefined && pty.cwd !== event.cwd) {
               changed = true;
@@ -379,8 +486,26 @@ export function createMetadataChangeHandler(
               event.foregroundProcess !== undefined &&
               pty.foregroundProcess !== event.foregroundProcess
             ) {
-              changed = true;
-              pty.foregroundProcess = event.foregroundProcess;
+              // The matchedPtys array mirrors allPtys — foreground process
+              // debouncing above already handles the logic. We must apply the
+              // same (possibly deferred) decision here for consistency.
+              // If a debounce is active for this PTY, skip the update here too.
+              if (foregroundProcessDebounce.has(event.ptyId)) {
+                // Debounce is pending — skip (the timeout will update both arrays)
+              } else {
+                const newProc = event.foregroundProcess;
+                const revertingToShell = isShellProcess(newProc, pty.shell);
+                const hadNonShell =
+                  pty.foregroundProcess != null &&
+                  !isShellProcess(pty.foregroundProcess, pty.shell);
+
+                if (revertingToShell && hadNonShell) {
+                  // The debounce was just set in the allPtys block above.
+                  // Skip this update — the timeout handler will do it.
+                } else {
+                  changed = applyForegroundProcess(pty, newProc);
+                }
+              }
             }
             if (event.cwd !== undefined && pty.cwd !== event.cwd) {
               changed = true;
