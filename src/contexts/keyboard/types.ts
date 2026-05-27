@@ -41,4 +41,5 @@ export interface KeyboardHandlerOptions {
   onToggleVimMode?: () => void;
   onRefreshHostColors?: () => void;
   onTogglePrefixOnly?: () => void;
+  onToggleFileOpener?: () => void;
 }

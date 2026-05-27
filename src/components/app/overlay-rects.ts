@@ -6,6 +6,7 @@ import { buildTemplateSummary } from '../template-overlay/summary';
 import { calculateLayoutDimensions } from '../aggregate';
 import type { PaneRenameState } from '../PaneRenameOverlay';
 import type { WorkspaceLabelState } from '../WorkspaceLabelOverlay';
+import type { FileOpenerState } from '../FileOpener';
 
 type CopyNotificationState = {
   visible: boolean;
@@ -53,7 +54,8 @@ export function getTemplateOverlayRect(
   const applyHeight = Math.max(0, Math.min(listRows + 6, height - 4));
 
   const summary = buildTemplateSummary(workspaces);
-  const summaryLines = summary.workspaceCount === 0 ? 1 : summary.workspaceCount + summary.paneCount;
+  const summaryLines =
+    summary.workspaceCount === 0 ? 1 : summary.workspaceCount + summary.paneCount;
   const maxSaveSummaryLines = Math.max(0, height - 13);
   const visibleSaveSummary = Math.min(summaryLines, maxSaveSummaryLines);
   const saveSummaryRows = visibleSaveSummary + (summaryLines > maxSaveSummaryLines ? 1 : 0);
@@ -191,4 +193,30 @@ export function getCopyNotificationRect(
   const left = Math.max(0, paneRect.x + paneRect.width - toastWidth - 2);
   const top = paneRect.y + 1;
   return { x: left, y: top, width: toastWidth, height: toastHeight };
+}
+
+export function getFileOpenerRect(
+  width: number,
+  height: number,
+  state: FileOpenerState
+): Rectangle | null {
+  if (!state.show) return null;
+  const overlayWidth = Math.max(0, Math.min(70, width - 4));
+
+  let overlayHeight = 3;
+  if (state.loading) {
+    overlayHeight = 3;
+  } else if (state.files.length > 0) {
+    const resultCount = state.files.length;
+    const maxListRows = Math.max(1, height - 7);
+    const listRows = Math.min(Math.max(1, resultCount), maxListRows);
+    overlayHeight = Math.max(0, Math.min(listRows + 3, height - 4));
+  }
+
+  const overlayX = Math.floor((width - overlayWidth) / 2);
+  const desiredCommandY = Math.floor(height * 0.15);
+  const desired = Math.max(0, desiredCommandY - 1);
+  const maxY = Math.max(0, height - overlayHeight);
+  const overlayY = Math.min(desired, maxY);
+  return { x: overlayX, y: overlayY, width: overlayWidth, height: overlayHeight };
 }

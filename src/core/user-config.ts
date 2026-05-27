@@ -41,11 +41,27 @@ export interface KeyboardSettings {
   prefixOnly: boolean;
 }
 
+export interface FileOpenerSettings {
+  /** The editor binary to open files with (default: "nvim") */
+  editor: string;
+  /** Additional arguments to pass to the editor */
+  editorArgs: string[];
+  /** Maximum number of files to discover */
+  maxFiles: number;
+}
+
+export const DEFAULT_FILE_OPENER_SETTINGS: FileOpenerSettings = {
+  editor: 'nvim',
+  editorArgs: [],
+  maxFiles: 5000,
+};
+
 export interface UserConfig {
   layout: LayoutSettings;
   theme: Theme;
   session: SessionSettings;
   keyboard: KeyboardSettings;
+  fileOpener: FileOpenerSettings;
   keybindings: KeybindingsConfig;
 }
 
@@ -69,6 +85,7 @@ export const DEFAULT_USER_CONFIG: UserConfig = {
     vimSequenceTimeoutMs: 1000,
     prefixOnly: false,
   },
+  fileOpener: DEFAULT_FILE_OPENER_SETTINGS,
   keybindings: DEFAULT_KEYBINDINGS,
 };
 
@@ -183,6 +200,7 @@ function mergeKeybindings(
     move: mergeKeybindingMap(base.move, overrides.move),
     search: mergeKeybindingMap(base.search, overrides.search),
     commandPalette: mergeKeybindingMap(base.commandPalette, overrides.commandPalette),
+    fileOpener: mergeKeybindingMap(base.fileOpener, overrides.fileOpener),
     templateOverlay: {
       apply: mergeKeybindingMap(base.templateOverlay.apply, overrides.templateOverlay?.apply),
       save: mergeKeybindingMap(base.templateOverlay.save, overrides.templateOverlay?.save),
@@ -255,6 +273,11 @@ function mergeUserConfig(base: UserConfig, overrides?: Partial<UserConfig>): Use
       vimMode: overrides.keyboard?.vimMode ?? base.keyboard.vimMode,
       vimSequenceTimeoutMs: vimSequenceTimeoutMs ?? base.keyboard.vimSequenceTimeoutMs,
       prefixOnly: overrides.keyboard?.prefixOnly ?? base.keyboard.prefixOnly,
+    },
+    fileOpener: {
+      editor: overrides.fileOpener?.editor ?? base.fileOpener.editor,
+      editorArgs: overrides.fileOpener?.editorArgs ?? base.fileOpener.editorArgs,
+      maxFiles: overrides.fileOpener?.maxFiles ?? base.fileOpener.maxFiles,
     },
     keybindings: mergeKeybindings(base.keybindings, overrides.keybindings),
   };

@@ -17,6 +17,7 @@ import { setKeyboardVimMode, setKeyboardPrefixOnly } from '../../core/user-confi
 import { handleNormalModeAction } from '../../contexts/keyboard/handlers';
 import type { KeyboardContextValue, KeyboardHandlerOptions } from '../../contexts/keyboard/types';
 import type { CommandPaletteCommand } from '../../core/command-palette';
+import { openInFileManager, buildEditorCommand } from '../../core/file-opener';
 import { createSearchVimState } from './search-vim';
 import { createCopyModeVimState } from './copy-mode-vim';
 import { createCopyModeKeyHandler } from './copy-mode-keyboard';
@@ -33,12 +34,17 @@ import type { SelectionContextValue } from '../../contexts/SelectionContext';
 import type { OverlayContextValue } from '../../contexts/OverlayContext';
 import type { AggregateViewState } from '../../contexts/aggregate-view-types';
 import type { KeyboardEvent } from '../../core/keyboard-event';
+import type { FileEntry } from '../../core/file-opener';
 
 /** Callbacks for aggregate-view-scoped actions. */
 export interface AggregateCommandActions {
   togglePreviewZoom: () => void;
   handleNewPaneInSession: () => Promise<void>;
   handleJumpToPty: () => Promise<boolean>;
+  handleOpenFileInSession: (entry: {
+    absolutePath: string;
+    isFolderAction: boolean;
+  }) => Promise<void>;
   killSelectedPty: (ptyId: string) => void;
   navigateUp: () => void;
   navigateDown: () => void;
@@ -89,6 +95,10 @@ export function useAppActions(deps: AppActionsDeps): {
   executeCommandAction(action: string): void;
   /** Execute a command palette command */
   handleCommandPaletteExecute(command: CommandPaletteCommand): void;
+  /** Handle file opener selection */
+  handleFileOpenerSelect(entry: FileEntry): Promise<void>;
+  /** Toggle file opener */
+  handleToggleFileOpener(): void;
   /** Paste from clipboard */
   handlePaste(): void;
   /** Enter search mode */
@@ -197,6 +207,56 @@ export function useAppActions(deps: AppActionsDeps): {
     terminal.refreshHostColors({ forceApply: true }).catch((error: unknown) => {
       console.warn('[openmux] Failed to refresh host colors:', error);
     });
+  };
+
+  const handleToggleFileOpener = async () => {
+    if (overlays.fileOpenerState.show) {
+      overlays.closeFileOpener();
+      return;
+    }
+
+    // In aggregate view, resolve CWD from the selected PTY
+    if (aggregateState.showAggregateView) {
+      const ptyId = aggregateActions.getSelectedPtyId();
+      if (ptyId) {
+        const cwd = await terminal.getSessionCwd(ptyId).catch(() => null);
+        if (cwd) {
+          overlays.openFileOpener(cwd);
+          return;
+        }
+      }
+    }
+
+    // Fallback: resolve CWD from the focused pane's PTY
+    const cwd = await terminal.getFocusedCwd().catch(() => null);
+    const rootDir = cwd ?? process.env.OPENMUX_ORIGINAL_CWD ?? process.cwd();
+    overlays.openFileOpener(rootDir);
+  };
+
+  const handleFileOpenerSelect = async (entry: FileEntry) => {
+    if (entry.isFolderAction) {
+      void openInFileManager(entry.absolutePath);
+      return;
+    }
+
+    // In aggregate view, delegate to the state manager which handles
+    // pending insertions, autoswitch, and editor command injection
+    // while staying in the aggregate view.
+    if (aggregateState.showAggregateView) {
+      void aggregateActions.handleOpenFileInSession(entry);
+      return;
+    }
+
+    // Workspace mode: create pane directly in the active workspace
+    const fileOpenerSettings = config.config().fileOpener;
+    const commandParts = buildEditorCommand(fileOpenerSettings, entry.absolutePath);
+    const fullCommand = `${fileOpenerSettings.editor} ${commandParts.join(' ')}`;
+    const cwd = path.dirname(entry.absolutePath);
+
+    const result = await terminal.createPaneWithPTY(cwd);
+    if (!result) return;
+
+    terminal.writeToPTY(result.ptyId, `${fullCommand}\n`);
   };
 
   const searchVimState = createSearchVimState({ config, search });
@@ -325,6 +385,7 @@ export function useAppActions(deps: AppActionsDeps): {
     onDumpConsoleLogs: handleDumpConsoleLogs,
     onToggleAggregateView: openAggregateView,
     onToggleCommandPalette: overlays.toggleCommandPalette,
+    onToggleFileOpener: handleToggleFileOpener,
     onToggleVimMode: handleToggleVimMode,
     onTogglePrefixOnly: handleTogglePrefixOnly,
     onRefreshHostColors: handleRefreshHostColors,
@@ -336,6 +397,8 @@ export function useAppActions(deps: AppActionsDeps): {
     actions,
     executeCommandAction,
     handleCommandPaletteExecute,
+    handleFileOpenerSelect,
+    handleToggleFileOpener,
     handlePaste,
     handleEnterSearch,
     handleEnterCopyMode,

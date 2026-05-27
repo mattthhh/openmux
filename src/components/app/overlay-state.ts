@@ -8,6 +8,7 @@ import type { VimInputMode } from '../../core/vim-sequences';
 import { createCommandPaletteState } from './command-palette-state';
 import type { PaneRenameState } from '../PaneRenameOverlay';
 import type { WorkspaceLabelState } from '../WorkspaceLabelOverlay';
+import type { FileOpenerState } from '../FileOpener';
 
 /**
  * Factory for creating vim mode signal pairs for overlays
@@ -35,6 +36,15 @@ export function createOverlayState() {
     value: '',
   });
 
+  const [fileOpenerState, setFileOpenerState] = createStore<FileOpenerState>({
+    show: false,
+    query: '',
+    selectedIndex: 0,
+    files: [],
+    rootDir: '',
+    loading: false,
+  });
+
   // Vim mode state for each overlay using factory
   const commandPaletteVim = createVimModeState('commandPalette');
   const paneRenameVim = createVimModeState('paneRename');
@@ -42,8 +52,41 @@ export function createOverlayState() {
   const sessionPickerVim = createVimModeState('sessionPicker');
   const templateOverlayVim = createVimModeState('templateOverlay');
   const aggregateVim = createVimModeState('aggregate');
+  const fileOpenerVim = createVimModeState('fileOpener');
 
   const [updateLabel, setUpdateLabel] = createSignal<string | null>(null);
+
+  const openFileOpener = (rootDir: string) => {
+    setFileOpenerState({
+      show: true,
+      query: '',
+      selectedIndex: 0,
+      files: [],
+      rootDir,
+      loading: true,
+    });
+  };
+
+  const closeFileOpener = () => {
+    setFileOpenerState({
+      show: false,
+      query: '',
+      selectedIndex: 0,
+      files: [],
+      rootDir: '',
+      loading: false,
+    });
+  };
+
+  const toggleFileOpener = () => {
+    if (fileOpenerState.show) {
+      closeFileOpener();
+    } else {
+      // Default to process.cwd() when triggered without a specific root
+      const cwd = process.env.OPENMUX_ORIGINAL_CWD ?? process.cwd();
+      openFileOpener(cwd);
+    }
+  };
 
   return {
     ...commandPalette,
@@ -63,7 +106,14 @@ export function createOverlayState() {
     setTemplateOverlayVimMode: templateOverlayVim.setter,
     aggregateVimMode: aggregateVim.getter,
     setAggregateVimMode: aggregateVim.setter,
+    fileOpenerVimMode: fileOpenerVim.getter,
+    setFileOpenerVimMode: fileOpenerVim.setter,
     updateLabel,
     setUpdateLabel,
+    fileOpenerState,
+    setFileOpenerState,
+    openFileOpener,
+    closeFileOpener,
+    toggleFileOpener,
   };
 }

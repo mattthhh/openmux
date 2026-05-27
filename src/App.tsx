@@ -42,6 +42,7 @@ import { setupControlServer } from './components/app/control-server';
 import { AppProviders } from './components/app/AppProviders';
 import {
   getCommandPaletteRect,
+  getFileOpenerRect,
   getPaneRenameRect,
   getWorkspaceLabelRect,
   getConfirmationRect,
@@ -136,6 +137,10 @@ function AppContent() {
   const [aggregateStateActions, setAggregateStateActions] = createSignal<{
     handleNewPaneInSession: () => Promise<void>;
     handleJumpToPty: () => Promise<boolean>;
+    handleOpenFileInSession: (entry: {
+      absolutePath: string;
+      isFolderAction: boolean;
+    }) => Promise<void>;
   } | null>(null);
 
   const aggregateCommandActions: AggregateCommandActions = {
@@ -143,6 +148,8 @@ function AppContent() {
     handleNewPaneInSession: () =>
       aggregateStateActions()?.handleNewPaneInSession() ?? Promise.resolve(),
     handleJumpToPty: () => aggregateStateActions()?.handleJumpToPty() ?? Promise.resolve(false),
+    handleOpenFileInSession: (entry) =>
+      aggregateStateActions()?.handleOpenFileInSession(entry) ?? Promise.resolve(),
     killSelectedPty: (ptyId: string) => overlays.confirmationHandlers.handleRequestKillPty(ptyId),
     navigateUp: aggregateView.navigateUp,
     navigateDown: aggregateView.navigateDown,
@@ -246,6 +253,7 @@ function AppContent() {
     selection,
     aggregateState: aggregateView.state,
     commandPaletteState: overlays.commandPaletteState,
+    fileOpenerState: overlays.fileOpenerState,
     paneRenameState: overlays.paneRenameState,
     workspaceLabelState: overlays.workspaceLabelState,
     confirmationVisible: () => confirmationState().visible,
@@ -253,6 +261,7 @@ function AppContent() {
     getSessionPickerRect,
     getTemplateOverlayRect,
     getCommandPaletteRect,
+    getFileOpenerRect,
     getPaneRenameRect,
     getWorkspaceLabelRect,
     getSearchOverlayRect,
@@ -329,6 +338,8 @@ function AppContent() {
         height={height()}
         commands={getCommandsForContext(aggregateView.state.showAggregateView)}
         onCommandPaletteExecute={appActions.handleCommandPaletteExecute}
+        onFileOpenerSelect={appActions.handleFileOpenerSelect}
+        onToggleFileOpener={appActions.handleToggleFileOpener}
         onToggleConsole={appActions.actions.onToggleConsole!}
         onAggregateActionsReady={setAggregateStateActions}
       />

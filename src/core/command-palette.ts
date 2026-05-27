@@ -148,6 +148,13 @@ const BASE_COMMANDS: CommandPaletteCommand[] = [
     keywords: ['session', 'picker'],
   },
   {
+    id: 'file.opener.toggle',
+    title: 'Open file',
+    description: 'Fuzzy find and open a file in the editor',
+    action: 'file.opener.toggle',
+    keywords: ['file', 'open', 'find', 'fuzzy', 'nvim', 'vim', 'editor'],
+  },
+  {
     id: 'template.overlay.toggle',
     title: 'Templates',
     description: 'Open the templates overlay',
@@ -329,6 +336,13 @@ const AGGREGATE_VIEW_COMMANDS: CommandPaletteCommand[] = [
     description: 'Open the session picker',
     action: 'session.picker.toggle',
     keywords: ['session', 'picker'],
+  },
+  {
+    id: 'aggregate.file.opener',
+    title: 'Open file',
+    description: 'Fuzzy find and open a file in the editor',
+    action: 'file.opener.toggle',
+    keywords: ['file', 'open', 'find', 'fuzzy', 'nvim', 'vim', 'editor'],
   },
   {
     id: 'aggregate.console.toggle',

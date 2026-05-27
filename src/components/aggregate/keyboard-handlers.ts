@@ -35,6 +35,7 @@ export function createAggregateKeyboardHandler(deps: AggregateKeyboardDeps) {
     handleEnterCopyMode,
     handleCopyModeKeys,
     onToggleCommandPalette,
+    onToggleFileOpener,
     onToggleConsole,
     onPaste,
   } = deps;
@@ -137,6 +138,10 @@ export function createAggregateKeyboardHandler(deps: AggregateKeyboardDeps) {
       onToggleCommandPalette?.();
       return true;
     }
+    if (globalAction === 'file.opener.toggle') {
+      onToggleFileOpener?.();
+      return true;
+    }
     if (globalAction === 'session.picker.toggle') {
       deps.togglePtyPicker();
       return true;
@@ -192,6 +197,13 @@ export function createAggregateKeyboardHandler(deps: AggregateKeyboardDeps) {
         setPrefixActive(false);
         clearPrefixTimeout();
         onToggleCommandPalette?.();
+        return true;
+      }
+
+      if (globalPrefixAction === 'file.opener.toggle') {
+        setPrefixActive(false);
+        clearPrefixTimeout();
+        onToggleFileOpener?.();
         return true;
       }
 

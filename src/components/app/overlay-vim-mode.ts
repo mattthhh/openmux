@@ -2,6 +2,7 @@ import type { Accessor } from 'solid-js';
 import type { CommandPaletteState } from '../CommandPalette';
 import type { PaneRenameState } from '../PaneRenameOverlay';
 import type { WorkspaceLabelState } from '../WorkspaceLabelOverlay';
+import type { FileOpenerState } from '../FileOpener';
 import type { VimInputMode } from '../../core/vim-sequences';
 import type { SearchContextValue } from '../../contexts/search/types';
 import type { SessionState } from '../../core/operations/session-actions';
@@ -15,12 +16,14 @@ export function createOverlayVimMode(params: {
   commandPaletteState: CommandPaletteState;
   paneRenameState: PaneRenameState;
   workspaceLabelState: WorkspaceLabelState;
+  fileOpenerState: FileOpenerState;
   session: ReturnType<typeof useSession>;
   sessionState: SessionState;
   aggregateState: { showAggregateView: boolean };
   keyboardState: ReturnType<typeof useKeyboard>;
   search: SearchContextValue;
   commandPaletteVimMode: Accessor<VimInputMode>;
+  fileOpenerVimMode: Accessor<VimInputMode>;
   paneRenameVimMode: Accessor<VimInputMode>;
   workspaceLabelVimMode: Accessor<VimInputMode>;
   sessionPickerVimMode: Accessor<VimInputMode>;
@@ -33,12 +36,14 @@ export function createOverlayVimMode(params: {
     commandPaletteState,
     paneRenameState,
     workspaceLabelState,
+    fileOpenerState,
     session,
     sessionState,
     aggregateState,
     keyboardState,
     search,
     commandPaletteVimMode,
+    fileOpenerVimMode,
     paneRenameVimMode,
     workspaceLabelVimMode,
     sessionPickerVimMode,
@@ -50,6 +55,7 @@ export function createOverlayVimMode(params: {
     if (config.config().keyboard.vimMode !== 'overlays') return null;
     if (confirmationVisible()) return null;
     if (commandPaletteState.show) return commandPaletteVimMode();
+    if (fileOpenerState.show) return fileOpenerVimMode();
     if (paneRenameState.show) return paneRenameVimMode();
     if (workspaceLabelState.show) return workspaceLabelVimMode();
     if (session.showTemplateOverlay) return templateOverlayVimMode();

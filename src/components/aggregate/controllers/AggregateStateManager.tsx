@@ -6,8 +6,11 @@
  */
 
 import { createEffect, onCleanup, createSignal } from 'solid-js';
+import path from 'node:path';
 import { loadSessionData } from '../../../effect/bridge';
 import { getFocusedPtyId } from '../../../core/workspace-utils';
+import { useConfig } from '../../../contexts/ConfigContext';
+import { buildEditorCommand } from '../../../core/file-opener';
 import { useLayout } from '../../../contexts/LayoutContext';
 import { useSession } from '../../../contexts/SessionContext';
 import { useTerminal } from '../../../contexts/TerminalContext';
@@ -31,6 +34,7 @@ export function AggregateStateManager() {
   const aggregate = useAggregateView();
   const layout = useLayout();
   const session = useSession();
+  const config = useConfig();
   const terminal = useTerminal();
   const keyboard = useKeyboard();
   const copyMode = useCopyMode();
@@ -47,7 +51,7 @@ export function AggregateStateManager() {
 
   const { state: layoutState, switchWorkspace, focusPane, setLayoutMode } = layout;
   const { state: sessionState, switchSession } = session;
-  const { findSessionForPty, getSessionCwd, createPaneWithPTY } = terminal;
+  const { findSessionForPty, getSessionCwd, createPaneWithPTY, writeToPTY } = terminal;
   const { state: keyboardState, enterAggregateMode } = keyboard;
 
   // Local pending focus signal (managed internally)
@@ -548,10 +552,120 @@ export function AggregateStateManager() {
     setPendingPaneFocus({ sessionId: targetSessionId, paneId: createdPane.paneId });
   };
 
+  // Send the editor command to a newly created PTY
+  const writeToEditor = (ptyId: string, filePath: string) => {
+    const settings = config.config().fileOpener;
+    const commandParts = buildEditorCommand(settings, filePath);
+    const fullCommand = `${settings.editor} ${commandParts.join(' ')}`;
+    writeToPTY(ptyId, `${fullCommand}\n`);
+  };
+
+  // Open a file in the selected PTY's session, creating a new pane with the editor.
+  // Follows the same autoswitch pattern as handleNewPaneInSession.
+  const handleOpenFileInSession = async (entry: {
+    absolutePath: string;
+    isFolderAction: boolean;
+  }): Promise<void> => {
+    if (entry.isFolderAction) return;
+
+    const currentSessionId = selectedSessionId();
+    const currentPtyId = selectedPtyId();
+
+    if (!currentSessionId && !currentPtyId) return;
+
+    const selectedPty = currentPtyId
+      ? (aggregate.state.allPtys[aggregate.state.allPtysIndex.get(currentPtyId) ?? -1] ?? null)
+      : null;
+
+    const targetSessionId =
+      currentSessionId ??
+      findSessionForPty(currentPtyId!)?.sessionId ??
+      sessionState.activeSessionId;
+    if (!targetSessionId) return;
+
+    const pendingInsertionId = crypto.randomUUID();
+    const pendingInsertion: PendingPaneCreation = {
+      id: pendingInsertionId,
+      sessionId: targetSessionId,
+      insertAfterPtyId: currentPtyId,
+      insertAfterPaneId: selectedPty?.paneId ?? null,
+      pendingPtyId: null,
+      pendingPaneId: null,
+      sortOrderHint: getNextPendingPaneCreationOrder(
+        {
+          allPtys: aggregate.state.allPtys,
+          sessionPaneOrderIndex: aggregate.state.sessionPaneOrderIndex,
+          pendingPaneCreations: aggregate.state.pendingPaneCreations,
+        },
+        {
+          sessionId: targetSessionId,
+          insertAfterPaneId: selectedPty?.paneId ?? null,
+        }
+      ),
+    };
+    aggregate.upsertPendingPaneCreation(pendingInsertion);
+
+    let targetWorkspaceId = layoutState.activeWorkspaceId;
+    // CWD is the directory containing the file
+    const targetCwd = path.dirname(entry.absolutePath);
+
+    if (targetSessionId === sessionState.activeSessionId) {
+      if (currentPtyId) {
+        const location = findPtyLocation(currentPtyId, layoutState.workspaces);
+        if (location) {
+          targetWorkspaceId = location.workspaceId;
+        }
+      }
+    } else {
+      const sessionData = await loadSessionData(targetSessionId);
+      if (sessionData instanceof Error) {
+        aggregate.removePendingPaneCreation(pendingInsertionId);
+        console.error('Failed to load session:', sessionData.message);
+        return;
+      }
+      targetWorkspaceId = sessionData.activeWorkspaceId;
+
+      const switched = await switchToSessionWithData(targetSessionId, sessionData);
+      if (!switched) {
+        aggregate.removePendingPaneCreation(pendingInsertionId);
+        return;
+      }
+    }
+
+    switchWorkspace(targetWorkspaceId);
+    setLayoutMode('stacked');
+    const createdPane = await createPaneWithPTY(targetCwd, 'shell', {
+      onCreated: (created) => {
+        aggregate.upsertPendingPaneCreation({
+          ...pendingInsertion,
+          pendingPtyId: created.ptyId,
+          pendingPaneId: created.paneId,
+        });
+      },
+    });
+    if (!createdPane) {
+      aggregate.removePendingPaneCreation(pendingInsertionId);
+      console.error('Failed to create pane in aggregate view');
+      return;
+    }
+
+    aggregate.upsertPendingPaneCreation({
+      ...pendingInsertion,
+      pendingPtyId: createdPane.ptyId,
+      pendingPaneId: createdPane.paneId,
+    });
+
+    setPendingPaneFocus({ sessionId: targetSessionId, paneId: createdPane.paneId });
+
+    // Send the editor command to the new PTY
+    writeToEditor(createdPane.ptyId, entry.absolutePath);
+  };
+
   // Return public API for use by other controllers
   return {
     handleJumpToPty,
     handleNewPaneInSession,
+    handleOpenFileInSession,
     pendingPaneFocus,
     setPendingPaneFocus,
     aggregateCopyModeActive,

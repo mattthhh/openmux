@@ -7,11 +7,13 @@ import { useLayout, useOverlays } from '../../contexts';
 import { useSelection } from '../../contexts/SelectionContext';
 import { useAggregateView } from '../../contexts/AggregateViewContext';
 import { type CommandPaletteCommand } from '../../core/command-palette';
+import type { FileEntry } from '../../core/file-opener';
 import { StatusBar, CopyNotification, ConfirmationDialog } from '../index';
 import { SessionPicker } from '../SessionPicker';
 import { SearchOverlay } from '../SearchOverlay';
 import { AggregateView, type AggregateStateActions } from '../AggregateView';
 import { CommandPalette } from '../CommandPalette';
+import { FileOpener } from '../FileOpener';
 import { PaneRenameOverlay } from '../PaneRenameOverlay';
 import { WorkspaceLabelOverlay } from '../WorkspaceLabelOverlay';
 import { TemplateOverlay } from '../TemplateOverlay';
@@ -22,6 +24,8 @@ interface AppOverlaysProps {
   height: number;
   commands: CommandPaletteCommand[];
   onCommandPaletteExecute: (command: CommandPaletteCommand) => void;
+  onFileOpenerSelect: (entry: FileEntry) => void;
+  onToggleFileOpener?: () => void;
   onToggleConsole?: () => void;
   /** Called when the aggregate state manager initializes with its action methods. */
   onAggregateActionsReady?: (actions: AggregateStateActions) => void;
@@ -57,6 +61,7 @@ export function AppOverlays(props: AppOverlaysProps) {
         onDetach={overlays.handleDetach}
         onRequestKillPty={overlays.confirmationHandlers.handleRequestKillPty}
         onToggleCommandPalette={overlays.toggleCommandPalette}
+        onToggleFileOpener={props.onToggleFileOpener ?? overlays.toggleFileOpener}
         onToggleConsole={props.onToggleConsole}
         onVimModeChange={overlays.setAggregateVimMode}
         onActionsReady={props.onAggregateActionsReady}
@@ -86,6 +91,15 @@ export function AppOverlays(props: AppOverlaysProps) {
         setState={overlays.setCommandPaletteState}
         onExecute={props.onCommandPaletteExecute}
         onVimModeChange={overlays.setCommandPaletteVimMode}
+      />
+
+      <FileOpener
+        width={props.width}
+        height={props.height}
+        state={overlays.fileOpenerState}
+        setState={overlays.setFileOpenerState}
+        onSelect={props.onFileOpenerSelect}
+        onVimModeChange={overlays.setFileOpenerVimMode}
       />
 
       <PaneRenameOverlay

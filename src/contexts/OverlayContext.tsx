@@ -23,6 +23,7 @@ import { createExitHandlers } from '../components/app/exit-handlers';
 import type { CommandPaletteState } from '../components/CommandPalette';
 import type { PaneRenameState } from '../components/PaneRenameOverlay';
 import type { WorkspaceLabelState } from '../components/WorkspaceLabelOverlay';
+import type { FileOpenerState } from '../components/FileOpener';
 import type { VimInputMode } from '../core/vim-sequences';
 import { getFocusedPtyId } from '../core/workspace-utils';
 import { shutdownShim, disposeRuntime } from '../effect/bridge';
@@ -37,8 +38,15 @@ export interface OverlayContextValue {
   setPaneRenameState: SetStoreFunction<PaneRenameState>;
   workspaceLabelState: WorkspaceLabelState;
   setWorkspaceLabelState: SetStoreFunction<WorkspaceLabelState>;
+  fileOpenerState: FileOpenerState;
+  setFileOpenerState: SetStoreFunction<FileOpenerState>;
+  openFileOpener: (rootDir: string) => void;
+  closeFileOpener: () => void;
+  toggleFileOpener: () => void;
   commandPaletteVimMode: Accessor<VimInputMode>;
   setCommandPaletteVimMode: (mode: VimInputMode) => void;
+  fileOpenerVimMode: Accessor<VimInputMode>;
+  setFileOpenerVimMode: (mode: VimInputMode) => void;
   paneRenameVimMode: Accessor<VimInputMode>;
   setPaneRenameVimMode: (mode: VimInputMode) => void;
   workspaceLabelVimMode: Accessor<VimInputMode>;
@@ -101,12 +109,14 @@ export function OverlayProvider(props: ParentProps) {
     commandPaletteState: overlayState.commandPaletteState,
     paneRenameState: overlayState.paneRenameState,
     workspaceLabelState: overlayState.workspaceLabelState,
+    fileOpenerState: overlayState.fileOpenerState,
     session,
     sessionState,
     aggregateState,
     keyboardState,
     search,
     commandPaletteVimMode: overlayState.commandPaletteVimMode,
+    fileOpenerVimMode: overlayState.fileOpenerVimMode,
     paneRenameVimMode: overlayState.paneRenameVimMode,
     workspaceLabelVimMode: overlayState.workspaceLabelVimMode,
     sessionPickerVimMode: overlayState.sessionPickerVimMode,

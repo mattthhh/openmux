@@ -3,6 +3,7 @@ import type { Rectangle } from '../../core/types';
 import type { CommandPaletteState } from '../CommandPalette';
 import type { PaneRenameState } from '../PaneRenameOverlay';
 import type { WorkspaceLabelState } from '../WorkspaceLabelOverlay';
+import type { FileOpenerState } from '../FileOpener';
 import type { SessionState } from '../../core/operations/session-actions';
 import type { TemplateSession } from '../../effect/models';
 import type { CommandPaletteCommand } from '../../core/command-palette';
@@ -50,6 +51,8 @@ type CopyNotificationRectFn = (
   panes: Array<{ ptyId?: string | null; rectangle?: Rectangle | null }>
 ) => Rectangle | null;
 
+type FileOpenerRectFn = (width: number, height: number, state: FileOpenerState) => Rectangle | null;
+
 export function setupOverlayClipRects(params: {
   getWidth: () => number;
   getHeight: () => number;
@@ -72,6 +75,7 @@ export function setupOverlayClipRects(params: {
   };
   commandPaletteState: CommandPaletteState;
   commandPaletteCommands: CommandPaletteCommand[] | (() => CommandPaletteCommand[]);
+  fileOpenerState: FileOpenerState;
   paneRenameState: PaneRenameState;
   workspaceLabelState: WorkspaceLabelState;
   confirmationVisible: () => boolean;
@@ -82,6 +86,7 @@ export function setupOverlayClipRects(params: {
   getSessionPickerRect: SessionPickerRectFn;
   getTemplateOverlayRect: TemplateOverlayRectFn;
   getCommandPaletteRect: CommandPaletteRectFn;
+  getFileOpenerRect: FileOpenerRectFn;
   getPaneRenameRect: PaneRenameRectFn;
   getWorkspaceLabelRect: WorkspaceLabelRectFn;
   getSearchOverlayRect: SearchOverlayRectFn;
@@ -99,6 +104,7 @@ export function setupOverlayClipRects(params: {
     aggregateState,
     commandPaletteState,
     commandPaletteCommands,
+    fileOpenerState,
     paneRenameState,
     workspaceLabelState,
     confirmationVisible,
@@ -106,6 +112,7 @@ export function setupOverlayClipRects(params: {
     getSessionPickerRect,
     getTemplateOverlayRect,
     getCommandPaletteRect,
+    getFileOpenerRect,
     getPaneRenameRect,
     getWorkspaceLabelRect,
     getSearchOverlayRect,
@@ -145,6 +152,7 @@ export function setupOverlayClipRects(params: {
           : commandPaletteCommands
       )
     );
+    pushRect(getFileOpenerRect(w, h, fileOpenerState));
     pushRect(getPaneRenameRect(w, h, paneRenameState));
     pushRect(getWorkspaceLabelRect(w, h, workspaceLabelState));
     pushRect(getSearchOverlayRect(w, h, Boolean(search.searchState)));

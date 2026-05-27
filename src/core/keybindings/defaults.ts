@@ -18,6 +18,7 @@ export const DEFAULT_KEYBINDINGS: KeybindingsConfig = {
     'alt+t': 'template.overlay.toggle',
     'alt+g': 'aggregate.toggle',
     'alt+f': 'search.open',
+    'alt+o': 'file.opener.toggle',
     'alt+p': 'command.palette.toggle',
     'alt+[': 'layout.cycle.prev',
     'alt+]': 'layout.cycle.next',
@@ -49,6 +50,7 @@ export const DEFAULT_KEYBINDINGS: KeybindingsConfig = {
     '/': 'search.open',
     '[': 'copy.mode',
     ':': 'command.palette.toggle',
+    o: 'file.opener.toggle',
     z: 'pane.zoom',
     ']': 'clipboard.paste',
     p: 'clipboard.paste',
@@ -81,6 +83,13 @@ export const DEFAULT_KEYBINDINGS: KeybindingsConfig = {
     enter: 'command.palette.confirm',
     escape: 'command.palette.close',
     backspace: 'command.palette.delete',
+  },
+  fileOpener: {
+    down: 'file.opener.down',
+    up: 'file.opener.up',
+    enter: 'file.opener.confirm',
+    escape: 'file.opener.close',
+    backspace: 'file.opener.delete',
   },
   templateOverlay: {
     apply: {

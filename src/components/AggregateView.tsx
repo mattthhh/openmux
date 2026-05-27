@@ -46,6 +46,10 @@ import { getFocusedPtyId } from '../core/workspace-utils';
 export interface AggregateStateActions {
   handleJumpToPty: () => Promise<boolean>;
   handleNewPaneInSession: () => Promise<void>;
+  handleOpenFileInSession: (entry: {
+    absolutePath: string;
+    isFolderAction: boolean;
+  }) => Promise<void>;
 }
 
 interface AggregateViewProps {
@@ -55,6 +59,7 @@ interface AggregateViewProps {
   onDetach?: () => void;
   onRequestKillPty?: (ptyId: string) => void;
   onToggleCommandPalette?: () => void;
+  onToggleFileOpener?: () => void;
   onToggleConsole?: () => void;
   onVimModeChange?: (mode: 'normal' | 'insert') => void;
   /** Called once after the state manager initializes with its action methods. */
@@ -84,6 +89,7 @@ export function AggregateView(props: AggregateViewProps) {
       props.onActionsReady?.({
         handleJumpToPty: stateManager.handleJumpToPty,
         handleNewPaneInSession: stateManager.handleNewPaneInSession,
+        handleOpenFileInSession: stateManager.handleOpenFileInSession,
       });
     }
   });
@@ -95,6 +101,7 @@ export function AggregateView(props: AggregateViewProps) {
     onDetach: props.onDetach,
     onRequestKillPty: props.onRequestKillPty,
     onToggleCommandPalette: props.onToggleCommandPalette,
+    onToggleFileOpener: props.onToggleFileOpener,
     onToggleConsole: props.onToggleConsole,
     stateManagerOverrides: {
       handleJumpToPty: stateManager.handleJumpToPty,
