@@ -5,7 +5,7 @@
 
 import { describe, it, expect } from 'bun:test';
 import { buildTreeRoot, flattenTree, getSortedSessions } from '../';
-import { filterPtys, groupPtysBySession, sortPtysForSession } from '../filter';
+import { groupPtysBySession, sortPtysForSession } from '../filter';
 import type { PtyInfo, SessionMetadata } from '../types';
 
 const createMockPty = (overrides: Partial<PtyInfo> = {}): PtyInfo => ({
@@ -45,21 +45,13 @@ const createMockSession = (overrides: Partial<SessionMetadata> = {}): SessionMet
 });
 
 describe('aggregate view integration', () => {
-  it('filters PTYs then builds tree', () => {
+  it('groups PTYs by session then builds tree', () => {
     const ptys = [
       createMockPty({ ptyId: '1', cwd: '/home/user/project', sessionId: 'session-a' }),
       createMockPty({ ptyId: '2', cwd: '/home/user/docs', sessionId: 'session-a' }),
-      createMockPty({ ptyId: '3', cwd: '/var/log', sessionId: 'session-b' }),
     ];
 
-    const filtered = filterPtys(ptys, 'project');
-    expect(filtered instanceof Error).toBe(false);
-    if (filtered instanceof Error) return;
-
-    expect(filtered).toHaveLength(1);
-    expect(filtered[0].ptyId).toBe('1');
-
-    const grouped = groupPtysBySession(filtered);
+    const grouped = groupPtysBySession(ptys);
     const sessions = [createMockSession({ id: 'session-a', name: 'Session A' })];
 
     const tree = buildTreeRoot(sessions, grouped, new Set(['session-a']), new Map(), new Map());
@@ -88,7 +80,7 @@ describe('aggregate view integration', () => {
 
     expect(tree.length).toBe(3);
 
-    const flattened = flattenTree(tree, '', true);
+    const flattened = flattenTree(tree, true);
     expect(flattened.length).toBeGreaterThan(0);
 
     const ptyItems = flattened.filter((i) => i.node.type === 'pty');

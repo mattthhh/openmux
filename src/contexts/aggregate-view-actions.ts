@@ -91,7 +91,6 @@ export function createAggregateViewActions(params: AggregateViewActionsParams) {
     setState(
       produce((s) => {
         s.showAggregateView = true;
-        s.filterQuery = '';
         s.pendingPaneCreations = [];
         s.listScrollOffset = 0;
         s.previewMode = true;
@@ -123,7 +122,6 @@ export function createAggregateViewActions(params: AggregateViewActionsParams) {
     setState(
       produce((s) => {
         s.showAggregateView = false;
-        s.filterQuery = '';
         s.selectedIndex = 0;
         s.selectedPtyId = null;
         s.selectedSessionId = null;
@@ -131,16 +129,6 @@ export function createAggregateViewActions(params: AggregateViewActionsParams) {
         s.listScrollOffset = 0;
         s.showPtyPicker = false;
         clearPreviewState(s);
-      })
-    );
-  };
-
-  const setFilterQuery = (query: string) => {
-    setState(
-      produce((s) => {
-        s.filterQuery = query;
-        recomputeMatches(s);
-        recomputeTree(s);
       })
     );
   };
@@ -591,7 +579,6 @@ export function createAggregateViewActions(params: AggregateViewActionsParams) {
   return {
     openAggregateView,
     closeAggregateView,
-    setFilterQuery,
     toggleShowInactive,
     navigateUp,
     navigateDown,

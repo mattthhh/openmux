@@ -2,9 +2,7 @@
  * Filter operations for aggregate view.
  */
 
-import * as errore from 'errore';
 import type { PtyInfo } from './types';
-import { FilterOperationError } from './errors';
 
 export function normalizeProcessName(name: string | undefined): string {
   if (!name) return '';
@@ -29,39 +27,6 @@ export function filterActivePtys(ptys: PtyInfo[]): PtyInfo[] {
 
 export function filterPtysByActivity(ptys: PtyInfo[], showInactive: boolean): PtyInfo[] {
   return showInactive ? ptys : filterActivePtys(ptys);
-}
-
-export function filterPtys(ptys: PtyInfo[], query: string): PtyInfo[] | FilterOperationError {
-  const trimmedQuery = query.trim();
-  if (!trimmedQuery) return ptys;
-
-  const terms = trimmedQuery.toLowerCase().split(/\s+/).filter(Boolean);
-  if (terms.length === 0) return ptys;
-
-  // The filter callback is pure and safe, but we wrap with errore.try
-  // at the boundary to enforce the error-as-values pattern consistently.
-  const result = errore.try<PtyInfo[], FilterOperationError>({
-    try: () =>
-      ptys.filter((pty) => {
-        const cwd = pty.cwd.toLowerCase();
-        const branch = pty.gitBranch?.toLowerCase() ?? '';
-        const process = pty.foregroundProcess?.toLowerCase() ?? '';
-        return terms.some(
-          (term) => cwd.includes(term) || branch.includes(term) || process.includes(term)
-        );
-      }),
-    catch: (cause) =>
-      new FilterOperationError({
-        reason: `Failed to filter PTYs: ${String(cause)}`,
-        cause,
-      }),
-  });
-
-  if (result instanceof FilterOperationError) {
-    console.warn('filterPtys failed:', result.message);
-    return result;
-  }
-  return result;
 }
 
 export function buildPtyIndex(ptys: PtyInfo[]): Map<string, number> {

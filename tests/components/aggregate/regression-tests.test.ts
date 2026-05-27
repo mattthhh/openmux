@@ -5,7 +5,6 @@ import { initialState } from '../../../src/contexts/aggregate-view-types';
 import type { SessionMetadata } from '../../../src/effect/models';
 import {
   buildPtyIndex,
-  filterPtys,
   recomputeMatches,
   recomputeTree,
 } from '../../../src/contexts/aggregate-view-helpers';
@@ -13,7 +12,6 @@ import { getSessionPaneOrderKey } from '../../../src/contexts/aggregate/pane-ord
 import { createAggregateViewActions } from '../../../src/contexts/aggregate-view-actions';
 
 const BASELINE_PERF = {
-  filterMs: 10,
   navigateMs: 1,
   ptyCreationMs: 5,
 };
@@ -128,36 +126,6 @@ function measureTime<T>(fn: () => T): { result: T; elapsedMs: number } {
 }
 
 describe('Regression Tests - Aggregate view current behavior', () => {
-  it('maintains OR semantics in filterPtys', () => {
-    const ptys = [
-      createMockPty({
-        ptyId: 'pty-1',
-        sessionId: 'session-a',
-        foregroundProcess: 'nvim',
-        cwd: '/project/a',
-      }),
-      createMockPty({
-        ptyId: 'pty-2',
-        sessionId: 'session-a',
-        foregroundProcess: 'bash',
-        cwd: '/project/b',
-      }),
-      createMockPty({
-        ptyId: 'pty-3',
-        sessionId: 'session-b',
-        foregroundProcess: 'node',
-        cwd: '/project/c',
-      }),
-    ];
-
-    expect(filterPtys(ptys, 'nvim').map((pty) => pty.ptyId)).toEqual(['pty-1']);
-    expect(filterPtys(ptys, 'project bash').map((pty) => pty.ptyId)).toEqual([
-      'pty-1',
-      'pty-2',
-      'pty-3',
-    ]);
-  });
-
   it('exposes the current aggregate action surface', () => {
     const sessions = [createMockSession('session-a', 'A')];
     const ptys = [createMockPty({ ptyId: 'pty-1', sessionId: 'session-a' })];
@@ -166,7 +134,6 @@ describe('Regression Tests - Aggregate view current behavior', () => {
 
     expect(typeof actions.openAggregateView).toBe('function');
     expect(typeof actions.closeAggregateView).toBe('function');
-    expect(typeof actions.setFilterQuery).toBe('function');
     expect(typeof actions.toggleShowInactive).toBe('function');
     expect(typeof actions.navigateUp).toBe('function');
     expect(typeof actions.navigateDown).toBe('function');
@@ -221,30 +188,6 @@ describe('Regression Tests - Aggregate view current behavior', () => {
     });
 
     expect(elapsedMs).toBeLessThan(10);
-  });
-
-  it('keeps filter performance within the expected tolerance', () => {
-    const sessions = Array.from({ length: 50 }, (_, index) =>
-      createMockSession(`session-${index}`)
-    );
-    const ptys = sessions.flatMap((session, sessionIndex) =>
-      Array.from({ length: 4 }, (_, index) =>
-        createMockPty({
-          ptyId: `pty-${sessionIndex}-${index}`,
-          sessionId: session.id,
-          foregroundProcess: index % 2 === 0 ? 'nvim' : 'bash',
-        })
-      )
-    );
-    const { state, setState } = seedState(sessions, ptys);
-    const actions = createActions(state, setState);
-
-    const { elapsedMs } = measureTime(() => {
-      actions.setFilterQuery('nvim');
-    });
-
-    expect(elapsedMs).toBeLessThan(BASELINE_PERF.filterMs * 2);
-    expect(state.matchedPtys.every((pty) => pty.foregroundProcess?.includes('nvim'))).toBe(true);
   });
 
   it('keeps tree navigation performance within tolerance', () => {

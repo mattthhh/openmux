@@ -225,10 +225,8 @@ export interface AggregateViewUiSlice {
   ptyMru: string[];
 }
 
-/** Filterable PTY collection state. */
+/** PTY collection state. */
 export interface AggregateViewFilterSlice {
-  /** Current filter query text */
-  filterQuery: string;
   /** Whether to include inactive PTYs in the list/search */
   showInactive: boolean;
   /** All PTYs from all sessions (flat array for backward compat) */
@@ -255,7 +253,7 @@ export interface AggregateViewSelectionSlice {
 export interface AggregateViewTreeSlice {
   /** Hierarchical tree structure: sessions with their PTYs */
   treeRoot: TreeNode[];
-  /** Flattened tree for visual navigation (respects filtering) */
+  /** Flattened tree for visual navigation */
   flattenedTree: FlattenedTreeItem[];
   /** Map from ptyId to FlattenedTreeItem index for O(1) lookup */
   flattenedTreeIndex: Map<string, number>;
@@ -323,7 +321,6 @@ export function createAggregateViewUiSlice(): AggregateViewUiSlice {
 
 export function createAggregateViewFilterSlice(): AggregateViewFilterSlice {
   return {
-    filterQuery: '',
     showInactive: true,
     allPtys: [],
     matchedPtys: [],
@@ -382,7 +379,6 @@ export interface AggregateViewContextValue {
   state: AggregateViewState;
   openAggregateView: () => void;
   closeAggregateView: () => void;
-  setFilterQuery: (query: string) => void;
   toggleShowInactive: () => void;
   navigateUp: () => void;
   navigateDown: () => void;

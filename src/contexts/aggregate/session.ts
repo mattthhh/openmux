@@ -4,7 +4,7 @@
 
 import type { SessionMetadata } from '../../effect/models';
 import type { AggregateViewState, SessionTreeNode } from './types';
-import { buildPtyIndex, filterPtys, filterPtysByActivity, groupPtysBySession } from './filter';
+import { buildPtyIndex, filterPtysByActivity, groupPtysBySession } from './filter';
 import { clearPreviewState } from './selection';
 import { buildFlattenedTreeIndex, buildTreeRoot, flattenTree } from './tree';
 import { buildPendingAggregatePtys, dedupeAggregatePtysByPane } from './rows';
@@ -50,15 +50,7 @@ export function recomputeMatches(state: AggregateViewState): void {
     ...buildPendingAggregatePtys(state),
   ]);
   const basePtys = filterPtysByActivity(effectivePtys, state.showInactive);
-  const matchedPtysResult = filterPtys(basePtys, state.filterQuery);
-
-  if (matchedPtysResult instanceof Error) {
-    console.warn('Failed to recompute matches:', matchedPtysResult.message);
-    state.matchedPtys = basePtys;
-  } else {
-    state.matchedPtys = matchedPtysResult;
-  }
-
+  state.matchedPtys = basePtys;
   state.matchedPtysIndex = buildPtyIndex(state.matchedPtys);
 }
 
@@ -113,7 +105,7 @@ export function recomputeTree(state: AggregateViewState): void {
     state.sessionPaneOrderIndex
   );
 
-  state.flattenedTree = flattenTree(state.treeRoot, state.filterQuery, state.showInactive);
+  state.flattenedTree = flattenTree(state.treeRoot, state.showInactive);
   state.flattenedTreeIndex = buildFlattenedTreeIndex(state.flattenedTree);
 
   if (state.flattenedTree.length === 0) {

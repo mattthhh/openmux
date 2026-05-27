@@ -40,9 +40,6 @@ export function createAggregateListHandler(deps: ListDeps) {
       case 'aggregate.list.toggle.scope':
         deps.toggleShowInactive();
         return true;
-      case 'aggregate.list.delete':
-        deps.setFilterQuery(deps.getFilterQuery().slice(0, -1));
-        return true;
       case 'aggregate.list.close':
         deps.closeAggregateView();
         deps.exitAggregateMode();
@@ -59,15 +56,6 @@ export function createAggregateListHandler(deps: ListDeps) {
     }
   };
 
-  const handleListInput = (event: KeyboardEvent): boolean => {
-    const { key } = event;
-    if (key.length === 1 && !event.ctrl && !event.alt && !event.meta) {
-      deps.setFilterQuery(deps.getFilterQuery() + key);
-      return true;
-    }
-    return true;
-  };
-
   const handleListModeKeys = (event: KeyboardEvent): boolean => {
     const keybindings = deps.getKeybindings();
     const keyEvent = {
@@ -81,7 +69,7 @@ export function createAggregateListHandler(deps: ListDeps) {
 
     if (!deps.getVimEnabled()) {
       if (handleListAction(action)) return true;
-      return handleListInput(event);
+      return true;
     }
 
     if (deps.getVimMode() === 'insert') {
@@ -91,7 +79,7 @@ export function createAggregateListHandler(deps: ListDeps) {
         return true;
       }
       if (handleListAction(action)) return true;
-      return handleListInput(event);
+      return true;
     }
 
     if (event.key === 'i' && !event.ctrl && !event.alt && !event.meta) {

@@ -6,7 +6,6 @@ import { describe, it, expect } from 'bun:test';
 import {
   // Filter
   normalizeProcessName,
-  filterPtys,
   groupPtysBySession,
   sortPtysForSession,
   // Tree
@@ -19,7 +18,7 @@ import {
   getSortedSessions,
 } from '../';
 import type { PtyInfo, SessionMetadata, AggregateViewState } from '../types';
-import { FilterOperationError, SelectionOperationError } from '../errors';
+import { SelectionOperationError } from '../errors';
 
 // Mock helpers
 const createMockPty = (overrides: Partial<PtyInfo> = {}): PtyInfo => ({
@@ -60,7 +59,6 @@ const createMockSession = (overrides: Partial<SessionMetadata> = {}): SessionMet
 
 const createMockState = (overrides: Partial<AggregateViewState> = {}): AggregateViewState => ({
   showAggregateView: false,
-  filterQuery: '',
   showInactive: true,
   allPtys: [],
   matchedPtys: [],
@@ -101,42 +99,6 @@ describe('Full Coverage: Filter Operations', () => {
     it('handles whitespace-only strings', () => {
       expect(normalizeProcessName('   ')).toBe('');
       expect(normalizeProcessName('\t\n')).toBe('');
-    });
-  });
-
-  describe('filterPtys', () => {
-    it('matches multiple terms (OR logic)', () => {
-      const ptys = [
-        createMockPty({ cwd: '/home/user/project', gitBranch: 'main' }),
-        createMockPty({ cwd: '/home/user/docs', foregroundProcess: 'vim' }),
-        createMockPty({ cwd: '/var/log', gitBranch: 'develop' }),
-      ];
-
-      const result = filterPtys(ptys, 'project vim');
-      expect(result instanceof Error).toBe(false);
-      if (result instanceof Error) return;
-
-      expect(result).toHaveLength(2);
-    });
-
-    it('is case insensitive', () => {
-      const ptys = [
-        createMockPty({ cwd: '/HOME/USER', gitBranch: 'MAIN', foregroundProcess: 'VIM' }),
-      ];
-
-      const result = filterPtys(ptys, 'home main vim');
-      expect(result instanceof Error).toBe(false);
-      if (result instanceof Error) return;
-
-      expect(result).toHaveLength(1);
-    });
-
-    it('returns empty array for no matches', () => {
-      const ptys = [createMockPty({ cwd: '/home' })];
-      const result = filterPtys(ptys, 'nonexistent');
-      expect(result instanceof Error).toBe(false);
-      if (result instanceof Error) return;
-      expect(result).toHaveLength(0);
     });
   });
 
@@ -268,12 +230,12 @@ describe('Full Coverage: Tree Operations', () => {
         new Map()
       );
 
-      const flattenedWithInactive = flattenTree(tree, '', true);
+      const flattenedWithInactive = flattenTree(tree, true);
       const ptyCountWithInactive = flattenedWithInactive.filter(
         (i) => i.node.type === 'pty'
       ).length;
 
-      const flattenedWithoutInactive = flattenTree(tree, '', false);
+      const flattenedWithoutInactive = flattenTree(tree, false);
       const ptyCountWithoutInactive = flattenedWithoutInactive.filter(
         (i) => i.node.type === 'pty'
       ).length;
@@ -282,7 +244,7 @@ describe('Full Coverage: Tree Operations', () => {
       expect(ptyCountWithoutInactive).toBe(1);
     });
 
-    it('filters sessions with no visible PTYs when query active', () => {
+    it('shows all sessions with their PTYs', () => {
       const ptys = [
         createMockPty({ ptyId: '1', cwd: '/project', sessionId: 'session-a' }),
         createMockPty({ ptyId: '2', cwd: '/other', sessionId: 'session-b' }),
@@ -305,10 +267,10 @@ describe('Full Coverage: Tree Operations', () => {
         new Map()
       );
 
-      const flattened = flattenTree(tree, 'project', true);
+      const flattened = flattenTree(tree, true);
       const sessionNodes = flattened.filter((i) => i.node.type === 'session');
 
-      expect(sessionNodes).toHaveLength(1);
+      expect(sessionNodes).toHaveLength(2);
     });
   });
 });
@@ -449,18 +411,6 @@ describe('Full Coverage: Session Operations', () => {
 });
 
 describe('Error Handling', () => {
-  describe('FilterOperationError', () => {
-    it('is returned on filter failure', () => {
-      const ptys = [createMockPty()];
-
-      // Simulate filter failure by checking error union type
-      const result = filterPtys(ptys, '');
-      if (result instanceof Error) {
-        expect(result).toBeInstanceOf(FilterOperationError);
-      }
-    });
-  });
-
   describe('SelectionOperationError', () => {
     it('has correct error properties', () => {
       const error = new SelectionOperationError({ reason: 'Test error' });

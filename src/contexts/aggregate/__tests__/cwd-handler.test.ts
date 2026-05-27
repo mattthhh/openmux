@@ -41,7 +41,6 @@ function makeState(ptys: ReturnType<typeof makePty>[] = [makePty()]) {
   const matchedPtysIndex = new Map(ptys.map((p, i) => [p.ptyId, i]));
   return createStore<AggregateViewState>({
     showAggregateView: false,
-    filterQuery: '',
     showInactive: true,
     allPtys: ptys,
     matchedPtys: [...ptys],

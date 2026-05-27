@@ -185,7 +185,7 @@ describe('AggregateView activity tracking', () => {
       expect(newTrackedPtys).toHaveLength(0);
     });
 
-    it('should handle filtered PTY list (showInactive/filterQuery)', () => {
+    it('should handle activity-filtered PTY list (showInactive)', () => {
       // When filters are applied, matchedPtys should only contain filtered results
       const allPtys: PtyInfo[] = [
         createMockPtyInfo({ ptyId: 'active-pty', foregroundProcess: 'nvim' }),

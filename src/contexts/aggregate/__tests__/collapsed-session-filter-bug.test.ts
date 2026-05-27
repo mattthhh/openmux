@@ -1,11 +1,9 @@
 /**
  * Test to reproduce the collapsed session disappearance bug.
- * 
- * Bug: When a session is collapsed and has visiblePtyCount === 0 with an active filter,
- * the entire session (including its header) disappears from the flattened tree.
- * 
- * Expected: The session header should always be visible regardless of whether
- * its children match the filter when collapsed.
+ *
+ * Previously: When a session is collapsed and had no visible PTYs with an active
+ * filter, the session header would disappear. Since the query filter was removed,
+ * all PTYs are always shown, so this bug can no longer occur.
  */
 
 import { describe, it, expect } from 'bun:test';
@@ -53,65 +51,57 @@ function createPtyNode(
 }
 
 describe('collapsed session with filter bug', () => {
-  it('should show session header even when collapsed with filter active', () => {
+  it('should show all session headers when collapsed', () => {
     // Setup: session-A expanded, session-B collapsed
-    // Both have PTYs with cwd='/home/user/project-a'
-    // Filter is 'project-a' which matches the PTYs
-    
     const treeRoot: TreeNode[] = [
       createSessionNode('session-A', 'Session A', true),
       createPtyNode('pty-A1', 'session-A', '/home/user/project-a', 'vim'),
       createPtyNode('pty-A2', 'session-A', '/home/user/other', 'bash'),
       createSessionNode('session-B', 'Session B', false), // COLLAPSED
-      // session-B's PTYs are NOT in treeRoot because it's collapsed
     ];
 
-    const result = flattenTree(treeRoot, 'project-a', true);
+    const result = flattenTree(treeRoot, true);
 
-    // Expected: Both sessions should be visible
-    // session-A header + matching PTY + spacer + session-B header
-    const sessionHeaders = result.filter(i => i.node.type === 'session');
-    
-    // BUG: Currently session-B disappears because visiblePtyCount === 0
+    // Both sessions should be visible
+    const sessionHeaders = result.filter((i) => i.node.type === 'session');
     expect(sessionHeaders.length).toBe(2);
-    expect(sessionHeaders.some(h => h.node.type === 'session' && h.node.session.id === 'session-A')).toBe(true);
-    expect(sessionHeaders.some(h => h.node.type === 'session' && h.node.session.id === 'session-B')).toBe(true);
+    expect(
+      sessionHeaders.some((h) => h.node.type === 'session' && h.node.session.id === 'session-A')
+    ).toBe(true);
+    expect(
+      sessionHeaders.some((h) => h.node.type === 'session' && h.node.session.id === 'session-B')
+    ).toBe(true);
   });
 
-  it('should keep session when collapsed with no matching children', () => {
-    // Another case: collapsed session with filter that wouldn't match its children anyway
+  it('should show collapsed session alongside expanded sessions', () => {
+    // Collapsed session with no PTYs visible because collapsed
     const treeRoot: TreeNode[] = [
       createSessionNode('session-A', 'Session A', true),
       createPtyNode('pty-A1', 'session-A', '/home/user/project-a', 'vim'),
       createSessionNode('session-B', 'Session B', false), // COLLAPSED
-      // No PTYs for session-B because it's collapsed
     ];
 
-    const result = flattenTree(treeRoot, 'project-a', true);
+    const result = flattenTree(treeRoot, true);
 
-    // session-A should be visible (has matching PTY)
-    // session-B should ALSO be visible (it's a session header)
-    const sessionHeaders = result.filter(i => i.node.type === 'session');
-    
-    // BUG: session-B disappears
+    // Both sessions should be visible
+    const sessionHeaders = result.filter((i) => i.node.type === 'session');
     expect(sessionHeaders.length).toBe(2);
   });
 
-  it('should show matching PTYs inside expanded session with filter', () => {
+  it('should show all PTYs inside expanded session', () => {
     const treeRoot: TreeNode[] = [
       createSessionNode('session-A', 'Session A', true),
-      createPtyNode('pty-A1', 'session-A', '/home/user/project-a', 'vim'), // matches
-      createPtyNode('pty-A2', 'session-A', '/home/user/other', 'bash'),    // no match
+      createPtyNode('pty-A1', 'session-A', '/home/user/project-a', 'vim'),
+      createPtyNode('pty-A2', 'session-A', '/home/user/other', 'bash'),
     ];
 
-    const result = flattenTree(treeRoot, 'project-a', true);
+    const result = flattenTree(treeRoot, true);
 
-    // Should show: session header + matching PTY only
-    const sessionNode = result.find(i => i.node.type === 'session');
-    const ptyNodes = result.filter(i => i.node.type === 'pty');
-    
+    // Should show: session header + all PTYs
+    const sessionNode = result.find((i) => i.node.type === 'session');
+    const ptyNodes = result.filter((i) => i.node.type === 'pty');
+
     expect(sessionNode).toBeDefined();
-    expect(ptyNodes.length).toBe(1);
-    expect(ptyNodes[0].node.type === 'pty' && ptyNodes[0].node.ptyInfo.ptyId).toBe('pty-A1');
+    expect(ptyNodes.length).toBe(2);
   });
 });

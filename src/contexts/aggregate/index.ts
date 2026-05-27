@@ -2,14 +2,11 @@
  * Aggregate View modular architecture.
  */
 
-export { FilterOperationError } from './errors';
-
 export {
   normalizeProcessName,
   isActivePty,
   filterActivePtys,
   filterPtysByActivity,
-  filterPtys,
   buildPtyIndex,
   groupPtysBySession,
   sortPtysForSession,

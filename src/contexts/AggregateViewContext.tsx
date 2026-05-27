@@ -1,6 +1,5 @@
 /**
  * AggregateViewContext - manages state for the aggregate view overlay.
- * Allows filtering and viewing PTYs across all workspaces.
  */
 
 import { createContext, useContext, createEffect, on, onCleanup, type ParentProps } from 'solid-js';

@@ -45,8 +45,6 @@ export function createAggregateKeyboardHandler(deps: AggregateKeyboardDeps) {
     getVimMode: deps.getVimMode,
     setVimMode: deps.setVimMode,
     getVimHandlers: deps.getVimHandlers,
-    getFilterQuery: deps.getFilterQuery,
-    setFilterQuery: deps.setFilterQuery,
     getMatchedCount: deps.getMatchedCount,
     toggleShowInactive: deps.toggleShowInactive,
     getSelectedPtyId: deps.getSelectedPtyId,

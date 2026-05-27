@@ -40,7 +40,6 @@ function createDeps(overrides: Partial<AggregateKeyboardDeps> = {}) {
     getPreviewMode: () => previewMode,
     getSelectedPtyId: () => 'pty-1',
     getPreviewPtyId: () => 'pty-1',
-    getFilterQuery: () => '',
     getSearchState: () => null,
     getInSearchMode: () => inSearchMode,
     getCopyModeActive: () => copyModeActive,
@@ -62,7 +61,6 @@ function createDeps(overrides: Partial<AggregateKeyboardDeps> = {}) {
       search: { handleCombo: () => ({ action: null, pending: false }), reset: () => {} },
     }),
     getEmulatorSync: () => null,
-    setFilterQuery: () => {},
     toggleShowInactive: () => {},
     setInSearchMode: (value) => {
       inSearchMode = value;

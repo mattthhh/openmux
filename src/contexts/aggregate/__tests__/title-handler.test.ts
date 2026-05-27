@@ -11,7 +11,6 @@ describe('title handler (litmus)', () => {
   it('creates a function', () => {
     const [_state, setState] = createStore<AggregateViewState>({
       showAggregateView: false,
-      filterQuery: '',
       showInactive: true,
       allPtys: [],
       matchedPtys: [],
@@ -75,7 +74,6 @@ describe('title handler (litmus)', () => {
 
     const [state, setState] = createStore<AggregateViewState>({
       showAggregateView: false,
-      filterQuery: '',
       showInactive: true,
       allPtys: [pty],
       matchedPtys: [pty],

@@ -7,7 +7,6 @@ export interface PendingAggregatePaneFocus {
 
 export type PendingAggregatePaneFocusResolution =
   | { type: 'wait' }
-  | { type: 'clear-filter' }
   | { type: 'expand-session'; sessionId: string }
   | { type: 'select-pty'; ptyId: string };
 
@@ -28,9 +27,8 @@ export function resolvePendingAggregatePaneFocus(params: {
   allPtys: PtyInfo[];
   flattenedTreeIndex: Map<string, number>;
   expandedSessionIds: Set<string>;
-  filterQuery: string;
 }): PendingAggregatePaneFocusResolution {
-  const { pending, allPtys, flattenedTreeIndex, expandedSessionIds, filterQuery } = params;
+  const { pending, allPtys, flattenedTreeIndex, expandedSessionIds } = params;
   if (!pending) {
     return { type: 'wait' };
   }
@@ -45,11 +43,7 @@ export function resolvePendingAggregatePaneFocus(params: {
   }
 
   const isVisibleInTree = flattenedTreeIndex.has(matchingPty.ptyId);
-  if (filterQuery && !isVisibleInTree) {
-    return { type: 'clear-filter' };
-  }
-
-  if (!flattenedTreeIndex.has(matchingPty.ptyId)) {
+  if (!isVisibleInTree) {
     return { type: 'wait' };
   }
 

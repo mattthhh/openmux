@@ -48,7 +48,6 @@ describe('resolvePendingAggregatePaneFocus', () => {
       allPtys: [],
       flattenedTreeIndex: new Map(),
       expandedSessionIds: new Set(['session-1']),
-      filterQuery: '',
     });
 
     expect(result).toEqual({ type: 'wait' });
@@ -70,34 +69,20 @@ describe('resolvePendingAggregatePaneFocus', () => {
       allPtys: [],
       flattenedTreeIndex: new Map([['pty-new', 5]]),
       expandedSessionIds: new Set(['session-1']),
-      filterQuery: '',
     });
 
     expect(result).toEqual({ type: 'wait' });
   });
 
-  it('clears the filter before focusing a hidden new pane', () => {
+  it('waits when the new pane PTY is not visible in the tree', () => {
     const result = resolvePendingAggregatePaneFocus({
       pending: createPending(),
       allPtys: [createPty()],
       flattenedTreeIndex: new Map(),
       expandedSessionIds: new Set(['session-1']),
-      filterQuery: 'vim',
     });
 
-    expect(result).toEqual({ type: 'clear-filter' });
-  });
-
-  it('expands the session before touching the filter', () => {
-    const result = resolvePendingAggregatePaneFocus({
-      pending: createPending(),
-      allPtys: [createPty()],
-      flattenedTreeIndex: new Map(),
-      expandedSessionIds: new Set(),
-      filterQuery: 'vim',
-    });
-
-    expect(result).toEqual({ type: 'expand-session', sessionId: 'session-1' });
+    expect(result).toEqual({ type: 'wait' });
   });
 
   it('expands the session before selecting the new pane', () => {
@@ -106,7 +91,17 @@ describe('resolvePendingAggregatePaneFocus', () => {
       allPtys: [createPty()],
       flattenedTreeIndex: new Map(),
       expandedSessionIds: new Set(),
-      filterQuery: '',
+    });
+
+    expect(result).toEqual({ type: 'expand-session', sessionId: 'session-1' });
+  });
+
+  it('expands the session before selecting the new pane (no filter)', () => {
+    const result = resolvePendingAggregatePaneFocus({
+      pending: createPending(),
+      allPtys: [createPty()],
+      flattenedTreeIndex: new Map(),
+      expandedSessionIds: new Set(),
     });
 
     expect(result).toEqual({ type: 'expand-session', sessionId: 'session-1' });
@@ -118,7 +113,6 @@ describe('resolvePendingAggregatePaneFocus', () => {
       allPtys: [createPty()],
       flattenedTreeIndex: new Map([['pty-1', 3]]),
       expandedSessionIds: new Set(['session-1']),
-      filterQuery: '',
     });
 
     expect(result).toEqual({ type: 'select-pty', ptyId: 'pty-1' });
@@ -133,7 +127,6 @@ describe('resolvePendingAggregatePaneFocus', () => {
       ],
       flattenedTreeIndex: new Map([['pty-2', 4]]),
       expandedSessionIds: new Set(['session-2']),
-      filterQuery: '',
     });
 
     expect(result).toEqual({ type: 'select-pty', ptyId: 'pty-2' });

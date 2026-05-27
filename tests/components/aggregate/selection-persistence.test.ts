@@ -343,35 +343,6 @@ describe('Selection Persistence - current tree behavior', () => {
     expect(state.previewZoomed).toBe(false);
   });
 
-  it('moves to the remaining PTY when the selected PTY is filtered out', () => {
-    const sessions = [createMockSession('session-a', 'A')];
-    const ptys = [
-      createMockPty({ ptyId: 'pty-1', sessionId: 'session-a', foregroundProcess: 'nvim' }),
-      createMockPty({ ptyId: 'pty-2', sessionId: 'session-a', foregroundProcess: 'bash' }),
-    ];
-    const { state, setState } = createAggregateState({
-      sessions,
-      ptys,
-      selectedPtyId: 'pty-1',
-    });
-    const actions = createActions(state, setState);
-
-    setState(
-      produce((s) => {
-        s.previewMode = true;
-        s.previewZoomed = true;
-      })
-    );
-
-    actions.setFilterQuery('bash');
-
-    expect(state.selectedPtyId).toBe('pty-2');
-    expect(state.selectedSessionId).toBe('session-a');
-    expect(state.flattenedTree[state.selectedIndex]?.node.type).toBe('pty');
-    expect(state.previewMode).toBe(false);
-    expect(state.previewZoomed).toBe(false);
-  });
-
   it('falls back to the session header when a selected PTY becomes hidden by collapse', () => {
     const sessions = [createMockSession('session-a', 'A')];
     const ptys = [

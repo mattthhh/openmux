@@ -166,15 +166,8 @@ export function findNearestSelectableIndex(
   return null;
 }
 
-export function flattenTree(
-  treeRoot: TreeNode[],
-  filterQuery: string,
-  showInactive: boolean
-): FlattenedTreeItem[] {
+export function flattenTree(treeRoot: TreeNode[], showInactive: boolean): FlattenedTreeItem[] {
   const flattened: FlattenedTreeItem[] = [];
-  const query = filterQuery.trim().toLowerCase();
-  const hasFilter = query.length > 0;
-
   const sessionGroups = new Map<string, { sessionNode: TreeNode; childNodes: TreeNode[] }>();
   let currentSessionId: string | null = null;
 
@@ -209,20 +202,7 @@ export function flattenTree(
       );
     }
 
-    if (hasFilter) {
-      visibleChildren = visibleChildren.filter((node) => {
-        if (node.type !== 'pty') return true;
-        const cwd = node.ptyInfo.cwd.toLowerCase();
-        const branch = node.ptyInfo.gitBranch?.toLowerCase() ?? '';
-        const process = node.ptyInfo.foregroundProcess?.toLowerCase() ?? '';
-        return cwd.includes(query) || branch.includes(query) || process.includes(query);
-      });
-    }
-
     const visiblePtyCount = visibleChildren.filter((node) => node.type === 'pty').length;
-    if (hasFilter && sessionNode.isExpanded && visiblePtyCount === 0) {
-      continue;
-    }
 
     flattened.push({
       node: sessionNode,

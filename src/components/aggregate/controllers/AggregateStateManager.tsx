@@ -43,7 +43,6 @@ export function AggregateStateManager() {
   const selectedIndex = () => aggregate.state.selectedIndex;
   const flattenedTree = () => aggregate.state.flattenedTree;
   const expandedSessionIds = () => aggregate.state.expandedSessionIds;
-  const filterQuery = () => aggregate.state.filterQuery;
   const pendingPaneCreations = () => aggregate.state.pendingPaneCreations;
 
   const { state: layoutState, switchWorkspace, focusPane, setLayoutMode } = layout;
@@ -183,17 +182,9 @@ export function AggregateStateManager() {
       allPtys: aggregate.state.allPtys,
       flattenedTreeIndex: aggregate.state.flattenedTreeIndex,
       expandedSessionIds: expandedSessionIds(),
-      filterQuery: filterQuery(),
     });
 
     if (resolution.type === 'wait') return;
-
-    if (resolution.type === 'clear-filter') {
-      if (filterQuery()) {
-        aggregate.setFilterQuery('');
-      }
-      return;
-    }
 
     if (resolution.type === 'expand-session') {
       aggregate.toggleSessionExpanded(resolution.sessionId);

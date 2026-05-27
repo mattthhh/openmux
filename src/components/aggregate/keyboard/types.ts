@@ -22,8 +22,6 @@ export interface ListDeps {
   setVimMode: (mode: VimInputMode) => void;
   getVimHandlers: () => VimHandlers;
 
-  getFilterQuery: () => string;
-  setFilterQuery: (query: string) => void;
   getMatchedCount: () => number;
   toggleShowInactive: () => void;
   getSelectedPtyId: () => string | null;
