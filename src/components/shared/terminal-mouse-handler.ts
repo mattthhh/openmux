@@ -16,15 +16,33 @@ export interface SelectionState {
 export interface TerminalMouseDeps {
   isMouseTrackingEnabled: (ptyId: string) => boolean;
 
-  getScrollState: (ptyId: string) => { viewportOffset: number; scrollbackLength: number; isAtBottom: boolean } | undefined;
+  getScrollState: (
+    ptyId: string
+  ) => { viewportOffset: number; scrollbackLength: number; isAtBottom: boolean } | undefined;
 
   scrollTerminal: (ptyId: string, delta: number) => void;
 
   setScrollOffset?: (ptyId: string, offset: number) => void;
 
-  startSelection: (ptyId: string, x: number, y: number, scrollbackLength: number, scrollOffset: number) => void;
-  updateSelection: (ptyId: string, x: number, y: number, scrollbackLength: number, scrollOffset: number) => void;
-  completeSelection: (ptyId: string, scrollbackLength: number, getLine: (absoluteY: number) => TerminalCell[] | null) => void;
+  startSelection: (
+    ptyId: string,
+    x: number,
+    y: number,
+    scrollbackLength: number,
+    scrollOffset: number
+  ) => void;
+  updateSelection: (
+    ptyId: string,
+    x: number,
+    y: number,
+    scrollbackLength: number,
+    scrollOffset: number
+  ) => void;
+  completeSelection: (
+    ptyId: string,
+    scrollbackLength: number,
+    getLine: (absoluteY: number) => TerminalCell[] | null
+  ) => void;
   clearSelection: (ptyId: string) => void;
   getSelection: (ptyId: string) => SelectionState | undefined;
 

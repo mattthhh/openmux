@@ -3,11 +3,7 @@ import type { TemplateSession } from '../../effect/models';
 import { formatComboSet, type ResolvedKeybindingMap } from '../../core/keybindings';
 import type { VimInputMode } from '../../core/vim-sequences';
 import type { TemplateTabMode } from './keyboard';
-import {
-  fitLabel,
-  formatRelativeTime,
-  truncate,
-} from './formatting';
+import { fitLabel, formatRelativeTime, truncate } from './formatting';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useOverlayColors } from '../overlay-colors';
 import { truncateHint } from '../overlay-hints';
@@ -57,9 +53,7 @@ export function TemplateOverlayView(props: TemplateOverlayViewProps) {
     if (line.type === 'text') {
       return (
         <box style={{ flexDirection: 'row', height: 1 }}>
-          <text fg={overlaySubtle()}>
-            {truncate(`${props.saveIndent}${line.value}`, maxWidth)}
-          </text>
+          <text fg={overlaySubtle()}>{truncate(`${props.saveIndent}${line.value}`, maxWidth)}</text>
         </box>
       );
     }
@@ -153,10 +147,8 @@ export function TemplateOverlayView(props: TemplateOverlayViewProps) {
   };
 
   const hintWidth = () => Math.max(1, props.overlayWidth - 4);
-  const applyHintDisplay = () => truncateHint(
-    props.templates.length === 0 ? emptyApplyHints() : applyHints(),
-    hintWidth()
-  );
+  const applyHintDisplay = () =>
+    truncateHint(props.templates.length === 0 ? emptyApplyHints() : applyHints(), hintWidth());
   const saveHintDisplay = () => truncateHint(props.error ?? saveHints(), hintWidth());
 
   return (
@@ -192,7 +184,7 @@ export function TemplateOverlayView(props: TemplateOverlayViewProps) {
 
           <Show
             when={props.tab === 'apply'}
-            fallback={(
+            fallback={
               <box style={{ flexDirection: 'column' }}>
                 <box style={{ height: 1, flexDirection: 'row' }}>
                   <text fg={overlaySubtle()}>{props.saveIndent}Name: </text>
@@ -203,11 +195,7 @@ export function TemplateOverlayView(props: TemplateOverlayViewProps) {
                     )}
                   </text>
                 </box>
-                <For each={props.visibleSaveSummaryLines}>
-                  {(line) => (
-                    renderSaveLine(line)
-                  )}
-                </For>
+                <For each={props.visibleSaveSummaryLines}>{(line) => renderSaveLine(line)}</For>
                 <Show when={props.saveSummaryTruncated}>
                   <box style={{ height: 1 }}>
                     <text fg={overlaySubtle()}>...</text>
@@ -217,20 +205,18 @@ export function TemplateOverlayView(props: TemplateOverlayViewProps) {
                   <text fg={overlaySeparator()}>{HORIZONTAL.repeat(props.overlayWidth - 4)}</text>
                 </box>
                 <box style={{ height: 1 }}>
-                  <text fg={overlaySubtle()}>
-                    {saveHintDisplay()}
-                  </text>
+                  <text fg={overlaySubtle()}>{saveHintDisplay()}</text>
                 </box>
               </box>
-            )}
+            }
           >
             <Show
               when={props.templates.length > 0}
-              fallback={(
+              fallback={
                 <box style={{ height: 1 }}>
-                  <text fg={overlaySubtle()}>  No templates saved</text>
+                  <text fg={overlaySubtle()}> No templates saved</text>
                 </box>
-              )}
+              }
             >
               <For each={props.visibleTemplates}>
                 {(template, index) => (
@@ -245,9 +231,7 @@ export function TemplateOverlayView(props: TemplateOverlayViewProps) {
               <text fg={overlaySeparator()}>{HORIZONTAL.repeat(props.overlayWidth - 4)}</text>
             </box>
             <box style={{ height: 1 }}>
-              <text fg={overlaySubtle()}>
-                {applyHintDisplay()}
-              </text>
+              <text fg={overlaySubtle()}>{applyHintDisplay()}</text>
             </box>
           </Show>
         </box>

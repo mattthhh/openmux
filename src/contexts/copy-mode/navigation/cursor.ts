@@ -9,10 +9,7 @@ const clamp = (value: number, min: number, max: number): number =>
   Math.max(min, Math.min(value, max));
 
 /** Clamp cursor to valid terminal bounds */
-export const clampCursor = (
-  cursor: CopyCursor,
-  meta: ScrollMeta
-): CopyCursor | null => {
+export const clampCursor = (cursor: CopyCursor, meta: ScrollMeta): CopyCursor | null => {
   if (!meta.terminalState || meta.rows <= 0 || meta.cols <= 0) {
     return null;
   }
@@ -32,10 +29,7 @@ export const calculateInitialCursor = (
   rows: number,
   cols: number
 ): CopyCursor => {
-  const absY =
-    viewportOffset > 0
-      ? scrollbackLength - viewportOffset
-      : scrollbackLength + cursorY;
+  const absY = viewportOffset > 0 ? scrollbackLength - viewportOffset : scrollbackLength + cursorY;
   const maxAbsY = Math.max(0, scrollbackLength + rows - 1);
   return {
     x: clamp(cursorX, 0, Math.max(0, cols - 1)),
@@ -44,11 +38,7 @@ export const calculateInitialCursor = (
 };
 
 /** Move cursor by delta, returning new position (not clamped) */
-export const moveCursorBy = (
-  current: CopyCursor,
-  dx: number,
-  dy: number
-): CopyCursor => ({
+export const moveCursorBy = (current: CopyCursor, dx: number, dy: number): CopyCursor => ({
   x: current.x + dx,
   absY: current.absY + dy,
 });

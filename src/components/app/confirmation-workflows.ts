@@ -4,10 +4,7 @@
 
 import { createSignal } from 'solid-js';
 import type { ConfirmationType } from '../../core/types';
-import {
-  createConfirmationHandlers,
-  type ConfirmationState,
-} from './confirmation-handlers';
+import { createConfirmationHandlers, type ConfirmationState } from './confirmation-handlers';
 import { createTemplatePendingActions } from './template-pending-actions';
 import { createSessionPendingActions } from './session-pending-actions';
 

@@ -74,12 +74,17 @@ export function resolvePaneSelector(params: {
     return panes;
   };
 
-  const findInWorkspace = (workspace: Workspace, predicate: (pane: PaneData) => boolean): PaneData | null => {
+  const findInWorkspace = (
+    workspace: Workspace,
+    predicate: (pane: PaneData) => boolean
+  ): PaneData | null => {
     const panes = collectWorkspacePanes(workspace);
     return panes.find(predicate) ?? null;
   };
 
-  const searchAcrossWorkspaces = (predicate: (pane: PaneData) => boolean): Array<{ pane: PaneData; workspaceId: WorkspaceId }> => {
+  const searchAcrossWorkspaces = (
+    predicate: (pane: PaneData) => boolean
+  ): Array<{ pane: PaneData; workspaceId: WorkspaceId }> => {
     const matches: Array<{ pane: PaneData; workspaceId: WorkspaceId }> = [];
     for (const [id, workspace] of Object.entries(workspaces)) {
       if (!workspace) continue;

@@ -22,10 +22,7 @@ export function registerMapping(
 /**
  * Remove all mappings for a given PTY ID
  */
-export function removeMappingForPty(
-  state: ShimServerState,
-  ptyId: string
-): void {
+export function removeMappingForPty(state: ShimServerState, ptyId: string): void {
   const info = state.ptyToPane.get(ptyId);
   if (!info) return;
   const map = state.sessionPanes.get(info.sessionId);
@@ -59,10 +56,7 @@ export function clearAllMappings(state: ShimServerState): void {
 /**
  * Get all PTY IDs mapped to a session
  */
-export function getPtyIdsForSession(
-  state: ShimServerState,
-  sessionId: string
-): string[] {
+export function getPtyIdsForSession(state: ShimServerState, sessionId: string): string[] {
   const map = state.sessionPanes.get(sessionId);
   if (!map) return [];
   return Array.from(map.values());

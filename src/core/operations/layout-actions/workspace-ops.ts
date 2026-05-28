@@ -5,7 +5,14 @@
 
 import type { Rectangle, WorkspaceId } from '../../types';
 import type { LayoutState, Workspaces } from './types';
-import { createWorkspace, updateWorkspace, recalculateLayout, syncPaneIdCounter, syncSplitIdCounter, generatePaneId } from './helpers';
+import {
+  createWorkspace,
+  updateWorkspace,
+  recalculateLayout,
+  syncPaneIdCounter,
+  syncSplitIdCounter,
+  generatePaneId,
+} from './helpers';
 
 /**
  * Handle SET_VIEWPORT action
@@ -65,7 +72,11 @@ export function handleSwitchWorkspace(state: LayoutState, workspaceId: Workspace
 
   // Check if existing workspace is empty and auto-create pane if enabled
   const existingWorkspace = state.workspaces[workspaceId];
-  if (state.config.autoCreatePaneOnEmptyWorkspace && existingWorkspace && !existingWorkspace.mainPane) {
+  if (
+    state.config.autoCreatePaneOnEmptyWorkspace &&
+    existingWorkspace &&
+    !existingWorkspace.mainPane
+  ) {
     const newPaneId = generatePaneId();
     const updatedWorkspace = {
       ...existingWorkspace,

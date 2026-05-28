@@ -1,24 +1,24 @@
-import { describe, expect, it, vi } from "bun:test";
+import { describe, expect, it, vi } from 'bun:test';
 
-import { createExitHandlers } from "../../../src/components/app/exit-handlers";
+import { createExitHandlers } from '../../../src/components/app/exit-handlers';
 
 const createDeps = () => {
   const events: string[] = [];
   const saveSession = vi.fn().mockImplementation(async () => {
-    events.push("save");
+    events.push('save');
   });
   const suspendSessionPersistence = vi.fn(() => {
-    events.push("suspend");
+    events.push('suspend');
   });
   const shutdownShim = vi.fn().mockImplementation(async () => {
-    events.push("shutdown");
+    events.push('shutdown');
   });
   const disposeRuntime = vi.fn().mockImplementation(async () => {
-    events.push("dispose");
+    events.push('dispose');
   });
   const renderer = {
     destroy: vi.fn(() => {
-      events.push("destroy");
+      events.push('destroy');
     }),
   };
 
@@ -32,15 +32,13 @@ const createDeps = () => {
   };
 };
 
-describe("createExitHandlers", () => {
-  it("suspends persistence after saving on quit", async () => {
+describe('createExitHandlers', () => {
+  it('suspends persistence after saving on quit', async () => {
     const deps = createDeps();
-    const exitSpy = vi.spyOn(process, "exit").mockImplementation(
-      ((code?: number) => {
-        deps.events.push(`exit:${code ?? 0}`);
-        return undefined as never;
-      }) as (code?: number) => never
-    );
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
+      deps.events.push(`exit:${code ?? 0}`);
+      return undefined as never;
+    }) as (code?: number) => never);
 
     const handlers = createExitHandlers({
       saveSession: deps.saveSession,
@@ -52,26 +50,17 @@ describe("createExitHandlers", () => {
 
     await handlers.handleQuit();
 
-    expect(deps.events).toEqual([
-      "save",
-      "suspend",
-      "shutdown",
-      "dispose",
-      "destroy",
-      "exit:0",
-    ]);
+    expect(deps.events).toEqual(['save', 'suspend', 'shutdown', 'dispose', 'destroy', 'exit:0']);
     expect(exitSpy).toHaveBeenCalledWith(0);
     exitSpy.mockRestore();
   });
 
-  it("suspends persistence after saving on detach", async () => {
+  it('suspends persistence after saving on detach', async () => {
     const deps = createDeps();
-    const exitSpy = vi.spyOn(process, "exit").mockImplementation(
-      ((code?: number) => {
-        deps.events.push(`exit:${code ?? 0}`);
-        return undefined as never;
-      }) as (code?: number) => never
-    );
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
+      deps.events.push(`exit:${code ?? 0}`);
+      return undefined as never;
+    }) as (code?: number) => never);
 
     const handlers = createExitHandlers({
       saveSession: deps.saveSession,
@@ -83,13 +72,7 @@ describe("createExitHandlers", () => {
 
     await handlers.handleDetach();
 
-    expect(deps.events).toEqual([
-      "save",
-      "suspend",
-      "dispose",
-      "destroy",
-      "exit:0",
-    ]);
+    expect(deps.events).toEqual(['save', 'suspend', 'dispose', 'destroy', 'exit:0']);
     expect(deps.shutdownShim).not.toHaveBeenCalled();
     expect(exitSpy).toHaveBeenCalledWith(0);
     exitSpy.mockRestore();

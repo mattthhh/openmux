@@ -3,7 +3,7 @@
  * These utilities pack/unpack terminal cells for efficient Web Worker transfer
  */
 
-import { describe, it, expect } from "bun:test";
+import { describe, it, expect } from 'bun:test';
 import {
   packCells,
   unpackCells,
@@ -12,7 +12,12 @@ import {
   packTerminalState,
   unpackTerminalState,
 } from '../../src/terminal/cell-serialization';
-import type { TerminalCell, TerminalState, DirtyTerminalUpdate, TerminalScrollState } from '../../src/core/types';
+import type {
+  TerminalCell,
+  TerminalState,
+  DirtyTerminalUpdate,
+  TerminalScrollState,
+} from '../../src/core/types';
 
 describe('cell-serialization', () => {
   describe('packCells/unpackCells', () => {

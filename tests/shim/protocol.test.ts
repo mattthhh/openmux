@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from 'bun:test';
 import { encodeFrame, FrameReader, type ShimHeader } from '../../src/shim/protocol';
 
 function readFrames(chunks: Buffer[]): Array<{ header: ShimHeader; payloads: Buffer[] }> {

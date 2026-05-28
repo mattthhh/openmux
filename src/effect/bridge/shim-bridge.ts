@@ -1,7 +1,7 @@
 /**
  * Shim bridge functions (errore version)
  * Provides proxy functions for shim client operations.
- * 
+ *
  * Directly calls ShimClient without Effect runtime.
  */
 
@@ -23,7 +23,9 @@ export type SessionPtyMapping = {
   stalePaneIds: string[];
 };
 
-export async function getSessionPtyMapping(sessionId: string): Promise<SessionPtyMapping | undefined> {
+export async function getSessionPtyMapping(
+  sessionId: string
+): Promise<SessionPtyMapping | undefined> {
   if (!isShimClient()) return undefined;
   return ShimClient.getSessionMapping(sessionId);
 }

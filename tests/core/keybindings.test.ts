@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from 'bun:test';
 import {
   eventToCombo,
   formatComboSet,
@@ -29,16 +29,18 @@ describe('keybindings', () => {
 
   it('formats grouped combos', () => {
     expect(formatComboSet(['alt+h', 'alt+j', 'alt+k', 'alt+l'])).toBe('\u2325hjkl');
-    expect(formatComboSet([
-      'alt+1',
-      'alt+2',
-      'alt+3',
-      'alt+4',
-      'alt+5',
-      'alt+6',
-      'alt+7',
-      'alt+8',
-      'alt+9',
-    ])).toBe('\u23251-9');
+    expect(
+      formatComboSet([
+        'alt+1',
+        'alt+2',
+        'alt+3',
+        'alt+4',
+        'alt+5',
+        'alt+6',
+        'alt+7',
+        'alt+8',
+        'alt+9',
+      ])
+    ).toBe('\u23251-9');
   });
 });

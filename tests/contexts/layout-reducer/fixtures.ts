@@ -1,4 +1,4 @@
-import { beforeEach } from "bun:test";
+import { beforeEach } from 'bun:test';
 import type { Rectangle, Workspace, WorkspaceId, PaneData } from '../../../src/core/types';
 import { DEFAULT_CONFIG } from '../../../src/core/config';
 import {

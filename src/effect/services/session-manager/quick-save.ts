@@ -4,16 +4,13 @@
  * Migrated from Effect to errore - uses promises and direct dependency passing
  */
 
-import type {
-  SerializedSession,
-  SessionMetadata,
-} from "../../models"
-import type { WorkspaceState } from "./types"
-import { collectCwdMap, serializeSession } from "./serialization"
-import type { SessionStorageError } from "../../errors"
+import type { SerializedSession, SessionMetadata } from '../../models';
+import type { WorkspaceState } from './types';
+import { collectCwdMap, serializeSession } from './serialization';
+import type { SessionStorageError } from '../../errors';
 
 export interface QuickSaveDeps {
-  saveSession: (session: SerializedSession) => Promise<SessionStorageError | void>
+  saveSession: (session: SerializedSession) => Promise<SessionStorageError | void>;
 }
 
 /**
@@ -26,9 +23,9 @@ export async function serializeWorkspaces(
   getCwd: (ptyId: string) => Promise<string>
 ): Promise<SerializedSession> {
   // Collect all CWDs
-  const cwdMap = await collectCwdMap(workspaces, getCwd)
+  const cwdMap = await collectCwdMap(workspaces, getCwd);
   // Serialize
-  return serializeSession(metadata, workspaces, activeWorkspaceId, cwdMap)
+  return serializeSession(metadata, workspaces, activeWorkspaceId, cwdMap);
 }
 
 /**
@@ -41,11 +38,6 @@ export async function quickSave(
   activeWorkspaceId: number,
   getCwd: (ptyId: string) => Promise<string>
 ): Promise<SessionStorageError | void> {
-  const session = await serializeWorkspaces(
-    metadata,
-    workspaces,
-    activeWorkspaceId,
-    getCwd
-  )
-  return await deps.saveSession(session)
+  const session = await serializeWorkspaces(metadata, workspaces, activeWorkspaceId, getCwd);
+  return await deps.saveSession(session);
 }

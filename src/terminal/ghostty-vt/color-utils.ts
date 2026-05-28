@@ -1,8 +1,8 @@
-import type { TerminalCell } from "../../core/types";
-import { areTerminalColorsEqual, type TerminalColors } from "../terminal-colors";
+import type { TerminalCell } from '../../core/types';
+import { areTerminalColorsEqual, type TerminalColors } from '../terminal-colors';
 
 export function buildOscColorSequence(colors: TerminalColors): string {
-  const format = (color: number) => `#${color.toString(16).padStart(6, "0")}`;
+  const format = (color: number) => `#${color.toString(16).padStart(6, '0')}`;
   let osc = `\x1b]10;${format(colors.foreground)}\x07`;
   osc += `\x1b]11;${format(colors.background)}\x07`;
   osc += `\x1b]12;${format(colors.foreground)}\x07`;
@@ -24,7 +24,10 @@ export function cloneColors(colors: TerminalColors): TerminalColors {
   };
 }
 
-export function buildColorRemap(from: TerminalColors, to: TerminalColors): Map<number, number> | null {
+export function buildColorRemap(
+  from: TerminalColors,
+  to: TerminalColors
+): Map<number, number> | null {
   if (areTerminalColorsEqual(from, to)) return null;
   const map = new Map<number, number>();
   if (from.foreground !== to.foreground) {
@@ -62,7 +65,7 @@ export function applyColorRemapToRow(row: TerminalCell[], remap: Map<number, num
 }
 
 function setRgb(target: { r: number; g: number; b: number }, color: number): void {
-  target.r = (color >> 16) & 0xFF;
-  target.g = (color >> 8) & 0xFF;
-  target.b = color & 0xFF;
+  target.r = (color >> 16) & 0xff;
+  target.g = (color >> 8) & 0xff;
+  target.b = color & 0xff;
 }

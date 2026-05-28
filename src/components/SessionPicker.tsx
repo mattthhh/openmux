@@ -7,7 +7,12 @@ import { useSession, type SessionSummary } from '../contexts/SessionContext';
 import type { SessionMetadata } from '../core/types';
 import { useTheme } from '../contexts/ThemeContext';
 import { useConfig } from '../contexts/ConfigContext';
-import { eventToCombo, formatComboSet, matchKeybinding, type ResolvedKeybindingMap } from '../core/keybindings';
+import {
+  eventToCombo,
+  formatComboSet,
+  matchKeybinding,
+  type ResolvedKeybindingMap,
+} from '../core/keybindings';
 import { useOverlayKeyboardHandler } from '../contexts/keyboard/use-overlay-keyboard-handler';
 import type { KeyboardEvent } from '../effect/bridge';
 import { createVimSequenceHandler, type VimInputMode } from '../core/vim-sequences';
@@ -41,7 +46,6 @@ function formatRelativeTime(timestamp: number): string {
   if (days < 7) return `${days}d ago`;
   return new Date(timestamp).toLocaleDateString();
 }
-
 
 export function SessionPicker(props: SessionPickerProps) {
   const theme = useTheme();
@@ -228,7 +232,8 @@ export function SessionPicker(props: SessionPickerProps) {
     if (await handleAction(result.action)) return true;
 
     const isBackspace = key === 'backspace';
-    const shouldMatchBindings = !isBackspace && (event.ctrl || event.alt || event.meta || key.length > 1);
+    const shouldMatchBindings =
+      !isBackspace && (event.ctrl || event.alt || event.meta || key.length > 1);
     if (shouldMatchBindings && !isBareEscape(event)) {
       const fallbackAction = matchKeybinding(bindings.list, keyEvent);
       if (await handleAction(fallbackAction)) return true;
@@ -353,7 +358,7 @@ export function SessionPicker(props: SessionPickerProps) {
             when={session.filteredSessions.length > 0}
             fallback={
               <box style={{ height: 1 }}>
-                <text fg={overlaySubtle()}>  No sessions found</text>
+                <text fg={overlaySubtle()}> No sessions found</text>
               </box>
             }
           >
@@ -420,34 +425,39 @@ function fitLine(text: string, width: number): string {
 
 function SessionRow(props: SessionRowProps) {
   // Build the row content
-  const activeMarker = () => props.isActive ? '*' : ' ';
+  const activeMarker = () => (props.isActive ? '*' : ' ');
 
   // Name (possibly being renamed)
-  const displayName = () => props.isRenaming ? props.renameValue : props.session.name;
+  const displayName = () => (props.isRenaming ? props.renameValue : props.session.name);
   const nameWidth = () => Math.min(20, props.maxWidth - 30);
   const truncatedName = () => {
     const name = displayName();
     const width = nameWidth();
-    return name.length > width
-      ? name.slice(0, width - 1) + '…'
-      : name.padEnd(width);
+    return name.length > width ? name.slice(0, width - 1) + '…' : name.padEnd(width);
   };
 
   // Summary info
-  const workspaceInfo = () => props.summary ? `${props.summary.workspaceCount}ws` : '   ';
-  const paneInfo = () => props.summary ? `${props.summary.paneCount}p` : '  ';
+  const workspaceInfo = () => (props.summary ? `${props.summary.workspaceCount}ws` : '   ');
+  const paneInfo = () => (props.summary ? `${props.summary.paneCount}p` : '  ');
 
   // Time
   const timeStr = () => formatRelativeTime(props.session.lastSwitchedAt);
 
   // Colors - use brighter color for selection
-  const nameColor = () => props.isSelected
-    ? props.selection.foreground
-    : (props.isActive ? props.activeColor : props.textColor);
-  const bgColor = () => props.isSelected ? props.selection.background : undefined;
+  const nameColor = () =>
+    props.isSelected
+      ? props.selection.foreground
+      : props.isActive
+        ? props.activeColor
+        : props.textColor;
+  const bgColor = () => (props.isSelected ? props.selection.background : undefined);
 
   // Build the line as a single string with proper formatting
-  const line = () => fitLine(` ${activeMarker()} ${truncatedName()} ${workspaceInfo()} ${paneInfo()} ${timeStr()}`, props.maxWidth);
+  const line = () =>
+    fitLine(
+      ` ${activeMarker()} ${truncatedName()} ${workspaceInfo()} ${paneInfo()} ${timeStr()}`,
+      props.maxWidth
+    );
 
   return (
     <text fg={nameColor()} bg={bgColor()}>

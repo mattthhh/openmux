@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from 'bun:test';
 import type { TerminalCell, TerminalState } from '../../src/core/types';
 import type { ITerminalEmulator } from '../../src/terminal/emulator-interface';
 import { captureEmulator } from '../../src/control/capture';

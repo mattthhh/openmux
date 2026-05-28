@@ -12,4 +12,4 @@ export {
   toArchivePlacement,
   type ArchivePlacement,
   PlacementSerializeError,
-} from "../../kitty-graphics/archive-placement"
+} from '../../kitty-graphics/archive-placement';

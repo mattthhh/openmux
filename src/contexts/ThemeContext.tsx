@@ -27,18 +27,17 @@ export function ThemeProvider(props: ThemeProviderProps) {
         cursor: { ...DEFAULT_THEME.ui.copyMode.cursor, ...uiOverrides?.copyMode?.cursor },
       },
       aggregate: {
-        selection: { ...DEFAULT_THEME.ui.aggregate.selection, ...uiOverrides?.aggregate?.selection },
+        selection: {
+          ...DEFAULT_THEME.ui.aggregate.selection,
+          ...uiOverrides?.aggregate?.selection,
+        },
         diff: { ...DEFAULT_THEME.ui.aggregate.diff, ...uiOverrides?.aggregate?.diff },
       },
     },
     searchAccentColor: props.theme?.searchAccentColor ?? DEFAULT_THEME.searchAccentColor,
   };
 
-  return (
-    <ThemeContext.Provider value={mergedTheme}>
-      {props.children}
-    </ThemeContext.Provider>
-  );
+  return <ThemeContext.Provider value={mergedTheme}>{props.children}</ThemeContext.Provider>;
 }
 
 export function useTheme(): Theme {

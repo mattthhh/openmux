@@ -6,7 +6,16 @@ const OSC_C1 = '\x9d';
 const ST_C1 = '\x9c';
 const APC_C1 = '\x9f';
 
-type ParseState = 'text' | 'esc' | 'csi' | 'osc' | 'dcs' | 'apc' | 'osc-esc' | 'dcs-esc' | 'apc-esc';
+type ParseState =
+  | 'text'
+  | 'esc'
+  | 'csi'
+  | 'osc'
+  | 'dcs'
+  | 'apc'
+  | 'osc-esc'
+  | 'dcs-esc'
+  | 'apc-esc';
 
 export function findIncompleteSequenceStart(data: string): number | null {
   let state: ParseState = 'text';
@@ -127,7 +136,8 @@ export function stripKittyResponses(data: string): string {
 
   while (i < data.length) {
     const ch = data[i];
-    const isEscApc = ch === ESC && i + 2 < data.length && data[i + 1] === '_' && data[i + 2] === 'G';
+    const isEscApc =
+      ch === ESC && i + 2 < data.length && data[i + 1] === '_' && data[i + 2] === 'G';
     const isC1Apc = ch === '\x9f' && i + 1 < data.length && data[i + 1] === 'G';
 
     if (!isEscApc && !isC1Apc) {

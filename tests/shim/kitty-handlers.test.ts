@@ -2,9 +2,15 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { Buffer } from 'buffer';
-import { describe, expect, it } from "bun:test";
-import type { ITerminalEmulator, KittyGraphicsImageInfo } from '../../src/terminal/emulator-interface';
-import { KittyGraphicsCompression, KittyGraphicsFormat } from '../../src/terminal/emulator-interface';
+import { describe, expect, it } from 'bun:test';
+import type {
+  ITerminalEmulator,
+  KittyGraphicsImageInfo,
+} from '../../src/terminal/emulator-interface';
+import {
+  KittyGraphicsCompression,
+  KittyGraphicsFormat,
+} from '../../src/terminal/emulator-interface';
 import { createKittyHandlers } from '../../src/shim/server/kitty';
 import { createShimServerState } from '../../src/shim/server-state';
 
@@ -114,9 +120,13 @@ describe('createKittyHandlers', () => {
     } as ITerminalEmulator;
 
     const sharedMemoryPayload = Buffer.from('SHMKEY', 'utf8').toString('base64');
-    handlers.sendKittyTransmit('pty-1', `\x1b_Ga=T,t=s,s=10,v=12,S=120,i=1;${sharedMemoryPayload}\x1b\\`, {
-      fromReplay: true,
-    });
+    handlers.sendKittyTransmit(
+      'pty-1',
+      `\x1b_Ga=T,t=s,s=10,v=12,S=120,i=1;${sharedMemoryPayload}\x1b\\`,
+      {
+        fromReplay: true,
+      }
+    );
     handlers.sendKittyUpdate('pty-1', emulator, true);
 
     const transmit = events.find((event) => event.header.type === 'ptyKittyTransmit');
@@ -137,7 +147,10 @@ describe('createKittyHandlers', () => {
     });
 
     const sharedMemoryPayload = Buffer.from('SHMKEY', 'utf8').toString('base64');
-    handlers.sendKittyTransmit('pty-1', `\x1b_Ga=T,t=s,s=10,v=12,S=120,i=1;${sharedMemoryPayload}\x1b\\`);
+    handlers.sendKittyTransmit(
+      'pty-1',
+      `\x1b_Ga=T,t=s,s=10,v=12,S=120,i=1;${sharedMemoryPayload}\x1b\\`
+    );
 
     const transmit = events.find((event) => event.header.type === 'ptyKittyTransmit');
     expect(transmit).toBeDefined();
@@ -153,10 +166,14 @@ describe('createKittyHandlers', () => {
     });
 
     const sharedMemoryPayload = Buffer.from('SHMKEY', 'utf8').toString('base64');
-    handlers.sendKittyTransmit('pty-1', `\x1b_Ga=T,t=s,s=10,v=12,S=120,i=1;${sharedMemoryPayload}\x1b\\`, {
-      fromReplay: true,
-      allowSharedMemoryReplay: true,
-    });
+    handlers.sendKittyTransmit(
+      'pty-1',
+      `\x1b_Ga=T,t=s,s=10,v=12,S=120,i=1;${sharedMemoryPayload}\x1b\\`,
+      {
+        fromReplay: true,
+        allowSharedMemoryReplay: true,
+      }
+    );
 
     const transmit = events.find((event) => event.header.type === 'ptyKittyTransmit');
     expect(transmit).toBeDefined();

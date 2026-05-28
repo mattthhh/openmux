@@ -1,4 +1,4 @@
-import { afterEach, beforeAll, describe, expect, it, vi } from "bun:test";
+import { afterEach, beforeAll, describe, expect, it, vi } from 'bun:test';
 import type { ITerminalEmulator } from '../../../src/terminal/emulator-interface';
 import * as capabilitiesActual from '../../../src/terminal/capabilities';
 import { createImageInfo, createPlacement, defaultRenderTarget } from './helpers';
@@ -20,7 +20,8 @@ vi.mock('../../../src/terminal/capabilities', () => ({
 }));
 
 beforeAll(async () => {
-  ({ KittyGraphicsRenderer, setKittyTransmitBroker } = await import('../../../src/terminal/kitty-graphics'));
+  ({ KittyGraphicsRenderer, setKittyTransmitBroker } =
+    await import('../../../src/terminal/kitty-graphics'));
 });
 
 describe('KittyGraphicsRenderer (overlays)', () => {

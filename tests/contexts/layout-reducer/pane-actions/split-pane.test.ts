@@ -1,8 +1,13 @@
-import { describe, it, expect } from "bun:test";
+import { describe, it, expect } from 'bun:test';
 import type { PaneData, SplitNode } from '../../../../src/core/types';
 import { layoutReducer, generatePaneId } from '../../../../src/core/operations/layout-actions';
 import { collectPanes, isSplitNode } from '../../../../src/core/layout-tree';
-import { createInitialState, createWorkspaceWithPanes, defaultViewport, setupLayoutReducerTest } from '../fixtures';
+import {
+  createInitialState,
+  createWorkspaceWithPanes,
+  defaultViewport,
+  setupLayoutReducerTest,
+} from '../fixtures';
 
 describe('Layout Reducer', () => {
   setupLayoutReducerTest();
@@ -68,7 +73,9 @@ describe('Layout Reducer', () => {
       expect(secondPane.rectangle).toBeDefined();
       expect(firstPane.rectangle!.width).toBe(split.rectangle!.width);
       expect(secondPane.rectangle!.width).toBe(split.rectangle!.width);
-      expect(firstPane.rectangle!.height + secondPane.rectangle!.height).toBe(split.rectangle!.height);
+      expect(firstPane.rectangle!.height + secondPane.rectangle!.height).toBe(
+        split.rectangle!.height
+      );
     });
 
     it('should support nested splits within main pane', () => {

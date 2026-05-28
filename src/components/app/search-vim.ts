@@ -16,7 +16,10 @@ export function createSearchVimState(params: {
 }): {
   getSearchVimMode: () => VimInputMode;
   setSearchVimMode: (mode: VimInputMode) => void;
-  getSearchVimHandler: () => { handleCombo: (combo: string) => { action: string | null; pending: boolean }; reset: () => void };
+  getSearchVimHandler: () => {
+    handleCombo: (combo: string) => { action: string | null; pending: boolean };
+    reset: () => void;
+  };
 } {
   const { config, search } = params;
 

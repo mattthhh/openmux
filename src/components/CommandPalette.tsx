@@ -197,7 +197,8 @@ export function CommandPalette(props: CommandPaletteProps) {
     if (handleAction(result.action)) return true;
 
     const isBackspace = event.key === 'backspace';
-    const shouldMatchBindings = !isBackspace && (event.ctrl || event.alt || event.meta || event.key.length > 1);
+    const shouldMatchBindings =
+      !isBackspace && (event.ctrl || event.alt || event.meta || event.key.length > 1);
     if (shouldMatchBindings && !isBareEscape(event)) {
       const action = matchKeybinding(bindings, keyEvent);
       if (handleAction(action)) return true;
@@ -276,10 +277,7 @@ export function CommandPalette(props: CommandPaletteProps) {
     const visible = listHeight();
     if (count <= visible || visible === 0) return 0;
     const half = Math.floor(visible / 2);
-    return Math.min(
-      Math.max(0, props.state.selectedIndex - half),
-      Math.max(0, count - visible)
-    );
+    return Math.min(Math.max(0, props.state.selectedIndex - half), Math.max(0, count - visible));
   });
 
   const visibleCommands = createMemo(() => {
@@ -290,10 +288,9 @@ export function CommandPalette(props: CommandPaletteProps) {
 
   const commandBindings = createMemo(() => {
     const bindings = config.keybindings();
-    const entries = filteredCommands().map((command) => [
-      command.id,
-      getCommandKeybinding(bindings, command.action),
-    ] as const);
+    const entries = filteredCommands().map(
+      (command) => [command.id, getCommandKeybinding(bindings, command.action)] as const
+    );
     return new Map(entries);
   });
 
@@ -446,14 +443,15 @@ function fitRight(text: string, width: number): string {
 }
 
 function CommandRow(props: CommandRowProps) {
-  const details = () => props.command.description ? ` - ${props.command.description}` : '';
+  const details = () => (props.command.description ? ` - ${props.command.description}` : '');
   const keybindingWidth = () => props.keybindingWidth;
   const keybindingText = () => fitRight(props.keybinding, keybindingWidth());
-  const titleWidth = () => Math.max(0, props.maxWidth - (keybindingWidth() ? keybindingWidth() + 1 : 0));
+  const titleWidth = () =>
+    Math.max(0, props.maxWidth - (keybindingWidth() ? keybindingWidth() + 1 : 0));
   const left = () => fitLine(`  ${props.command.title}${details()}`, titleWidth());
-  const fg = () => props.isSelected ? props.selection.foreground : props.colors.foreground;
-  const bindingFg = () => props.isSelected ? props.colors.muted : props.colors.subtle;
-  const bg = () => props.isSelected ? props.selection.background : undefined;
+  const fg = () => (props.isSelected ? props.selection.foreground : props.colors.foreground);
+  const bindingFg = () => (props.isSelected ? props.colors.muted : props.colors.subtle);
+  const bg = () => (props.isSelected ? props.selection.background : undefined);
 
   return (
     <box style={{ flexDirection: 'row' }}>

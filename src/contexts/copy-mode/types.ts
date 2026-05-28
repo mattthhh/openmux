@@ -21,7 +21,10 @@ export interface CopyModeState {
 
 export interface CopyModeContextValue {
   /** Enter copy mode for a PTY (optionally with custom terminal state getter for aggregate view) */
-  enterCopyMode: (ptyId: string, getTerminalState?: (ptyId: string) => TerminalState | null) => void;
+  enterCopyMode: (
+    ptyId: string,
+    getTerminalState?: (ptyId: string) => TerminalState | null
+  ) => void;
   /** Exit copy mode */
   exitCopyMode: () => void;
   /** Whether copy mode is active (optionally for a PTY) */

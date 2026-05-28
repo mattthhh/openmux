@@ -2,13 +2,15 @@
  * Tests for GhosttyVtTerminal with mocked FFI bindings.
  */
 
-import { describe, it, expect, beforeAll, beforeEach, vi } from "bun:test";
-import { mockGhostty, resetGhosttySymbols } from "../mocks/ghostty-ffi";
+import { describe, it, expect, beforeAll, beforeEach, vi } from 'bun:test';
+import { mockGhostty, resetGhosttySymbols } from '../mocks/ghostty-ffi';
 
-let GhosttyVtTerminal: typeof import("../../src/terminal/ghostty-vt/terminal").GhosttyVtTerminal;
+let GhosttyVtTerminal: typeof import('../../src/terminal/ghostty-vt/terminal').GhosttyVtTerminal;
 
 beforeAll(async () => {
-  ({ GhosttyVtTerminal } = await import(`../../src/terminal/ghostty-vt/terminal?test=${Date.now()}`));
+  ({ GhosttyVtTerminal } = await import(
+    `../../src/terminal/ghostty-vt/terminal?test=${Date.now()}`
+  ));
 });
 
 beforeEach(() => {
@@ -110,8 +112,8 @@ function writeKittyPlacement(
   view.setInt32(offset + 52, placement.z, true);
 }
 
-describe("GhosttyVtTerminal", () => {
-  it("passes config to native constructor", () => {
+describe('GhosttyVtTerminal', () => {
+  it('passes config to native constructor', () => {
     let capturedConfig: Buffer | null = null;
 
     const ghosttyTerminalNew = vi.fn(() => 1);
@@ -157,7 +159,7 @@ describe("GhosttyVtTerminal", () => {
     }
   });
 
-  it("parses viewport cells into the pool", () => {
+  it('parses viewport cells into the pool', () => {
     const viewportData = Buffer.alloc(CELL_SIZE * 2);
     writeCell(viewportData, 0, {
       codepoint: 0x41,
@@ -218,7 +220,7 @@ describe("GhosttyVtTerminal", () => {
     term.free();
   });
 
-  it("parses scrollback lines into new arrays", () => {
+  it('parses scrollback lines into new arrays', () => {
     const lineData = Buffer.alloc(CELL_SIZE * 2);
     writeCell(lineData, 0, {
       codepoint: 0x43,
@@ -237,11 +239,13 @@ describe("GhosttyVtTerminal", () => {
       hyperlinkId: 3,
     });
 
-    const scrollbackMock = vi.fn((_handle: number, _offset: number, outBuffer: Buffer, cols: number) => {
-      expect(cols).toBe(2);
-      lineData.copy(outBuffer);
-      return 2;
-    });
+    const scrollbackMock = vi.fn(
+      (_handle: number, _offset: number, outBuffer: Buffer, cols: number) => {
+        expect(cols).toBe(2);
+        lineData.copy(outBuffer);
+        return 2;
+      }
+    );
 
     mockGhostty.symbols = {
       ghostty_terminal_new: vi.fn(() => 1),
@@ -259,9 +263,9 @@ describe("GhosttyVtTerminal", () => {
     term.free();
   });
 
-  it("reads terminal responses when available", () => {
+  it('reads terminal responses when available', () => {
     const readMock = vi.fn((_handle: number, buffer: Buffer, _size: number) => {
-      buffer.write("OK");
+      buffer.write('OK');
       return 2;
     });
 
@@ -275,7 +279,7 @@ describe("GhosttyVtTerminal", () => {
     };
 
     const term = new GhosttyVtTerminal(80, 24);
-    expect(term.readResponse()).toBe("OK");
+    expect(term.readResponse()).toBe('OK');
 
     mockGhostty.symbols.ghostty_terminal_has_response = vi.fn(() => false);
     expect(term.readResponse()).toBeNull();
@@ -283,7 +287,7 @@ describe("GhosttyVtTerminal", () => {
     term.free();
   });
 
-  it("reads kitty image metadata and data", () => {
+  it('reads kitty image metadata and data', () => {
     const info = {
       id: 42,
       number: 7,
@@ -301,22 +305,28 @@ describe("GhosttyVtTerminal", () => {
       ghostty_terminal_new: vi.fn(() => 1),
       ghostty_terminal_free: vi.fn(),
       ghostty_terminal_get_kitty_image_count: vi.fn(() => 1),
-      ghostty_terminal_get_kitty_image_ids: vi.fn((_handle: number, outBuffer: Buffer, count: number) => {
-        expect(count).toBe(1);
-        outBuffer.writeUInt32LE(info.id, 0);
-        return 1;
-      }),
-      ghostty_terminal_get_kitty_image_info: vi.fn((_handle: number, imageId: number, outBuffer: Buffer) => {
-        expect(imageId).toBe(info.id);
-        writeKittyImageInfo(outBuffer, info);
-        return true;
-      }),
-      ghostty_terminal_copy_kitty_image_data: vi.fn((_handle: number, imageId: number, outBuffer: Buffer, size: number) => {
-        expect(imageId).toBe(info.id);
-        expect(size).toBe(imageData.length);
-        imageData.copy(outBuffer);
-        return imageData.length;
-      }),
+      ghostty_terminal_get_kitty_image_ids: vi.fn(
+        (_handle: number, outBuffer: Buffer, count: number) => {
+          expect(count).toBe(1);
+          outBuffer.writeUInt32LE(info.id, 0);
+          return 1;
+        }
+      ),
+      ghostty_terminal_get_kitty_image_info: vi.fn(
+        (_handle: number, imageId: number, outBuffer: Buffer) => {
+          expect(imageId).toBe(info.id);
+          writeKittyImageInfo(outBuffer, info);
+          return true;
+        }
+      ),
+      ghostty_terminal_copy_kitty_image_data: vi.fn(
+        (_handle: number, imageId: number, outBuffer: Buffer, size: number) => {
+          expect(imageId).toBe(info.id);
+          expect(size).toBe(imageData.length);
+          imageData.copy(outBuffer);
+          return imageData.length;
+        }
+      ),
     };
 
     const term = new GhosttyVtTerminal(2, 2);
@@ -337,7 +347,7 @@ describe("GhosttyVtTerminal", () => {
     term.free();
   });
 
-  it("reads kitty placements", () => {
+  it('reads kitty placements', () => {
     const placement = {
       image_id: 3,
       placement_id: 9,
@@ -359,11 +369,13 @@ describe("GhosttyVtTerminal", () => {
       ghostty_terminal_new: vi.fn(() => 1),
       ghostty_terminal_free: vi.fn(),
       ghostty_terminal_get_kitty_placement_count: vi.fn(() => 1),
-      ghostty_terminal_get_kitty_placements: vi.fn((_handle: number, outBuffer: Buffer, count: number) => {
-        expect(count).toBe(1);
-        writeKittyPlacement(outBuffer, 0, placement);
-        return 1;
-      }),
+      ghostty_terminal_get_kitty_placements: vi.fn(
+        (_handle: number, outBuffer: Buffer, count: number) => {
+          expect(count).toBe(1);
+          writeKittyPlacement(outBuffer, 0, placement);
+          return 1;
+        }
+      ),
     };
 
     const term = new GhosttyVtTerminal(2, 2);

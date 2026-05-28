@@ -1,6 +1,12 @@
-import { describe, test, expect } from "bun:test";
+import { describe, test, expect } from 'bun:test';
 import { parseTerminalQueries } from '../../../src/terminal/terminal-query-passthrough/parser';
-import { CSI, ESC, XTWINOPS_14T, XTWINOPS_16T, XTWINOPS_18T } from '../../../src/terminal/terminal-query-passthrough/constants';
+import {
+  CSI,
+  ESC,
+  XTWINOPS_14T,
+  XTWINOPS_16T,
+  XTWINOPS_18T,
+} from '../../../src/terminal/terminal-query-passthrough/constants';
 
 describe('parseTerminalQueries', () => {
   describe('XTWINOPS queries', () => {

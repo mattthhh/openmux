@@ -1,7 +1,7 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from 'bun:test';
 import { KittyTransmitRelay } from '../../src/terminal/kitty-graphics/transmit-relay';
 
 const ESC = '\x1b';
@@ -121,7 +121,10 @@ describe('KittyTransmitRelay', () => {
       const second = PNG_1X1.slice(40, 80);
       const third = PNG_1X1.slice(80);
 
-      const firstResult = relay.handleSequence('pty-4b', `${ESC}_Ga=t,f=100,i=6,m=1;${first}${ESC}\\`);
+      const firstResult = relay.handleSequence(
+        'pty-4b',
+        `${ESC}_Ga=t,f=100,i=6,m=1;${first}${ESC}\\`
+      );
       expect(firstResult.forwardSequence).toBeNull();
       expect(firstResult.emuSequence).toContain('s=1');
       expect(firstResult.emuSequence).toContain('v=1');

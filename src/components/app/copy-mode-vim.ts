@@ -12,7 +12,10 @@ export function createCopyModeVimState(params: {
   config: ReturnType<typeof useConfig>;
   isCopyModeActive: () => boolean;
 }): {
-  getCopyVimHandler: () => { handleCombo: (combo: string) => { action: string | null; pending: boolean }; reset: () => void };
+  getCopyVimHandler: () => {
+    handleCombo: (combo: string) => { action: string | null; pending: boolean };
+    reset: () => void;
+  };
 } {
   const { config, isCopyModeActive } = params;
 

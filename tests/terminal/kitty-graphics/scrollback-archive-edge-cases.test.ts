@@ -1,5 +1,8 @@
-import { describe, expect, it, vi, beforeEach, afterEach } from "bun:test";
-import type { ITerminalEmulator, KittyGraphicsPlacement } from '../../../src/terminal/emulator-interface';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'bun:test';
+import type {
+  ITerminalEmulator,
+  KittyGraphicsPlacement,
+} from '../../../src/terminal/emulator-interface';
 import type { TerminalCell } from '../../../src/core/types';
 import type { ArchivePlacement } from '../../../src/terminal/kitty-graphics/archive-placement';
 import { ScrollbackArchive } from '../../../src/terminal/scrollback-archive';
@@ -7,11 +10,7 @@ import { ArchivedTerminalEmulator } from '../../../src/terminal/archived-emulato
 import { HOT_SCROLLBACK_LIMIT } from '../../../src/terminal/scrollback-config';
 import { ScrollbackArchiver } from '../../../src/effect/services/pty/scrollback-archiver';
 import type { InternalPtySession } from '../../../src/effect/services/pty/types';
-import {
-  createImageInfo,
-  createPlacement,
-  createMockEmulatorWithPlacements,
-} from './helpers';
+import { createImageInfo, createPlacement, createMockEmulatorWithPlacements } from './helpers';
 
 /**
  * Integration tests for Kitty graphics scrollback archive edge cases.
@@ -54,11 +53,11 @@ describe('Kitty Graphics Scrollback Archive Edge Cases', () => {
       // Trigger multiple rapid archival runs
       for (let i = 0; i < 5; i++) {
         archiver.schedule();
-        await new Promise(resolve => setTimeout(resolve, 10));
+        await new Promise((resolve) => setTimeout(resolve, 10));
       }
 
       // Wait for all async operations
-      await new Promise(resolve => setTimeout(resolve, 200));
+      await new Promise((resolve) => setTimeout(resolve, 200));
 
       // Verify archive has accumulated lines
       expect(archive.length).toBeGreaterThan(0);
@@ -77,7 +76,7 @@ describe('Kitty Graphics Scrollback Archive Edge Cases', () => {
       const scrollbackLength = HOT_SCROLLBACK_LIMIT + 3000;
       const placements: KittyGraphicsPlacement[] = [
         createPlacement(1, 1, { screenX: 0, screenY: 0, columns: 5, rows: 2 }),
-      ].map(p => ({ ...p, screenY: -scrollbackLength }));
+      ].map((p) => ({ ...p, screenY: -scrollbackLength }));
 
       const liveEmulator = createMockEmulatorWithPlacements({
         scrollbackLength,
@@ -94,13 +93,13 @@ describe('Kitty Graphics Scrollback Archive Edge Cases', () => {
       archiver.schedule();
       archiver.schedule();
 
-      await new Promise(resolve => setTimeout(resolve, 150));
+      await new Promise((resolve) => setTimeout(resolve, 150));
 
       const archivedEmulator = new ArchivedTerminalEmulator(liveEmulator, archive);
       const allPlacements = archivedEmulator.getKittyPlacements();
 
       // Should not have duplicate placements
-      const uniqueKeys = new Set(allPlacements.map(p => `${p.imageId}:${p.placementId}`));
+      const uniqueKeys = new Set(allPlacements.map((p) => `${p.imageId}:${p.placementId}`));
       expect(uniqueKeys.size).toBe(allPlacements.length);
 
       archive.dispose();
@@ -110,7 +109,7 @@ describe('Kitty Graphics Scrollback Archive Edge Cases', () => {
       const scrollbackLength = HOT_SCROLLBACK_LIMIT + 2500;
       const placements: KittyGraphicsPlacement[] = [
         createPlacement(1, 1, { screenX: 0, screenY: 0, columns: 10, rows: 5 }),
-      ].map(p => ({ ...p, screenY: -scrollbackLength }));
+      ].map((p) => ({ ...p, screenY: -scrollbackLength }));
 
       const liveEmulator = createMockEmulatorWithPlacements({
         scrollbackLength,
@@ -124,7 +123,7 @@ describe('Kitty Graphics Scrollback Archive Edge Cases', () => {
 
       // Start archival
       archiver.schedule();
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await new Promise((resolve) => setTimeout(resolve, 50));
 
       // Simulate interruption by disposing and recreating
       const initialLength = archive.length;
@@ -133,7 +132,7 @@ describe('Kitty Graphics Scrollback Archive Edge Cases', () => {
       const archiver2 = new ScrollbackArchiver(session, liveEmulator);
       archiver2.schedule();
 
-      await new Promise(resolve => setTimeout(resolve, 150));
+      await new Promise((resolve) => setTimeout(resolve, 150));
 
       // Should continue from where it left off
       expect(archive.length).toBeGreaterThanOrEqual(initialLength);
@@ -318,7 +317,7 @@ describe('Kitty Graphics Scrollback Archive Edge Cases', () => {
       expect(placements).toHaveLength(3);
 
       // Verify all image IDs are present in placements
-      const imageIds = placements.map(p => p.imageId).sort((a, b) => a - b);
+      const imageIds = placements.map((p) => p.imageId).sort((a, b) => a - b);
       expect(imageIds).toEqual([1, 2, 3]);
 
       archive.dispose();
@@ -431,7 +430,7 @@ describe('Kitty Graphics Scrollback Archive Edge Cases', () => {
       expect(retrieved).toHaveLength(100);
 
       // Verify order is preserved
-      const imageIds = retrieved.map(p => p.imageId).sort((a, b) => a - b);
+      const imageIds = retrieved.map((p) => p.imageId).sort((a, b) => a - b);
       for (let i = 0; i < 100; i++) {
         expect(imageIds[i]).toBe(i + 1);
       }
@@ -515,11 +514,13 @@ describe('Kitty Graphics Scrollback Archive Edge Cases', () => {
           (async () => {
             const lines = [createMockLine(80)];
             await archive1.appendLines(lines);
-            await archive1.appendPlacements([{
-              ...createPlacement(i + 1, 1, { screenX: 0, screenY: i, columns: 5, rows: 2 }),
-              archiveOffset: i,
-              originalScreenY: i,
-            }]);
+            await archive1.appendPlacements([
+              {
+                ...createPlacement(i + 1, 1, { screenX: 0, screenY: i, columns: 5, rows: 2 }),
+                archiveOffset: i,
+                originalScreenY: i,
+              },
+            ]);
           })()
         );
 
@@ -527,11 +528,13 @@ describe('Kitty Graphics Scrollback Archive Edge Cases', () => {
           (async () => {
             const lines = [createMockLine(80)];
             await archive2.appendLines(lines);
-            await archive2.appendPlacements([{
-              ...createPlacement(i + 100, 1, { screenX: 0, screenY: i, columns: 5, rows: 2 }),
-              archiveOffset: i,
-              originalScreenY: i,
-            }]);
+            await archive2.appendPlacements([
+              {
+                ...createPlacement(i + 100, 1, { screenX: 0, screenY: i, columns: 5, rows: 2 }),
+                archiveOffset: i,
+                originalScreenY: i,
+              },
+            ]);
           })()
         );
       }
@@ -549,8 +552,8 @@ describe('Kitty Graphics Scrollback Archive Edge Cases', () => {
       expect(p2).toHaveLength(10);
 
       // Verify no cross-contamination
-      expect(p1.every(pl => pl.imageId < 100)).toBe(true);
-      expect(p2.every(pl => pl.imageId >= 100)).toBe(true);
+      expect(p1.every((pl) => pl.imageId < 100)).toBe(true);
+      expect(p2.every((pl) => pl.imageId >= 100)).toBe(true);
 
       archive1.dispose();
       archive2.dispose();
@@ -673,21 +676,21 @@ function createMockSession(
   emulator: ITerminalEmulator
 ): InternalPtySession {
   return {
-    id: "test-pty",
-    pty: {} as unknown as InternalPtySession["pty"],
+    id: 'test-pty',
+    pty: {} as unknown as InternalPtySession['pty'],
     emulator,
     liveEmulator: emulator,
     scrollbackArchive: archive,
     scrollbackArchiver: null as unknown as ScrollbackArchiver,
-    queryPassthrough: {} as unknown as InternalPtySession["queryPassthrough"],
+    queryPassthrough: {} as unknown as InternalPtySession['queryPassthrough'],
     cols: 80,
     rows: 24,
     pixelWidth: 800,
     pixelHeight: 600,
     cellWidth: 10,
     cellHeight: 20,
-    cwd: "/home/test",
-    shell: "/bin/bash",
+    cwd: '/home/test',
+    shell: '/bin/bash',
     closing: false,
     subscribers: new Set(),
     scrollSubscribers: new Set(),

@@ -1,7 +1,7 @@
 /**
  * Tests for search helper functions
  */
-import { describe, it, expect } from "bun:test";
+import { describe, it, expect } from 'bun:test';
 import type { TerminalCell } from '../../src/core/types';
 import type { SearchMatch } from '../../src/contexts/search/types';
 import {
@@ -208,9 +208,7 @@ describe('buildMatchLookup', () => {
   });
 
   it('creates lookup for single match', () => {
-    const matches: SearchMatch[] = [
-      { lineIndex: 5, startCol: 10, endCol: 15 },
-    ];
+    const matches: SearchMatch[] = [{ lineIndex: 5, startCol: 10, endCol: 15 }];
 
     const lookup = buildMatchLookup(matches);
 
@@ -287,9 +285,7 @@ describe('buildMatchLookup', () => {
   });
 
   it('returns undefined for non-existent line', () => {
-    const matches: SearchMatch[] = [
-      { lineIndex: 5, startCol: 0, endCol: 5 },
-    ];
+    const matches: SearchMatch[] = [{ lineIndex: 5, startCol: 0, endCol: 5 }];
 
     const lookup = buildMatchLookup(matches);
 

@@ -3,10 +3,10 @@
  * Basic integration tests ensuring the module works end-to-end.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from "bun:test"
-import fs from "node:fs"
-import path from "node:path"
-import os from "node:os"
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
 import {
   ScrollbackArchive,
   ScrollbackArchiveManager,
@@ -16,32 +16,32 @@ import {
   unpackPlacements,
   loadMeta,
   flushMeta,
-} from "../"
+} from '../';
 
-describe("scrollback smoke", () => {
-  let tempDir: string
+describe('scrollback smoke', () => {
+  let tempDir: string;
 
   beforeEach(() => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "scrollback-smoke-"))
-  })
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'scrollback-smoke-'));
+  });
 
   afterEach(() => {
-    fs.rmSync(tempDir, { recursive: true, force: true })
-  })
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
 
-  it("exports all public APIs", () => {
-    expect(ScrollbackArchive).toBeDefined()
-    expect(ScrollbackArchiveManager).toBeDefined()
-    expect(createChunk).toBeDefined()
-    expect(findChunk).toBeDefined()
-    expect(packPlacements).toBeDefined()
-    expect(unpackPlacements).toBeDefined()
-    expect(loadMeta).toBeDefined()
-    expect(flushMeta).toBeDefined()
-  })
+  it('exports all public APIs', () => {
+    expect(ScrollbackArchive).toBeDefined();
+    expect(ScrollbackArchiveManager).toBeDefined();
+    expect(createChunk).toBeDefined();
+    expect(findChunk).toBeDefined();
+    expect(packPlacements).toBeDefined();
+    expect(unpackPlacements).toBeDefined();
+    expect(loadMeta).toBeDefined();
+    expect(flushMeta).toBeDefined();
+  });
 
-  it("basic archive workflow", async () => {
-    const archive = new ScrollbackArchive({ rootDir: tempDir })
+  it('basic archive workflow', async () => {
+    const archive = new ScrollbackArchive({ rootDir: tempDir });
 
     // Create simple test lines with different row identifiers
     const lines = Array.from({ length: 3 }, (_, row) =>
@@ -58,30 +58,30 @@ describe("scrollback smoke", () => {
         dim: false,
         width: 1 as const,
       }))
-    )
+    );
 
     // Append lines
-    await archive.appendLines(lines)
-    expect(archive.length).toBe(3)
+    await archive.appendLines(lines);
+    expect(archive.length).toBe(3);
 
     // Read back line 1 - should have 'B' as first char (65 + 1 = 66 = 'B')
-    const retrieved = archive.getLine(1)
-    expect(retrieved).not.toBeNull()
-    expect(retrieved![0].char).toBe("B")
+    const retrieved = archive.getLine(1);
+    expect(retrieved).not.toBeNull();
+    expect(retrieved![0].char).toBe('B');
 
     // Cleanup
-    archive.dispose()
-  })
+    archive.dispose();
+  });
 
-  it("archive with manager workflow", async () => {
-    const manager = new ScrollbackArchiveManager(10 * 1024 * 1024)
+  it('archive with manager workflow', async () => {
+    const manager = new ScrollbackArchiveManager(10 * 1024 * 1024);
     const archive = new ScrollbackArchive({
       rootDir: tempDir,
       manager,
-    })
+    });
 
     const line = Array.from({ length: 80 }, () => ({
-      char: "X",
+      char: 'X',
       fg: { r: 200, g: 200, b: 200 },
       bg: { r: 0, g: 0, b: 0 },
       bold: true,
@@ -92,18 +92,18 @@ describe("scrollback smoke", () => {
       blink: false,
       dim: false,
       width: 1 as const,
-    }))
+    }));
 
-    await archive.appendLines([line])
-    expect(manager.getArchiveCount()).toBe(1)
+    await archive.appendLines([line]);
+    expect(manager.getArchiveCount()).toBe(1);
 
-    archive.dispose()
-    expect(manager.getArchiveCount()).toBe(0)
-  })
+    archive.dispose();
+    expect(manager.getArchiveCount()).toBe(0);
+  });
 
-  it("persistence round-trip", async () => {
+  it('persistence round-trip', async () => {
     // Create and populate
-    const archive1 = new ScrollbackArchive({ rootDir: tempDir })
+    const archive1 = new ScrollbackArchive({ rootDir: tempDir });
 
     const line = Array.from({ length: 80 }, (_, i) => ({
       char: String.fromCharCode(48 + (i % 10)),
@@ -117,21 +117,21 @@ describe("scrollback smoke", () => {
       blink: false,
       dim: false,
       width: 1 as const,
-    }))
+    }));
 
-    await archive1.appendLines([line, line])
-    archive1.dispose()
+    await archive1.appendLines([line, line]);
+    archive1.dispose();
 
     // Recreate and verify
-    const archive2 = new ScrollbackArchive({ rootDir: tempDir })
-    expect(archive2.length).toBe(2)
+    const archive2 = new ScrollbackArchive({ rootDir: tempDir });
+    expect(archive2.length).toBe(2);
 
-    const retrieved = archive2.getLine(0)
-    expect(retrieved).not.toBeNull()
-    expect(retrieved![0].char).toBe("0")
-    expect(retrieved![0].fg.r).toBe(0)
-    expect(retrieved![0].bold).toBe(true)
+    const retrieved = archive2.getLine(0);
+    expect(retrieved).not.toBeNull();
+    expect(retrieved![0].char).toBe('0');
+    expect(retrieved![0].fg.r).toBe(0);
+    expect(retrieved![0].bold).toBe(true);
 
-    archive2.dispose()
-  })
-})
+    archive2.dispose();
+  });
+});

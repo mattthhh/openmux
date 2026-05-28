@@ -4,7 +4,13 @@
 
 import type { PaneData, Workspace } from '../../types';
 import type { LayoutState } from './types';
-import { getActiveWorkspace, updateWorkspace, recalculateLayout, generatePaneId, generateSplitId } from './helpers';
+import {
+  getActiveWorkspace,
+  updateWorkspace,
+  recalculateLayout,
+  generatePaneId,
+  generateSplitId,
+} from './helpers';
 import { containsPane, replacePaneWithSplit } from '../../layout-tree';
 
 export function handleSplitPane(
@@ -41,7 +47,9 @@ export function handleSplitPane(
       focusedPaneId: newPaneId,
     };
   } else {
-    const stackIndex = workspace.stackPanes.findIndex(p => containsPane(p, workspace.focusedPaneId!));
+    const stackIndex = workspace.stackPanes.findIndex((p) =>
+      containsPane(p, workspace.focusedPaneId!)
+    );
     if (stackIndex < 0) return state;
 
     const newStack = workspace.stackPanes.map((pane, index) =>

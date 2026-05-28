@@ -14,11 +14,14 @@ export type CliCommand =
   | { kind: 'session.create'; name?: string }
   | ({ kind: 'pane.split'; direction: 'horizontal' | 'vertical' } & PaneCommandBase)
   | ({ kind: 'pane.send'; text: string } & PaneCommandBase)
-  | ({ kind: 'pane.capture'; format: 'text' | 'ansi'; lines: number; raw: boolean } & PaneCommandBase);
+  | ({
+      kind: 'pane.capture';
+      format: 'text' | 'ansi';
+      lines: number;
+      raw: boolean;
+    } & PaneCommandBase);
 
-export type ParseResult =
-  | { ok: true; command: CliCommand }
-  | { ok: false; error: string };
+export type ParseResult = { ok: true; command: CliCommand } | { ok: false; error: string };
 
 const HELP_FLAGS = new Set(['-h', '--help']);
 
@@ -51,7 +54,11 @@ function resolveHelpTopic(args: string[]): HelpTopic {
   return 'root';
 }
 
-function readOptionValue(args: string[], index: number, flag: string): { value: string; nextIndex: number } | { error: string } {
+function readOptionValue(
+  args: string[],
+  index: number,
+  flag: string
+): { value: string; nextIndex: number } | { error: string } {
   const arg = args[index];
   const eqIndex = arg.indexOf('=');
   if (eqIndex >= 0) {

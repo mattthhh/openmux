@@ -14,9 +14,7 @@ export interface AggregateListViewport extends AggregateListViewportParams {
   hiddenBelowCount: number;
 }
 
-export function clampAggregateListScrollOffset(
-  params: AggregateListViewportParams
-): number {
+export function clampAggregateListScrollOffset(params: AggregateListViewportParams): number {
   const { totalItems, maxRows, scrollOffset } = params;
 
   if (totalItems <= 0 || maxRows <= 0 || totalItems <= maxRows) {

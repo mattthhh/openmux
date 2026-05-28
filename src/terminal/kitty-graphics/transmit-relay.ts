@@ -56,7 +56,11 @@ export class KittyTransmitRelay {
   private stubAllFormats = false;
   private stubSharedMemory = true;
 
-  constructor(options?: { stubPng?: boolean; stubAllFormats?: boolean; stubSharedMemory?: boolean }) {
+  constructor(options?: {
+    stubPng?: boolean;
+    stubAllFormats?: boolean;
+    stubSharedMemory?: boolean;
+  }) {
     this.offloadThresholdBytes = resolveKittyOffloadThreshold();
     this.offloadCleanupDelayMs = resolveKittyOffloadCleanupDelay();
     const stubEnv = (process.env.OPENMUX_KITTY_EMULATOR_STUB ?? '').toLowerCase();
@@ -146,7 +150,10 @@ export class KittyTransmitRelay {
     }
 
     const mergedParams = mergeTransmitParams(this.pendingChunk?.params ?? null, transmit);
-    const mergedControlParams = mergeControlParams(this.pendingChunk?.controlParams ?? null, parsed.params);
+    const mergedControlParams = mergeControlParams(
+      this.pendingChunk?.controlParams ?? null,
+      parsed.params
+    );
     const medium = mergedParams.medium ?? 'd';
     const isPng = (mergedParams.format ?? '') === '100';
 
@@ -157,14 +164,12 @@ export class KittyTransmitRelay {
     }
 
     const activeOffload = this.pendingChunk?.offload ?? null;
-    const shouldOffload = activeOffload ?? this.shouldOffload(mergedParams, parsed.data, transmit.more);
+    const shouldOffload =
+      activeOffload ?? this.shouldOffload(mergedParams, parsed.data, transmit.more);
     const shouldStubSharedMemory = this.stubSharedMemory && medium === 's';
     const shouldStubByFormat = this.stubAllFormats && (medium !== 's' || this.stubSharedMemory);
     const shouldStubEmulator =
-      this.stubEmulator ||
-      shouldStubByFormat ||
-      (this.stubPng && isPng) ||
-      shouldStubSharedMemory;
+      this.stubEmulator || shouldStubByFormat || (this.stubPng && isPng) || shouldStubSharedMemory;
     let offloadDims: { width: number; height: number } | null = null;
     let forwardSequence: string | null = null;
     if (shouldOffload) {
@@ -207,9 +212,10 @@ export class KittyTransmitRelay {
 
     if (shouldStubEmulator && (medium === 'f' || medium === 't') && transmit.more) {
       const filePayload = `${this.pendingChunk?.mode === 'buffer' ? this.pendingChunk.filePayload : ''}${parsed.data}`;
-      const controlParams = this.pendingChunk?.mode === 'buffer'
-        ? mergeControlParams(this.pendingChunk.controlParams, parsed.params)
-        : mergedControlParams;
+      const controlParams =
+        this.pendingChunk?.mode === 'buffer'
+          ? mergeControlParams(this.pendingChunk.controlParams, parsed.params)
+          : mergedControlParams;
       this.pendingChunk = {
         guestKey,
         params: mergedParams,
@@ -228,7 +234,12 @@ export class KittyTransmitRelay {
       const baseParams = this.pendingChunk.controlParams ?? parsed.params;
       const controlParams = new Map(baseParams);
       const rebuiltControl = rebuildControl(controlParams);
-      parsedForStub = { ...parsed, data: combinedPayload, params: controlParams, control: rebuiltControl };
+      parsedForStub = {
+        ...parsed,
+        data: combinedPayload,
+        params: controlParams,
+        control: rebuiltControl,
+      };
       forwardSequence = buildForwardFileSequence(controlParams, combinedPayload);
       const emuParams = new Map(controlParams);
       emuParams.delete('m');
@@ -262,11 +273,7 @@ export class KittyTransmitRelay {
     }
 
     if (transmit.more) {
-      const mode = this.pendingChunk?.mode === 'buffer'
-        ? 'buffer'
-        : stubbed
-          ? 'stub'
-          : 'pass';
+      const mode = this.pendingChunk?.mode === 'buffer' ? 'buffer' : stubbed ? 'stub' : 'pass';
       this.pendingChunk = {
         guestKey,
         params: mergedParams,
@@ -324,9 +331,11 @@ export class KittyTransmitRelay {
         return { emuSequence: null, dropEmulator: false };
       }
       if (medium !== 's') {
-        const dims = dimsOverride ?? (medium === 'd'
-          ? parsePngDimensionsFromBase64(parsed.data)
-          : parsePngDimensionsFromFilePayload(parsed.data));
+        const dims =
+          dimsOverride ??
+          (medium === 'd'
+            ? parsePngDimensionsFromBase64(parsed.data)
+            : parsePngDimensionsFromFilePayload(parsed.data));
         if (dims) {
           controlParams.set('s', String(dims.width));
           controlParams.set('v', String(dims.height));
@@ -353,7 +362,10 @@ export class KittyTransmitRelay {
     if (!forceStub) {
       this.stubbedGuestKeys.add(guestKey);
     }
-    return { emuSequence: `${parsed.prefix}${rebuiltControl};${parsed.suffix}`, dropEmulator: false };
+    return {
+      emuSequence: `${parsed.prefix}${rebuiltControl};${parsed.suffix}`,
+      dropEmulator: false,
+    };
   }
 
   private shouldOffload(params: TransmitParams, data: string, isChunked: boolean): boolean {
@@ -452,7 +464,10 @@ function nextSynthetic(current: number): number {
   return next;
 }
 
-function buildForwardFileSequence(controlParamsInput: Map<string, string>, payload: string): string {
+function buildForwardFileSequence(
+  controlParamsInput: Map<string, string>,
+  payload: string
+): string {
   const controlParams = new Map(controlParamsInput);
   controlParams.set('a', 't');
   controlParams.set('q', '2');

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from 'bun:test';
 import { TerminalQueryPassthrough } from '../../../src/terminal/terminal-query-passthrough';
 import { generateDa1Response } from '../../../src/terminal/terminal-query-passthrough/responses';
 import { BEL, ESC, ST } from '../../../src/terminal/terminal-query-passthrough/constants';

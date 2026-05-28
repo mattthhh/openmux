@@ -10,7 +10,13 @@ import { refreshPty } from '../../effect/bridge/pty-bridge';
 export interface PaneResizeDeps {
   getPanes: () => PaneData[];
 
-  resizePTY: (ptyId: string, cols: number, rows: number, pixelWidth?: number, pixelHeight?: number) => void;
+  resizePTY: (
+    ptyId: string,
+    cols: number,
+    rows: number,
+    pixelWidth?: number,
+    pixelHeight?: number
+  ) => void;
   getCellMetrics?: () => { cellWidth: number; cellHeight: number } | null;
 }
 
@@ -18,13 +24,14 @@ export interface PaneResizeDeps {
  * Create pane resize handlers
  */
 export function createPaneResizeHandlers(deps: PaneResizeDeps) {
-  const {
-    getPanes,
-    resizePTY,
-    getCellMetrics,
-  } = deps;
+  const { getPanes, resizePTY, getCellMetrics } = deps;
 
-  type PaneGeometry = { cols: number; rows: number; pixelWidth: number | null; pixelHeight: number | null };
+  type PaneGeometry = {
+    cols: number;
+    rows: number;
+    pixelWidth: number | null;
+    pixelHeight: number | null;
+  };
   const lastGeometry = new Map<string, PaneGeometry>();
   const RESIZE_BATCH_SIZE = 2;
   let resizeScheduled = false;
@@ -41,7 +48,8 @@ export function createPaneResizeHandlers(deps: PaneResizeDeps) {
     const pixelHeight = metrics ? rows * metrics.cellHeight : null;
     const geometry: PaneGeometry = { cols, rows, pixelWidth, pixelHeight };
     const previous = lastGeometry.get(pane.ptyId);
-    const sizeChanged = !previous ||
+    const sizeChanged =
+      !previous ||
       previous.cols !== cols ||
       previous.rows !== rows ||
       previous.pixelWidth !== pixelWidth ||

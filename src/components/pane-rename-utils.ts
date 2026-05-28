@@ -1,8 +1,6 @@
 export const DEFAULT_PANE_TITLE = 'shell';
 
-export type PaneRenameResult =
-  | { type: 'clear'; title: string }
-  | { type: 'manual'; title: string };
+export type PaneRenameResult = { type: 'clear'; title: string } | { type: 'manual'; title: string };
 
 export function resolvePaneRename(
   value: string,

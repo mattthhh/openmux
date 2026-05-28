@@ -49,7 +49,7 @@ export function sessionReducer(state: SessionState, action: SessionAction): Sess
       let newSelectedIndex = 0;
       if (!state.showSessionPicker && state.sessions.length > 1) {
         // Find the first session that is not the currently active one
-        const otherSessionIndex = state.sessions.findIndex(s => s.id !== state.activeSessionId);
+        const otherSessionIndex = state.sessions.findIndex((s) => s.id !== state.activeSessionId);
         newSelectedIndex = otherSessionIndex !== -1 ? otherSessionIndex : 0;
       }
       return {
@@ -89,7 +89,7 @@ export function sessionReducer(state: SessionState, action: SessionAction): Sess
       };
 
     case 'NAVIGATE_DOWN': {
-      const filteredCount = state.sessions.filter(s =>
+      const filteredCount = state.sessions.filter((s) =>
         s.name.toLowerCase().includes(state.searchQuery.toLowerCase())
       ).length;
       return {

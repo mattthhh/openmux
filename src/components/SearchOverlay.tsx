@@ -118,7 +118,9 @@ export function SearchOverlay(props: SearchOverlayProps) {
             <text fg={overlayFg()}>{queryDisplay(state().query)}</text>
             <text fg={accentColor()}>{cursorText}</text>
             <text fg={overlaySeparator()}>{spacerText}</text>
-            <text fg={state().matches.length > 0 ? overlayMatch() : overlaySubtle()}>{matchDisplay()}</text>
+            <text fg={state().matches.length > 0 ? overlayMatch() : overlaySubtle()}>
+              {matchDisplay()}
+            </text>
             <Show when={hintDisplay().length > 0}>
               <text fg={overlaySeparator()}>{spacerText}</text>
               <text fg={overlaySubtle()}>{hintDisplay()}</text>

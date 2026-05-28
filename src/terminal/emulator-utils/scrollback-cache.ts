@@ -1,54 +1,51 @@
 /**
  * Scrollback Cache - LRU cache for scrollback lines
  */
-import type { TerminalCell, DirtyTerminalUpdate } from '../../core/types'
-import type { TerminalModes } from '../emulator-interface'
+import type { TerminalCell, DirtyTerminalUpdate } from '../../core/types';
+import type { TerminalModes } from '../emulator-interface';
 
 /**
  * ScrollbackCache manages cached scrollback lines with LRU eviction
  */
 export class ScrollbackCache {
-  private cache = new Map<number, TerminalCell[]>()
-  private maxSize: number
-  private lastScrollbackLength = 0
+  private cache = new Map<number, TerminalCell[]>();
+  private maxSize: number;
+  private lastScrollbackLength = 0;
 
   constructor(maxSize = 1000) {
-    this.maxSize = maxSize
+    this.maxSize = maxSize;
   }
 
   get(offset: number): TerminalCell[] | null {
-    return this.cache.get(offset) ?? null
+    return this.cache.get(offset) ?? null;
   }
 
   set(offset: number, cells: TerminalCell[]): void {
-    this.cache.set(offset, cells)
-    this.prune()
+    this.cache.set(offset, cells);
+    this.prune();
   }
 
   setMany(lines: Map<number, TerminalCell[]>): void {
     for (const [offset, cells] of lines) {
-      this.cache.set(offset, cells)
+      this.cache.set(offset, cells);
     }
-    this.prune()
+    this.prune();
   }
 
   clear(): void {
-    this.cache.clear()
+    this.cache.clear();
   }
 
   get size(): number {
-    return this.cache.size
+    return this.cache.size;
   }
 
   /**
    * Handle scrollback changes and determine if cache should be cleared
    * Returns true if cache was cleared
    */
-  handleScrollbackChange(
-    newScrollbackLength: number,
-    isAtScrollbackLimit: boolean
-  ): boolean {
-    const scrollbackDelta = newScrollbackLength - this.lastScrollbackLength
+  handleScrollbackChange(newScrollbackLength: number, isAtScrollbackLimit: boolean): boolean {
+    const scrollbackDelta = newScrollbackLength - this.lastScrollbackLength;
 
     // Smart cache invalidation to prevent flicker when scrolled back:
     // - When scrollback GROWS (delta > 0): existing cached lines at their absolute
@@ -58,26 +55,27 @@ export class ScrollbackCache {
     // - When scrollback stays same (delta == 0) but NOT at limit: just in-place
     //   updates (animations, cursor moves), cache is still valid, don't clear
     // - When scrollback shrinks (delta < 0): reset occurred, must clear
-    const contentShifted = scrollbackDelta < 0 ||
-      (scrollbackDelta === 0 && isAtScrollbackLimit && this.lastScrollbackLength > 0)
+    const contentShifted =
+      scrollbackDelta < 0 ||
+      (scrollbackDelta === 0 && isAtScrollbackLimit && this.lastScrollbackLength > 0);
 
     if (contentShifted) {
-      this.clear()
+      this.clear();
     }
 
-    this.lastScrollbackLength = newScrollbackLength
-    return contentShifted
+    this.lastScrollbackLength = newScrollbackLength;
+    return contentShifted;
   }
 
   private prune(): void {
     // Simple LRU eviction by removing oldest entries
     if (this.cache.size > this.maxSize) {
-      const excess = this.cache.size - this.maxSize
-      const iterator = this.cache.keys()
+      const excess = this.cache.size - this.maxSize;
+      const iterator = this.cache.keys();
       for (let i = 0; i < excess; i++) {
-        const key = iterator.next().value
+        const key = iterator.next().value;
         if (key !== undefined) {
-          this.cache.delete(key)
+          this.cache.delete(key);
         }
       }
     }
@@ -93,5 +91,5 @@ export function shouldClearCacheOnUpdate(
 ): boolean {
   // Clear scrollback cache when alternate screen mode changes
   // (entering/exiting vim, htop, etc.) - not on resize, to prevent flash
-  return currentModes.alternateScreen !== update.alternateScreen
+  return currentModes.alternateScreen !== update.alternateScreen;
 }

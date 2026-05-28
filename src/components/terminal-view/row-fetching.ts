@@ -1,19 +1,19 @@
 /**
  * Row Fetching - handles fetching rows for terminal rendering with scrollback
  */
-import type { TerminalCell, TerminalState } from '../../core/types'
-import type { ITerminalEmulator } from '../../terminal/emulator-interface'
+import type { TerminalCell, TerminalState } from '../../core/types';
+import type { ITerminalEmulator } from '../../terminal/emulator-interface';
 
 export interface RowFetchingOptions {
-  viewportOffset: number
-  scrollbackLength: number
-  rows: number
+  viewportOffset: number;
+  scrollbackLength: number;
+  rows: number;
 }
 
 export interface RowFetchResult {
-  rowCache: (TerminalCell[] | null)[]
-  firstMissingOffset: number
-  lastMissingOffset: number
+  rowCache: (TerminalCell[] | null)[];
+  firstMissingOffset: number;
+  lastMissingOffset: number;
 }
 
 /**
@@ -25,52 +25,52 @@ export function fetchRowsForRendering(
   emulator: ITerminalEmulator | null,
   options: RowFetchingOptions
 ): RowFetchResult {
-  const { viewportOffset, scrollbackLength, rows } = options
+  const { viewportOffset, scrollbackLength, rows } = options;
 
-  const currentEmulator = viewportOffset > 0 ? emulator : null
-  const rowCache: (TerminalCell[] | null)[] = new Array(rows)
+  const currentEmulator = viewportOffset > 0 ? emulator : null;
+  const rowCache: (TerminalCell[] | null)[] = new Array(rows);
 
   // Track missing scrollback lines for prefetching
-  let firstMissingOffset = -1
-  let lastMissingOffset = -1
+  let firstMissingOffset = -1;
+  let lastMissingOffset = -1;
 
   for (let y = 0; y < rows; y++) {
     if (viewportOffset === 0) {
       // Normal case: use live terminal rows
-      rowCache[y] = state.cells[y] ?? null
+      rowCache[y] = state.cells[y] ?? null;
     } else {
       // Scrolled back: calculate which row to fetch
-      const absoluteY = scrollbackLength - viewportOffset + y
+      const absoluteY = scrollbackLength - viewportOffset + y;
 
       if (absoluteY < 0) {
         // Before scrollback
-        rowCache[y] = null
+        rowCache[y] = null;
       } else if (absoluteY < scrollbackLength) {
         // In scrollback buffer - ask emulator (may populate cache synchronously)
-        const line = currentEmulator?.getScrollbackLine(absoluteY) ?? null
-        rowCache[y] = line
+        const line = currentEmulator?.getScrollbackLine(absoluteY) ?? null;
+        rowCache[y] = line;
         // Track missing scrollback lines (null when should have data)
         if (line === null && currentEmulator) {
           if (firstMissingOffset === -1) {
-            firstMissingOffset = absoluteY
+            firstMissingOffset = absoluteY;
           }
-          lastMissingOffset = absoluteY
+          lastMissingOffset = absoluteY;
         }
       } else {
         // In live terminal area
-        const liveY = absoluteY - scrollbackLength
-        rowCache[y] = state.cells[liveY] ?? null
+        const liveY = absoluteY - scrollbackLength;
+        rowCache[y] = state.cells[liveY] ?? null;
       }
     }
   }
 
-  return { rowCache, firstMissingOffset, lastMissingOffset }
+  return { rowCache, firstMissingOffset, lastMissingOffset };
 }
 
 export interface PrefetchRequest {
-  ptyId: string
-  start: number
-  count: number
+  ptyId: string;
+  start: number;
+  count: number;
 }
 
 /**
@@ -85,14 +85,14 @@ export function calculatePrefetchRequest(
   rows: number
 ): PrefetchRequest | null {
   if (firstMissingOffset === -1) {
-    return null
+    return null;
   }
 
   // Prefetch buffer: 2x viewport height above current position
-  const bufferSize = rows * 2
-  const prefetchStart = Math.max(0, firstMissingOffset - bufferSize)
-  const prefetchEnd = Math.min(scrollbackLength - 1, lastMissingOffset + rows)
-  const count = prefetchEnd - prefetchStart + 1
+  const bufferSize = rows * 2;
+  const prefetchStart = Math.max(0, firstMissingOffset - bufferSize);
+  const prefetchEnd = Math.min(scrollbackLength - 1, lastMissingOffset + rows);
+  const count = prefetchEnd - prefetchStart + 1;
 
-  return { ptyId, start: prefetchStart, count }
+  return { ptyId, start: prefetchStart, count };
 }

@@ -165,7 +165,14 @@ describe('buildWordSelection', () => {
     start: 6,
     end: 10,
     absY: 50,
-    line: [{ char: ' ' }, { char: 'w' }, { char: 'o' }, { char: 'r' }, { char: 'l' }, { char: 'd' }] as any,
+    line: [
+      { char: ' ' },
+      { char: 'w' },
+      { char: 'o' },
+      { char: 'r' },
+      { char: 'l' },
+      { char: 'd' },
+    ] as any,
   };
 
   it('builds inner word selection', () => {
@@ -179,7 +186,7 @@ describe('buildWordSelection', () => {
   it('builds around word selection with trailing space', () => {
     const wordWithTrailing = {
       start: 1, // word starts at index 1
-      end: 5,   // word ends at index 5
+      end: 5, // word ends at index 5
       absY: 50,
       line: [
         { char: ' ' },

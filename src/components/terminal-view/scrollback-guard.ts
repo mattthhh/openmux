@@ -1,4 +1,4 @@
-import type { TerminalCell } from '../../core/types'
+import type { TerminalCell } from '../../core/types';
 
 /**
  * Scrollback render guard
@@ -8,28 +8,26 @@ import type { TerminalCell } from '../../core/types'
  * (performance) by providing view-side consistency during scroll interactions.
  */
 export interface ScrollbackGuardOptions {
-  desiredViewportOffset: number
-  desiredScrollbackLength: number
-  rows: number
-  desiredRowCache: (TerminalCell[] | null)[]
-  lastStableViewportOffset: number
-  lastStableScrollbackLength: number
-  lastObservedViewportOffset: number
-  lastObservedScrollbackLength: number
+  desiredViewportOffset: number;
+  desiredScrollbackLength: number;
+  rows: number;
+  desiredRowCache: (TerminalCell[] | null)[];
+  lastStableViewportOffset: number;
+  lastStableScrollbackLength: number;
+  lastObservedViewportOffset: number;
+  lastObservedScrollbackLength: number;
 }
 
 export interface ScrollbackGuardResult {
-  shouldDefer: boolean
-  isUserScroll: boolean
-  renderViewportOffset: number
-  renderScrollbackLength: number
-  renderRowCache: (TerminalCell[] | null)[]
-  hasMissingScrollback: boolean
+  shouldDefer: boolean;
+  isUserScroll: boolean;
+  renderViewportOffset: number;
+  renderScrollbackLength: number;
+  renderRowCache: (TerminalCell[] | null)[];
+  hasMissingScrollback: boolean;
 }
 
-export function guardScrollbackRender(
-  options: ScrollbackGuardOptions
-): ScrollbackGuardResult {
+export function guardScrollbackRender(options: ScrollbackGuardOptions): ScrollbackGuardResult {
   const {
     desiredViewportOffset,
     desiredScrollbackLength,
@@ -39,33 +37,33 @@ export function guardScrollbackRender(
     lastStableScrollbackLength,
     lastObservedViewportOffset,
     lastObservedScrollbackLength,
-  } = options
+  } = options;
 
-  const scrollbackDelta = desiredScrollbackLength - lastObservedScrollbackLength
-  const shouldAutoAdjust = scrollbackDelta !== 0 && lastObservedViewportOffset > 0
+  const scrollbackDelta = desiredScrollbackLength - lastObservedScrollbackLength;
+  const shouldAutoAdjust = scrollbackDelta !== 0 && lastObservedViewportOffset > 0;
   const expectedViewportOffset = shouldAutoAdjust
     ? Math.max(0, Math.min(lastObservedViewportOffset + scrollbackDelta, desiredScrollbackLength))
-    : lastObservedViewportOffset
-  const isUserScroll = desiredViewportOffset !== expectedViewportOffset
+    : lastObservedViewportOffset;
+  const isUserScroll = desiredViewportOffset !== expectedViewportOffset;
 
-  let hasMissingScrollback = false
-  const renderRowCache: (TerminalCell[] | null)[] = new Array(rows)
+  let hasMissingScrollback = false;
+  const renderRowCache: (TerminalCell[] | null)[] = new Array(rows);
   for (let y = 0; y < rows; y++) {
-    const absoluteY = desiredScrollbackLength - desiredViewportOffset + y
-    const row = desiredRowCache[y]
-    renderRowCache[y] = row
+    const absoluteY = desiredScrollbackLength - desiredViewportOffset + y;
+    const row = desiredRowCache[y];
+    renderRowCache[y] = row;
     if (row === null && absoluteY >= 0 && absoluteY < desiredScrollbackLength) {
-      hasMissingScrollback = true
+      hasMissingScrollback = true;
     }
   }
 
-  const shouldDefer = (isUserScroll || desiredViewportOffset > 0) && hasMissingScrollback
+  const shouldDefer = (isUserScroll || desiredViewportOffset > 0) && hasMissingScrollback;
   const renderViewportOffset = shouldDefer
     ? Math.min(lastStableViewportOffset, desiredScrollbackLength)
-    : desiredViewportOffset
+    : desiredViewportOffset;
   const renderScrollbackLength = shouldDefer
     ? Math.min(lastStableScrollbackLength, desiredScrollbackLength)
-    : desiredScrollbackLength
+    : desiredScrollbackLength;
 
   return {
     shouldDefer,
@@ -74,5 +72,5 @@ export function guardScrollbackRender(
     renderScrollbackLength,
     renderRowCache,
     hasMissingScrollback,
-  }
+  };
 }

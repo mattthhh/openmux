@@ -2,25 +2,25 @@
  * Tests for OSC stripping used by ghostty-vt emulator.
  */
 
-import { describe, it, expect } from "bun:test";
-import { stripProblematicOscSequences } from "../../src/terminal/ghostty-vt/osc-stripping";
+import { describe, it, expect } from 'bun:test';
+import { stripProblematicOscSequences } from '../../src/terminal/ghostty-vt/osc-stripping';
 
-describe("stripProblematicOscSequences", () => {
-  const ESC = "\x1b";
-  const BEL = "\x07";
+describe('stripProblematicOscSequences', () => {
+  const ESC = '\x1b';
+  const BEL = '\x07';
 
-  it("strips title and color set sequences", () => {
+  it('strips title and color set sequences', () => {
     const input = `A${ESC}]0;title${BEL}B${ESC}]10;#ffffff${BEL}C`;
-    expect(stripProblematicOscSequences(input)).toBe("ABC");
+    expect(stripProblematicOscSequences(input)).toBe('ABC');
   });
 
-  it("preserves color query sequences", () => {
+  it('preserves color query sequences', () => {
     const input = `A${ESC}]10;?${BEL}B`;
     expect(stripProblematicOscSequences(input)).toBe(input);
   });
 
-  it("strips desktop notification sequences", () => {
+  it('strips desktop notification sequences', () => {
     const input = `A${ESC}]9;Title;Body${BEL}B${ESC}]777;notify;Task;Done${BEL}C`;
-    expect(stripProblematicOscSequences(input)).toBe("ABC");
+    expect(stripProblematicOscSequences(input)).toBe('ABC');
   });
 });

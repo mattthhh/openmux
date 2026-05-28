@@ -1,4 +1,4 @@
-import { describe, test, expect } from "bun:test";
+import { describe, test, expect } from 'bun:test';
 import { parseTerminalQueries } from '../../../src/terminal/terminal-query-passthrough/parser';
 import {
   BEL,

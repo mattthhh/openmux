@@ -1,17 +1,17 @@
-import type { DesktopNotification } from "./command-parser";
-import { getHostCapabilities } from "./capabilities";
-import { hasHostSequenceWriter, writeHostSequence } from "./host-output";
+import type { DesktopNotification } from './command-parser';
+import { getHostCapabilities } from './capabilities';
+import { hasHostSequenceWriter, writeHostSequence } from './host-output';
 
-const DESKTOP_NOTIFICATIONS_ENV = "OPENMUX_DESKTOP_NOTIFICATIONS";
-const DESKTOP_NOTIFICATION_SOUND_ENV = "OPENMUX_NOTIFICATION_SOUND";
-const DEFAULT_NOTIFICATION_TITLE = "openmux";
-const OSC_ESCAPE = "\x1b";
-const OSC_BEL = "\x07";
+const DESKTOP_NOTIFICATIONS_ENV = 'OPENMUX_DESKTOP_NOTIFICATIONS';
+const DESKTOP_NOTIFICATION_SOUND_ENV = 'OPENMUX_NOTIFICATION_SOUND';
+const DEFAULT_NOTIFICATION_TITLE = 'openmux';
+const OSC_ESCAPE = '\x1b';
+const OSC_BEL = '\x07';
 
 function desktopNotificationsEnabled(): boolean {
-  if (process.platform !== "darwin") return false;
-  const raw = (process.env[DESKTOP_NOTIFICATIONS_ENV] ?? "").toLowerCase();
-  if (raw === "0" || raw === "false" || raw === "off") return false;
+  if (process.platform !== 'darwin') return false;
+  const raw = (process.env[DESKTOP_NOTIFICATIONS_ENV] ?? '').toLowerCase();
+  if (raw === '0' || raw === 'false' || raw === 'off') return false;
   return true;
 }
 
@@ -27,12 +27,12 @@ function hostNotificationEnabled(): boolean {
     process.env.TERM_PROGRAM,
     process.env.TERM,
   ];
-  const hint = hintParts.filter(Boolean).join(" ").toLowerCase();
-  return hint.includes("ghostty");
+  const hint = hintParts.filter(Boolean).join(' ').toLowerCase();
+  return hint.includes('ghostty');
 }
 
 function sanitizeOscPayload(text: string): string {
-  return text.replace(/[\x00-\x1f\x7f]/g, "");
+  return text.replace(/[\x00-\x1f\x7f]/g, '');
 }
 
 function buildOscPayload(title: string, body: string): string | null {
@@ -46,7 +46,7 @@ function buildOscPayload(title: string, body: string): string | null {
 export function buildOscSequence(notification: DesktopNotification): string | null {
   const payload = buildOscPayload(notification.title, notification.body);
   if (!payload) return null;
-  if (notification.source === "osc777") {
+  if (notification.source === 'osc777') {
     return `${OSC_ESCAPE}]777;notify;${payload}${OSC_BEL}`;
   }
   return `${OSC_ESCAPE}]9;${payload}${OSC_BEL}`;
@@ -59,16 +59,20 @@ export function sendHostNotification(notification: DesktopNotification): boolean
   return writeHostSequence(sequence);
 }
 
-export function sendMacOsNotification(params: { title: string; subtitle?: string; body: string }): boolean {
+export function sendMacOsNotification(params: {
+  title: string;
+  subtitle?: string;
+  body: string;
+}): boolean {
   if (!desktopNotificationsEnabled()) return false;
-  if (typeof Bun === "undefined" || typeof Bun.spawn !== "function") return false;
+  if (typeof Bun === 'undefined' || typeof Bun.spawn !== 'function') return false;
 
   const title = params.title.trim() || DEFAULT_NOTIFICATION_TITLE;
   const body = params.body.trim();
   if (!body) return false;
 
-  const subtitle = params.subtitle?.trim() ?? "";
-  const sound = (process.env[DESKTOP_NOTIFICATION_SOUND_ENV] ?? "Glass").trim();
+  const subtitle = params.subtitle?.trim() ?? '';
+  const sound = (process.env[DESKTOP_NOTIFICATION_SOUND_ENV] ?? 'Glass').trim();
 
   const script = `on run argv
   set theTitle to item 1 of argv
@@ -92,10 +96,10 @@ export function sendMacOsNotification(params: { title: string; subtitle?: string
 end run`;
 
   try {
-    const proc = Bun.spawn(
-      ["osascript", "-e", script, "--", title, subtitle, body, sound],
-      { stdout: "ignore", stderr: "ignore" }
-    );
+    const proc = Bun.spawn(['osascript', '-e', script, '--', title, subtitle, body, sound], {
+      stdout: 'ignore',
+      stderr: 'ignore',
+    });
     proc.exited.catch((e) => {
       console.warn('[notifications] osascript process failed:', e);
     });

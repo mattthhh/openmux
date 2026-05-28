@@ -13,7 +13,7 @@
  * new content arrives, AND prevents flicker from in-place animations.
  */
 
-import { describe, it, expect, vi, beforeEach } from "bun:test";
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import type { DirtyTerminalUpdate, TerminalCell, TerminalScrollState } from '../../src/core/types';
 import type { TerminalColors } from '../../src/terminal/terminal-colors';
 
@@ -82,7 +82,8 @@ describe('scrollback-cache-invalidation', () => {
       const update = createDirtyUpdate(10);
       const scrollbackDelta = update.scrollState.scrollbackLength - lastScrollbackLength;
       const isAtScrollbackLimit = update.scrollState.isAtScrollbackLimit ?? false;
-      const contentShifted = scrollbackDelta < 0 ||
+      const contentShifted =
+        scrollbackDelta < 0 ||
         (scrollbackDelta === 0 && isAtScrollbackLimit && lastScrollbackLength > 0);
 
       if (contentShifted) {
@@ -110,7 +111,8 @@ describe('scrollback-cache-invalidation', () => {
       const update = createDirtyUpdate(2000, true);
       const scrollbackDelta = update.scrollState.scrollbackLength - lastScrollbackLength;
       const isAtScrollbackLimit = update.scrollState.isAtScrollbackLimit ?? false;
-      const contentShifted = scrollbackDelta < 0 ||
+      const contentShifted =
+        scrollbackDelta < 0 ||
         (scrollbackDelta === 0 && isAtScrollbackLimit && lastScrollbackLength > 0);
 
       if (contentShifted) {
@@ -139,7 +141,8 @@ describe('scrollback-cache-invalidation', () => {
       const update = createDirtyUpdate(100, false); // isAtScrollbackLimit = false
       const scrollbackDelta = update.scrollState.scrollbackLength - lastScrollbackLength;
       const isAtScrollbackLimit = update.scrollState.isAtScrollbackLimit ?? false;
-      const contentShifted = scrollbackDelta < 0 ||
+      const contentShifted =
+        scrollbackDelta < 0 ||
         (scrollbackDelta === 0 && isAtScrollbackLimit && lastScrollbackLength > 0);
 
       // scrollbackDelta = 0, but NOT at limit, so contentShifted = false
@@ -169,7 +172,8 @@ describe('scrollback-cache-invalidation', () => {
       const update = createDirtyUpdate(0);
       const scrollbackDelta = update.scrollState.scrollbackLength - lastScrollbackLength;
       const isAtScrollbackLimit = update.scrollState.isAtScrollbackLimit ?? false;
-      const contentShifted = scrollbackDelta < 0 ||
+      const contentShifted =
+        scrollbackDelta < 0 ||
         (scrollbackDelta === 0 && isAtScrollbackLimit && lastScrollbackLength > 0);
 
       if (contentShifted) {
@@ -199,7 +203,8 @@ describe('scrollback-cache-invalidation', () => {
       const update = createDirtyUpdate(150);
       const scrollbackDelta = update.scrollState.scrollbackLength - lastScrollbackLength;
       const isAtScrollbackLimit = update.scrollState.isAtScrollbackLimit ?? false;
-      const contentShifted = scrollbackDelta < 0 ||
+      const contentShifted =
+        scrollbackDelta < 0 ||
         (scrollbackDelta === 0 && isAtScrollbackLimit && lastScrollbackLength > 0);
 
       if (contentShifted) {
@@ -229,7 +234,8 @@ describe('scrollback-cache-invalidation', () => {
       const update = createDirtyUpdate(2000, true);
       const scrollbackDelta = update.scrollState.scrollbackLength - lastScrollbackLength;
       const isAtScrollbackLimit = update.scrollState.isAtScrollbackLimit ?? false;
-      const contentShifted = scrollbackDelta < 0 ||
+      const contentShifted =
+        scrollbackDelta < 0 ||
         (scrollbackDelta === 0 && isAtScrollbackLimit && lastScrollbackLength > 0);
 
       // scrollbackDelta = 0, isAtScrollbackLimit = true, so contentShifted = true
@@ -269,7 +275,8 @@ describe('scrollback-cache-invalidation', () => {
         const update = createDirtyUpdate(500, false); // NOT at limit
         const scrollbackDelta = update.scrollState.scrollbackLength - lastScrollbackLength;
         const isAtScrollbackLimit = update.scrollState.isAtScrollbackLimit ?? false;
-        const contentShifted = scrollbackDelta < 0 ||
+        const contentShifted =
+          scrollbackDelta < 0 ||
           (scrollbackDelta === 0 && isAtScrollbackLimit && lastScrollbackLength > 0);
 
         if (contentShifted) {
@@ -300,7 +307,8 @@ describe('scrollback-cache-invalidation', () => {
       const update = createDirtyUpdate(2000, true); // AT limit
       const scrollbackDelta = update.scrollState.scrollbackLength - lastScrollbackLength;
       const isAtScrollbackLimit = update.scrollState.isAtScrollbackLimit ?? false;
-      const contentShifted = scrollbackDelta < 0 ||
+      const contentShifted =
+        scrollbackDelta < 0 ||
         (scrollbackDelta === 0 && isAtScrollbackLimit && lastScrollbackLength > 0);
 
       expect(contentShifted).toBe(true);
@@ -324,7 +332,8 @@ describe('scrollback-cache-invalidation', () => {
         const update = createDirtyUpdate(newLength, false);
         const scrollbackDelta = update.scrollState.scrollbackLength - lastScrollbackLength;
         const isAtScrollbackLimit = update.scrollState.isAtScrollbackLimit ?? false;
-        const contentShifted = scrollbackDelta < 0 ||
+        const contentShifted =
+          scrollbackDelta < 0 ||
           (scrollbackDelta === 0 && isAtScrollbackLimit && lastScrollbackLength > 0);
 
         // Add to cache as we go
@@ -347,7 +356,8 @@ describe('scrollback-cache-invalidation', () => {
         const update = createDirtyUpdate(newLength, atLimit);
         const scrollbackDelta = update.scrollState.scrollbackLength - lastScrollbackLength;
         const isAtScrollbackLimit = update.scrollState.isAtScrollbackLimit ?? false;
-        const contentShifted = scrollbackDelta < 0 ||
+        const contentShifted =
+          scrollbackDelta < 0 ||
           (scrollbackDelta === 0 && isAtScrollbackLimit && lastScrollbackLength > 0);
 
         scrollbackCache.set(newLength - 50, [createTestCell(`line at ${newLength - 50}`)]);
@@ -366,7 +376,8 @@ describe('scrollback-cache-invalidation', () => {
       const finalUpdate = createDirtyUpdate(2000, true);
       const scrollbackDelta = finalUpdate.scrollState.scrollbackLength - lastScrollbackLength;
       const isAtScrollbackLimit = finalUpdate.scrollState.isAtScrollbackLimit ?? false;
-      const contentShifted = scrollbackDelta < 0 ||
+      const contentShifted =
+        scrollbackDelta < 0 ||
         (scrollbackDelta === 0 && isAtScrollbackLimit && lastScrollbackLength > 0);
 
       expect(scrollbackDelta).toBe(0);

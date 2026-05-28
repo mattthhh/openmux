@@ -36,7 +36,6 @@ export interface ConfirmationHandlerDeps {
   onCancelDeleteTemplate?: () => void;
   onConfirmDeleteSession?: () => Promise<void> | void;
   onCancelDeleteSession?: () => void;
-
 }
 
 /**

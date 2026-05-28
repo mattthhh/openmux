@@ -85,6 +85,7 @@ ThemeProvider              // Styling/theming
 ### Key Modules
 
 **Layout and session state (src/core/)**
+
 - `types.ts`, `config.ts` - Core types and defaults
 - `operations/master-stack-layout.ts` - Layout calculation
 - `operations/layout-actions/` - Pane/workspace actions
@@ -92,6 +93,7 @@ ThemeProvider              // Styling/theming
 - `workspace-utils.ts`, `coordinates/`, `scroll-utils.ts`, `keyboard-utils.ts`
 
 **Terminal layer (src/terminal/)**
+
 - `ghostty-vt/`, `emulator-utils/` - native libghostty-vt bindings + shared emulator helpers
 - `emulator-interface.ts` - ITerminalEmulator abstraction
 - `input-handler.ts`, `sync-mode-parser.ts` - Input/escape handling
@@ -99,20 +101,24 @@ ThemeProvider              // Styling/theming
 - `paste-intercepting-stdin.ts`, `focused-pty-registry.ts`
 
 **Shim / detach (src/shim/)**
+
 - `main.ts`, `server.ts` - Shim server + RPC handling
 - `client/` - Shim client connection, PTY state cache, detach handling
 
 **UI components (src/components/)**
+
 - `PaneContainer.tsx`, `Pane.tsx`, `TerminalView.tsx` - Pane rendering
 - `AggregateView.tsx`, `SessionPicker.tsx`, `SearchOverlay.tsx`
 - `StatusBar.tsx`, `CopyNotification.tsx`
 
 **SolidJS contexts (src/contexts/)**
+
 - `LayoutContext.tsx`, `TerminalContext.tsx`, `KeyboardContext.tsx`
 - `SelectionContext.tsx`, `SearchContext.tsx`, `SessionContext.tsx`
 - `ThemeContext.tsx`, `TitleContext.tsx`, `AggregateViewContext.tsx`
 
 **Effect module (src/effect/)**
+
 - `errors.ts` - Domain-specific tagged errors using errore
 - `resources.ts` - ResourceStack for cleanup with `using`/`defer`
 - `services/` - Service implementations (PTY, Session, etc.)
@@ -143,12 +149,12 @@ async function loadSession(id: string): Promise<SessionData | SessionStorageErro
     try: () => fs.readFile(getPath(id), 'utf8').then(JSON.parse),
     catch: (e) => new SessionStorageError({ operation: 'read', path: id, reason: String(e) }),
   });
-  
+
   // Golang-style: if err != nil { return err }
   if (result instanceof SessionStorageError) {
     return result;
   }
-  
+
   return validateSession(result);
 }
 
@@ -158,12 +164,12 @@ function parseConfig(path: string): Config | ConfigParseError {
     try: () => TOML.parse(fs.readFileSync(path, 'utf8')) as Config,
     catch: (e) => new ConfigParseError({ path, reason: String(e) }),
   });
-  
+
   if (result instanceof ConfigParseError) {
     console.warn('Failed to parse config:', result);
     return DEFAULT_CONFIG;
   }
-  
+
   return result;
 }
 ```
@@ -212,12 +218,12 @@ async function initializeAndRender(): Promise<void | StartupError> {
   if (services instanceof Error) {
     return new StartupError({ reason: `Failed to initialize: ${services.message}` });
   }
-  
+
   const renderResult = await tryAsync<void, StartupError>({
     try: () => render(() => <App />),
     catch: (e) => new StartupError({ reason: String(e) }),
   });
-  
+
   // Return error up the chain
   if (renderResult instanceof StartupError) {
     return renderResult;
@@ -271,31 +277,31 @@ import { ResourceStack } from '../effect/resources';
 
 async function processPty(ptyId: string): Promise<void | PtyError> {
   await using resources = new ResourceStack();
-  
+
   // Defer cleanup (like Go's defer) - runs LIFO on scope exit
   const tempFile = await createTempFile();
   resources.defer(() => fs.unlink(tempFile));
-  
+
   // Register subscriptions for auto-cleanup
   const unsub = subscribeToUpdates(ptyId, handleUpdate);
   resources.registerSubscription(unsub);
-  
+
   // Register timers/intervals
   const timeout = setTimeout(() => cancelOperation(), 5000);
   resources.registerTimer(timeout);
-  
+
   // Register AbortController
   const controller = new AbortController();
   resources.registerAbortController(controller);
-  
+
   // Defer with error logging (cleanup failures don't block other cleanups)
   resources.deferSafe(() => {
     state.activeProcesses.delete(ptyId);
   });
-  
+
   // Do work...
   const result = await doWork(tempFile, controller.signal);
-  
+
   // All cleanup runs automatically when function exits
   return result;
 }
@@ -324,10 +330,10 @@ class RefreshGuard implements AsyncDisposable {
 async function refreshData() {
   if (refreshState.refreshInProgress) return;
   await using _guard = new RefreshGuard(refreshState, 'refreshInProgress');
-  
+
   // Do work while flag is true...
   await fetchData();
-  
+
   // Flag automatically reset here, even if fetchData() throws
 }
 ```
@@ -352,13 +358,13 @@ await using cleanup = {
 class ResourceStack extends AsyncDisposableStack {
   // Basic defer (LIFO order - last deferred runs first)
   defer(cleanup: () => void | Promise<void>): void;
-  
+
   // Defer with error logging (cleanup errors don't stop other cleanups)
   deferSafe(cleanup: () => void | Promise<void>): void;
-  
+
   // Defer multiple at once
   deferAll(...cleanups: Array<() => void | Promise<void>>): void;
-  
+
   // Register common resource types
   registerTimer(timer: ReturnType<typeof setTimeout>): void;
   registerInterval(interval: ReturnType<typeof setInterval>): void;
@@ -371,12 +377,12 @@ class ResourceStack extends AsyncDisposableStack {
 
 ### When to Use
 
-| Pattern | Use Case |
-|---------|----------|
-| `await using resources = new ResourceStack()` | Multiple cleanup operations needed |
-| `await using guard = new SomeGuard()` | State flag management (prevents re-entrant calls) |
-| `await using _ = { [Symbol.asyncDispose]: ... }` | One-off inline cleanup |
-| `using file = openSync(...)` | Synchronous resources (rare in our codebase) |
+| Pattern                                          | Use Case                                          |
+| ------------------------------------------------ | ------------------------------------------------- |
+| `await using resources = new ResourceStack()`    | Multiple cleanup operations needed                |
+| `await using guard = new SomeGuard()`            | State flag management (prevents re-entrant calls) |
+| `await using _ = { [Symbol.asyncDispose]: ... }` | One-off inline cleanup                            |
+| `using file = openSync(...)`                     | Synchronous resources (rare in our codebase)      |
 
 ### Example: Session Operations
 
@@ -387,16 +393,16 @@ async function handleSessionSwitch(id: string): Promise<void> {
   resources.defer(() => {
     dispatch({ type: 'CLOSE_SESSION_PICKER' });
   });
-  
+
   // Prevent concurrent switching
   await using _guard = new SwitchingGuard(dispatch, true);
-  
+
   const result = await switchToSession(id);
   if (result instanceof SessionError) {
     console.error('Failed to switch:', result.message);
     return;
   }
-  
+
   // picker closed and guard reset automatically
 }
 ```
@@ -406,30 +412,34 @@ async function handleSessionSwitch(id: string): Promise<void> {
 Contexts expose values via object properties. Understanding what's safe to destructure is critical:
 
 **Safe to destructure (action functions):**
+
 ```tsx
-const { newPane, closePane, focusPane } = useLayout();  // Plain functions
-const { createPTY, writeToPTY } = useTerminal();        // Plain functions
+const { newPane, closePane, focusPane } = useLayout(); // Plain functions
+const { createPTY, writeToPTY } = useTerminal(); // Plain functions
 ```
 
 **Safe to destructure (store proxy - accessing properties IS reactive):**
+
 ```tsx
 const { state } = useLayout();
-state.workspaces;           // Reactive - store proxy tracks access
-state.activeWorkspaceId;    // Reactive
+state.workspaces; // Reactive - store proxy tracks access
+state.activeWorkspaceId; // Reactive
 ```
 
 **NOT safe to destructure (computed getters - call signal/memo inside):**
+
 ```tsx
 // DON'T: Destructuring calls the getter once, loses reactivity
 const { activeWorkspace, panes, isInitialized } = useLayout();
 
 // DO: Access via context object to call getter at access time
 const layout = useLayout();
-layout.activeWorkspace;     // Calls getter each time, stays reactive
-layout.panes;               // Calls getter each time, stays reactive
+layout.activeWorkspace; // Calls getter each time, stays reactive
+layout.panes; // Calls getter each time, stays reactive
 ```
 
 **Computed getters by context (access via context object, don't destructure):**
+
 - `LayoutContext`: `activeWorkspace`, `panes`, `paneCount`, `populatedWorkspaces`, `layoutVersion`
 - `TerminalContext`: `isInitialized`
 - `SessionContext`: `filteredSessions`
@@ -439,6 +449,7 @@ layout.panes;               // Calls getter each time, stays reactive
 ## Layout Modes
 
 Each workspace has a `layoutMode` that determines pane arrangement:
+
 - **vertical**: Main pane left, stack panes split vertically on right
 - **horizontal**: Main pane top, stack panes split horizontally on bottom
 - **stacked**: Main pane left, stack panes tabbed on right (only active visible)
@@ -461,6 +472,7 @@ Each workspace has a `layoutMode` that determines pane arrangement:
 ```
 
 Instead, use:
+
 - JSDoc comments for documentation: `/** Brief description */`
 - Simple inline comments when necessary: `// Brief explanation`
 - Group related functions with a single comment or whitespace, not decorative borders

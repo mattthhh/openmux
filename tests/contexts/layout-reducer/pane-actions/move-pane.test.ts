@@ -1,4 +1,4 @@
-import { describe, it, expect } from "bun:test";
+import { describe, it, expect } from 'bun:test';
 import type { PaneData, SplitNode } from '../../../../src/core/types';
 import { layoutReducer, generatePaneId } from '../../../../src/core/operations/layout-actions';
 import { collectPanes, isSplitNode } from '../../../../src/core/layout-tree';
@@ -51,10 +51,7 @@ describe('Layout Reducer', () => {
 
     it('should reorder stack entries when no sibling in direction', () => {
       const mainPane: PaneData = { id: generatePaneId() };
-      const stackPanes: PaneData[] = [
-        { id: generatePaneId() },
-        { id: generatePaneId() },
-      ];
+      const stackPanes: PaneData[] = [{ id: generatePaneId() }, { id: generatePaneId() }];
       const workspace = createWorkspaceWithPanes(1, mainPane, stackPanes, {
         focusedPaneId: stackPanes[1]!.id,
         activeStackIndex: 1,
@@ -138,8 +135,8 @@ describe('Layout Reducer', () => {
 
       // The stack pane should now contain the originally split pane
       // and the main split should contain the original stack pane
-      expect(allPanes.some(p => p.id === stackPane.id)).toBe(true);
-      expect(stackPanes.some(p => p.id !== stackPane.id)).toBe(true);
+      expect(allPanes.some((p) => p.id === stackPane.id)).toBe(true);
+      expect(stackPanes.some((p) => p.id !== stackPane.id)).toBe(true);
     });
 
     it('should swap panes between stack entries in stacked mode', () => {
@@ -147,10 +144,7 @@ describe('Layout Reducer', () => {
       // In stacked mode, each stack entry is a separate tree with its own geometry
       // Moving west/east at the edge swaps pane data, not entire trees
       const mainPane: PaneData = { id: generatePaneId() };
-      const stackPanes: PaneData[] = [
-        { id: generatePaneId() },
-        { id: generatePaneId() },
-      ];
+      const stackPanes: PaneData[] = [{ id: generatePaneId() }, { id: generatePaneId() }];
       const workspace = createWorkspaceWithPanes(1, mainPane, stackPanes, {
         focusedPaneId: stackPanes[1]!.id,
         activeStackIndex: 1,
@@ -173,10 +167,7 @@ describe('Layout Reducer', () => {
     it('should swap panes with main in stacked mode', () => {
       // When moving from stack to main, swap pane data using geometry
       const mainPane: PaneData = { id: generatePaneId() };
-      const stackPanes: PaneData[] = [
-        { id: generatePaneId() },
-        { id: generatePaneId() },
-      ];
+      const stackPanes: PaneData[] = [{ id: generatePaneId() }, { id: generatePaneId() }];
       const workspace = createWorkspaceWithPanes(1, mainPane, stackPanes, {
         focusedPaneId: stackPanes[0]!.id,
         activeStackIndex: 0,

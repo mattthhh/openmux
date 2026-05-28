@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "bun:test";
+import { describe, expect, it, vi } from 'bun:test';
 import { handlePtyNotification } from '../../src/shim/client/connection';
 import type { DesktopNotification } from '../../src/terminal/command-parser';
 

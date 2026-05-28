@@ -3,25 +3,25 @@
  */
 
 export type QueryType =
-  | 'cpr'           // Cursor Position Report (ESC[6n)
-  | 'decxcpr'       // Extended Cursor Position Report (ESC[?6n)
-  | 'status'        // Device Status Report (ESC[5n)
-  | 'da1'           // Primary Device Attributes (ESC[c)
-  | 'da2'           // Secondary Device Attributes (ESC[>c)
-  | 'da3'           // Tertiary Device Attributes (ESC[=c)
-  | 'xtversion'     // Terminal Version (ESC[>q)
-  | 'decrqm'        // DEC Request Mode (ESC[?Ps$p)
-  | 'decrqss'       // Request Status String (DCS$q...ST)
-  | 'xtgettcap'     // Termcap Query (DCS+q...ST)
+  | 'cpr' // Cursor Position Report (ESC[6n)
+  | 'decxcpr' // Extended Cursor Position Report (ESC[?6n)
+  | 'status' // Device Status Report (ESC[5n)
+  | 'da1' // Primary Device Attributes (ESC[c)
+  | 'da2' // Secondary Device Attributes (ESC[>c)
+  | 'da3' // Tertiary Device Attributes (ESC[=c)
+  | 'xtversion' // Terminal Version (ESC[>q)
+  | 'decrqm' // DEC Request Mode (ESC[?Ps$p)
+  | 'decrqss' // Request Status String (DCS$q...ST)
+  | 'xtgettcap' // Termcap Query (DCS+q...ST)
   | 'kitty-keyboard' // Kitty Keyboard Protocol (ESC[?u)
-  | 'xtwinops'      // Window Operations (ESC[14t, 16t, 18t)
+  | 'xtwinops' // Window Operations (ESC[14t, 16t, 18t)
   | 'xtwinops-drop' // Other Window Operations to drop silently (ESC[Ps;...t)
-  | 'osc-palette'   // OSC 4 Palette Query
-  | 'osc-fg'        // OSC 10 Foreground Query
-  | 'osc-bg'        // OSC 11 Background Query
-  | 'osc-cursor'    // OSC 12 Cursor Color Query
+  | 'osc-palette' // OSC 4 Palette Query
+  | 'osc-fg' // OSC 10 Foreground Query
+  | 'osc-bg' // OSC 11 Background Query
+  | 'osc-cursor' // OSC 12 Cursor Color Query
   | 'osc-clipboard' // OSC 52 Clipboard Query
-  | 'osc-drop';     // Unknown OSC sequences to drop silently (e.g., OSC 66)
+  | 'osc-drop'; // Unknown OSC sequences to drop silently (e.g., OSC 66)
 
 export interface TerminalQuery {
   type: QueryType;

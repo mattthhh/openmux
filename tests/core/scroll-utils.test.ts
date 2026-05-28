@@ -2,7 +2,7 @@
  * Tests for scroll utility functions.
  * These tests ensure scroll clamping prevents momentum accumulation at boundaries.
  */
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from 'bun:test';
 import {
   clampScrollOffset,
   calculateScrollDelta,

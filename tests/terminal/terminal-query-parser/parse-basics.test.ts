@@ -1,6 +1,11 @@
-import { describe, test, expect } from "bun:test";
+import { describe, test, expect } from 'bun:test';
 import { parseTerminalQueries } from '../../../src/terminal/terminal-query-passthrough/parser';
-import { ESC, DSR_CPR_QUERY, DA1_QUERY, XTVERSION_QUERY } from '../../../src/terminal/terminal-query-passthrough/constants';
+import {
+  ESC,
+  DSR_CPR_QUERY,
+  DA1_QUERY,
+  XTVERSION_QUERY,
+} from '../../../src/terminal/terminal-query-passthrough/constants';
 
 describe('parseTerminalQueries', () => {
   describe('no queries', () => {

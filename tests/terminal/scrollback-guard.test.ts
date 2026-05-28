@@ -2,7 +2,7 @@
  * Tests for scrollback render guard logic.
  */
 
-import { describe, it, expect } from "bun:test";
+import { describe, it, expect } from 'bun:test';
 import type { TerminalCell } from '../../src/core/types';
 import { guardScrollbackRender } from '../../src/components/terminal-view/scrollback-guard';
 

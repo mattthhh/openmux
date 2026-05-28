@@ -1,15 +1,18 @@
-import { describe, expect, test, beforeEach, afterEach, vi } from "bun:test";
-import { ScrollbackArchiver } from "../../../../src/effect/services/pty/scrollback-archiver";
-import type { InternalPtySession } from "../../../../src/effect/services/pty/types";
+import { describe, expect, test, beforeEach, afterEach, vi } from 'bun:test';
+import { ScrollbackArchiver } from '../../../../src/effect/services/pty/scrollback-archiver';
+import type { InternalPtySession } from '../../../../src/effect/services/pty/types';
 import type {
   ITerminalEmulator,
   KittyGraphicsPlacement,
   KittyGraphicsImageInfo,
-} from "../../../../src/terminal/emulator-interface";
-import type { TerminalCell } from "../../../../src/core/types";
-import { ScrollbackArchive, type ArchivePlacement } from "../../../../src/terminal/scrollback-archive";
-import { ArchivedTerminalEmulator } from "../../../../src/terminal/archived-emulator";
-import { HOT_SCROLLBACK_LIMIT } from "../../../../src/terminal/scrollback-config";
+} from '../../../../src/terminal/emulator-interface';
+import type { TerminalCell } from '../../../../src/core/types';
+import {
+  ScrollbackArchive,
+  type ArchivePlacement,
+} from '../../../../src/terminal/scrollback-archive';
+import { ArchivedTerminalEmulator } from '../../../../src/terminal/archived-emulator';
+import { HOT_SCROLLBACK_LIMIT } from '../../../../src/terminal/scrollback-config';
 
 /**
  * Integration tests for Kitty graphics in ScrollbackArchiver.
@@ -102,7 +105,7 @@ function createMockGhosttyEmulator(
     getDirtyUpdate: vi.fn(),
     getTerminalState: vi.fn(),
     getCursor: vi.fn(() => ({ x: 0, y: 0, visible: true })),
-    getCursorKeyMode: vi.fn(() => "normal" as const),
+    getCursorKeyMode: vi.fn(() => 'normal' as const),
     getKittyKeyboardFlags: vi.fn(() => 0),
     isMouseTrackingEnabled: vi.fn(() => false),
     isAlternateScreen: vi.fn(() => false),
@@ -111,7 +114,7 @@ function createMockGhosttyEmulator(
       background: { r: 0, g: 0, b: 0 },
       foreground: { r: 255, g: 255, b: 255 },
     })),
-    getTitle: vi.fn(() => "mock-ghostty"),
+    getTitle: vi.fn(() => 'mock-ghostty'),
     onTitleChange: vi.fn(() => () => {}),
     onUpdate: vi.fn(() => () => {}),
     onModeChange: vi.fn(() => () => {}),
@@ -135,7 +138,7 @@ function createMockGhosttyEmulator(
     },
     _removePlacement: (imageId: number, placementId: number) => {
       currentPlacements = currentPlacements.filter(
-        p => !(p.imageId === imageId && p.placementId === placementId)
+        (p) => !(p.imageId === imageId && p.placementId === placementId)
       );
     },
   } as ITerminalEmulator & {
@@ -156,7 +159,7 @@ function createMockGhosttyEmulator(
     // In real Ghostty, pins on pruned lines get marked as garbage
     // We simulate this by removing placements that were on lines that got pruned
     const prunedLineCount = oldLength - currentScrollbackLength;
-    currentPlacements = currentPlacements.filter(p => {
+    currentPlacements = currentPlacements.filter((p) => {
       // Calculate absolute line index for this placement
       const absoluteLine = p.screenY + oldLength;
       // Keep only placements not on pruned lines
@@ -175,21 +178,21 @@ function createMockSession(
   emulator: ITerminalEmulator
 ): InternalPtySession {
   return {
-    id: "test-pty-" + Math.random().toString(36).slice(2),
-    pty: {} as unknown as InternalPtySession["pty"],
+    id: 'test-pty-' + Math.random().toString(36).slice(2),
+    pty: {} as unknown as InternalPtySession['pty'],
     emulator,
     liveEmulator: emulator,
     scrollbackArchive: archive,
     scrollbackArchiver: null as unknown as ScrollbackArchiver,
-    queryPassthrough: {} as unknown as InternalPtySession["queryPassthrough"],
+    queryPassthrough: {} as unknown as InternalPtySession['queryPassthrough'],
     cols: 80,
     rows: 24,
     pixelWidth: 800,
     pixelHeight: 600,
     cellWidth: 10,
     cellHeight: 20,
-    cwd: "/home/test",
-    shell: "/bin/bash",
+    cwd: '/home/test',
+    shell: '/bin/bash',
     closing: false,
     subscribers: new Set(),
     scrollSubscribers: new Set(),
@@ -209,13 +212,13 @@ function createMockSession(
   };
 }
 
-describe("ScrollbackArchiver Kitty Graphics Integration", () => {
-  const testDir = "/tmp/openmux-test-archiver-kitty-integration";
+describe('ScrollbackArchiver Kitty Graphics Integration', () => {
+  const testDir = '/tmp/openmux-test-archiver-kitty-integration';
 
   beforeEach(() => {
     // Clean up test directory
     try {
-      const fs = require("node:fs");
+      const fs = require('node:fs');
       fs.rmSync(testDir, { recursive: true, force: true });
     } catch {
       // Ignore cleanup errors
@@ -225,7 +228,7 @@ describe("ScrollbackArchiver Kitty Graphics Integration", () => {
   afterEach(() => {
     // Clean up test directory
     try {
-      const fs = require("node:fs");
+      const fs = require('node:fs');
       fs.rmSync(testDir, { recursive: true, force: true });
     } catch {
       // Ignore cleanup errors
@@ -235,8 +238,8 @@ describe("ScrollbackArchiver Kitty Graphics Integration", () => {
   /**
    * Full flow integration test: Simulate complete Kitty graphics lifecycle
    */
-  describe("full flow simulation", () => {
-    test("captures and retrieves Kitty images through archival cycle", async () => {
+  describe('full flow simulation', () => {
+    test('captures and retrieves Kitty images through archival cycle', async () => {
       const imageStore = new MockImageStore();
 
       // Add some test images
@@ -330,7 +333,7 @@ describe("ScrollbackArchiver Kitty Graphics Integration", () => {
       archive.dispose();
     });
 
-    test("handles image spanning live and archived scrollback", async () => {
+    test('handles image spanning live and archived scrollback', async () => {
       const imageStore = new MockImageStore();
       imageStore.addImage(
         {
@@ -397,7 +400,7 @@ describe("ScrollbackArchiver Kitty Graphics Integration", () => {
       archive.dispose();
     });
 
-    test("survives multiple archival cycles with different images", async () => {
+    test('survives multiple archival cycles with different images', async () => {
       const imageStore = new MockImageStore();
 
       // Add multiple images
@@ -476,8 +479,8 @@ describe("ScrollbackArchiver Kitty Graphics Integration", () => {
   /**
    * Test graceful handling of image deletion after archival
    */
-  describe("image deletion handling", () => {
-    test("gracefully handles deleted image in archive", async () => {
+  describe('image deletion handling', () => {
+    test('gracefully handles deleted image in archive', async () => {
       const imageStore = new MockImageStore();
       imageStore.addImage(
         {
@@ -548,7 +551,7 @@ describe("ScrollbackArchiver Kitty Graphics Integration", () => {
       archive.dispose();
     });
 
-    test("handles partial image deletion (multiple images, some deleted)", async () => {
+    test('handles partial image deletion (multiple images, some deleted)', async () => {
       const imageStore = new MockImageStore();
 
       // Add 3 images
@@ -652,8 +655,8 @@ describe("ScrollbackArchiver Kitty Graphics Integration", () => {
   /**
    * Test coordinate accuracy through archival
    */
-  describe("coordinate accuracy", () => {
-    test("preserves exact placement coordinates through archival", async () => {
+  describe('coordinate accuracy', () => {
+    test('preserves exact placement coordinates through archival', async () => {
       const imageStore = new MockImageStore();
       imageStore.addImage(
         {
@@ -709,9 +712,7 @@ describe("ScrollbackArchiver Kitty Graphics Integration", () => {
 
       // Verify coordinates are preserved
       if (archivedPlacements.length > 0) {
-        const archived = archivedPlacements.find(
-          (p) => p.imageId === 1 && p.placementId === 1
-        );
+        const archived = archivedPlacements.find((p) => p.imageId === 1 && p.placementId === 1);
         if (archived) {
           expect(archived.screenX).toBe(originalPlacement.screenX);
           expect(archived.columns).toBe(originalPlacement.columns);
@@ -727,8 +728,8 @@ describe("ScrollbackArchiver Kitty Graphics Integration", () => {
   /**
    * Test behavior under stress conditions
    */
-  describe("stress conditions", () => {
-    test("handles very rapid archival without losing placements", async () => {
+  describe('stress conditions', () => {
+    test('handles very rapid archival without losing placements', async () => {
       const imageStore = new MockImageStore();
 
       // Add many images

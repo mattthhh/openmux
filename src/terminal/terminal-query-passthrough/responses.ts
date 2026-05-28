@@ -4,12 +4,13 @@
 
 import { ESC, ST, DCS } from './constants';
 
-
 /**
  * Convert string to hex encoding (2 hex digits per character)
  */
 export function stringToHex(str: string): string {
-  return Array.from(str).map(c => c.charCodeAt(0).toString(16).padStart(2, '0')).join('');
+  return Array.from(str)
+    .map((c) => c.charCodeAt(0).toString(16).padStart(2, '0'))
+    .join('');
 }
 
 /**
@@ -22,7 +23,6 @@ export function hexToString(hex: string): string {
   }
   return str;
 }
-
 
 /**
  * Generate a CPR (Cursor Position Report) response
@@ -40,7 +40,6 @@ export function generateDecxcprResponse(row: number, col: number): string {
   return `${ESC}[?${row + 1};${col + 1};1R`;
 }
 
-
 /**
  * Generate a Device Status OK response
  * Format: ESC[0n
@@ -48,7 +47,6 @@ export function generateDecxcprResponse(row: number, col: number): string {
 export function generateStatusOkResponse(): string {
   return `${ESC}[0n`;
 }
-
 
 /**
  * Generate a Primary Device Attributes (DA1) response
@@ -81,7 +79,6 @@ export function generateDa2Response(): string {
 export function generateDa3Response(): string {
   return `${DCS}!|00000000${ST}`;
 }
-
 
 /**
  * Generate an OSC foreground color response
@@ -128,7 +125,6 @@ export function generateOscPaletteResponse(index: number, r: number, g: number, 
   return `${ESC}]4;${index};rgb:${r16}/${g16}/${b16}${ST}`;
 }
 
-
 /**
  * Generate a DECRPM (Report Mode) response for DEC private modes
  * Format: ESC[?Ps;Pm$y
@@ -161,7 +157,6 @@ export function generateXtgettcapResponse(capabilities: Map<string, string | nul
   return responses.join('');
 }
 
-
 /**
  * Generate an XTWINOPS response for window size queries
  * Format depends on the operation:
@@ -172,10 +167,17 @@ export function generateXtgettcapResponse(capabilities: Map<string, string | nul
 export function generateXtwinopsResponse(winop: number, height: number, width: number): string {
   let responseCode: number;
   switch (winop) {
-    case 14: responseCode = 4; break;
-    case 16: responseCode = 6; break;
-    case 18: responseCode = 8; break;
-    default: return '';
+    case 14:
+      responseCode = 4;
+      break;
+    case 16:
+      responseCode = 6;
+      break;
+    case 18:
+      responseCode = 8;
+      break;
+    default:
+      return '';
   }
   return `${ESC}[${responseCode};${height};${width}t`;
 }

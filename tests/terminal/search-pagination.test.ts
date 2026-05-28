@@ -5,7 +5,7 @@
  * memory exhaustion when searching through large scrollback buffers.
  */
 
-import { describe, it, expect } from "bun:test";
+import { describe, it, expect } from 'bun:test';
 import type { SearchMatch } from '../../src/terminal/emulator-interface';
 
 // Simulate the search pagination logic from the emulator search handler.

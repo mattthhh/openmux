@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from 'bun:test';
 import { buildOscSequence } from '../../src/terminal/desktop-notifications';
 import type { DesktopNotification } from '../../src/terminal/command-parser';
 

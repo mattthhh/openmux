@@ -1,6 +1,10 @@
-import { describe, it, expect } from "bun:test";
+import { describe, it, expect } from 'bun:test';
 import type { PaneData } from '../../../../src/core/types';
-import { layoutReducer, createWorkspace, generatePaneId } from '../../../../src/core/operations/layout-actions';
+import {
+  layoutReducer,
+  createWorkspace,
+  generatePaneId,
+} from '../../../../src/core/operations/layout-actions';
 import { createInitialState, createWorkspaceWithPanes, setupLayoutReducerTest } from '../fixtures';
 
 describe('Layout Reducer', () => {

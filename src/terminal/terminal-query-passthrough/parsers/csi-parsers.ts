@@ -135,9 +135,11 @@ export class XtwinopsQueryParser implements QueryParser {
   }
 
   parse(data: string, index: number): ParseResult | null {
-    const prefixLen = data.startsWith(this.csiPrefix, index) ? this.csiPrefix.length
-      : data[index] === this.c1Csi ? 1
-      : 0;
+    const prefixLen = data.startsWith(this.csiPrefix, index)
+      ? this.csiPrefix.length
+      : data[index] === this.c1Csi
+        ? 1
+        : 0;
     if (prefixLen === 0) return null;
 
     let pos = index + prefixLen;
@@ -182,9 +184,11 @@ export class XtwinopsDropParser implements QueryParser {
   private readonly c1Csi = '\x9b';
 
   canParse(data: string, index: number): boolean {
-    const prefixLen = data.startsWith(this.csiPattern, index) ? this.csiPattern.length
-      : data[index] === this.c1Csi ? 1
-      : 0;
+    const prefixLen = data.startsWith(this.csiPattern, index)
+      ? this.csiPattern.length
+      : data[index] === this.c1Csi
+        ? 1
+        : 0;
     if (prefixLen === 0) return false;
     // Look ahead to see if this looks like a CSI...t sequence
     let pos = index + prefixLen;
@@ -198,9 +202,11 @@ export class XtwinopsDropParser implements QueryParser {
   }
 
   parse(data: string, index: number): ParseResult | null {
-    const prefixLen = data.startsWith(this.csiPattern, index) ? this.csiPattern.length
-      : data[index] === this.c1Csi ? 1
-      : 0;
+    const prefixLen = data.startsWith(this.csiPattern, index)
+      ? this.csiPattern.length
+      : data[index] === this.c1Csi
+        ? 1
+        : 0;
     if (prefixLen === 0) return null;
 
     let pos = index + prefixLen;

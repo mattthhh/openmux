@@ -16,8 +16,7 @@ const clamp = (value: number, min: number, max: number): number =>
   Math.max(min, Math.min(value, max));
 
 export const isForwardSelection = (anchor: CopyCursor, cursor: CopyCursor): boolean => {
-  return cursor.absY > anchor.absY ||
-    (cursor.absY === anchor.absY && cursor.x >= anchor.x);
+  return cursor.absY > anchor.absY || (cursor.absY === anchor.absY && cursor.x >= anchor.x);
 };
 
 export const buildCharSelectionRange = (

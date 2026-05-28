@@ -40,7 +40,12 @@ export function PaneRenameOverlay(props: PaneRenameOverlayProps) {
   const theme = useTheme();
   const layout = useLayout();
   const titleContext = useTitle();
-  const { background: overlayBg, foreground: overlayFg, separator: overlaySeparator, subtle: overlaySubtle } = useOverlayColors();
+  const {
+    background: overlayBg,
+    foreground: overlayFg,
+    separator: overlaySeparator,
+    subtle: overlaySubtle,
+  } = useOverlayColors();
 
   const accentColor = () => theme.pane.focusedBorderColor;
   const vimEnabled = () => config.config().keyboard.vimMode === 'overlays';
@@ -236,10 +241,7 @@ export function PaneRenameOverlay(props: PaneRenameOverlayProps) {
 
   const hintWidth = createMemo(() => {
     const reserved =
-      promptText.length +
-      spacerText.length * 2 +
-      cursorText.length +
-      valueDisplay().length;
+      promptText.length + spacerText.length * 2 + cursorText.length + valueDisplay().length;
     return Math.max(0, innerWidth() - reserved);
   });
 

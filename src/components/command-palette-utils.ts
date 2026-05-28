@@ -1,6 +1,9 @@
 import type { CommandPaletteCommand } from '../core/command-palette';
 
-export function filterCommands(commands: CommandPaletteCommand[], query: string): CommandPaletteCommand[] {
+export function filterCommands(
+  commands: CommandPaletteCommand[],
+  query: string
+): CommandPaletteCommand[] {
   const trimmed = query.trim().toLowerCase();
   if (!trimmed) return [];
 
@@ -13,7 +16,9 @@ export function filterCommands(commands: CommandPaletteCommand[], query: string)
       command.description ?? '',
       command.action,
       ...(command.keywords ?? []),
-    ].join(' ').toLowerCase();
+    ]
+      .join(' ')
+      .toLowerCase();
     return terms.every((term) => haystack.includes(term));
   });
 }

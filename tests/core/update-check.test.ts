@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from 'bun:test';
 import { compareSemver, isUpdateAvailable } from '../../src/core/update-check';
 
 describe('update-check', () => {

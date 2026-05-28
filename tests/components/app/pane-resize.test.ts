@@ -1,7 +1,7 @@
 /**
  * Tests for batched pane resize scheduling.
  */
-import { describe, expect, test, beforeEach, afterEach, vi } from "bun:test";
+import { describe, expect, test, beforeEach, afterEach, vi } from 'bun:test';
 import type { PaneData } from '../../../src/core/types';
 import { createPaneResizeHandlers } from '../../../src/components/app/pane-resize';
 

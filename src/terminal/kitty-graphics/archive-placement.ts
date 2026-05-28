@@ -146,7 +146,10 @@ export function packPlacements(placements: ArchivePlacement[]): ArrayBuffer {
  * @param count Number of placements to unpack (defaults to buffer.length / PLACEMENT_SIZE)
  * @returns Array of deserialized ArchivePlacements, or PlacementSerializeError on failure
  */
-export function unpackPlacements(buffer: ArrayBuffer, count?: number): ArchivePlacement[] | PlacementSerializeError {
+export function unpackPlacements(
+  buffer: ArrayBuffer,
+  count?: number
+): ArchivePlacement[] | PlacementSerializeError {
   const placementCount = count ?? Math.floor(buffer.byteLength / PLACEMENT_SIZE);
 
   if (buffer.byteLength < placementCount * PLACEMENT_SIZE) {

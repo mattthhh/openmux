@@ -2,27 +2,23 @@
  * Constants for terminal query passthrough
  */
 
-
 export const ESC = '\x1b';
 export const CSI = '\x9b';
 export const BEL = '\x07';
 export const ST = `${ESC}\\`;
 export const DCS = `${ESC}P`;
 
+export const DSR_CPR_QUERY = `${ESC}[6n`; // Cursor Position Report query
+export const DSR_STATUS_QUERY = `${ESC}[5n`; // Device Status query
 
-export const DSR_CPR_QUERY = `${ESC}[6n`;      // Cursor Position Report query
-export const DSR_STATUS_QUERY = `${ESC}[5n`;   // Device Status query
+export const DA1_QUERY = `${ESC}[c`; // Primary Device Attributes (short form)
+export const DA1_QUERY_FULL = `${ESC}[0c`; // Primary Device Attributes (explicit)
+export const DA2_QUERY = `${ESC}[>c`; // Secondary Device Attributes (short form)
+export const DA2_QUERY_FULL = `${ESC}[>0c`; // Secondary Device Attributes (explicit)
+export const DA3_QUERY = `${ESC}[=c`; // Tertiary Device Attributes (short form)
+export const DA3_QUERY_FULL = `${ESC}[=0c`; // Tertiary Device Attributes (explicit)
 
-
-export const DA1_QUERY = `${ESC}[c`;           // Primary Device Attributes (short form)
-export const DA1_QUERY_FULL = `${ESC}[0c`;     // Primary Device Attributes (explicit)
-export const DA2_QUERY = `${ESC}[>c`;          // Secondary Device Attributes (short form)
-export const DA2_QUERY_FULL = `${ESC}[>0c`;    // Secondary Device Attributes (explicit)
-export const DA3_QUERY = `${ESC}[=c`;          // Tertiary Device Attributes (short form)
-export const DA3_QUERY_FULL = `${ESC}[=0c`;    // Tertiary Device Attributes (explicit)
-
-
-export const XTVERSION_QUERY = `${ESC}[>q`;    // Terminal version query (short form)
+export const XTVERSION_QUERY = `${ESC}[>q`; // Terminal version query (short form)
 export const XTVERSION_QUERY_FULL = `${ESC}[>0q`; // Terminal version query (explicit)
 
 export const DECRQM_PREFIX = `${ESC}[?`;
@@ -30,17 +26,13 @@ export const DECRQM_SUFFIX = '$p';
 
 export const XTGETTCAP_PREFIX = `${DCS}+q`;
 
-
 export const KITTY_KEYBOARD_QUERY = `${ESC}[?u`;
 
-
-export const XTWINOPS_14T = `${ESC}[14t`;  // Window size in pixels
-export const XTWINOPS_16T = `${ESC}[16t`;  // Cell size in pixels
-export const XTWINOPS_18T = `${ESC}[18t`;  // Text area in characters
-
+export const XTWINOPS_14T = `${ESC}[14t`; // Window size in pixels
+export const XTWINOPS_16T = `${ESC}[16t`; // Cell size in pixels
+export const XTWINOPS_18T = `${ESC}[18t`; // Text area in characters
 
 export const DECXCPR_QUERY = `${ESC}[?6n`;
-
 
 export const OSC_PALETTE_PREFIX = `${ESC}]4;`;
 export const OSC_FG_QUERY_BEL = `${ESC}]10;?${BEL}`;
@@ -50,51 +42,48 @@ export const OSC_BG_QUERY_ST = `${ESC}]11;?${ST}`;
 export const OSC_CURSOR_QUERY_BEL = `${ESC}]12;?${BEL}`;
 export const OSC_CURSOR_QUERY_ST = `${ESC}]12;?${ST}`;
 
-
 export const OSC_CLIPBOARD_PREFIX = `${ESC}]52;`;
 
 export const DECRQSS_PREFIX = `${DCS}$q`;
 
 export const KNOWN_CAPABILITIES: Record<string, string> = {
   // Terminal name
-  'TN': 'xterm-256color',
-  'name': 'xterm-256color',
+  TN: 'xterm-256color',
+  name: 'xterm-256color',
   // Colors
-  'Co': '256',
-  'colors': '256',
+  Co: '256',
+  colors: '256',
   // RGB/True color support
-  'RGB': '',  // Empty string means supported
-  'rgb': '',
+  RGB: '', // Empty string means supported
+  rgb: '',
   // Setrgbf/Setrgbb for true color
-  'setrgbf': '\x1b[38;2;%p1%d;%p2%d;%p3%dm',
-  'setrgbb': '\x1b[48;2;%p1%d;%p2%d;%p3%dm',
+  setrgbf: '\x1b[38;2;%p1%d;%p2%d;%p3%dm',
+  setrgbb: '\x1b[48;2;%p1%d;%p2%d;%p3%dm',
 };
-
 
 export const KNOWN_MODES: Record<number, 0 | 1 | 2 | 3 | 4> = {
-  1: 2,      // DECCKM - Cursor keys mode (reset = normal)
-  7: 2,      // DECAWM - Auto-wrap mode (reset = no wrap)
-  12: 2,     // Cursor blink (reset = steady)
-  25: 1,     // DECTCEM - Text cursor enable (set = visible)
-  1000: 2,   // Mouse tracking (reset)
-  1002: 2,   // Cell motion mouse tracking (reset)
-  1003: 2,   // All motion mouse tracking (reset)
-  1004: 2,   // Focus events (reset)
-  1006: 2,   // SGR mouse mode (reset)
-  1049: 2,   // Alternate screen buffer (reset = normal)
-  2004: 2,   // Bracketed paste (reset)
-  2026: 2,   // Synchronized output (reset)
-  2048: 2,   // In-band resize notifications (reset) - sends CSI 48 on resize when enabled
+  1: 2, // DECCKM - Cursor keys mode (reset = normal)
+  7: 2, // DECAWM - Auto-wrap mode (reset = no wrap)
+  12: 2, // Cursor blink (reset = steady)
+  25: 1, // DECTCEM - Text cursor enable (set = visible)
+  1000: 2, // Mouse tracking (reset)
+  1002: 2, // Cell motion mouse tracking (reset)
+  1003: 2, // All motion mouse tracking (reset)
+  1004: 2, // Focus events (reset)
+  1006: 2, // SGR mouse mode (reset)
+  1049: 2, // Alternate screen buffer (reset = normal)
+  2004: 2, // Bracketed paste (reset)
+  2026: 2, // Synchronized output (reset)
+  2048: 2, // In-band resize notifications (reset) - sends CSI 48 on resize when enabled
 };
-
 
 export const DEFAULT_PALETTE: number[] = (() => {
   const palette: number[] = [];
 
   // Standard 16 colors (indices 0-15)
   const standard16 = [
-    0x000000, 0xcd0000, 0x00cd00, 0xcdcd00, 0x0000ee, 0xcd00cd, 0x00cdcd, 0xe5e5e5,
-    0x7f7f7f, 0xff0000, 0x00ff00, 0xffff00, 0x5c5cff, 0xff00ff, 0x00ffff, 0xffffff,
+    0x000000, 0xcd0000, 0x00cd00, 0xcdcd00, 0x0000ee, 0xcd00cd, 0x00cdcd, 0xe5e5e5, 0x7f7f7f,
+    0xff0000, 0x00ff00, 0xffff00, 0x5c5cff, 0xff00ff, 0x00ffff, 0xffffff,
   ];
   palette.push(...standard16);
 

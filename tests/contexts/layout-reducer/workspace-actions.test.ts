@@ -2,7 +2,7 @@
  * Tests for workspace-focused layout reducer actions.
  */
 
-import { describe, it, expect } from "bun:test";
+import { describe, it, expect } from 'bun:test';
 import type { PaneData, Rectangle, Workspace } from '../../../src/core/types';
 import { layoutReducer, createWorkspace } from '../../../src/core/operations/layout-actions';
 import { createInitialState, createWorkspaceWithPanes, setupLayoutReducerTest } from './fixtures';

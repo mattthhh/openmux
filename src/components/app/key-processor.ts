@@ -2,29 +2,26 @@
  * Key Processor - processes keyboard input in normal mode
  * Converts keyboard events to terminal escape sequences
  */
-import type { ITerminalEmulator } from '../../terminal/emulator-interface'
-import type { KeyboardEvent } from '../../core/keyboard-event'
-import { encodeKeyForEmulator } from '../../terminal/key-encoder'
+import type { ITerminalEmulator } from '../../terminal/emulator-interface';
+import type { KeyboardEvent } from '../../core/keyboard-event';
+import { encodeKeyForEmulator } from '../../terminal/key-encoder';
 
 export interface KeyProcessorDeps {
-  clearAllSelections: () => void
-  getFocusedEmulator: () => ITerminalEmulator | null
-  writeToFocused: (data: string) => void
+  clearAllSelections: () => void;
+  getFocusedEmulator: () => ITerminalEmulator | null;
+  writeToFocused: (data: string) => void;
 }
 
 /**
  * Process keyboard input in normal mode and forward to PTY
  */
-export function processNormalModeKey(
-  event: KeyboardEvent,
-  deps: KeyProcessorDeps
-): void {
+export function processNormalModeKey(event: KeyboardEvent, deps: KeyProcessorDeps): void {
   // Clear any active selection when user types
-  if (event.eventType !== "release") {
-    deps.clearAllSelections()
+  if (event.eventType !== 'release') {
+    deps.clearAllSelections();
   }
 
-  const emulator = deps.getFocusedEmulator()
+  const emulator = deps.getFocusedEmulator();
   const sequence = encodeKeyForEmulator(
     {
       key: event.key,
@@ -38,9 +35,9 @@ export function processNormalModeKey(
       repeated: event.repeated,
     },
     emulator
-  )
+  );
 
   if (sequence) {
-    deps.writeToFocused(sequence)
+    deps.writeToFocused(sequence);
   }
 }

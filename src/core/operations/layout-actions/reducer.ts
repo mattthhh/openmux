@@ -9,8 +9,21 @@ import { handleNavigate } from './navigate';
 import { handleNewPane } from './new-pane';
 import { handleSplitPane } from './split-pane';
 import { handleClosePane, handleClosePaneById } from './close-pane';
-import { handleSetViewport, handleSwitchWorkspace, handleSetWorkspaceLabel, handleLoadSession, handleClearAll } from './workspace-ops';
-import { handleSetLayoutMode, handleSetPanePty, handleSetPaneTitle, handleSwapMain, handleMovePane, handleToggleZoom } from './pane-ops';
+import {
+  handleSetViewport,
+  handleSwitchWorkspace,
+  handleSetWorkspaceLabel,
+  handleLoadSession,
+  handleClearAll,
+} from './workspace-ops';
+import {
+  handleSetLayoutMode,
+  handleSetPanePty,
+  handleSetPaneTitle,
+  handleSwapMain,
+  handleMovePane,
+  handleToggleZoom,
+} from './pane-ops';
 
 /**
  * Layout reducer - handles all layout-related actions

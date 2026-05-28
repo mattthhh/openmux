@@ -1,4 +1,4 @@
-import { describe, it, expect } from "bun:test";
+import { describe, it, expect } from 'bun:test';
 import { layoutReducer } from '../../../../src/core/operations/layout-actions';
 import { createInitialState, defaultViewport, setupLayoutReducerTest } from '../fixtures';
 

@@ -7,19 +7,19 @@ import {
   packPlacements as packPlacementsToArrayBuffer,
   unpackPlacements as unpackPlacementsFromArrayBuffer,
   type ArchivePlacement,
-} from "../../kitty-graphics/archive-placement"
-import type { ArchiveChunk } from "../types"
-import { readPlacementBuffer, appendPlacementData } from "../io"
+} from '../../kitty-graphics/archive-placement';
+import type { ArchiveChunk } from '../types';
+import { readPlacementBuffer, appendPlacementData } from '../io';
 
 /**
  * Cache entry for placement chunk data.
  */
 export type PlacementCacheEntry = {
   /** Size of cached placement data */
-  placementBytes: number
+  placementBytes: number;
   /** Cached placements */
-  placements: ArchivePlacement[]
-}
+  placements: ArchivePlacement[];
+};
 
 /**
  * Converts an ArrayBuffer to a Node.js Buffer.
@@ -27,7 +27,7 @@ export type PlacementCacheEntry = {
  * @returns Node.js Buffer
  */
 function toBuffer(arrayBuffer: ArrayBuffer): Buffer {
-  return Buffer.from(arrayBuffer)
+  return Buffer.from(arrayBuffer);
 }
 
 /**
@@ -39,7 +39,7 @@ function toArrayBuffer(buffer: Buffer): ArrayBuffer {
   return buffer.buffer.slice(
     buffer.byteOffset,
     buffer.byteOffset + buffer.byteLength
-  ) as ArrayBuffer
+  ) as ArrayBuffer;
 }
 
 /**
@@ -48,8 +48,8 @@ function toArrayBuffer(buffer: Buffer): ArrayBuffer {
  * @returns Buffer containing packed placements
  */
 export function packPlacements(placements: ArchivePlacement[]): Buffer {
-  const arrayBuffer = packPlacementsToArrayBuffer(placements)
-  return toBuffer(arrayBuffer)
+  const arrayBuffer = packPlacementsToArrayBuffer(placements);
+  return toBuffer(arrayBuffer);
 }
 
 /**
@@ -58,13 +58,13 @@ export function packPlacements(placements: ArchivePlacement[]): Buffer {
  * @returns Array of ArchivePlacements, empty array on error
  */
 export function unpackPlacements(buffer: Buffer): ArchivePlacement[] {
-  const arrayBuffer = toArrayBuffer(buffer)
-  const result = unpackPlacementsFromArrayBuffer(arrayBuffer)
+  const arrayBuffer = toArrayBuffer(buffer);
+  const result = unpackPlacementsFromArrayBuffer(arrayBuffer);
   if (result instanceof Error) {
-    console.warn('[placement-manager] Failed to unpack placements:', result.message)
-    return []
+    console.warn('[placement-manager] Failed to unpack placements:', result.message);
+    return [];
   }
-  return result
+  return result;
 }
 
 /**
@@ -78,35 +78,35 @@ export function readPlacementsFromChunk(
   cache?: Map<number, PlacementCacheEntry>
 ): ArchivePlacement[] {
   if (!chunk.placementPath || !chunk.placementBytes || chunk.placementBytes === 0) {
-    return []
+    return [];
   }
 
   // Check cache first
   if (cache) {
-    const cached = cache.get(chunk.id)
+    const cached = cache.get(chunk.id);
     if (cached && cached.placementBytes === chunk.placementBytes) {
-      return cached.placements
+      return cached.placements;
     }
   }
 
   // Read from disk
-  const buffer = readPlacementBuffer(chunk)
+  const buffer = readPlacementBuffer(chunk);
   if (!buffer) {
-    if (cache) cache.delete(chunk.id)
-    return []
+    if (cache) cache.delete(chunk.id);
+    return [];
   }
 
-  const placements = unpackPlacements(buffer)
+  const placements = unpackPlacements(buffer);
 
   // Update cache
   if (cache) {
     cache.set(chunk.id, {
       placementBytes: chunk.placementBytes,
       placements,
-    })
+    });
   }
 
-  return placements
+  return placements;
 }
 
 /**
@@ -126,8 +126,8 @@ export function rebasePlacementOffset(
   // Stored offsets are archive-relative to the chunk's original write position.
   // After oldest chunks are dropped, remaining chunk starts shift downward.
   // Rebase into the current archive coordinate space.
-  const delta = chunk.startOffsetAtWrite - currentChunkStart
-  return storedOffset - delta
+  const delta = chunk.startOffsetAtWrite - currentChunkStart;
+  return storedOffset - delta;
 }
 
 /**
@@ -147,44 +147,40 @@ export function getPlacementsForLineRange(
   cache?: Map<number, PlacementCacheEntry>
 ): ArchivePlacement[] {
   // Normalize range
-  if (startOffset < 0) startOffset = 0
-  if (endOffset > totalLines) endOffset = totalLines
-  if (startOffset >= endOffset) return []
+  if (startOffset < 0) startOffset = 0;
+  if (endOffset > totalLines) endOffset = totalLines;
+  if (startOffset >= endOffset) return [];
 
-  const placements: ArchivePlacement[] = []
+  const placements: ArchivePlacement[] = [];
 
   // Find which chunks overlap with the requested range
-  let chunkStart = 0
+  let chunkStart = 0;
   for (const chunk of chunks) {
-    const chunkEnd = chunkStart + chunk.lineCount
+    const chunkEnd = chunkStart + chunk.lineCount;
 
     // Check if this chunk overlaps with the requested range
     if (chunkEnd > startOffset && chunkStart < endOffset) {
       // This chunk has relevant lines, check for placement data
       if (chunk.placementPath && chunk.placementBytes && chunk.placementBytes > 0) {
-        const chunkPlacements = readPlacementsFromChunk(chunk, cache)
+        const chunkPlacements = readPlacementsFromChunk(chunk, cache);
         // Rebase chunk placements into the current archive coordinate space
         for (const placement of chunkPlacements) {
-          const rebasedOffset = rebasePlacementOffset(
-            chunk,
-            chunkStart,
-            placement.archiveOffset
-          )
-          if (rebasedOffset < startOffset || rebasedOffset >= endOffset) continue
-          if (rebasedOffset < 0 || rebasedOffset >= totalLines) continue
+          const rebasedOffset = rebasePlacementOffset(chunk, chunkStart, placement.archiveOffset);
+          if (rebasedOffset < startOffset || rebasedOffset >= endOffset) continue;
+          if (rebasedOffset < 0 || rebasedOffset >= totalLines) continue;
           placements.push({
             ...placement,
             archiveOffset: rebasedOffset,
-          })
+          });
         }
       }
     }
 
-    chunkStart = chunkEnd
-    if (chunkStart >= endOffset) break
+    chunkStart = chunkEnd;
+    if (chunkStart >= endOffset) break;
   }
 
-  return placements
+  return placements;
 }
 
 /**
@@ -199,22 +195,22 @@ export async function appendPlacementsToChunk(
   placements: ArchivePlacement[],
   cache?: Map<number, PlacementCacheEntry>
 ): Promise<void> {
-  if (placements.length === 0) return
+  if (placements.length === 0) return;
 
-  const packed = packPlacements(placements)
-  const result = await appendPlacementData(chunk, packed)
+  const packed = packPlacements(placements);
+  const result = await appendPlacementData(chunk, packed);
 
   if (result instanceof Error) {
     // Error occurred, don't update metadata
-    return
+    return;
   }
 
   // Update chunk metadata
-  chunk.placementBytes = (chunk.placementBytes ?? 0) + packed.byteLength
+  chunk.placementBytes = (chunk.placementBytes ?? 0) + packed.byteLength;
 
   // Invalidate cache for this chunk
   if (cache) {
-    cache.delete(chunk.id)
+    cache.delete(chunk.id);
   }
 }
 
@@ -225,8 +221,8 @@ export async function appendPlacementsToChunk(
  */
 export function setupPlacementPath(chunk: ArchiveChunk, rootDir: string): void {
   if (!chunk.placementPath) {
-    chunk.placementFilename = `chunk-${chunk.id}-placements.bin`
-    chunk.placementPath = `${rootDir}/${chunk.placementFilename}`
-    chunk.placementBytes = 0
+    chunk.placementFilename = `chunk-${chunk.id}-placements.bin`;
+    chunk.placementPath = `${rootDir}/${chunk.placementFilename}`;
+    chunk.placementBytes = 0;
   }
 }

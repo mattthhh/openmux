@@ -21,7 +21,7 @@ export function normalizeKeyEvent(event: OpenTuiKeyEvent): KeyboardEvent {
   const sequence = event.sequence ?? '';
   const metaIsAlt = !!event.meta && !event.option && sequence.startsWith('\x1b');
   const alt = event.option || metaIsAlt;
-  const meta = metaIsAlt ? false : (alt ? false : event.meta);
+  const meta = metaIsAlt ? false : alt ? false : event.meta;
 
   return {
     key: event.name,

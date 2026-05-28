@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "bun:test";
+import { afterEach, describe, expect, it, vi } from 'bun:test';
 import { checkForUpdateLabel } from '../../src/core/update-checker';
 
 const originalFetch = globalThis.fetch;

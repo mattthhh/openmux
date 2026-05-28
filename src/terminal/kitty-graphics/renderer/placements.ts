@@ -2,13 +2,7 @@ import { buildDeletePlacement, buildDisplay } from '../commands';
 import { applyClipRects, computePlacementRender } from '../geometry';
 import { tracePtyEvent } from '../../pty-trace';
 import { isSameRender } from '../renderer-helpers';
-import type {
-  CellMetrics,
-  ClipRect,
-  PaneState,
-  PlacementRender,
-  PtyKittyState,
-} from '../types';
+import type { CellMetrics, ClipRect, PaneState, PlacementRender, PtyKittyState } from '../types';
 
 export function deletePlacementsForImage(params: {
   imageId: number;
@@ -56,15 +50,7 @@ export function renderPanePlacements(params: {
   placementsByPane: Map<string, Map<string, PlacementRender>>;
   nextHostPlacementId: number;
 }): number {
-  const {
-    paneKey,
-    pane,
-    state,
-    metrics,
-    output,
-    clipRects,
-    placementsByPane,
-  } = params;
+  const { paneKey, pane, state, metrics, output, clipRects, placementsByPane } = params;
   let nextHostPlacementId = params.nextHostPlacementId;
 
   const prevPlacements = placementsByPane.get(paneKey) ?? new Map<string, PlacementRender>();
@@ -91,7 +77,11 @@ export function renderPanePlacements(params: {
     for (const render of renders) {
       const existing = prevPlacements.get(render.key);
       const hostPlacementId = existing?.hostPlacementId ?? nextHostPlacementId++;
-      const renderState: PlacementRender = { ...render, hostImageId: image.hostId, hostPlacementId };
+      const renderState: PlacementRender = {
+        ...render,
+        hostImageId: image.hostId,
+        hostPlacementId,
+      };
 
       nextPlacements.set(render.key, renderState);
       if (!existing || !isSameRender(existing, renderState)) {

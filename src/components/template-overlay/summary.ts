@@ -3,7 +3,11 @@
  */
 
 import type { Workspaces } from '../../core/operations/layout-actions';
-import type { TemplateSession, TemplateLayoutNode, TemplateWorkspaceLayout } from '../../effect/models';
+import type {
+  TemplateSession,
+  TemplateLayoutNode,
+  TemplateWorkspaceLayout,
+} from '../../effect/models';
 import { collectPanes } from '../../core/layout-tree';
 import { pathTail } from './formatting';
 
@@ -116,7 +120,10 @@ function countTemplateLayout(layout: TemplateWorkspaceLayout | undefined): numbe
   return total;
 }
 
-export function getTemplateStats(template: TemplateSession): { workspaceCount: number; paneCount: number } {
+export function getTemplateStats(template: TemplateSession): {
+  workspaceCount: number;
+  paneCount: number;
+} {
   if (template.workspaces.length > 0) {
     let paneCount = 0;
     for (const workspace of template.workspaces) {

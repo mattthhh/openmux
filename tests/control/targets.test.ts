@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from 'bun:test';
 import type { Workspace, WorkspaceId } from '../../src/core/types';
 import type { LayoutState } from '../../src/core/operations/layout-actions';
 import { DEFAULT_CONFIG } from '../../src/core/config';
@@ -17,7 +17,10 @@ function createWorkspace(id: WorkspaceId, params: Partial<Workspace>): Workspace
   };
 }
 
-function createLayoutState(workspaces: Record<WorkspaceId, Workspace>, activeWorkspaceId: WorkspaceId): LayoutState {
+function createLayoutState(
+  workspaces: Record<WorkspaceId, Workspace>,
+  activeWorkspaceId: WorkspaceId
+): LayoutState {
   return {
     workspaces,
     activeWorkspaceId,
@@ -32,10 +35,22 @@ describe('control pane selector', () => {
   test('parses common selectors', () => {
     expect(parsePaneSelector('focused')).toEqual({ ok: true, selector: { type: 'focused' } });
     expect(parsePaneSelector('main')).toEqual({ ok: true, selector: { type: 'main' } });
-    expect(parsePaneSelector('stack:2')).toEqual({ ok: true, selector: { type: 'stack', index: 2 } });
-    expect(parsePaneSelector('pane:abc')).toEqual({ ok: true, selector: { type: 'pane', id: 'abc' } });
-    expect(parsePaneSelector('pty:xyz')).toEqual({ ok: true, selector: { type: 'pty', id: 'xyz' } });
-    expect(parsePaneSelector('pane-1')).toEqual({ ok: true, selector: { type: 'pane', id: 'pane-1' } });
+    expect(parsePaneSelector('stack:2')).toEqual({
+      ok: true,
+      selector: { type: 'stack', index: 2 },
+    });
+    expect(parsePaneSelector('pane:abc')).toEqual({
+      ok: true,
+      selector: { type: 'pane', id: 'abc' },
+    });
+    expect(parsePaneSelector('pty:xyz')).toEqual({
+      ok: true,
+      selector: { type: 'pty', id: 'xyz' },
+    });
+    expect(parsePaneSelector('pane-1')).toEqual({
+      ok: true,
+      selector: { type: 'pane', id: 'pane-1' },
+    });
   });
 
   test('rejects invalid stack selectors', () => {
@@ -47,7 +62,10 @@ describe('control pane selector', () => {
 describe('resolvePaneSelector', () => {
   const workspace1 = createWorkspace(1, {
     mainPane: { id: 'pane-1', ptyId: 'pty-1' },
-    stackPanes: [{ id: 'pane-2', ptyId: 'pty-2' }, { id: 'pane-3', ptyId: 'pty-3' }],
+    stackPanes: [
+      { id: 'pane-2', ptyId: 'pty-2' },
+      { id: 'pane-3', ptyId: 'pty-3' },
+    ],
     focusedPaneId: 'pane-2',
     activeStackIndex: 0,
   });

@@ -1,14 +1,17 @@
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "bun:test";
-import type { ITerminalEmulator, KittyGraphicsPlacement } from '../../../src/terminal/emulator-interface';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'bun:test';
+import type {
+  ITerminalEmulator,
+  KittyGraphicsPlacement,
+} from '../../../src/terminal/emulator-interface';
 import type { TerminalCell } from '../../../src/core/types';
 import type { ArchivePlacement } from '../../../src/terminal/kitty-graphics/archive-placement';
 import { ScrollbackArchive } from '../../../src/terminal/scrollback-archive';
 import { ArchivedTerminalEmulator } from '../../../src/terminal/archived-emulator';
 import * as capabilitiesActual from '../../../src/terminal/capabilities';
-import { 
-  createImageInfo, 
-  createPlacement, 
-  defaultRenderTarget, 
+import {
+  createImageInfo,
+  createPlacement,
+  defaultRenderTarget,
   sendKittyTransmit,
   createMockEmulatorWithPlacements,
 } from './helpers';
@@ -65,7 +68,7 @@ describe('Kitty Graphics Scrollback Archive', () => {
         columns: 10,
         rows: 5,
       });
-      
+
       const liveEmulator = createMockEmulatorWithPlacements({
         scrollbackLength: 100,
         placements: [placement],
@@ -87,13 +90,15 @@ describe('Kitty Graphics Scrollback Archive', () => {
       for (let i = 0; i < 50; i++) {
         lines.push(createMockLine(80));
       }
-      
+
       // Manually add placements to archive (simulating what ScrollbackArchiver does)
-      const archivePlacements: ArchivePlacement[] = [{
-        ...placement,
-        archiveOffset: 0,
-        originalScreenY: 0,
-      }];
+      const archivePlacements: ArchivePlacement[] = [
+        {
+          ...placement,
+          archiveOffset: 0,
+          originalScreenY: 0,
+        },
+      ];
 
       // Store in archive (await async operations)
       await archive.appendLines(lines);
@@ -134,17 +139,19 @@ describe('Kitty Graphics Scrollback Archive', () => {
       await archive.appendLines(lines);
 
       // Archive placement at offset 5
-      const archivePlacements: ArchivePlacement[] = [{
-        ...placement,
-        archiveOffset: 5,
-        originalScreenY: 5,
-      }];
+      const archivePlacements: ArchivePlacement[] = [
+        {
+          ...placement,
+          archiveOffset: 5,
+          originalScreenY: 5,
+        },
+      ];
       await archive.appendPlacements(archivePlacements);
 
       // Get placements - archived ones should have adjusted screenY
       const placements = archivedEmulator.getKittyPlacements();
-      const archivedPlacement = placements.find(p => p.imageId === 1 && p.placementId === 1);
-      
+      const archivedPlacement = placements.find((p) => p.imageId === 1 && p.placementId === 1);
+
       expect(archivedPlacement).toBeDefined();
       // screenY is set to archiveOffset (absolute line position)
       expect(archivedPlacement!.screenY).toBe(5);
@@ -207,7 +214,7 @@ describe('Kitty Graphics Scrollback Archive', () => {
       });
 
       const archive = new ScrollbackArchive({ rootDir: testDir });
-      
+
       // Add archived lines with placements
       const lines: TerminalCell[][] = [];
       for (let i = 0; i < 50; i++) {
@@ -229,7 +236,7 @@ describe('Kitty Graphics Scrollback Archive', () => {
       const archivedEmulator = new ArchivedTerminalEmulator(liveEmulator, archive);
 
       const totalScrollback = archive.length + liveEmulator.getScrollbackLength();
-      
+
       // Update renderer with archived emulator
       // viewportOffset = 35: viewing archive offsets 0-25 (archiveOffset 30 is at row 5)
       renderer.updatePane('pane-1', {
@@ -309,11 +316,13 @@ describe('Kitty Graphics Scrollback Archive', () => {
         lines.push(createMockLine(80));
       }
       await archive.appendLines(lines);
-      await archive.appendPlacements([{
-        ...createPlacement(2, 1),
-        archiveOffset: 8,
-        originalScreenY: 8,
-      }]);
+      await archive.appendPlacements([
+        {
+          ...createPlacement(2, 1),
+          archiveOffset: 8,
+          originalScreenY: 8,
+        },
+      ]);
 
       const originalGetPlacementsForLineRange = archive.getPlacementsForLineRange.bind(archive);
       let scanCount = 0;
@@ -371,12 +380,12 @@ describe('Kitty Graphics Scrollback Archive', () => {
 
       // Get merged placements
       const placements = archivedEmulator.getKittyPlacements();
-      
+
       // Should have placements from both archive and live
       expect(placements.length).toBeGreaterThanOrEqual(1);
 
       // Check that archived placement has archiveOffset property (marks it as archived)
-      const archived = placements.find(p => 'archiveOffset' in p);
+      const archived = placements.find((p) => 'archiveOffset' in p);
       expect(archived).toBeDefined();
       // Archived placements have screenY = archiveOffset (absolute position)
       expect(archived!.screenY).toBe(15);
@@ -419,11 +428,9 @@ describe('Kitty Graphics Scrollback Archive', () => {
 
       // Get merged placements - should be deduplicated
       const placements = archivedEmulator.getKittyPlacements();
-      
+
       // Should only have one placement (deduplicated by imageId:placementId)
-      const matchingPlacements = placements.filter(
-        p => p.imageId === 1 && p.placementId === 1
-      );
+      const matchingPlacements = placements.filter((p) => p.imageId === 1 && p.placementId === 1);
       expect(matchingPlacements).toHaveLength(1);
 
       archive.dispose();
@@ -449,7 +456,7 @@ describe('Kitty Graphics Scrollback Archive', () => {
       });
 
       const archive = new ScrollbackArchive({ rootDir: testDir });
-      
+
       // Add many archived lines
       const lines: TerminalCell[][] = [];
       for (let i = 0; i < 100; i++) {
@@ -517,7 +524,7 @@ describe('Kitty Graphics Scrollback Archive', () => {
 
     it('handles images with different z-order correctly', async () => {
       const archive = new ScrollbackArchive({ rootDir: testDir });
-      
+
       const lines: TerminalCell[][] = [];
       for (let i = 0; i < 50; i++) {
         lines.push(createMockLine(80));
@@ -549,7 +556,7 @@ describe('Kitty Graphics Scrollback Archive', () => {
       expect(retrievedPlacements).toHaveLength(3);
 
       // Verify z values are preserved
-      const zValues = retrievedPlacements.map(p => p.z).sort((a, b) => a - b);
+      const zValues = retrievedPlacements.map((p) => p.z).sort((a, b) => a - b);
       expect(zValues).toEqual([-5, 0, 10]);
 
       archive.dispose();
@@ -558,7 +565,7 @@ describe('Kitty Graphics Scrollback Archive', () => {
 
   describe('litmus: Placement cleanup after chunk drop', () => {
     it('removes placements when archive chunk is dropped', async () => {
-      const archive = new ScrollbackArchive({ 
+      const archive = new ScrollbackArchive({
         rootDir: testDir,
         chunkMaxLines: 10, // Small chunks for testing
       });
@@ -573,7 +580,12 @@ describe('Kitty Graphics Scrollback Archive', () => {
 
         // Add placement for this chunk
         const placement: ArchivePlacement = {
-          ...createPlacement(chunk + 1, 1, { screenX: 0, screenY: chunk * 10, columns: 5, rows: 2 }),
+          ...createPlacement(chunk + 1, 1, {
+            screenX: 0,
+            screenY: chunk * 10,
+            columns: 5,
+            rows: 2,
+          }),
           archiveOffset: chunk * 10,
           originalScreenY: chunk * 10,
         };
@@ -608,7 +620,7 @@ describe('Kitty Graphics Scrollback Archive', () => {
     it('cleans up placement files when chunk is dropped', async () => {
       const fs = require('node:fs');
 
-      const archive = new ScrollbackArchive({ 
+      const archive = new ScrollbackArchive({
         rootDir: testDir,
         chunkMaxLines: 10,
       });
@@ -649,7 +661,7 @@ describe('Kitty Graphics Scrollback Archive', () => {
       expect(oldestChunk!.placementPath).toBeDefined();
 
       const placementFilePath = oldestChunk!.placementPath;
-      
+
       // Verify placement file exists before drop
       if (placementFilePath) {
         expect(fs.existsSync(placementFilePath)).toBe(true);
@@ -659,7 +671,7 @@ describe('Kitty Graphics Scrollback Archive', () => {
       archive.dropOldestChunk();
 
       // Wait for async cleanup
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise((resolve) => setTimeout(resolve, 100));
 
       // Verify placement file is deleted
       if (placementFilePath) {
@@ -676,7 +688,7 @@ describe('Kitty Graphics Scrollback Archive', () => {
         imageInfo: createImageInfo(1, 1n),
       });
 
-      const archive = new ScrollbackArchive({ 
+      const archive = new ScrollbackArchive({
         rootDir: testDir,
         chunkMaxLines: 10,
       });
@@ -688,11 +700,13 @@ describe('Kitty Graphics Scrollback Archive', () => {
         initialLines.push(createMockLine(80));
       }
       await archive.appendLines(initialLines);
-      await archive.appendPlacements([{
-        ...createPlacement(1, 1),
-        archiveOffset: 12,
-        originalScreenY: 12,
-      }]);
+      await archive.appendPlacements([
+        {
+          ...createPlacement(1, 1),
+          archiveOffset: 12,
+          originalScreenY: 12,
+        },
+      ]);
 
       // First access builds cache.
       const placements1 = archivedEmulator.getKittyPlacements();
@@ -707,11 +721,13 @@ describe('Kitty Graphics Scrollback Archive', () => {
         refillLines.push(createMockLine(80));
       }
       await archive.appendLines(refillLines);
-      await archive.appendPlacements([{
-        ...createPlacement(2, 1),
-        archiveOffset: 10,
-        originalScreenY: 10,
-      }]);
+      await archive.appendPlacements([
+        {
+          ...createPlacement(2, 1),
+          archiveOffset: 10,
+          originalScreenY: 10,
+        },
+      ]);
 
       expect(archive.length).toBe(20);
 
@@ -766,7 +782,12 @@ describe('Kitty Graphics Scrollback Archive', () => {
         getTerminalState: () => ({
           rows: [],
           cursor: { x: 0, y: 0, visible: true },
-          modes: { mouseTracking: false, cursorKeyMode: 'normal', alternateScreen: false, inBandResize: false },
+          modes: {
+            mouseTracking: false,
+            cursorKeyMode: 'normal',
+            alternateScreen: false,
+            inBandResize: false,
+          },
         }),
         getCursor: () => ({ x: 0, y: 0, visible: true }),
         getCursorKeyMode: () => 'normal',
@@ -794,7 +815,7 @@ describe('Kitty Graphics Scrollback Archive', () => {
 
     it('handles large archive offsets correctly', async () => {
       const archive = new ScrollbackArchive({ rootDir: testDir });
-      
+
       // Add many lines
       const lines: TerminalCell[][] = [];
       for (let i = 0; i < 1000; i++) {

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from 'bun:test';
 
 import { resolvePaneRename } from '../../src/components/pane-rename-utils';
 
@@ -8,6 +8,9 @@ describe('resolvePaneRename', () => {
   });
 
   it('returns trimmed manual title', () => {
-    expect(resolvePaneRename('  Opencode  ', 'shell')).toEqual({ type: 'manual', title: 'Opencode' });
+    expect(resolvePaneRename('  Opencode  ', 'shell')).toEqual({
+      type: 'manual',
+      title: 'Opencode',
+    });
   });
 });

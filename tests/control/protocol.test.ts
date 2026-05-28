@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from 'bun:test';
 import { encodeFrame, FrameReader, type ControlHeader } from '../../src/control/protocol';
 
 function readFrames(chunks: Buffer[]): Array<{ header: ControlHeader; payloads: Buffer[] }> {

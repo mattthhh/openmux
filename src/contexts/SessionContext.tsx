@@ -52,7 +52,6 @@ import { createSessionOperations } from './session-operations';
 
 export type { SessionState, SessionSummary };
 
-
 export interface SessionContextValue {
   state: SessionState;
   /** Filter sessions by search query */
@@ -60,7 +59,10 @@ export interface SessionContextValue {
   /** Create a new session */
   createSession: (name?: string) => Promise<SessionMetadata | SessionStorageError>;
   /** Switch to a session */
-  switchSession: (id: string, options?: { preloadedData?: Awaited<ReturnType<typeof loadSessionData>> }) => Promise<void>;
+  switchSession: (
+    id: string,
+    options?: { preloadedData?: Awaited<ReturnType<typeof loadSessionData>> }
+  ) => Promise<void>;
   /** Rename a session */
   renameSession: (id: string, name: string) => Promise<void>;
   /** Delete a session */
@@ -113,7 +115,6 @@ export interface SessionContextValue {
 
 const SessionContext = createContext<SessionContextValue | null>(null);
 
-
 interface SessionProviderProps extends ParentProps {
   /** Function to get CWD for a PTY ID */
   getCwd: (ptyId: string) => Promise<string>;
@@ -153,10 +154,12 @@ export function SessionProvider(props: SessionProviderProps) {
 
   // Helper to dispatch actions through the reducer
   const dispatch = (action: SessionAction) => {
-    setState(produce((s) => {
-      const newState = sessionReducer(s as SessionState, action);
-      Object.assign(s, newState);
-    }));
+    setState(
+      produce((s) => {
+        const newState = sessionReducer(s as SessionState, action);
+        Object.assign(s, newState);
+      })
+    );
   };
 
   const hasAnyPanes = (workspaces: Workspaces): boolean =>
@@ -165,7 +168,11 @@ export function SessionProvider(props: SessionProviderProps) {
     );
 
   const shouldPersistSession = (workspaces: Workspaces): boolean =>
-    persistenceEnabled() && state.initialized && !state.switching && !!state.activeSession && hasAnyPanes(workspaces);
+    persistenceEnabled() &&
+    state.initialized &&
+    !state.switching &&
+    !!state.activeSession &&
+    hasAnyPanes(workspaces);
 
   // Picker actions
   const {
@@ -269,15 +276,14 @@ export function SessionProvider(props: SessionProviderProps) {
     }
 
     let activeId = await getActiveSessionId();
-    let activeSession = activeId
-      ? sessions.find(s => s.id === activeId) ?? null
-      : null;
+    let activeSession = activeId ? (sessions.find((s) => s.id === activeId) ?? null) : null;
 
     const requestedSession = (process.env.OPENMUX_START_SESSION ?? '').trim();
     if (requestedSession) {
-      const matched = sessions.find(
-        (session) => session.id === requestedSession || session.name === requestedSession
-      ) ?? null;
+      const matched =
+        sessions.find(
+          (session) => session.id === requestedSession || session.name === requestedSession
+        ) ?? null;
       if (matched) {
         activeSession = matched;
         activeId = matched.id;
@@ -338,7 +344,9 @@ export function SessionProvider(props: SessionProviderProps) {
           const metadata = result;
           dispatch({ type: 'SET_SESSIONS', sessions: [...sessions, metadata] });
           dispatch({ type: 'SET_ACTIVE_SESSION', id: metadata.id, session: metadata });
-          await props.onSessionLoad({}, 1, new Map(), new Map(), metadata.id, { allowPrune: false });
+          await props.onSessionLoad({}, 1, new Map(), new Map(), metadata.id, {
+            allowPrune: false,
+          });
         }
         if (result instanceof SessionStorageError) {
           console.error('Failed to create replacement session:', result.message);
@@ -356,9 +364,11 @@ export function SessionProvider(props: SessionProviderProps) {
         );
       }
 
-      refreshTask = switchPromise.then(() => refreshSessions()).catch((e) => {
-        console.warn('[SessionContext] Failed to refresh sessions:', e);
-      });
+      refreshTask = switchPromise
+        .then(() => refreshSessions())
+        .catch((e) => {
+          console.warn('[SessionContext] Failed to refresh sessions:', e);
+        });
     }
 
     dispatch({ type: 'SET_INITIALIZED' });
@@ -377,12 +387,7 @@ export function SessionProvider(props: SessionProviderProps) {
       const activeWorkspaceId = props.getActiveWorkspaceId();
 
       if (state.activeSession && shouldPersistSession(workspaces)) {
-        await saveCurrentSession(
-          state.activeSession,
-          workspaces,
-          activeWorkspaceId,
-          props.getCwd
-        );
+        await saveCurrentSession(state.activeSession, workspaces, activeWorkspaceId, props.getCwd);
       }
     }, intervalMs);
 
@@ -415,25 +420,22 @@ export function SessionProvider(props: SessionProviderProps) {
     const activeWorkspaceId = props.getActiveWorkspaceId();
 
     if (shouldPersistSession(workspaces)) {
-      saveCurrentSession(
-        state.activeSession,
-        workspaces,
-        activeWorkspaceId,
-        props.getCwd
-      );
+      saveCurrentSession(state.activeSession, workspaces, activeWorkspaceId, props.getCwd);
     }
   });
 
   // Computed values
   const filteredSessions = createMemo(() =>
-    state.sessions.filter(s =>
-      s.name.toLowerCase().includes(state.searchQuery.toLowerCase())
-    )
+    state.sessions.filter((s) => s.name.toLowerCase().includes(state.searchQuery.toLowerCase()))
   );
 
   const value: SessionContextValue = {
-    get state() { return state; },
-    get filteredSessions() { return filteredSessions(); },
+    get state() {
+      return state;
+    },
+    get filteredSessions() {
+      return filteredSessions();
+    },
     ...sessionOps,
     refreshSessions,
     togglePicker,
@@ -445,8 +447,12 @@ export function SessionProvider(props: SessionProviderProps) {
     navigateUp,
     navigateDown,
     setSelectedIndex,
-    get showTemplateOverlay() { return showTemplateOverlay(); },
-    get templates() { return templates(); },
+    get showTemplateOverlay() {
+      return showTemplateOverlay();
+    },
+    get templates() {
+      return templates();
+    },
     openTemplateOverlay,
     toggleTemplateOverlay,
     closeTemplateOverlay,
@@ -458,13 +464,8 @@ export function SessionProvider(props: SessionProviderProps) {
     suspendPersistence: () => setPersistenceEnabled(false),
   };
 
-  return (
-    <SessionContext.Provider value={value}>
-      {props.children}
-    </SessionContext.Provider>
-  );
+  return <SessionContext.Provider value={value}>{props.children}</SessionContext.Provider>;
 }
-
 
 export function useSession(): SessionContextValue {
   const context = useContext(SessionContext);

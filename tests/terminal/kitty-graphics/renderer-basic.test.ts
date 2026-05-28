@@ -1,8 +1,13 @@
 import { Buffer } from 'buffer';
-import { afterEach, beforeAll, describe, expect, it, vi } from "bun:test";
+import { afterEach, beforeAll, describe, expect, it, vi } from 'bun:test';
 import type { ITerminalEmulator } from '../../../src/terminal/emulator-interface';
 import * as capabilitiesActual from '../../../src/terminal/capabilities';
-import { createImageInfo, createPlacement, defaultRenderTarget, sendKittyTransmit } from './helpers';
+import {
+  createImageInfo,
+  createPlacement,
+  defaultRenderTarget,
+  sendKittyTransmit,
+} from './helpers';
 
 let KittyGraphicsRenderer: typeof import('../../../src/terminal/kitty-graphics').KittyGraphicsRenderer;
 let KittyTransmitBroker: typeof import('../../../src/terminal/kitty-graphics').KittyTransmitBroker;

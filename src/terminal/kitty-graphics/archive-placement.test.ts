@@ -205,9 +205,7 @@ describe('ArchivePlacement serialization', () => {
     });
 
     it('should return error when count exceeds buffer size', () => {
-      const packed = packPlacements([
-        { ...basePlacement, archiveOffset: 0, originalScreenY: 0 },
-      ]);
+      const packed = packPlacements([{ ...basePlacement, archiveOffset: 0, originalScreenY: 0 }]);
       const result = unpackPlacements(packed, 2);
       expect(result).toBeInstanceOf(PlacementSerializeError);
       expect((result as PlacementSerializeError).message).toMatch(/Buffer too small/);
@@ -297,21 +295,21 @@ describe('ArchivePlacement serialization', () => {
       const packed = packPlacement(placement);
       const view = new DataView(packed);
 
-      expect(view.getUint32(0, true)).toBe(1);   // imageId
-      expect(view.getUint32(4, true)).toBe(2);   // placementId
-      expect(view.getUint8(8)).toBe(3);          // placementTag
+      expect(view.getUint32(0, true)).toBe(1); // imageId
+      expect(view.getUint32(4, true)).toBe(2); // placementId
+      expect(view.getUint8(8)).toBe(3); // placementTag
       // bytes 9-11: padding
-      expect(view.getUint32(12, true)).toBe(4);  // screenX
-      expect(view.getUint32(16, true)).toBe(5);  // screenY
-      expect(view.getUint32(20, true)).toBe(6);  // xOffset
-      expect(view.getUint32(24, true)).toBe(7);  // yOffset
-      expect(view.getUint32(28, true)).toBe(8);  // sourceX
-      expect(view.getUint32(32, true)).toBe(9);  // sourceY
+      expect(view.getUint32(12, true)).toBe(4); // screenX
+      expect(view.getUint32(16, true)).toBe(5); // screenY
+      expect(view.getUint32(20, true)).toBe(6); // xOffset
+      expect(view.getUint32(24, true)).toBe(7); // yOffset
+      expect(view.getUint32(28, true)).toBe(8); // sourceX
+      expect(view.getUint32(32, true)).toBe(9); // sourceY
       expect(view.getUint32(36, true)).toBe(10); // sourceWidth
       expect(view.getUint32(40, true)).toBe(11); // sourceHeight
       expect(view.getUint32(44, true)).toBe(12); // columns
       expect(view.getUint32(48, true)).toBe(13); // rows
-      expect(view.getInt32(52, true)).toBe(14);  // z
+      expect(view.getInt32(52, true)).toBe(14); // z
       expect(view.getUint32(56, true)).toBe(15); // archiveOffset
       expect(view.getUint32(60, true)).toBe(16); // originalScreenY
     });

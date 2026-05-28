@@ -6,7 +6,11 @@
  */
 
 import { createSignal, createEffect, onCleanup, type Accessor } from 'solid-js';
-import { createVimSequenceHandler, type VimInputMode, type VimSequence } from '../../../core/vim-sequences';
+import {
+  createVimSequenceHandler,
+  type VimInputMode,
+  type VimSequence,
+} from '../../../core/vim-sequences';
 import { useConfig } from '../../../contexts/ConfigContext';
 
 /** Configuration for vim sequence handlers per mode */
@@ -106,9 +110,7 @@ function buildVimHandlers(config: VimHandlerConfig): VimHandlers {
  * });
  * ```
  */
-export function useVimMode(options: {
-  isAggregateVisible: Accessor<boolean>;
-}): UseVimModeResult {
+export function useVimMode(options: { isAggregateVisible: Accessor<boolean> }): UseVimModeResult {
   const config = useConfig();
 
   // Track vim mode state

@@ -6,8 +6,7 @@ export const CONTROL_PROTOCOL_VERSION = 1;
 
 const defaultSocketDir = join(homedir(), '.config', 'openmux', 'sockets');
 
-export const CONTROL_SOCKET_DIR =
-  process.env.OPENMUX_CONTROL_SOCKET_DIR ?? defaultSocketDir;
+export const CONTROL_SOCKET_DIR = process.env.OPENMUX_CONTROL_SOCKET_DIR ?? defaultSocketDir;
 
 export const CONTROL_SOCKET_PATH =
   process.env.OPENMUX_CONTROL_SOCKET_PATH ?? join(CONTROL_SOCKET_DIR, 'openmux-ui.sock');

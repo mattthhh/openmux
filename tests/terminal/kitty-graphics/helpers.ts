@@ -68,7 +68,7 @@ export const createPlacement = (
 
 /**
  * Create an ArchivePlacement from a KittyGraphicsPlacement with archive metadata.
- * 
+ *
  * @param placement - The base Kitty graphics placement
  * @param archiveOffset - The offset in the scrollback archive where this placement belongs
  * @param originalScreenY - The original Y coordinate on screen when archived
@@ -99,11 +99,13 @@ export interface MockEmulatorOptions {
 /**
  * Create a mock terminal emulator with Kitty graphics support for testing.
  * Useful for testing scrollback archive functionality without a real Ghostty VT.
- * 
+ *
  * @param options - Configuration for the mock emulator
  * @returns A mock ITerminalEmulator with Kitty graphics methods
  */
-export const createMockEmulatorWithPlacements = (options: MockEmulatorOptions = {}): ITerminalEmulator => {
+export const createMockEmulatorWithPlacements = (
+  options: MockEmulatorOptions = {}
+): ITerminalEmulator => {
   const {
     scrollbackLength = 0,
     placements = [],
@@ -117,11 +119,13 @@ export const createMockEmulatorWithPlacements = (options: MockEmulatorOptions = 
   } = options;
 
   let imagesDirty = dirty;
-  const imageIds: number[] = explicitImageIds ?? (
-    placements.length > 0
-      ? [...new Set(placements.map(p => p.imageId))]
-      : (imageInfo ? [imageInfo.id] : [])
-  );
+  const imageIds: number[] =
+    explicitImageIds ??
+    (placements.length > 0
+      ? [...new Set(placements.map((p) => p.imageId))]
+      : imageInfo
+        ? [imageInfo.id]
+        : []);
 
   return {
     cols,
@@ -157,7 +161,12 @@ export const createMockEmulatorWithPlacements = (options: MockEmulatorOptions = 
     getTerminalState: () => ({
       rows: [],
       cursor: { x: 0, y: 0, visible: true },
-      modes: { mouseTracking: false, cursorKeyMode: 'normal', alternateScreen: false, inBandResize: false },
+      modes: {
+        mouseTracking: false,
+        cursorKeyMode: 'normal',
+        alternateScreen: false,
+        inBandResize: false,
+      },
     }),
     getCursor: () => ({ x: 0, y: 0, visible: true }),
     getCursorKeyMode: () => 'normal' as const,
@@ -171,10 +180,12 @@ export const createMockEmulatorWithPlacements = (options: MockEmulatorOptions = 
     onUpdate: () => () => {},
     onModeChange: () => () => {},
     search: async () => ({ matches: [], query: '' }),
-    
+
     // Kitty graphics support
     getKittyImagesDirty: () => imagesDirty,
-    clearKittyImagesDirty: () => { imagesDirty = false; },
+    clearKittyImagesDirty: () => {
+      imagesDirty = false;
+    },
     getKittyImageIds: () => imageIds,
     getKittyImageInfo: () => imageInfo,
     getKittyImageData: () => imageData,

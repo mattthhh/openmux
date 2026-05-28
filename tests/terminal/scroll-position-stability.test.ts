@@ -8,7 +8,7 @@
  * 4. Stale cache entries are cleared when content shifts (at scrollback limit)
  */
 
-import { describe, it, expect } from "bun:test";
+import { describe, it, expect } from 'bun:test';
 import type { TerminalCell } from '../../src/core/types';
 
 describe('scroll-position-stability', () => {
@@ -332,7 +332,10 @@ describe('scroll-position-stability', () => {
       const scrollbackDelta = newScrollbackLength - scrollbackLength;
 
       if (scrollbackDelta !== 0 && viewportOffset > 0) {
-        viewportOffset = Math.max(0, Math.min(viewportOffset + scrollbackDelta, newScrollbackLength));
+        viewportOffset = Math.max(
+          0,
+          Math.min(viewportOffset + scrollbackDelta, newScrollbackLength)
+        );
       }
       scrollbackLength = newScrollbackLength;
 
