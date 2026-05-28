@@ -107,6 +107,7 @@ export async function renameSession(
     sessions: updatedSessions,
     activeSessionId: currentIndex.activeSessionId,
     aggregateSessionOrder: currentIndex.aggregateSessionOrder,
+    aggregateHiddenSessionGroups: currentIndex.aggregateHiddenSessionGroups,
   });
 }
 
@@ -192,6 +193,7 @@ export async function updateAutoName(
     sessions: updatedSessions,
     activeSessionId: index.activeSessionId,
     aggregateSessionOrder: index.aggregateSessionOrder,
+    aggregateHiddenSessionGroups: index.aggregateHiddenSessionGroups,
   });
 }
 
@@ -227,5 +229,38 @@ export async function setAggregateSessionOrder(
     sessions: index.sessions,
     activeSessionId: index.activeSessionId,
     aggregateSessionOrder: [...nextOrder, ...missingIds].map((id) => id as SessionId),
+    aggregateHiddenSessionGroups: index.aggregateHiddenSessionGroups,
+  });
+}
+
+export async function getAggregateHiddenSessionGroups(
+  storage: SessionStorage
+): Promise<SessionStorageError | string[]> {
+  const index = await storage.loadIndex();
+  if (index instanceof SessionStorageError) {
+    return index;
+  }
+
+  return [...(index.aggregateHiddenSessionGroups ?? [])].map((id) => String(id));
+}
+
+export async function setAggregateHiddenSessionGroups(
+  storage: SessionStorage,
+  hiddenGroupIds: string[]
+): Promise<SessionStorageError | void> {
+  const index = await storage.loadIndex();
+  if (index instanceof SessionStorageError) {
+    return index;
+  }
+
+  // Only keep IDs that correspond to existing sessions
+  const existingIds = new Set(index.sessions.map((session) => String(session.id)));
+  const nextHidden = hiddenGroupIds.filter((id) => existingIds.has(id));
+
+  return storage.saveIndex({
+    sessions: index.sessions,
+    activeSessionId: index.activeSessionId,
+    aggregateSessionOrder: index.aggregateSessionOrder,
+    aggregateHiddenSessionGroups: nextHidden.map((id) => id as SessionId),
   });
 }

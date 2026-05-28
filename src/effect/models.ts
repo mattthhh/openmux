@@ -123,6 +123,7 @@ export const SessionIndexSchema = z.object({
   sessions: z.array(SessionMetadataSchema),
   activeSessionId: SessionIdSchema.nullable(),
   aggregateSessionOrder: z.array(SessionIdSchema).optional(),
+  aggregateHiddenSessionGroups: z.array(SessionIdSchema).optional(),
 });
 
 export type SessionIndex = z.infer<typeof SessionIndexSchema>;
@@ -132,6 +133,7 @@ export const createEmptySessionIndex = (): SessionIndex => ({
   sessions: [],
   activeSessionId: null,
   aggregateSessionOrder: [],
+  aggregateHiddenSessionGroups: [],
 });
 
 /** Template pane definition for layout templates */

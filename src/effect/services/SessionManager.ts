@@ -28,6 +28,8 @@ import {
   updateAutoName as metadataUpdateAutoName,
   getAggregateSessionOrder as metadataGetAggregateSessionOrder,
   setAggregateSessionOrder as metadataSetAggregateSessionOrder,
+  getAggregateHiddenSessionGroups as metadataGetAggregateHiddenSessionGroups,
+  setAggregateHiddenSessionGroups as metadataSetAggregateHiddenSessionGroups,
   type SessionInfo,
 } from './session-manager/metadata';
 
@@ -73,6 +75,7 @@ export interface SessionManager {
   getSessionInfo(id: SessionId): Promise<SessionError | SessionInfo | null>;
   updateAutoName(id: SessionId, cwd: string): Promise<SessionError | void>;
   aggregateOrder: SessionAggregateOrderStore;
+  hiddenGroups: SessionAggregateOrderStore;
   snapshot: SessionSnapshotStore;
 }
 
@@ -136,6 +139,11 @@ export async function createSessionManager(
       get: () => metadataGetAggregateSessionOrder(storage),
       set: (order: string[]) => metadataSetAggregateSessionOrder(storage, order),
     },
+    hiddenGroups: {
+      get: () => metadataGetAggregateHiddenSessionGroups(storage),
+      set: (hiddenGroupIds: string[]) =>
+        metadataSetAggregateHiddenSessionGroups(storage, hiddenGroupIds),
+    },
     snapshot: {
       serialize: (input: SessionSnapshotInput) =>
         quickSaveSerializeWorkspaces(
@@ -163,6 +171,7 @@ export function createTestSessionManager(): SessionManager {
   const sessions = new Map<SessionId, SerializedSession>();
   let activeId: SessionId | null = null;
   let aggregateSessionOrder: string[] = [];
+  let aggregateHiddenSessionGroups: string[] = [];
 
   const getActiveSessionId = (): SessionId | null => activeId;
 
@@ -294,6 +303,15 @@ export function createTestSessionManager(): SessionManager {
         );
         const missing = Array.from(sessions.keys()).filter((id) => !nextOrder.includes(id));
         aggregateSessionOrder = [...nextOrder, ...missing];
+      },
+    },
+    hiddenGroups: {
+      get: async () => aggregateHiddenSessionGroups,
+      set: async (hiddenGroupIds: string[]) => {
+        const existingIds = new Set(Array.from(sessions.keys()));
+        aggregateHiddenSessionGroups = hiddenGroupIds.filter((id) =>
+          existingIds.has(id as SessionId)
+        );
       },
     },
 

@@ -43,6 +43,8 @@ import { getFocusedPtyId } from '../core/workspace-utils';
 import {
   getAggregateSessionOrderResult,
   setAggregateSessionOrder,
+  getAggregateHiddenSessionGroupsResult,
+  setAggregateHiddenSessionGroups,
 } from '../effect/bridge/session-bridge';
 import { getSessionCwd as getStoredSessionCwd } from '../effect/bridge';
 import { getAggregateSessionForPty } from '../effect/bridge/aggregate/cache/session-pty-cache';
@@ -222,6 +224,27 @@ export function AggregateViewProvider(props: AggregateViewProviderProps) {
     }
   };
 
+  const loadPersistedHiddenGroups = async (): Promise<void> => {
+    const persistedHidden = await getAggregateHiddenSessionGroupsResult();
+    if (persistedHidden instanceof Error) {
+      console.error('Failed to load aggregate hidden session groups:', persistedHidden.message);
+      return;
+    }
+
+    setState(
+      produce((s) => {
+        s.hiddenSessionGroupIds = new Set(persistedHidden);
+        recomputeTree(s);
+      })
+    );
+  };
+
+  const persistHiddenGroups = async (hiddenGroupIds: Set<string>): Promise<void> => {
+    const result = await setAggregateHiddenSessionGroups([...hiddenGroupIds]);
+    if (result instanceof Error) {
+      console.error('Failed to persist aggregate hidden session groups:', result.message);
+    }
+  };
   // Handle creating a new pane in a specific session
   const handleCreatePaneInSession = (_sessionId: string) => {
     actions.closeAggregateView();
@@ -233,6 +256,7 @@ export function AggregateViewProvider(props: AggregateViewProviderProps) {
     refreshPtys,
     onCreatePaneInSession: handleCreatePaneInSession,
     persistSessionOrder,
+    persistHiddenGroups,
     getFocusedPtyId: () => {
       const ws = layout.activeWorkspace;
       return ws ? (getFocusedPtyId(ws) ?? null) : null;
@@ -245,6 +269,7 @@ export function AggregateViewProvider(props: AggregateViewProviderProps) {
       (showAggregateView) => {
         if (showAggregateView) {
           void loadPersistedSessionOrder();
+          void loadPersistedHiddenGroups();
 
           // Initial load: instant with current session PTYs, then background full refresh
           void (async () => {

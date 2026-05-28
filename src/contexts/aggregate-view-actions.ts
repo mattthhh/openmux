@@ -33,12 +33,21 @@ export interface AggregateViewActionsParams {
   onCreatePaneInSession?: (sessionId: string) => void;
   /** Persist manual aggregate session order */
   persistSessionOrder?: (order: string[]) => Promise<void>;
+  /** Persist hidden session groups */
+  persistHiddenGroups?: (hiddenGroupIds: Set<string>) => Promise<void>;
   /** The PTY ID that was focused before the aggregate view opened */
   getFocusedPtyId?: () => string | null;
 }
 
 export function createAggregateViewActions(params: AggregateViewActionsParams) {
-  const { state, setState, refreshPtys, onCreatePaneInSession, persistSessionOrder } = params;
+  const {
+    state,
+    setState,
+    refreshPtys,
+    onCreatePaneInSession,
+    persistSessionOrder,
+    persistHiddenGroups,
+  } = params;
 
   const getSessionIdForItem = (item: FlattenedTreeItem | undefined): string | null => {
     if (!item) return null;
@@ -130,7 +139,6 @@ export function createAggregateViewActions(params: AggregateViewActionsParams) {
         s.pendingPaneCreations = [];
         s.listScrollOffset = 0;
         s.showPtyPicker = false;
-        s.hiddenSessionGroupIds.clear();
         clearPreviewState(s);
       })
     );
@@ -587,6 +595,7 @@ export function createAggregateViewActions(params: AggregateViewActionsParams) {
         recomputeTree(s);
       })
     );
+    void persistHiddenGroups?.(state.hiddenSessionGroupIds);
   };
 
   /** Reveal all hidden session groups */
@@ -597,6 +606,7 @@ export function createAggregateViewActions(params: AggregateViewActionsParams) {
         recomputeTree(s);
       })
     );
+    void persistHiddenGroups?.(state.hiddenSessionGroupIds);
   };
 
   return {

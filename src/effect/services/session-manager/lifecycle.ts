@@ -67,6 +67,7 @@ export async function createSession(
     sessions: updatedSessions,
     activeSessionId: id,
     aggregateSessionOrder: currentIndex.aggregateSessionOrder,
+    aggregateHiddenSessionGroups: currentIndex.aggregateHiddenSessionGroups,
   });
   if (saveIndexResult instanceof SessionStorageError) {
     return saveIndexResult;
@@ -117,6 +118,7 @@ export async function saveSession(
     sessions,
     activeSessionId: currentIndex.activeSessionId,
     aggregateSessionOrder: currentIndex.aggregateSessionOrder,
+    aggregateHiddenSessionGroups: currentIndex.aggregateHiddenSessionGroups,
   });
 }
 
@@ -163,6 +165,9 @@ export async function deleteSession(
     sessions: filteredSessions,
     activeSessionId: newActiveId,
     aggregateSessionOrder: filteredAggregateOrder,
+    aggregateHiddenSessionGroups: (currentIndex.aggregateHiddenSessionGroups ?? []).filter(
+      (sessionId) => sessionId !== id
+    ),
   });
   if (saveIndexResult instanceof SessionStorageError) {
     return saveIndexResult;

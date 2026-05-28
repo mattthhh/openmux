@@ -157,6 +157,29 @@ export async function setAggregateSessionOrder(
   if (result instanceof Error) return result;
 }
 
+/** Get persisted aggregate hidden session groups */
+export async function getAggregateHiddenSessionGroups(): Promise<string[]> {
+  const result = await getAggregateHiddenSessionGroupsResult();
+  if (result instanceof Error) return [];
+  return result;
+}
+
+/** Get persisted aggregate hidden session groups without collapsing errors */
+export async function getAggregateHiddenSessionGroupsResult(): Promise<
+  string[] | SessionStorageError
+> {
+  const manager = getSessionManager();
+  return manager.hiddenGroups.get();
+}
+
+/** Persist aggregate hidden session groups */
+export async function setAggregateHiddenSessionGroups(
+  hiddenGroupIds: string[]
+): Promise<void | SessionStorageError> {
+  const manager = getSessionManager();
+  const result = await manager.hiddenGroups.set(hiddenGroupIds);
+  if (result instanceof Error) return result;
+}
 /** Create a new session (legacy compatibility) */
 export async function createSessionLegacy(
   name?: string
