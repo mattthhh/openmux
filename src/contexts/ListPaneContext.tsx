@@ -101,6 +101,9 @@ export interface ListPaneContextValue {
   scrollHandlers: ListScrollHandlers;
   /** Shimmer target color (host bg for effects) */
   shimmerTargetColor: string;
+  /** PTY ID of the currently focused pane (main terminal view).
+   *  Used to suppress glow for PTYs the user is already watching. */
+  focusedPtyId: string | null;
 }
 
 const ListPaneContext = createContext<ListPaneContextValue | null>(null);
@@ -120,6 +123,8 @@ export interface ListPaneProviderProps extends ParentProps {
   scrollHandlers: ListScrollHandlers;
   /** Shimmer target color */
   shimmerTargetColor: string;
+  /** PTY ID of the currently focused pane (main terminal view). */
+  focusedPtyId: string | null;
 }
 
 export function createListPaneContextValue(props: ListPaneProviderProps): ListPaneContextValue {
@@ -144,6 +149,9 @@ export function createListPaneContextValue(props: ListPaneProviderProps): ListPa
     },
     get shimmerTargetColor() {
       return props.shimmerTargetColor;
+    },
+    get focusedPtyId() {
+      return props.focusedPtyId;
     },
   };
 }

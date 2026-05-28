@@ -13,6 +13,7 @@ import {
   hasMeaningfulActivity,
   suppressPtyShimmer,
   unsuppressPtyShimmer,
+  setShimmerFocusedPty,
 } from '../shimmer';
 import type { PtyInfo } from '../../contexts/aggregate-view-types';
 
@@ -58,6 +59,7 @@ describe('shimmer activity tracking', () => {
     unsuppressPtyShimmer('pty-2');
     unsuppressPtyShimmer('pty-3');
     unsuppressPtyShimmer('saved:session-1:pane-1');
+    setShimmerFocusedPty('pty-other');
   });
 
   describe('recordPtyStdoutActivity', () => {
@@ -105,7 +107,7 @@ describe('shimmer activity tracking', () => {
       expect(hasRecentPtyStdoutActivity('pty-2', now + 100)).toBe(true);
     });
 
-    it('retains recent activity while shimmer is suppressed and restores it on unsuppress', () => {
+    it('retains recent activity while shimmer is suppressed but does not restart shimmer on unsuppress', () => {
       const now = Date.now();
 
       suppressPtyShimmer('pty-1');
@@ -115,9 +117,10 @@ describe('shimmer activity tracking', () => {
       expect(hasRecentPtyStdoutActivity('pty-1', now + 100)).toBe(true);
       expect(hasActiveShimmer('pty-1', now + 100)).toBe(false);
 
+      // unsuppress no longer restarts shimmer from stale activity.
+      // New activity through recordPtyStdoutActivity will start fresh shimmer.
       unsuppressPtyShimmer('pty-1');
-
-      expect(hasActiveShimmer('pty-1')).toBe(true);
+      expect(hasActiveShimmer('pty-1')).toBe(false);
     });
 
     it('clones recent activity to a saved aggregate row id', () => {

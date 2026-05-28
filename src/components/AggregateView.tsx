@@ -262,6 +262,7 @@ export function AggregateView(props: AggregateViewProps) {
                 onPlaceholderClick: () => {},
               }}
               shimmerTargetColor={hostBgColor()}
+              focusedPtyId={activePtyId()}
             >
               <ListPane components={{ SessionTreeNode, PtyTreeRow, PlaceholderRow }} />
             </ListPaneProvider>

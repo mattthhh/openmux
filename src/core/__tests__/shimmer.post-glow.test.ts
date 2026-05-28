@@ -21,6 +21,7 @@ import {
   clearPostShimmerGlow,
   suppressPtyShimmer,
   unsuppressPtyShimmer,
+  setShimmerFocusedPty,
 } from '../shimmer';
 
 /** Helper: advance shimmer through all sweeps by checking at intermediate times. */
@@ -41,6 +42,9 @@ describe('post-shimmer glow', () => {
     unsuppressPtyShimmer('pty-2');
     clearPostShimmerGlow('pty-1');
     clearPostShimmerGlow('pty-2');
+    // Default: focus on a different PTY so pty-1 is considered
+    // unfocused (glow should fire in basic tests).
+    setShimmerFocusedPty('pty-other');
   });
 
   it('returns false when the PTY has never shimmered', () => {
@@ -171,7 +175,7 @@ describe('post-shimmer glow', () => {
     expect(hasPostShimmerGlow('pty-1')).toBe(false);
   });
 
-  it('unsuppressPtyShimmer does not restart shimmer when glow is active', () => {
+  it('unsuppressPtyShimmer does not restart shimmer from stale activity', () => {
     const baseTime = 10000;
     recordPtyStdoutActivity('pty-1', baseTime);
     recordPtyStdoutActivity('pty-1', baseTime + 100);
@@ -180,28 +184,188 @@ describe('post-shimmer glow', () => {
     expect(hasPostShimmerGlow('pty-1')).toBe(true);
     expect(hasActiveShimmer('pty-1')).toBe(false);
 
-    // Simulate PtyTreeRow remount: suppress (cleanup) then unsuppress (effect)
+    // suppress clears glow (simulates component cleanup)
     suppressPtyShimmer('pty-1');
-    expect(hasPostShimmerGlow('pty-1')).toBe(false); // suppress clears glow
+    expect(hasPostShimmerGlow('pty-1')).toBe(false);
 
-    // Restore glow state manually (simulating what happen without suppress)
-    // The real scenario: component unmounts (onCleanup calls unsuppress),
-    // then remounts (selection effect calls unsuppress again)
-    clearPostShimmerGlow('pty-1');
-
-    // Now test the direct case: glow present, unsuppress should not restart shimmer
-    // First, set up glow again by completing shimmer
-    clearPtyStdoutActivity('pty-1');
-    unsuppressPtyShimmer('pty-1');
-    recordPtyStdoutActivity('pty-1', baseTime);
-    recordPtyStdoutActivity('pty-1', baseTime + 100);
-    driveShimmerCompletion('pty-1', baseTime);
-    expect(hasPostShimmerGlow('pty-1')).toBe(true);
-
-    // unsuppress should NOT start a new shimmer despite stale activity data
+    // unsuppress should NOT restart shimmer from stale activity data
     unsuppressPtyShimmer('pty-1');
     expect(hasActiveShimmer('pty-1')).toBe(false);
-    // Glow should still be present
+    // No glow either (suppress cleared it and unsuppress didn't recreate)
+    expect(hasPostShimmerGlow('pty-1')).toBe(false);
+  });
+});
+
+describe('post-shimmer glow — focus gating', () => {
+  beforeEach(() => {
+    clearPtyStdoutActivity('pty-1');
+    clearPtyStdoutActivity('pty-2');
+    unsuppressPtyShimmer('pty-1');
+    unsuppressPtyShimmer('pty-2');
+    clearPostShimmerGlow('pty-1');
+    clearPostShimmerGlow('pty-2');
+    // Focus on a different PTY so pty-1/pty-2 are unfocused by default
+    setShimmerFocusedPty('pty-other');
+  });
+
+  it('does NOT glow when the PTY is focused at activity time', () => {
+    setShimmerFocusedPty('pty-1');
+
+    const baseTime = 10000;
+    recordPtyStdoutActivity('pty-1', baseTime);
+    recordPtyStdoutActivity('pty-1', baseTime + 100);
+
+    driveShimmerCompletion('pty-1', baseTime);
+
+    expect(hasActiveShimmer('pty-1')).toBe(false);
+    expect(hasPostShimmerGlow('pty-1')).toBe(false);
+  });
+
+  it('glows for a non-focused PTY at activity time', () => {
+    setShimmerFocusedPty('pty-2');
+
+    const baseTime = 10000;
+    recordPtyStdoutActivity('pty-1', baseTime);
+    recordPtyStdoutActivity('pty-1', baseTime + 100);
+
+    driveShimmerCompletion('pty-1', baseTime);
+
+    expect(hasActiveShimmer('pty-1')).toBe(false);
     expect(hasPostShimmerGlow('pty-1')).toBe(true);
+  });
+
+  it('does NOT glow when user was focused at activity time but switches away before completion', () => {
+    const baseTime = 10000;
+    // User is watching pty-1 when activity fires
+    setShimmerFocusedPty('pty-1');
+    recordPtyStdoutActivity('pty-1', baseTime);
+    recordPtyStdoutActivity('pty-1', baseTime + 100);
+
+    // Midway through shimmer, user switches to pty-2
+    setShimmerFocusedPty('pty-2');
+
+    driveShimmerCompletion('pty-1', baseTime);
+
+    // No glow: user was watching when the activity happened
+    expect(hasPostShimmerGlow('pty-1')).toBe(false);
+  });
+
+  it('glows when activity happened while unfocused even if user switches TO the PTY later', () => {
+    const baseTime = 10000;
+    // Activity happens while user is NOT watching
+    setShimmerFocusedPty('pty-2');
+    recordPtyStdoutActivity('pty-1', baseTime);
+    recordPtyStdoutActivity('pty-1', baseTime + 100);
+
+    // User switches to pty-1 after activity was recorded
+    setShimmerFocusedPty('pty-1');
+
+    driveShimmerCompletion('pty-1', baseTime);
+
+    // Glow fires: the activity happened while the user wasn't watching
+    expect(hasPostShimmerGlow('pty-1')).toBe(true);
+  });
+
+  it('captured focus at activity time — switching away AFTER recording does not produce glow', () => {
+    const baseTime = 10000;
+    // User is watching pty-1 when activity occurs
+    setShimmerFocusedPty('pty-1');
+    recordPtyStdoutActivity('pty-1', baseTime);
+    recordPtyStdoutActivity('pty-1', baseTime + 100);
+
+    // Activity was recorded while focused → sawUnfocusedActivity = false.
+    // Now switch away — this should NOT retroactively cause glow.
+    setShimmerFocusedPty('pty-2');
+
+    driveShimmerCompletion('pty-1', baseTime);
+
+    expect(hasPostShimmerGlow('pty-1')).toBe(false);
+  });
+
+  it('queued activity while unfocused does NOT upgrade sawUnfocusedActivity', () => {
+    const baseTime = 10000;
+    // Initial activity while focused — user was watching
+    setShimmerFocusedPty('pty-1');
+    recordPtyStdoutActivity('pty-1', baseTime);
+    recordPtyStdoutActivity('pty-1', baseTime + 100);
+
+    // Switch away — new activity queues while unfocused
+    setShimmerFocusedPty('pty-2');
+    recordPtyStdoutActivity('pty-1', baseTime + 3000);
+
+    driveShimmerCompletion('pty-1', baseTime);
+
+    // No glow: the shimmer started while focused, queued activity from
+    // prompt echo etc. should not retroactively trigger glow.
+    expect(hasPostShimmerGlow('pty-1')).toBe(false);
+  });
+
+  it('no-glow for focused PTY via max duration cap', () => {
+    setShimmerFocusedPty('pty-1');
+
+    const baseTime = 10000;
+    recordPtyStdoutActivity('pty-1', baseTime);
+    recordPtyStdoutActivity('pty-1', baseTime + 100);
+
+    // Past max total duration — guaranteed completion
+    const afterMax = baseTime + 16000;
+    expect(hasActiveShimmer('pty-1', afterMax)).toBe(false);
+    expect(hasPostShimmerGlow('pty-1')).toBe(false);
+  });
+
+  it('glow via max duration if any activity was unfocused', () => {
+    const baseTime = 10000;
+    // Activity while unfocused
+    setShimmerFocusedPty('pty-2');
+    recordPtyStdoutActivity('pty-1', baseTime);
+    recordPtyStdoutActivity('pty-1', baseTime + 100);
+
+    const afterMax = baseTime + 16000;
+    expect(hasActiveShimmer('pty-1', afterMax)).toBe(false);
+    expect(hasPostShimmerGlow('pty-1')).toBe(true);
+  });
+
+  it('covers the ls -a scenario: focused PTY, fast command, switch away, no glow', () => {
+    setShimmerFocusedPty('pty-1');
+
+    const baseTime = 10000;
+    recordPtyStdoutActivity('pty-1', baseTime);
+    recordPtyStdoutActivity('pty-1', baseTime + 100);
+
+    // User switches to another PTY before shimmer animation finishes
+    setShimmerFocusedPty('pty-2');
+
+    // Shimmer completes — no glow because user was watching when ls ran
+    driveShimmerCompletion('pty-1', baseTime);
+
+    expect(hasActiveShimmer('pty-1')).toBe(false);
+    expect(hasPostShimmerGlow('pty-1')).toBe(false);
+  });
+
+  it('npm install while away: unfocused PTY, glow fires', () => {
+    setShimmerFocusedPty('pty-2');
+
+    const baseTime = 10000;
+    recordPtyStdoutActivity('pty-1', baseTime);
+    recordPtyStdoutActivity('pty-1', baseTime + 100);
+
+    driveShimmerCompletion('pty-1', baseTime);
+
+    expect(hasActiveShimmer('pty-1')).toBe(false);
+    expect(hasPostShimmerGlow('pty-1')).toBe(true);
+  });
+
+  it('null focusedPtyId assumes focused — no false glow on startup', () => {
+    // Simulates app startup before the SolidJS effect runs
+    setShimmerFocusedPty(null); // Explicitly null — before effect runs
+    const baseTime = 10000;
+    // PTY output arrives — should NOT glow even though focusedPtyId is null
+    recordPtyStdoutActivity('pty-1', baseTime);
+    recordPtyStdoutActivity('pty-1', baseTime + 100);
+
+    driveShimmerCompletion('pty-1', baseTime);
+
+    expect(hasActiveShimmer('pty-1')).toBe(false);
+    expect(hasPostShimmerGlow('pty-1')).toBe(false);
   });
 });

@@ -8,6 +8,7 @@ import {
   recordPtyStdoutActivity,
   hasRecentPtyStdoutActivity,
   clearPtyStdoutActivity,
+  setShimmerFocusedPty,
 } from '../shimmer';
 
 // Mock terminal that properly tracks dirty state
@@ -28,12 +29,24 @@ class MockTerminal {
     return dirty;
   }
 
-  getCursor() { return { x: 0, y: 0, visible: true }; }
-  getScrollbackLength() { return 0; }
-  getViewport() { return []; }
-  isRowDirty() { return true; }
-  getKittyKeyboardFlags() { return 0; }
-  getMode() { return false; }
+  getCursor() {
+    return { x: 0, y: 0, visible: true };
+  }
+  getScrollbackLength() {
+    return 0;
+  }
+  getViewport() {
+    return [];
+  }
+  isRowDirty() {
+    return true;
+  }
+  getKittyKeyboardFlags() {
+    return 0;
+  }
+  getMode() {
+    return false;
+  }
   resize() {}
   free() {}
 }
@@ -135,6 +148,7 @@ describe('shimmer integration - emulator to activity tracking', () => {
     clearPtyStdoutActivity('test-pty-2');
     clearPtyStdoutActivity('test-pty-lifecycle');
     clearPtyStdoutActivity('background-session-pty');
+    setShimmerFocusedPty('pty-other');
   });
 
   it('FIXED: should track dirty rows even when updates are disabled', () => {
@@ -174,7 +188,7 @@ describe('shimmer integration - emulator to activity tracking', () => {
 
     // Get the dirty update - would have NO dirty rows in old code
     const update = emulator.getDirtyUpdate();
-    
+
     // This is what the bug was - dirty rows are NOT tracked
     expect(update.dirtyRows.size).toBe(0);
 
@@ -209,7 +223,7 @@ describe('shimmer integration - emulator to activity tracking', () => {
     // In our test mock, we verify the pattern: no callbacks while disabled,
     // but activity WAS tracked
     emulator.setUpdateEnabled(true);
-    
+
     // After enabling, subsequent writes should trigger callbacks
     emulator.write('Data after enable\n');
     expect(callbackCount).toBeGreaterThan(0); // Now callbacks fire

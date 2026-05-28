@@ -151,6 +151,7 @@ export const ListPane: Component<ListPaneProps> = (props) => {
                       <props.components.PtyTreeRow
                         pty={(node() as Extract<TreeNode, { type: 'pty' }>).ptyInfo}
                         isSelected={isSelected()}
+                        focusedPtyId={ctx.focusedPtyId}
                         maxWidth={ctx.layout.innerWidth}
                         indent={ptyIndent()}
                         aggregateTheme={colors.theme.ui.aggregate}

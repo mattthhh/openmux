@@ -23,6 +23,21 @@ const ptyStdoutActivity = new Map<string, number[]>();
 /** PTY IDs that should not shimmer (e.g., selected in aggregate view) */
 const suppressedPtyIds = new Set<string>();
 
+/** The currently focused PTY (the one the user is watching).
+ *  Used at activity-recording time to determine whether the user saw the
+ *  output.  Captured in ShimmerState.sawUnfocusedActivity so the glow
+ *  decision is based on what happened at recording time, not at the
+ *  later animation-completion time. */
+let focusedPtyId: string | null = null;
+
+/**
+ * Update the focused PTY for glow gating.
+ * Called from the app's focus-tracking system whenever focus changes.
+ */
+export function setShimmerFocusedPty(ptyId: string | null): void {
+  focusedPtyId = ptyId;
+}
+
 /** PTY IDs whose shimmer completed (not suppressed or cleared).
  *  Maps ptyId → completion timestamp.  Persists until the user
  *  selects the row (clicks to preview) — no auto-expiry timer. */
@@ -36,6 +51,10 @@ interface ShimmerState {
   sweepCount: number; // Number of completed sweeps in current cycle
   hasQueuedActivity: boolean; // New activity arrived during animation - queue ONE more sweep max
   totalStartTime: number; // When shimmer first started (for max duration cap)
+  /** True if any activity was recorded while the PTY was NOT focused.
+   *  If all activity happened while the user was watching, there is nothing
+   *  to notify about and the glow should not fire on completion. */
+  sawUnfocusedActivity: boolean;
 }
 
 const shimmerStates = new Map<string, ShimmerState>();
@@ -77,21 +96,12 @@ export function unsuppressPtyShimmer(ptyId: string): void {
     return;
   }
 
-  const recent = prunePtyStdoutActivity(ptyId);
-  if (recent.length < MIN_OUTPUT_EVENTS_FOR_SHIMMER) {
-    return;
-  }
-
-  const latestActivity = recent[recent.length - 1] ?? Date.now();
-  shimmerStates.set(ptyId, {
-    startTime: latestActivity,
-    duration: DEFAULT_CONFIG.sweepDuration,
-    sweepDuration: DEFAULT_CONFIG.sweepDuration,
-    sweepCount: 0,
-    hasQueuedActivity: false,
-    totalStartTime: recent[0] ?? latestActivity,
-  });
-  notifyShimmerStateListeners();
+  // Don't restart shimmer from stale activity data. If the shimmer already
+  // played out naturally (no glow = user was watching, glow = user wasn't),
+  // resurrecting it from old timestamps would produce a false glow for
+  // focused PTYs (the most common case). New activity will start fresh
+  // shimmer through recordPtyStdoutActivity.
+  return;
 }
 
 interface ShimmerConfig {
@@ -199,9 +209,18 @@ export function recordPtyStdoutActivity(ptyId: string, time = Date.now()): void 
     // Animation is running - queue ONE more sweep max (ring buffer of 1)
     // Don't accumulate multiple queued sweeps - just mark that we need one more
     existingState.hasQueuedActivity = true;
+    // NOTE: Do NOT upgrade sawUnfocusedActivity here.  The flag captures
+    // whether the user was watching when the shimmer STARTED.  Subsequent
+    // queued activity (e.g. shell prompt arriving after switching away)
+    // should not retroactively cause glow — the user already saw the
+    // meaningful output.
   } else {
     // New shimmer starting — clear any lingering glow from a previous cycle
     recentlyCompletedShimmer.delete(ptyId);
+    // Capture whether the user was watching when this activity occurred.
+    // If focusedPtyId is null (app startup / effect not yet run), assume
+    // the user is watching — false glow is worse than missed glow.
+    const wasUnfocused = focusedPtyId !== null && ptyId !== focusedPtyId;
     // No animation running - start fresh
     shimmerStates.set(ptyId, {
       startTime: time,
@@ -210,6 +229,7 @@ export function recordPtyStdoutActivity(ptyId: string, time = Date.now()): void 
       sweepCount: 0,
       hasQueuedActivity: false,
       totalStartTime: time, // Track when shimmer first started
+      sawUnfocusedActivity: wasUnfocused,
     });
     notifyShimmerStateListeners();
   }
@@ -245,7 +265,12 @@ export function clonePtyStdoutActivity(
 
   const sourceState = shimmerStates.get(sourcePtyId);
   if (sourceState) {
-    shimmerStates.set(targetPtyId, { ...sourceState });
+    shimmerStates.set(targetPtyId, {
+      ...sourceState,
+      // Cloned rows are aggregate-view projections — the user is not
+      // watching them directly, so mark unfocused activity for glow.
+      sawUnfocusedActivity: true,
+    });
     notifyShimmerStateListeners();
     return;
   }
@@ -266,6 +291,9 @@ export function clonePtyStdoutActivity(
     sweepCount: 0,
     hasQueuedActivity: false,
     totalStartTime: recent[0] ?? latestActivity,
+    // Cloned rows are aggregate-view projections — the user is not
+    // watching them directly, so mark unfocused activity for glow.
+    sawUnfocusedActivity: true,
   });
   notifyShimmerStateListeners();
 }
@@ -374,7 +402,9 @@ export function getPtyShimmerColor(
 
   // Check max total duration cap (prevents infinite animation with continuous activity)
   if (totalElapsed > MAX_TOTAL_SHIMMER_MS) {
-    recentlyCompletedShimmer.set(ptyId, now);
+    if (state.sawUnfocusedActivity) {
+      recentlyCompletedShimmer.set(ptyId, now);
+    }
     shimmerStates.delete(ptyId);
     notifyShimmerStateListeners();
     return undefined;
@@ -392,7 +422,9 @@ export function getPtyShimmerColor(
       state.hasQueuedActivity = false; // Consume the queued activity
     } else if (elapsed > state.duration) {
       // No queued activity and main duration expired - clear state
-      recentlyCompletedShimmer.set(ptyId, now);
+      if (state.sawUnfocusedActivity) {
+        recentlyCompletedShimmer.set(ptyId, now);
+      }
       shimmerStates.delete(ptyId);
       notifyShimmerStateListeners();
       return undefined;
@@ -401,7 +433,9 @@ export function getPtyShimmerColor(
 
   // Check if animation has fully expired with no queued activity
   if (elapsed > state.duration && !state.hasQueuedActivity) {
-    recentlyCompletedShimmer.set(ptyId, now);
+    if (state.sawUnfocusedActivity) {
+      recentlyCompletedShimmer.set(ptyId, now);
+    }
     shimmerStates.delete(ptyId);
     notifyShimmerStateListeners();
     return undefined;
@@ -452,7 +486,10 @@ export function hasActiveShimmer(ptyId: string, now = Date.now()): boolean {
 
   // Check max total duration cap
   if (totalElapsed > MAX_TOTAL_SHIMMER_MS) {
-    recentlyCompletedShimmer.set(ptyId, now);
+    const state = shimmerStates.get(ptyId)!;
+    if (state.sawUnfocusedActivity) {
+      recentlyCompletedShimmer.set(ptyId, now);
+    }
     shimmerStates.delete(ptyId);
     notifyShimmerStateListeners();
     return false;
@@ -473,7 +510,9 @@ export function hasActiveShimmer(ptyId: string, now = Date.now()): boolean {
 
   // Check if animation has fully expired
   if (elapsed > state.duration && !state.hasQueuedActivity) {
-    recentlyCompletedShimmer.set(ptyId, now);
+    if (state.sawUnfocusedActivity) {
+      recentlyCompletedShimmer.set(ptyId, now);
+    }
     shimmerStates.delete(ptyId);
     notifyShimmerStateListeners();
     return false;

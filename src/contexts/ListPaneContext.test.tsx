@@ -139,6 +139,9 @@ describe('ListPaneContext', () => {
       get shimmerTargetColor() {
         return '#000000';
       },
+      get focusedPtyId() {
+        return null;
+      },
       children: undefined,
     });
 
@@ -195,6 +198,9 @@ describe('ListPaneContext', () => {
       },
       get shimmerTargetColor() {
         return '#000000';
+      },
+      get focusedPtyId() {
+        return null;
       },
       children: undefined,
     });

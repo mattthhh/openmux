@@ -31,6 +31,9 @@ export interface PtyTreeRowProps {
   pty: PtyInfo;
   /** Whether this row is selected */
   isSelected: boolean;
+  /** PTY ID of the currently focused pane (main terminal view).
+   *  Used to suppress glow for PTYs the user is already watching. */
+  focusedPtyId: string | null;
   /** Max width for rendering */
   maxWidth: number;
   /** Indentation string (just spaces, no tree glyphs) */
@@ -297,12 +300,19 @@ export function PtyTreeRow(props: PtyTreeRowProps) {
   const shimmerStateVersion = useShimmerStateVersion();
   const [isAnimating, setIsAnimating] = createSignal(hasActiveShimmer(props.pty.ptyId));
 
+  // Whether the user is currently watching this PTY — either it's
+  // selected in the aggregate view (being previewed) or it's the
+  // focused PTY in the main terminal (output is visible in real-time).
+  // In either case, the user saw the output, so glow is unnecessary.
+  const isUserWatching = () => props.isSelected || props.pty.ptyId === props.focusedPtyId;
+
   // Post-shimmer glow: bright white text until the user clicks the row to
   // preview the PTY. No timeout — cleared only by selection.
   // Initialize from the shimmer module so glow survives remount (session
   // group expand/collapse destroys and recreates PtyTreeRow instances).
+  // But suppress glow initialization if the user is already watching.
   const [glowActive, setGlowActive] = createSignal(
-    !hasActiveShimmer(props.pty.ptyId) && hasPostShimmerGlow(props.pty.ptyId)
+    !hasActiveShimmer(props.pty.ptyId) && hasPostShimmerGlow(props.pty.ptyId) && !isUserWatching()
   );
 
   // Debounce timer for glow activation — shared across effects below.
@@ -343,12 +353,12 @@ export function PtyTreeRow(props: PtyTreeRowProps) {
     if (glowDebounce) clearTimeout(glowDebounce);
     // Defer glow: if shimmer restarts before the timer fires it is
     // cancelled and the glow never appears, avoiding the flash.
-    if (hasPostShimmerGlow(props.pty.ptyId) && !props.isSelected) {
+    if (hasPostShimmerGlow(props.pty.ptyId) && !isUserWatching()) {
       glowDebounce = setTimeout(() => {
         glowDebounce = null;
         // Re-check: shimmer may have restarted during the wait
         if (hasActiveShimmer(props.pty.ptyId)) return;
-        if (hasPostShimmerGlow(props.pty.ptyId) && !props.isSelected) {
+        if (hasPostShimmerGlow(props.pty.ptyId) && !isUserWatching()) {
           setGlowActive(true);
         }
       }, GLOW_DEBOUNCE_MS);
@@ -385,7 +395,7 @@ export function PtyTreeRow(props: PtyTreeRowProps) {
   };
 
   // Whether to render the label in bold (post-shimmer glow)
-  const isBoldGlow = () => glowActive() && !props.isSelected;
+  const isBoldGlow = () => glowActive() && !isUserWatching();
 
   // Background color
   const bgColor = () => (props.isSelected ? selectionColors().background : undefined);

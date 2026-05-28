@@ -2,6 +2,7 @@ import { createEffect, createSignal, onCleanup, onMount } from 'solid-js';
 import { sendPtyFocusEvent } from '../../effect/bridge';
 import { setFocusedPty } from '../../terminal/focused-pty-registry';
 import { setHostFocusState } from '../../terminal/host-focus';
+import { setShimmerFocusedPty } from '../../core/shimmer';
 
 const FOCUS_IN_SEQUENCE = '\x1b[I';
 const FOCUS_OUT_SEQUENCE = '\x1b[O';
@@ -13,7 +14,9 @@ interface RendererWithInputHandler {
 
 export function setupFocusedPtyRegistry(getFocusedPtyId: () => string | null | undefined): void {
   createEffect(() => {
-    setFocusedPty(getFocusedPtyId() ?? null);
+    const id = getFocusedPtyId() ?? null;
+    setFocusedPty(id);
+    setShimmerFocusedPty(id);
   });
 }
 
