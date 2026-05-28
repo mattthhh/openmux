@@ -130,6 +130,7 @@ export function createAggregateViewActions(params: AggregateViewActionsParams) {
         s.pendingPaneCreations = [];
         s.listScrollOffset = 0;
         s.showPtyPicker = false;
+        s.hiddenSessionGroupIds.clear();
         clearPreviewState(s);
       })
     );
@@ -578,6 +579,26 @@ export function createAggregateViewActions(params: AggregateViewActionsParams) {
     );
   };
 
+  /** Hide a session group from the aggregate view list */
+  const hideSessionGroup = (sessionId: string) => {
+    setState(
+      produce((s) => {
+        s.hiddenSessionGroupIds.add(sessionId);
+        recomputeTree(s);
+      })
+    );
+  };
+
+  /** Reveal all hidden session groups */
+  const showHiddenSessionGroups = () => {
+    setState(
+      produce((s) => {
+        s.hiddenSessionGroupIds.clear();
+        recomputeTree(s);
+      })
+    );
+  };
+
   return {
     openAggregateView,
     closeAggregateView,
@@ -617,5 +638,7 @@ export function createAggregateViewActions(params: AggregateViewActionsParams) {
     openPtyPicker,
     closePtyPicker,
     pushPtyMru,
+    hideSessionGroup,
+    showHiddenSessionGroups,
   };
 }

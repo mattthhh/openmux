@@ -105,7 +105,11 @@ export function recomputeTree(state: AggregateViewState): void {
     state.sessionPaneOrderIndex
   );
 
-  state.flattenedTree = flattenTree(state.treeRoot, state.showInactive);
+  state.flattenedTree = flattenTree(
+    state.treeRoot,
+    state.showInactive,
+    state.hiddenSessionGroupIds
+  );
   state.flattenedTreeIndex = buildFlattenedTreeIndex(state.flattenedTree);
 
   if (state.flattenedTree.length === 0) {

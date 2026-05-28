@@ -133,6 +133,13 @@ export interface SpacerTreeNode {
   type: 'spacer';
 }
 
+/** Indicator row for revealing hidden session groups */
+export interface HiddenGroupsTreeNode {
+  type: 'hidden-groups';
+  /** Number of hidden session groups */
+  count: number;
+}
+
 /**
  * Union type for all tree node types in the aggregate view hierarchy.
  *
@@ -141,10 +148,16 @@ export interface SpacerTreeNode {
  * - PtyTreeNode: A terminal session belonging to a parent session
  * - PlaceholderTreeNode: Loading or unloaded state indicator
  * - SpacerTreeNode: Visual separator between session groups
+ * - HiddenGroupsTreeNode: Indicator to reveal hidden session groups
  *
  * Used to build the visual tree structure for navigation and rendering.
  */
-export type TreeNode = SessionTreeNode | PtyTreeNode | PlaceholderTreeNode | SpacerTreeNode;
+export type TreeNode =
+  | SessionTreeNode
+  | PtyTreeNode
+  | PlaceholderTreeNode
+  | SpacerTreeNode
+  | HiddenGroupsTreeNode;
 
 /**
  * Flattened tree item for visual navigation and rendering in the aggregate view.
@@ -259,6 +272,8 @@ export interface AggregateViewTreeSlice {
   flattenedTreeIndex: Map<string, number>;
   /** Expanded session IDs (collapsed sessions hide their PTYs) */
   expandedSessionIds: Set<string>;
+  /** Session IDs hidden from the list via right-click */
+  hiddenSessionGroupIds: Set<string>;
   /** Per-session pane ordering kept alongside the flattened index for tests and tree helpers. */
   sessionPaneOrders: Map<string, Map<string, number>>;
   /** Aggregate-list ordering per session, stored as a flattened pane-order index. */
@@ -343,6 +358,7 @@ export function createAggregateViewTreeSlice(): AggregateViewTreeSlice {
     flattenedTree: [],
     flattenedTreeIndex: new Map(),
     expandedSessionIds: new Set(),
+    hiddenSessionGroupIds: new Set(),
     sessionPaneOrders: new Map(),
     sessionPaneOrderIndex: new Map(),
     manualSessionOrder: [],
@@ -429,4 +445,8 @@ export interface AggregateViewContextValue {
   closePtyPicker: () => void;
   /** Push a PTY ID onto the MRU stack (dedup + reorder) */
   pushPtyMru: (ptyId: string) => void;
+  /** Hide a session group from the list */
+  hideSessionGroup: (sessionId: string) => void;
+  /** Reveal all hidden session groups */
+  showHiddenSessionGroups: () => void;
 }

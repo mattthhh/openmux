@@ -27,9 +27,11 @@ export { truncateHint } from '../overlay-hints';
 export { SessionTreeNode } from './SessionTreeNode';
 export { PtyTreeRow } from './PtyTreeRow';
 export { PlaceholderRow } from './PlaceholderRow';
+export { HiddenGroupsRow } from './HiddenGroupsRow';
 export type { SessionTreeNodeProps } from './SessionTreeNode';
 export type { PtyTreeRowProps } from './PtyTreeRow';
 export type { PlaceholderRowProps } from './PlaceholderRow';
+export type { HiddenGroupsRowProps } from './HiddenGroupsRow';
 
 // Pane components
 export { ListPane, type ListPaneProps } from './ListPane';

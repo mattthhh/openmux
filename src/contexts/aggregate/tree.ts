@@ -166,7 +166,11 @@ export function findNearestSelectableIndex(
   return null;
 }
 
-export function flattenTree(treeRoot: TreeNode[], showInactive: boolean): FlattenedTreeItem[] {
+export function flattenTree(
+  treeRoot: TreeNode[],
+  showInactive: boolean,
+  hiddenSessionGroupIds?: Set<string>
+): FlattenedTreeItem[] {
   const flattened: FlattenedTreeItem[] = [];
   const sessionGroups = new Map<string, { sessionNode: TreeNode; childNodes: TreeNode[] }>();
   let currentSessionId: string | null = null;
@@ -188,11 +192,18 @@ export function flattenTree(treeRoot: TreeNode[], showInactive: boolean): Flatte
 
   const groups = [...sessionGroups.values()];
   let index = 0;
+  let hiddenCount = 0;
 
   for (let groupIndex = 0; groupIndex < groups.length; groupIndex++) {
     const group = groups[groupIndex];
     const sessionNode = group.sessionNode;
     if (sessionNode.type !== 'session') continue;
+
+    // Skip hidden session groups
+    if (hiddenSessionGroupIds && hiddenSessionGroupIds.has(sessionNode.session.id)) {
+      hiddenCount++;
+      continue;
+    }
 
     let visibleChildren = group.childNodes;
 
@@ -201,8 +212,6 @@ export function flattenTree(treeRoot: TreeNode[], showInactive: boolean): Flatte
         node.type === 'pty' ? isActivePty(node.ptyInfo) : true
       );
     }
-
-    const visiblePtyCount = visibleChildren.filter((node) => node.type === 'pty').length;
 
     flattened.push({
       node: sessionNode,
@@ -241,6 +250,29 @@ export function flattenTree(treeRoot: TreeNode[], showInactive: boolean): Flatte
         parentSessionId: undefined,
       });
     }
+  }
+
+  // Append "Show hidden groups" indicator if any sessions are hidden
+  if (hiddenCount > 0) {
+    // Add spacer before the indicator if there are visible groups above
+    if (flattened.length > 0) {
+      flattened.push({
+        node: { type: 'spacer' },
+        depth: 0,
+        isLast: false,
+        prefix: '',
+        index: index++,
+        parentSessionId: undefined,
+      });
+    }
+    flattened.push({
+      node: { type: 'hidden-groups', count: hiddenCount },
+      depth: 0,
+      isLast: true,
+      prefix: '',
+      index: index++,
+      parentSessionId: undefined,
+    });
   }
 
   for (let currentIndex = 0; currentIndex < flattened.length; currentIndex++) {

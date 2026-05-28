@@ -36,6 +36,8 @@ export interface SessionTreeNodeProps {
   isDropTarget?: boolean;
   /** Whether this session is being dragged */
   isDragging?: boolean;
+  /** Right-click handler */
+  onContextMenu?: () => void;
 }
 
 /**
@@ -80,8 +82,13 @@ export function SessionTreeNode(props: SessionTreeNodeProps) {
     return name.slice(0, availableNameWidth() - 1) + '…';
   };
 
-  const handleMouseDown = (event: { preventDefault: () => void }) => {
+  const handleMouseDown = (event: { preventDefault: () => void; button?: number }) => {
     event.preventDefault();
+    // Right-click (button 2) triggers context menu
+    if (event.button === 2) {
+      props.onContextMenu?.();
+      return;
+    }
     props.onMouseDown?.();
   };
 

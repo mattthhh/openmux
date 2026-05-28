@@ -41,6 +41,10 @@ export interface ListSelectionHandlers {
   onSelectPty: (ptyId: string) => void;
   /** Toggle session expansion */
   onToggleSession: (sessionId: string) => void;
+  /** Hide a session group from the list */
+  onHideSessionGroup: (sessionId: string) => void;
+  /** Reveal all hidden session groups */
+  onShowHiddenSessionGroups: () => void;
 }
 
 /** Consolidated drag handlers */

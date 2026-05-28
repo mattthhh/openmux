@@ -17,6 +17,7 @@ import { useListPane, useListPaneColors } from '../../contexts/ListPaneContext';
 import type { SessionTreeNodeProps } from './SessionTreeNode';
 import type { PtyTreeRowProps } from './PtyTreeRow';
 import type { PlaceholderRowProps } from './PlaceholderRow';
+import type { HiddenGroupsRowProps } from './HiddenGroupsRow';
 
 /** Props for the ListPane component - reduced to essentials */
 export interface ListPaneProps {
@@ -25,6 +26,7 @@ export interface ListPaneProps {
     SessionTreeNode: Component<SessionTreeNodeProps>;
     PtyTreeRow: Component<PtyTreeRowProps>;
     PlaceholderRow: Component<PlaceholderRowProps>;
+    HiddenGroupsRow: Component<HiddenGroupsRowProps>;
   };
 }
 
@@ -134,17 +136,34 @@ export const ListPane: Component<ListPaneProps> = (props) => {
                     <Show
                       when={node().type === 'pty'}
                       fallback={
-                        <props.components.PlaceholderRow
-                          indent={ptyIndent()}
-                          maxWidth={ctx.layout.innerWidth}
-                          aggregateTheme={colors.theme.ui.aggregate}
-                          textColors={textColors}
-                          isSelected={isSelected()}
-                          label={(node() as Extract<TreeNode, { type: 'placeholder' }>).message}
-                          onClick={() => {
-                            ctx.selectionHandlers.onSelectItem(item.index);
-                          }}
-                        />
+                        <Show
+                          when={node().type === 'hidden-groups'}
+                          fallback={
+                            <props.components.PlaceholderRow
+                              indent={ptyIndent()}
+                              maxWidth={ctx.layout.innerWidth}
+                              aggregateTheme={colors.theme.ui.aggregate}
+                              textColors={textColors}
+                              isSelected={isSelected()}
+                              label={(node() as Extract<TreeNode, { type: 'placeholder' }>).message}
+                              onClick={() => {
+                                ctx.selectionHandlers.onSelectItem(item.index);
+                              }}
+                            />
+                          }
+                        >
+                          <props.components.HiddenGroupsRow
+                            count={(node() as Extract<TreeNode, { type: 'hidden-groups' }>).count}
+                            isSelected={isSelected()}
+                            maxWidth={ctx.layout.innerWidth}
+                            aggregateTheme={colors.theme.ui.aggregate}
+                            textColors={textColors}
+                            onClick={() => {
+                              ctx.selectionHandlers.onSelectItem(item.index);
+                              ctx.selectionHandlers.onShowHiddenSessionGroups();
+                            }}
+                          />
+                        </Show>
                       }
                     >
                       {/* PTY row — click selects the PTY for preview */}
@@ -194,6 +213,10 @@ export const ListPane: Component<ListPaneProps> = (props) => {
                     onMouseUp={() => {
                       const sessionNode = node() as Extract<TreeNode, { type: 'session' }>;
                       handleSessionMouseUp(sessionNode.session.id, sessionNode.loadState);
+                    }}
+                    onContextMenu={() => {
+                      const sessionNode = node() as Extract<TreeNode, { type: 'session' }>;
+                      ctx.selectionHandlers.onHideSessionGroup(sessionNode.session.id);
                     }}
                   />
                 </Show>

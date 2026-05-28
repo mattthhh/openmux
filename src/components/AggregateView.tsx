@@ -31,6 +31,7 @@ import {
   SessionTreeNode,
   PtyTreeRow,
   PlaceholderRow,
+  HiddenGroupsRow,
 } from './aggregate';
 import { PtyPicker } from './PtyPicker';
 import { ListPaneProvider } from '../contexts/ListPaneContext';
@@ -243,6 +244,8 @@ export function AggregateView(props: AggregateViewProps) {
                 onSelectItem: aggregate.setSelectedIndex,
                 onSelectPty: aggregate.selectPty,
                 onToggleSession: aggregate.toggleSessionExpanded,
+                onHideSessionGroup: aggregate.hideSessionGroup,
+                onShowHiddenSessionGroups: aggregate.showHiddenSessionGroups,
               }}
               dragHandlers={{
                 onBeginSessionDrag: sessionDrag.beginDrag,
@@ -264,7 +267,9 @@ export function AggregateView(props: AggregateViewProps) {
               shimmerTargetColor={hostBgColor()}
               focusedPtyId={activePtyId()}
             >
-              <ListPane components={{ SessionTreeNode, PtyTreeRow, PlaceholderRow }} />
+              <ListPane
+                components={{ SessionTreeNode, PtyTreeRow, PlaceholderRow, HiddenGroupsRow }}
+              />
             </ListPaneProvider>
           </Show>
           <PreviewPane
