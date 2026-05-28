@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.127](https://github.com/monotykamary/openmux/compare/v0.3.126...v0.3.127) (2026-05-28)
+
+
+### Bug Fixes
+
+* **aggregate-view:** resolve staleness in sidebar folder/process names and stuck ... placeholders ([b02dfee](https://github.com/monotykamary/openmux/commit/b02dfee4a0c13f6ece5ee403b2ebad4996612616))
+* **shimmer:** prevent false post-shimmer glow for focused PTYs ([a91dfa6](https://github.com/monotykamary/openmux/commit/a91dfa6fa4ac1855a3c7b1236507d61aab7c4836))
+
 ### [0.3.126](https://github.com/monotykamary/openmux/compare/v0.3.125...v0.3.126) (2026-05-27)
 
 
