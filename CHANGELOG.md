@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.129](https://github.com/monotykamary/openmux/compare/v0.3.128...v0.3.129) (2026-05-28)
+
+
+### Features
+
+* **aggregate-view:** add right-click to hide session groups with reveal indicator ([9bc473c](https://github.com/monotykamary/openmux/commit/9bc473c900451c8e732ff66f5f970fc00ae3d096))
+* **aggregate-view:** persist hidden session groups across openmux restarts ([18ba387](https://github.com/monotykamary/openmux/commit/18ba387b4bdd691ce473384d8335c7829c97cc35))
+
 ### [0.3.128](https://github.com/monotykamary/openmux/compare/v0.3.127...v0.3.128) (2026-05-28)
 
 
