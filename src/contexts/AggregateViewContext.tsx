@@ -183,7 +183,7 @@ export function AggregateViewProvider(props: AggregateViewProviderProps) {
       getCurrentSessionPtys
     );
 
-  const metadataHandler = createMetadataChangeHandler(setState);
+  const metadataHandler = createMetadataChangeHandler(setState, () => state);
   const handleMetadataChange = (event: MetadataChangeEvent) => {
     suspendedPtyCache.invalidateByPtyId(event.ptyId);
     metadataHandler(event);

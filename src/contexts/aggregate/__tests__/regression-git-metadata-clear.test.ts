@@ -654,7 +654,7 @@ describe('regression: git metadata must not clear then redraw', () => {
       allSessions: new Map([['session-1', sessionMetadata]]),
     });
 
-    const handler = createMetadataChangeHandler(setState);
+    const handler = createMetadataChangeHandler(setState, () => state);
 
     // Simulate CWD change event (user ran `cd` to a different directory)
     handler({ ptyId: 'pty-1', cwd: '/non-git' });
@@ -713,7 +713,7 @@ describe('regression: git metadata must not clear then redraw', () => {
       allSessions: new Map([['session-1', sessionMetadata]]),
     });
 
-    const handler = createMetadataChangeHandler(setState);
+    const handler = createMetadataChangeHandler(setState, () => state);
 
     // CWD change should also clear git metadata in matchedPtys
     handler({ ptyId: 'pty-1', cwd: '/some-other-dir' });
@@ -761,7 +761,7 @@ describe('regression: git metadata must not clear then redraw', () => {
       allSessions: new Map([['session-1', sessionMetadata]]),
     });
 
-    const handler = createMetadataChangeHandler(setState);
+    const handler = createMetadataChangeHandler(setState, () => state);
 
     // Same CWD — git metadata should NOT be cleared
     handler({ ptyId: 'pty-1', cwd: '/repo-a' });
@@ -814,7 +814,7 @@ describe('regression: git metadata must not clear then redraw', () => {
       allSessions: new Map([['session-1', sessionMetadata]]),
     });
 
-    const handler = createMetadataChangeHandler(setState);
+    const handler = createMetadataChangeHandler(setState, () => state);
 
     // CWD changes to another git repo — stale metadata must be cleared
     handler({ ptyId: 'pty-1', cwd: '/repo-b' });

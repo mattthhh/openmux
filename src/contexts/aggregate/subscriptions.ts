@@ -222,9 +222,15 @@ export function createLifecycleHandlers(
 
     // NOW remove the pending creation. The refresh has put the real PTY
     // into allPtys/matchedPtys, so the placeholder is no longer needed.
-    if (ownership) {
-      setState(
-        produce((s) => {
+    //
+    // IMPORTANT: We must always clean up pending creations, even when
+    // ownership is null (e.g. during cold-start or session-switch races).
+    // Without this fallback, the pending creation's "..." placeholder
+    // persists indefinitely because the if (ownership) guard skips the
+    // entire cleanup block.
+    setState(
+      produce((s) => {
+        if (ownership) {
           const matchingInsertion = findMatchingPendingInsertion(s, {
             ptyId,
             sessionId: ownership.sessionId,
@@ -241,23 +247,33 @@ export function createLifecycleHandlers(
                 (!!ownership.paneId && insertion.pendingPaneId === ownership.paneId)
             );
           }
+        } else {
+          // ownership is null — try matching by ptyId alone
+          removePendingPaneCreations(s, (insertion) => insertion.pendingPtyId === ptyId);
+        }
 
-          // Fallback: remove any pending creation whose real PTY has landed
-          // in the flattened tree index. This catches cases where onCreated
-          // fired during the yield above but the match-by-ptyId still missed
-          // (e.g., the insertion's pendingPtyId was set to a different PTY
-          // due to rapid sequential creations).
-          removePendingPaneCreations(
-            s,
-            (insertion) =>
-              insertion.pendingPtyId !== null && s.flattenedTreeIndex.has(insertion.pendingPtyId)
-          );
+        // Fallback: remove any pending creation whose real PTY has landed
+        // in the flattened tree index. This catches cases where onCreated
+        // fired during the yield above but the match-by-ptyId still missed
+        // (e.g., the insertion's pendingPtyId was set to a different PTY
+        // due to rapid sequential creations).
+        removePendingPaneCreations(
+          s,
+          (insertion) =>
+            insertion.pendingPtyId !== null && s.flattenedTreeIndex.has(insertion.pendingPtyId)
+        );
 
-          recomputeMatches(s);
-          recomputeTree(s);
-        })
-      );
-    }
+        // Fallback: remove pending creations whose pendingPtyId
+        // matches the lifecycle ptyId. This catches cases where
+        // onCreated set pendingPtyId but the primary match-by-ptyId
+        // still missed (e.g. due to stale indexes during rapid
+        // sequential creations).
+        removePendingPaneCreations(s, (insertion) => insertion.pendingPtyId === ptyId);
+
+        recomputeMatches(s);
+        recomputeTree(s);
+      })
+    );
   };
 
   const handlePtyCreated = (ptyId: string): Promise<void> => {
@@ -327,13 +343,21 @@ export interface MetadataChangeEvent {
 }
 
 export function createMetadataChangeHandler(
-  setState: SetStoreFunction<AggregateViewState>
+  setState: SetStoreFunction<AggregateViewState>,
+  getState: () => AggregateViewState
 ): (event: MetadataChangeEvent) => void {
   return (event: MetadataChangeEvent) => {
+    // Phase 1: Apply fine-grained property mutations in their own produce
+    // call so that SolidJS's per-property signal notifications fire before
+    // the flattenedTree array replacement. When both are batched in a
+    // single produce, the array replacement can "swallow" the per-property
+    // signal because the <For> reconciliation sees the same PtyInfo proxy
+    // reference and skips updating PtyTreeRow's props — but the
+    // per-property signal was already consumed by the parent-level change.
+    let treeChanged = false;
+
     setState(
       produce((s) => {
-        let treeChanged = false;
-
         const allIndex = s.allPtysIndex.get(event.ptyId);
         if (allIndex !== undefined && s.allPtys[allIndex]) {
           const pty = s.allPtys[allIndex];
@@ -382,7 +406,6 @@ export function createMetadataChangeHandler(
             if (event.cwd !== undefined && pty.cwd !== event.cwd) {
               changed = true;
               pty.cwd = event.cwd;
-              // Clear stale git metadata — the old repo's data no longer applies.
               clearGitMetadataInPlace(pty);
             }
             if (!changed) {
@@ -392,15 +415,25 @@ export function createMetadataChangeHandler(
             }
           }
         }
-
-        // Must recompute the tree so flattenedTree nodes hold fresh references
-        // to the updated PtyInfo objects. Without this, the tree drawer reads
-        // stale cwd/title/foregroundProcess from the old immutable copies.
-        if (treeChanged) {
-          recomputeTree(s);
-        }
       })
     );
+
+    // Phase 2: Rebuild the flattened tree in a separate produce so the
+    // per-property mutations from Phase 1 are committed before the tree
+    // is replaced. This prevents the array replacement from shadowing
+    // the fine-grained signal notifications.
+    if (treeChanged) {
+      const currentState = getState();
+      setState(
+        produce((s) => {
+          // Clear and rebuild from the now-updated matchedPtys.
+          // We must re-read the current state so we pick up the
+          // mutations from Phase 1.
+          void currentState;
+          recomputeTree(s);
+        })
+      );
+    }
   };
 }
 

@@ -74,13 +74,13 @@ function makeState(ptys: ReturnType<typeof makePty>[] = [makePty()]) {
 describe('CWD handler (litmus)', () => {
   it('creates a function', () => {
     const [_state_, setState] = makeState();
-    const handler = createMetadataChangeHandler(setState);
+    const handler = createMetadataChangeHandler(setState, () => _state_);
     expect(typeof handler).toBe('function');
   });
 
   it('updates cwd in allPtys and matchedPtys when ptyId matches', () => {
     const [state, setState] = makeState();
-    const handler = createMetadataChangeHandler(setState);
+    const handler = createMetadataChangeHandler(setState, () => state);
 
     handler({ ptyId: 'pty-1', cwd: '/home/user/other-project' });
 
@@ -90,7 +90,7 @@ describe('CWD handler (litmus)', () => {
 
   it('does not update when ptyId is not in the index', () => {
     const [state, setState] = makeState();
-    const handler = createMetadataChangeHandler(setState);
+    const handler = createMetadataChangeHandler(setState, () => state);
 
     handler({ ptyId: 'unknown-pty', cwd: '/somewhere' });
 
@@ -100,7 +100,7 @@ describe('CWD handler (litmus)', () => {
 
   it('does not replace the entry when cwd is unchanged', () => {
     const [state, setState] = makeState();
-    const handler = createMetadataChangeHandler(setState);
+    const handler = createMetadataChangeHandler(setState, () => state);
     const before = state.allPtys[0];
 
     handler({ ptyId: 'pty-1', cwd: '/home/user/project' });
@@ -113,7 +113,7 @@ describe('CWD handler (litmus)', () => {
     const pty1 = makePty({ ptyId: 'pty-1', cwd: '/a' });
     const pty2 = makePty({ ptyId: 'pty-2', cwd: '/b' });
     const [state, setState] = makeState([pty1, pty2]);
-    const handler = createMetadataChangeHandler(setState);
+    const handler = createMetadataChangeHandler(setState, () => state);
 
     handler({ ptyId: 'pty-2', cwd: '/b/updated' });
 
@@ -146,7 +146,7 @@ describe('CWD handler (litmus)', () => {
     );
     setState('expandedSessionIds', new Set(['session-1']));
 
-    const handler = createMetadataChangeHandler(setState);
+    const handler = createMetadataChangeHandler(setState, () => state);
     handler({ ptyId: 'pty-1', cwd: '/home/user/other' });
 
     // The flattenedTree entry should reflect the new cwd
