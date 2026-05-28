@@ -1,3 +1,9 @@
+// zig-git memory strategy:
+// All request/response data uses fixed-size stack arrays (static allocation).
+// No dynamic (heap) allocation at all — following the TigerBeetle pattern.
+// libgit2 resources are cleaned up with defer git_*_free() on every path.
+// A global mutex serializes all libgit2 calls (libgit2 is not thread-safe).
+
 const std = @import("std");
 const c = @cImport({
     @cInclude("git2.h");

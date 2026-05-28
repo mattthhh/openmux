@@ -86,12 +86,20 @@ pub fn newWithConfig(
     rows: c_int,
     config_: ?*const GhosttyTerminalConfig,
 ) callconv(.c) ?*anyopaque {
-    const alloc = if (builtin.target.cpu.arch.isWasm())
+    // gpa: general-purpose allocator scoped to the TerminalWrapper.
+    // On WASM we use the wasm page allocator; otherwise the system malloc.
+    // For debug builds, callers should use allocator.debugGpa() externally
+    // and pass the resulting allocator to get leak/double-free detection.
+    const gpa = if (builtin.target.cpu.arch.isWasm())
         std.heap.wasm_allocator
     else
         std.heap.c_allocator;
 
-    const wrapper = alloc.create(TerminalWrapper) catch return null;
+    const wrapper = gpa.create(TerminalWrapper) catch return null;
+    // Track whether initialization completed. If any step fails before
+    // we're done, the defer destroys the partially-initialized wrapper.
+    var initialized = false;
+    defer if (!initialized) gpa.destroy(wrapper);
 
     // Parse config or use defaults
     const scrollback_limit_lines: usize = if (config_) |cfg|
@@ -140,24 +148,25 @@ pub fn newWithConfig(
         }
     }
 
-    wrapper.alloc = alloc;
-    wrapper.terminal = Terminal.init(alloc, .{
+    wrapper.alloc = gpa;
+    wrapper.terminal = Terminal.init(gpa, .{
         .cols = @intCast(cols),
         .rows = @intCast(rows),
         .max_scrollback = scrollback_limit,
         .colors = colors,
-    }) catch {
-        alloc.destroy(wrapper);
-        return null;
-    };
+    }) catch return null;
+    // Terminal.init allocates its own internal state via gpa.
+    // If it fails, the defer above destroys the wrapper.
+    // Terminal.deinit is responsible for its own cleanup on success.
 
-    // Initialize response buffer
+    // Initialize response buffer (scratch buffer for DSR/DA/OSC responses).
+    // Uses clearRetainingCapacity between reads to avoid re-allocation.
     wrapper.response_buffer = std.ArrayList(u8).empty;
 
     // Initialize stream with a handler that references wrapper-owned state.
     // ResponseStream takes ownership of this handler and deinitializes it in stream.deinit().
     wrapper.stream = ResponseStream.init(
-        ResponseHandler.init(alloc, &wrapper.terminal, &wrapper.response_buffer),
+        ResponseHandler.init(gpa, &wrapper.terminal, &wrapper.response_buffer),
     );
     wrapper.render_state = RenderState.empty;
     wrapper.last_screen_is_alternate = false;
@@ -172,18 +181,26 @@ pub fn newWithConfig(
     // multi-codepoint grapheme clusters as single visual units.
     wrapper.terminal.modes.set(.grapheme_cluster, true);
 
+    initialized = true;
     return @ptrCast(wrapper);
 }
 
+/// Frees all resources owned by the TerminalWrapper.
+/// Deinitialization order (reverse of initialization):
+///   1. stream (calls handler.deinit internally)
+///   2. response_buffer (scratch buffer for DSR/DA responses)
+///   3. render_state (cached cell data)
+///   4. terminal (Ghostty terminal state, pages, scrollback)
+///   5. wrapper itself
 pub fn free(ptr: ?*anyopaque) callconv(.c) void {
     const wrapper: *TerminalWrapper = @ptrCast(@alignCast(ptr orelse return));
-    const alloc = wrapper.alloc;
-    // stream.deinit() calls handler.deinit() internally.
+    // gpa: the allocator scoped to this wrapper, stored at creation time.
+    const gpa = wrapper.alloc;
     wrapper.stream.deinit();
-    wrapper.response_buffer.deinit(alloc);
-    wrapper.render_state.deinit(alloc);
-    wrapper.terminal.deinit(alloc);
-    alloc.destroy(wrapper);
+    wrapper.response_buffer.deinit(gpa);
+    wrapper.render_state.deinit(gpa);
+    wrapper.terminal.deinit(gpa);
+    gpa.destroy(wrapper);
 }
 
 pub fn resize(ptr: ?*anyopaque, cols: c_int, rows: c_int) callconv(.c) void {

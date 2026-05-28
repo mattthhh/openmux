@@ -182,7 +182,16 @@ const ZigAllocator = struct {
     }
 };
 
-/// Returns an allocator to use for the given possibly-null C allocator.
+/// Returns an allocator for the given possibly-null C allocator.
+///
+/// Allocator scoping convention (follows Zig community best practices):
+/// - `c_alloc` or `gpa`  — general-purpose allocator; caller must free individually.
+/// - `arena`            — short-lived arena; bulk-deallocated at a system boundary.
+/// - `scratch`          — private workspace for a function; never return scratch data.
+///
+/// Note: `c_allocator` provides no leak/double-free/use-after-free detection.
+/// For debug builds, use `debugDefaultZig()` which wraps a GeneralPurposeAllocator
+/// with `.safety = true` to catch these bugs at runtime.
 pub fn default(c_alloc_: ?*const Allocator) std.mem.Allocator {
     if (c_alloc_) |c_alloc| return c_alloc.zig();
 
@@ -191,6 +200,20 @@ pub fn default(c_alloc_: ?*const Allocator) std.mem.Allocator {
     if (comptime builtin.target.cpu.arch.isWasm()) return std.heap.wasm_allocator;
 
     return std.heap.smp_allocator;
+}
+
+/// Returns a GeneralPurposeAllocator-backed allocator with safety checks enabled.
+/// Use this in debug/safe builds to detect leaks, double-free, and use-after-free.
+/// The caller must call `gpa.deinit()` when done to check for leaks.
+///
+/// Usage:
+/// ```zig
+/// var gpa = allocator.debugGpa();
+/// defer _ = gpa.deinit();
+/// const alloc = gpa.allocator();
+/// ```
+pub fn debugGpa() std.heap.GeneralPurposeAllocator(.{ .safety = true }) {
+    return .{};
 }
 
 pub const c_allocator: Allocator = .fromZig(&std.heap.c_allocator);

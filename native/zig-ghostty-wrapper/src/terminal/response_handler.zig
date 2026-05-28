@@ -23,7 +23,14 @@ fn monotonicTimestamp() u64 {
 
 /// Response handler that processes VT sequences and queues responses.
 /// This extends the readonly stream handler to also handle queries.
+///
+/// Allocator scoping:
+/// - `alloc` (gpa): General-purpose allocator shared with the parent TerminalWrapper.
+///   Used for temporary APC command allocations (freed in apcEnd via defer).
+/// - `response_buffer`: Reference to the parent wrapper's scratch buffer.
+///   Handler appends DSR/DA/OSC responses; caller clears between reads.
 pub const ResponseHandler = struct {
+    /// gpa: shared allocator from TerminalWrapper (does NOT own this allocator).
     alloc: Allocator,
     terminal: *Terminal,
     response_buffer: *std.ArrayList(u8),
@@ -229,6 +236,8 @@ pub const ResponseHandler = struct {
         }
     }
 
+    /// Handles APC command termination. cmd.deinit uses gpa (self.alloc) to
+    /// free temporary allocations; defer ensures cleanup even on error paths.
     fn apcEnd(self: *ResponseHandler) !void {
         var cmd = self.apc.end() orelse return;
         defer cmd.deinit(self.alloc);

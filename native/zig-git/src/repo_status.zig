@@ -6,6 +6,8 @@ const c = @cImport({
 const constants = @import("constants.zig");
 const git_mutex = @import("git_mutex.zig");
 
+/// Git repository status with fixed-size stack arrays (no dynamic allocation).
+/// Buffer sizes: MAX_BRANCH_LEN (256) for branch names, MAX_CWD_LEN (4096) for paths.
 pub const RepoStatus = struct {
     branch: [constants.MAX_BRANCH_LEN]u8 = undefined,
     gitdir: [constants.MAX_CWD_LEN]u8 = undefined,
@@ -47,6 +49,8 @@ fn writeShortOid(dest: [*]u8, dest_len: usize, oid: *const c.git_oid) void {
     dest[short_len] = 0;
 }
 
+/// Resolves the HEAD reference to a branch name (or short OID if detached).
+/// Uses defer on every git_reference_free to handle all branches/early returns.
 fn getBranch(repo: *c.git_repository, dest: [*]u8, dest_len: usize) void {
     clearBuffer(dest, dest_len);
 
@@ -318,6 +322,9 @@ pub fn fillRepoStatus(repo: *c.git_repository, out: *RepoStatus) void {
     computeDetached(repo, out);
 }
 
+/// Opens a git repository, fills status, and cleans up.
+/// Uses defer for both the git_mutex unlock and git_repository_free
+/// to guarantee cleanup on all code paths (including early returns).
 pub fn computeRepoStatus(cwd: [*:0]const u8, out: *RepoStatus) bool {
     git_mutex.lock();
     defer git_mutex.unlock();
