@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.128](https://github.com/monotykamary/openmux/compare/v0.3.127...v0.3.128) (2026-05-28)
+
+
+### Bug Fixes
+
+* **native:** harden Zig memory safety with defer guard, GPA helper, and allocator scope docs ([a2d5c9b](https://github.com/monotykamary/openmux/commit/a2d5c9bcaa8a52050f6d2c97c0dd62723aaabd57))
+
+
+### Performance
+
+* optimize hot-path cell rendering, layout dispatch, and subscription updates ([73c01be](https://github.com/monotykamary/openmux/commit/73c01be73fd70867e6a940e4cf494e94e7205016))
+
 ### [0.3.127](https://github.com/monotykamary/openmux/compare/v0.3.126...v0.3.127) (2026-05-28)
 
 
