@@ -199,6 +199,14 @@ export function createTerminalRenderer(params: {
       getCachedRGBA(196, 181, 253)
     );
 
+    // Capture search snapshot once per frame to avoid per-cell signal reads.
+    const searchSnapshot = hasSearch
+      ? {
+          isMatch: (x: number, absoluteY: number) => search.isSearchMatch(ptyId, x, absoluteY),
+          isCurrent: (x: number, absoluteY: number) => search.isCurrentMatch(ptyId, x, absoluteY),
+        }
+      : null;
+
     const renderOptions = {
       ptyId,
       hasSelection,
@@ -217,6 +225,7 @@ export function createTerminalRenderer(params: {
       copySelectionBg,
       copyCursorFg,
       copyCursorBg,
+      searchSnapshot,
     };
 
     const renderDeps = {

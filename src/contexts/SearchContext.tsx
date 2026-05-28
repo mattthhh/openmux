@@ -21,15 +21,9 @@ import { runStream, streamFromSubscription, debounce, tap } from '../effect/stre
 import type { VimInputMode } from '../core/vim-sequences';
 
 import type { SearchState, SearchContextValue } from './search/types';
-import {
-  isCellInMatch,
-  calculateScrollOffset,
-  buildMatchLookup,
-} from './search/helpers';
-
+import { isCellInMatch, calculateScrollOffset, buildMatchLookup } from './search/helpers';
 
 const SearchContext = createContext<SearchContextValue | null>(null);
-
 
 interface SearchProviderProps extends ParentProps {}
 
@@ -58,9 +52,7 @@ export function SearchProvider(props: SearchProviderProps) {
     setSearchVersion((v) => v + 1);
 
     // Rebuild spatial index for fast lookup using extracted helper
-    matchLookup = newState?.matches
-      ? buildMatchLookup(newState.matches)
-      : new Map();
+    matchLookup = newState?.matches ? buildMatchLookup(newState.matches) : new Map();
   };
 
   const searchStream = tap(
@@ -197,9 +189,8 @@ export function SearchProvider(props: SearchProviderProps) {
     const state = searchState();
     if (!state || state.matches.length === 0 || !state.terminalState) return;
 
-    const newIndex = state.currentMatchIndex <= 0
-      ? state.matches.length - 1
-      : state.currentMatchIndex - 1;
+    const newIndex =
+      state.currentMatchIndex <= 0 ? state.matches.length - 1 : state.currentMatchIndex - 1;
     const match = state.matches[newIndex];
 
     updateSearchState({
@@ -250,10 +241,13 @@ export function SearchProvider(props: SearchProviderProps) {
     const currentMatch = state.matches[state.currentMatchIndex];
     return isCellInMatch(x, absoluteY, currentMatch);
   };
-
   const value: SearchContextValue = {
-    get searchState() { return searchState(); },
-    get vimMode() { return vimMode(); },
+    get searchState() {
+      return searchState();
+    },
+    get vimMode() {
+      return vimMode();
+    },
     setVimMode,
     enterSearchMode,
     exitSearchMode,
@@ -262,16 +256,13 @@ export function SearchProvider(props: SearchProviderProps) {
     prevMatch,
     isSearchMatch,
     isCurrentMatch,
-    get searchVersion() { return searchVersion(); },
+    get searchVersion() {
+      return searchVersion();
+    },
   };
 
-  return (
-    <SearchContext.Provider value={value}>
-      {props.children}
-    </SearchContext.Provider>
-  );
+  return <SearchContext.Provider value={value}>{props.children}</SearchContext.Provider>;
 }
-
 
 export function useSearch(): SearchContextValue {
   const context = useContext(SearchContext);

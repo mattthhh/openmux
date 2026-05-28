@@ -61,6 +61,11 @@ export interface CellRenderingOptions {
   copySelectionBg: RGBA;
   copyCursorFg: RGBA;
   copyCursorBg: RGBA;
+  /** Pre-captured search snapshot (no signal reads) for per-cell use */
+  searchSnapshot?: {
+    isMatch: (x: number, absoluteY: number) => boolean;
+    isCurrent: (x: number, absoluteY: number) => boolean;
+  } | null;
 }
 
 /**
@@ -93,6 +98,31 @@ export function getCellColors(
     copyCursorBg,
   } = options;
 
+  // Fast path: most common case is no overlays, no cursor, no inverse/dim, default bg.
+  // This avoids all the function calls (isCellSelected, isSearchMatch, etc.) and
+  // extra RGBA lookups for the ~90% of cells that are plain terminal text.
+  if (
+    !hasSelection &&
+    !hasSearch &&
+    !hasCopySelection &&
+    !copyModeActive &&
+    !(isAtBottom && isFocused && cursorVisible) &&
+    !copyCursor &&
+    !cell.dim &&
+    !cell.inverse &&
+    !cell.strikethrough
+  ) {
+    let attributes = 0;
+    if (cell.bold) attributes |= ATTR_BOLD;
+    if (cell.italic) attributes |= ATTR_ITALIC;
+    if (cell.underline) attributes |= ATTR_UNDERLINE;
+    const fg = getCachedRGBA(cell.fg.r, cell.fg.g, cell.fg.b);
+    const bg = cell.defaultBg
+      ? DEFAULT_BG_SENTINEL
+      : getCachedRGBA(cell.bg.r, cell.bg.g, cell.bg.b);
+    return { fg, bg, attributes };
+  }
+
   // Only show cursor when at bottom (not scrolled back) and focused
   const isVirtualCursor = !!copyCursor && copyCursor.absY === absoluteY && copyCursor.x === x;
   const isRealCursor =
@@ -109,8 +139,17 @@ export function getCellColors(
   const isCopySelected = hasCopySelection && deps.isCopySelected?.(ptyId, x, absoluteY);
 
   // Check if cell is a search match (skip function calls if no active search)
-  const isMatch = hasSearch && deps.isSearchMatch(ptyId, x, absoluteY);
-  const isCurrent = hasSearch && deps.isCurrentMatch(ptyId, x, absoluteY);
+  // When a search snapshot is available, use it to avoid per-cell signal reads
+  const isMatch =
+    hasSearch &&
+    (options.searchSnapshot
+      ? options.searchSnapshot.isMatch(x, absoluteY)
+      : deps.isSearchMatch(ptyId, x, absoluteY));
+  const isCurrent =
+    hasSearch &&
+    (options.searchSnapshot
+      ? options.searchSnapshot.isCurrent(x, absoluteY)
+      : deps.isCurrentMatch(ptyId, x, absoluteY));
 
   // Determine cell colors
   let fgR = cell.fg.r,
@@ -136,7 +175,7 @@ export function getCellColors(
     fgG = bgG;
     bgG = tmpG;
     const tmpB = fgB;
-    fgB = bgB;
+    bgB = bgB;
     bgB = tmpB;
   }
 
@@ -216,6 +255,14 @@ export function renderRow(
 
   // Calculate absolute Y for selection check (accounts for scrollback)
   const absoluteY = scrollbackLength - viewportOffset + rowIndex;
+
+  // Fast path: null/empty row — batch-draw spaces instead of per-cell setCell.
+  // Padding cells must use the opaque fallbackBg (not the sentinel) so UI
+  // elements don't bleed through. This was previously done per-cell.
+  if (!row) {
+    buffer.drawText(' '.repeat(cols), offsetX, rowIndex + offsetY, fallbackFg, fallbackBg, 0);
+    return;
+  }
 
   // Track the previous cell to detect spacer cells after wide characters
   let prevCellWasWide = false;

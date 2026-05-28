@@ -124,14 +124,29 @@ export function setupUnifiedSubscription(deps: UnifiedSubscriptionDeps): void {
                     for (const [rowIdx, newRow] of terminalUpdate.dirtyRows) {
                       cachedRows[rowIdx] = newRow;
                     }
-                    viewState.terminalState = {
-                      ...existingState,
-                      cells: cachedRows,
-                      cursor: terminalUpdate.cursor,
-                      alternateScreen: terminalUpdate.alternateScreen,
-                      mouseTracking: terminalUpdate.mouseTracking,
-                      cursorKeyMode: terminalUpdate.cursorKeyMode,
-                    };
+                    // Only create a new state object if something actually changed.
+                    // Cursor position changes on every keypress, scroll changes on output,
+                    // and modes change on DECSET/DECRST — all need re-rendering.
+                    const cursorChanged =
+                      existingState.cursor.x !== terminalUpdate.cursor.x ||
+                      existingState.cursor.y !== terminalUpdate.cursor.y ||
+                      existingState.cursor.visible !== terminalUpdate.cursor.visible;
+                    const modesChanged =
+                      existingState.alternateScreen !== terminalUpdate.alternateScreen ||
+                      existingState.mouseTracking !== terminalUpdate.mouseTracking ||
+                      existingState.cursorKeyMode !== terminalUpdate.cursorKeyMode;
+                    const rowsChanged = terminalUpdate.dirtyRows.size > 0;
+
+                    if (rowsChanged || cursorChanged || modesChanged) {
+                      viewState.terminalState = {
+                        ...existingState,
+                        cells: rowsChanged ? cachedRows : existingState.cells,
+                        cursor: terminalUpdate.cursor,
+                        alternateScreen: terminalUpdate.alternateScreen,
+                        mouseTracking: terminalUpdate.mouseTracking,
+                        cursorKeyMode: terminalUpdate.cursorKeyMode,
+                      };
+                    }
                   }
                 }
 

@@ -73,6 +73,12 @@ export function TerminalView(props: TerminalViewProps) {
   });
 
   // Request render when selection or search version changes.
+  // Only re-render this pane if the selection/search actually affects it,
+  // avoiding cross-pane renders during mouse drag (regression from modularization).
+  let lastSelectionRef: unknown = null;
+  let lastSearchRef: unknown = null;
+  let lastSearchPtyId: string | null = null;
+
   createEffect(
     on(
       [
@@ -80,7 +86,27 @@ export function TerminalView(props: TerminalViewProps) {
         () => search.searchVersion,
         () => copyMode.copyModeVersion,
       ],
-      () => renderer.requestRender()
+      () => {
+        const selectionRef = getSelection(props.ptyId) ?? null;
+        const searchState = search.searchState;
+        const searchPtyId = searchState?.ptyId ?? null;
+        const affectsSearch = searchPtyId === props.ptyId || lastSearchPtyId === props.ptyId;
+
+        const selectionChanged = selectionRef !== lastSelectionRef;
+        const searchChanged = affectsSearch && searchState !== lastSearchRef;
+        const copyModeChanged =
+          copyMode.isActive(props.ptyId) || copyMode.hasSelection(props.ptyId);
+
+        if (selectionChanged || searchChanged || copyModeChanged) {
+          renderer.requestRender();
+        }
+
+        lastSelectionRef = selectionRef;
+        if (affectsSearch) {
+          lastSearchRef = searchState;
+        }
+        lastSearchPtyId = searchPtyId;
+      }
     )
   );
 
