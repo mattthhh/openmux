@@ -268,13 +268,34 @@ export function renderRow(
   let prevCellWasWide = false;
   let prevCellBg: RGBA | null = null;
 
+  // Run-length buffer: accumulate contiguous same-style characters for
+  // batch drawText instead of per-cell setCell. This reduces FFI call
+  // count from cols-per-row to ~runs-per-row (3-10x fewer for typical
+  // source code / shell output).
+  let runChars = '';
+  let runStartX = 0;
+  let runFg: RGBA | null = null;
+  let runBg: RGBA | null = null;
+  let runAttrs = 0;
+  let runActive = false;
+
+  const flushRun = () => {
+    if (runChars.length > 0 && runFg !== null && runBg !== null) {
+      buffer.drawText(runChars, runStartX + offsetX, rowIndex + offsetY, runFg, runBg, runAttrs);
+    }
+    runChars = '';
+    runFg = null;
+    runBg = null;
+    runAttrs = 0;
+    runActive = false;
+  };
+
   for (let x = 0; x < cols; x++) {
     const cell = row?.[x] ?? null;
 
     if (!cell) {
-      // No cell data (padding/empty area) — use the opaque fallback bg.
-      // Only PTY-derived cells with defaultBg=true use the sentinel;
-      // padding cells must be opaque so UI elements don't bleed through.
+      // No cell data — flush any pending run and use setCell for padding
+      flushRun();
       buffer.setCell(x + offsetX, rowIndex + offsetY, ' ', fallbackFg, fallbackBg, 0);
       prevCellWasWide = false;
       prevCellBg = null;
@@ -286,6 +307,7 @@ export function renderRow(
     // IMPORTANT: Use BLACK for fg (spacers are invisible), only use sentinel for bg.
     // Never pass DEFAULT_BG_SENTINEL as fg — it would leak into \x1b[38;2;...m.
     if (prevCellWasWide && prevCellBg) {
+      flushRun();
       buffer.drawChar(0, x + offsetX, rowIndex + offsetY, BLACK, prevCellBg, 0);
       prevCellWasWide = false;
       prevCellBg = null;
@@ -293,13 +315,27 @@ export function renderRow(
     }
 
     const { fg, bg, attributes } = getCellColors(cell, x, absoluteY, rowIndex, options, deps);
+    const char = cell.char || ' ';
 
-    // Write cell directly to buffer (with offset for pane position)
-    // Use fallback space if char is empty to ensure cell is always overwritten
-    buffer.setCell(x + offsetX, rowIndex + offsetY, cell.char || ' ', fg, bg, attributes);
+    // Check if this cell continues the current run (same style + not a wide char)
+    if (runActive && runFg === fg && runBg === bg && runAttrs === attributes && cell.width !== 2) {
+      runChars += char;
+    } else {
+      // Flush previous run and start a new one
+      flushRun();
+      runChars = char;
+      runStartX = x;
+      runFg = fg;
+      runBg = bg;
+      runAttrs = attributes;
+      runActive = true;
+    }
 
     // Track if this cell was wide for next iteration
     prevCellWasWide = cell.width === 2;
     prevCellBg = prevCellWasWide ? bg : null;
   }
+
+  // Flush any remaining run
+  flushRun();
 }
