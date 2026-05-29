@@ -1,7 +1,6 @@
 import { createEffect, on, onCleanup } from 'solid-js';
 import type { TerminalCell, UnifiedTerminalUpdate } from '../../core/types';
 import { subscribeUnifiedToPty, getEmulator } from '../../effect/bridge';
-import { deferMacrotask } from '../../core/scheduling';
 import { getKittyGraphicsRenderer } from '../../terminal/kitty-graphics';
 import * as errore from 'errore';
 import { TerminalSubscriptionError } from '../../effect/errors';
@@ -49,7 +48,13 @@ export function setupUnifiedSubscription(deps: UnifiedSubscriptionDeps): void {
         const requestRenderFrame = () => {
           if (!renderRequested && mounted) {
             renderRequested = true;
-            deferMacrotask(() => {
+            // Use queueMicrotask for frame batching with tighter timing than setTimeout(0).
+            // Multiple PTY updates within the same event loop tick are coalesced
+            // (renderRequested flag prevents duplicate scheduling), while microtasks
+            // run before the next macrotask for lower latency than deferMacrotask.
+            // This matches the pattern from the original React TerminalView optimization
+            // (commit c96bbf6e) while preserving the coalescing guarantee from commit 7c14a024.
+            queueMicrotask(() => {
               if (mounted) {
                 renderRequested = false;
                 setVersion((v) => v + 1);
