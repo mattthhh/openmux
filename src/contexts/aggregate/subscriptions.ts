@@ -447,17 +447,22 @@ export function createMetadataChangeHandler(
         // This fires the signal only for
         // flattenedTree[flatIndex].node.ptyInfo, causing exactly one
         // PtyTreeRow to re-render instead of all visible rows.
+        //
+        // SAFETY: Use matchedIndex only — never fall back to allIndex.
+        // The flattenedTree is built from matchedPtys, so matchedIndex
+        // must be defined when flatIndex is defined. allIndex is an
+        // index into a different array and accessing matchedPtys with it
+        // would read a completely different PTY, causing git metadata
+        // cross-contamination.
         const flatIndex = s.flattenedTreeIndex.get(event.ptyId);
         if (
           flatIndex !== undefined &&
           flatIndex < s.flattenedTree.length &&
-          s.flattenedTree[flatIndex]?.node.type === 'pty'
+          s.flattenedTree[flatIndex]?.node.type === 'pty' &&
+          matchedIndex !== undefined &&
+          s.matchedPtys[matchedIndex]
         ) {
-          // Use matchedPtys as source (it's what recomputeTree would use)
-          const sourceIdx = matchedIndex ?? allIndex;
-          if (sourceIdx !== undefined && s.matchedPtys[sourceIdx]) {
-            s.flattenedTree[flatIndex].node.ptyInfo = s.matchedPtys[sourceIdx];
-          }
+          s.flattenedTree[flatIndex].node.ptyInfo = s.matchedPtys[matchedIndex];
         }
       })
     );

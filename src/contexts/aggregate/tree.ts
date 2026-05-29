@@ -117,7 +117,14 @@ export function buildTreeRoot(
       for (const pty of sessionPtys) {
         root.push({
           type: 'pty',
-          ptyInfo: pty,
+          // Shallow-copy so flattenedTree entries have unique object references
+          // from matchedPtys. Otherwise SolidJS's path-based signal tracking
+          // can miss changes — mutations on the matchedPtys path don't propagate
+          // signals to flattenedTree[X].node.ptyInfo even though they share the
+          // same underlying object. With unique references, replacing the
+          // flattenedTree array causes props.pty to change by reference,
+          // triggering memo re-evaluation in PtyTreeRow.
+          ptyInfo: { ...pty },
           parentSessionId: session.id,
         });
       }
