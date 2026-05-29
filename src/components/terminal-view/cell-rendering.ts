@@ -317,8 +317,20 @@ export function renderRow(
     const { fg, bg, attributes } = getCellColors(cell, x, absoluteY, rowIndex, options, deps);
     const char = cell.char || ' ';
 
-    // Check if this cell continues the current run (same style + not a wide char)
-    if (runActive && runFg === fg && runBg === bg && runAttrs === attributes && cell.width !== 2) {
+    // Wide characters (width=2) cannot be batched into runs because drawText
+    // would place a spacer via the width calculation, but the next iteration
+    // also needs to handle the spacer explicitly via drawChar(0,...). Instead,
+    // flush the run and render wide chars individually with setCell.
+    if (cell.width === 2) {
+      flushRun();
+      buffer.setCell(x + offsetX, rowIndex + offsetY, char, fg, bg, attributes);
+      prevCellWasWide = true;
+      prevCellBg = bg;
+      continue;
+    }
+
+    // Check if this cell continues the current run (same style)
+    if (runActive && runFg === fg && runBg === bg && runAttrs === attributes) {
       runChars += char;
     } else {
       // Flush previous run and start a new one
@@ -330,10 +342,6 @@ export function renderRow(
       runAttrs = attributes;
       runActive = true;
     }
-
-    // Track if this cell was wide for next iteration
-    prevCellWasWide = cell.width === 2;
-    prevCellBg = prevCellWasWide ? bg : null;
   }
 
   // Flush any remaining run
