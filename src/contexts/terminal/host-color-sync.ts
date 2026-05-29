@@ -144,8 +144,8 @@ export function createHostColorSync(deps: HostColorSyncDeps): HostColorSync {
    * Polls every 250ms for up to 10 seconds until colors change.
    */
   const refreshColorsWithPolling = () => {
-    const pollIntervalMs = 250;
-    const pollWindowMs = 10_000;
+    const pollIntervalMs = 500;
+    const pollWindowMs = 5_000;
     const paletteDelayMs = 400;
     const startedAt = Date.now();
     const seq = appearanceSequence;

@@ -208,7 +208,10 @@ export function SearchProvider(props: SearchProviderProps) {
   };
 
   // Check if cell is any search match (optimized with spatial index)
-  // Note: In Solid, this is synchronous - no stale closure issues
+  // Note: In Solid, this is synchronous - no stale closure issues.
+  // WARNING: This function reads the searchState() signal. When called from the
+  // rendering hot path, always use the searchSnapshot wrapper (captured once per
+  // frame in terminal-renderer.ts) to avoid per-cell reactive dependency tracking.
   const isSearchMatch = (ptyId: string, x: number, absoluteY: number): boolean => {
     const state = searchState();
     if (!state || state.ptyId !== ptyId) {
