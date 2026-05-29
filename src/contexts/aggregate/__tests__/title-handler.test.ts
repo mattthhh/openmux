@@ -40,7 +40,7 @@ describe('title handler (litmus)', () => {
       listScrollOffset: 0,
     });
 
-    const handler = createMetadataChangeHandler(setState, () => state);
+    const handler = createMetadataChangeHandler(setState);
     expect(typeof handler).toBe('function');
   });
 
@@ -103,7 +103,7 @@ describe('title handler (litmus)', () => {
       listScrollOffset: 0,
     });
 
-    const handler = createMetadataChangeHandler(setState, () => state);
+    const handler = createMetadataChangeHandler(setState);
     handler({ ptyId: 'pty-1', title: 'new-title' });
 
     expect(state.allPtys[0].title).toBe('new-title');

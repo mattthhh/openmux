@@ -59,7 +59,7 @@ describe('AggregateView - PTY Name Consistency', () => {
         matchedPtysIndex: buildPtyIndex([pty1]),
       });
 
-      const handleMetadataChange = createMetadataChangeHandler(setState, () => state);
+      const handleMetadataChange = createMetadataChangeHandler(setState);
 
       // When nvim sets its title to "main.rs"
       handleMetadataChange({ ptyId: 'pty-1', title: 'main.rs' });
@@ -86,7 +86,7 @@ describe('AggregateView - PTY Name Consistency', () => {
         matchedPtysIndex: buildPtyIndex([pty1]),
       });
 
-      const handleMetadataChange = createMetadataChangeHandler(setState, () => state);
+      const handleMetadataChange = createMetadataChangeHandler(setState);
 
       // Application sets title (different from process name)
       handleMetadataChange({ ptyId: 'pty-1', title: 'My Application v1.0' });
@@ -116,7 +116,7 @@ describe('AggregateView - PTY Name Consistency', () => {
         matchedPtysIndex: buildPtyIndex([pty1, pty2]),
       });
 
-      const handleMetadataChange = createMetadataChangeHandler(setState, () => state);
+      const handleMetadataChange = createMetadataChangeHandler(setState);
 
       // PTY 1's nvim has file "main.rs" open
       handleMetadataChange({ ptyId: 'pty-1', title: 'main.rs' });
@@ -156,7 +156,7 @@ describe('AggregateView - PTY Name Consistency', () => {
         matchedPtysIndex: buildPtyIndex([pty1, pty2]),
       });
 
-      const handleMetadataChange = createMetadataChangeHandler(setState, () => state);
+      const handleMetadataChange = createMetadataChangeHandler(setState);
 
       // Simulate stale index: manually corrupt the index to point to wrong PTY
       setState(
@@ -193,7 +193,7 @@ describe('AggregateView - PTY Name Consistency', () => {
         matchedPtysIndex: buildPtyIndex([pty1, pty2, pty3]),
       });
 
-      const handleMetadataChange = createMetadataChangeHandler(setState, () => state);
+      const handleMetadataChange = createMetadataChangeHandler(setState);
 
       // Remove middle PTY (simulating PTY destruction)
       setState(
@@ -234,7 +234,7 @@ describe('AggregateView - PTY Name Consistency', () => {
         matchedPtysIndex: buildPtyIndex(ptys),
       });
 
-      const handleMetadataChange = createMetadataChangeHandler(setState, () => state);
+      const handleMetadataChange = createMetadataChangeHandler(setState);
 
       // Simulate rapid lifecycle: remove multiple PTYs at once
       setState(
@@ -284,7 +284,7 @@ describe('AggregateView - PTY Name Consistency', () => {
         matchedPtysIndex: buildPtyIndex([pty1, pty2]),
       });
 
-      const handleMetadataChange = createMetadataChangeHandler(setState, () => state);
+      const handleMetadataChange = createMetadataChangeHandler(setState);
 
       // Corrupt the index - make pty-1's index point to pty-2's position
       setState(

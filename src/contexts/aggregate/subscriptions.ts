@@ -14,7 +14,7 @@ import {
 import { removeAggregateSessionMappingForPty } from '../../effect/bridge/aggregate';
 import { subscribeToGitRepoChanges } from '../../effect/services/pty/helpers';
 
-import type { AggregateViewState, PendingPaneCreation } from './types';
+import type { AggregateViewState, PendingPaneCreation, PtyInfo } from './types';
 import { buildPtyIndex } from './filter';
 import { findPendingPaneCreationForLifecycle, removePendingPaneCreations } from './pending';
 import { selectAfterPtyRemoval } from './selection';
@@ -343,97 +343,124 @@ export interface MetadataChangeEvent {
 }
 
 export function createMetadataChangeHandler(
-  setState: SetStoreFunction<AggregateViewState>,
-  getState: () => AggregateViewState
+  setState: SetStoreFunction<AggregateViewState>
 ): (event: MetadataChangeEvent) => void {
   return (event: MetadataChangeEvent) => {
-    // Phase 1: Apply fine-grained property mutations in their own produce
-    // call so that SolidJS's per-property signal notifications fire before
-    // the flattenedTree array replacement. When both are batched in a
-    // single produce, the array replacement can "swallow" the per-property
-    // signal because the <For> reconciliation sees the same PtyInfo proxy
-    // reference and skips updating PtyTreeRow's props — but the
-    // per-property signal was already consumed by the parent-level change.
-    let treeChanged = false;
-
+    // Targeted metadata update: replace PtyInfo objects in allPtys and
+    // matchedPtys, then patch the flattenedTree entry directly.
+    //
+    // SolidJS store signals are PATH-based. Mutating s.allPtys[idx].cwd
+    // in-place fires the signal on the allPtys path only — PtyTreeRow's
+    // label memo tracks the flattenedTree path, so it never re-evaluates.
+    //
+    // Replacing the PtyInfo object (s.allPtys[idx] = newPty) fires a
+    // coarser-grained signal but is correct. The critical step is setting
+    // the flattenedTree entry's ptyInfo to a new reference — this makes
+    // props.pty change, forcing PtyTreeRow's label memo to re-evaluate.
+    //
+    // By patching flattenedTree directly instead of calling recomputeTree,
+    // only the AFFECTED PtyTreeRow re-renders. A full recomputeTree would
+    // replace the entire flattenedTree array, causing all visible rows to
+    // re-render on every metadata event — visible as a "flash" during
+    // rapid updates on first load.
     setState(
       produce((s) => {
         const allIndex = s.allPtysIndex.get(event.ptyId);
+        const matchedIndex = s.matchedPtysIndex.get(event.ptyId);
+        let allChanged = false;
+        let matchedChanged = false;
+
+        // Replace PtyInfo in allPtys with a new object
         if (allIndex !== undefined && s.allPtys[allIndex]) {
           const pty = s.allPtys[allIndex];
           if (pty.ptyId === event.ptyId) {
-            let changed = false;
+            const updates: Partial<PtyInfo> = {};
             if (event.title !== undefined && pty.title !== event.title) {
-              changed = true;
-              pty.title = event.title;
+              updates.title = event.title;
+              allChanged = true;
             }
             if (
               event.foregroundProcess !== undefined &&
               pty.foregroundProcess !== event.foregroundProcess
             ) {
-              changed = true;
-              pty.foregroundProcess = event.foregroundProcess;
+              updates.foregroundProcess = event.foregroundProcess;
+              allChanged = true;
             }
             if (event.cwd !== undefined && pty.cwd !== event.cwd) {
-              changed = true;
-              pty.cwd = event.cwd;
-              clearGitMetadataInPlace(pty);
+              updates.cwd = event.cwd;
+              allChanged = true;
             }
-            if (!changed) {
-              s.allPtys[allIndex] = pty;
-            } else {
-              treeChanged = true;
+            if (allChanged) {
+              const newPty = { ...pty, ...updates } as PtyInfo;
+              if (updates.cwd !== undefined) {
+                clearGitMetadataInPlace(newPty);
+              }
+              s.allPtys[allIndex] = newPty;
             }
           }
         }
 
-        const matchedIndex = s.matchedPtysIndex.get(event.ptyId);
+        // Replace PtyInfo in matchedPtys with a new object
+        // (may be a different object from allPtys due to dedup/merge)
         if (matchedIndex !== undefined && s.matchedPtys[matchedIndex]) {
           const pty = s.matchedPtys[matchedIndex];
           if (pty.ptyId === event.ptyId) {
-            let changed = false;
+            const updates: Partial<PtyInfo> = {};
             if (event.title !== undefined && pty.title !== event.title) {
-              changed = true;
-              pty.title = event.title;
+              updates.title = event.title;
+              matchedChanged = true;
             }
             if (
               event.foregroundProcess !== undefined &&
               pty.foregroundProcess !== event.foregroundProcess
             ) {
-              changed = true;
-              pty.foregroundProcess = event.foregroundProcess;
+              updates.foregroundProcess = event.foregroundProcess;
+              matchedChanged = true;
             }
             if (event.cwd !== undefined && pty.cwd !== event.cwd) {
-              changed = true;
-              pty.cwd = event.cwd;
-              clearGitMetadataInPlace(pty);
+              updates.cwd = event.cwd;
+              matchedChanged = true;
             }
-            if (!changed) {
-              s.matchedPtys[matchedIndex] = pty;
-            } else {
-              treeChanged = true;
+            if (matchedChanged) {
+              const newPty = { ...pty, ...updates } as PtyInfo;
+              if (updates.cwd !== undefined) {
+                clearGitMetadataInPlace(newPty);
+              }
+              s.matchedPtys[matchedIndex] = newPty;
             }
+          }
+        }
+
+        if (!allChanged && !matchedChanged) return;
+
+        // Check if foregroundProcess change affects active/inactive classification.
+        // When showInactive is false, a PTY toggling between active and inactive
+        // changes matchedPtys membership — that's a structural change requiring
+        // full recomputeMatches + recomputeTree.
+        if (event.foregroundProcess !== undefined && !s.showInactive) {
+          recomputeMatches(s);
+          recomputeTree(s);
+          return;
+        }
+
+        // Targeted update: patch only the affected flattenedTree entry.
+        // This fires the signal only for
+        // flattenedTree[flatIndex].node.ptyInfo, causing exactly one
+        // PtyTreeRow to re-render instead of all visible rows.
+        const flatIndex = s.flattenedTreeIndex.get(event.ptyId);
+        if (
+          flatIndex !== undefined &&
+          flatIndex < s.flattenedTree.length &&
+          s.flattenedTree[flatIndex]?.node.type === 'pty'
+        ) {
+          // Use matchedPtys as source (it's what recomputeTree would use)
+          const sourceIdx = matchedIndex ?? allIndex;
+          if (sourceIdx !== undefined && s.matchedPtys[sourceIdx]) {
+            s.flattenedTree[flatIndex].node.ptyInfo = s.matchedPtys[sourceIdx];
           }
         }
       })
     );
-
-    // Phase 2: Rebuild the flattened tree in a separate produce so the
-    // per-property mutations from Phase 1 are committed before the tree
-    // is replaced. This prevents the array replacement from shadowing
-    // the fine-grained signal notifications.
-    if (treeChanged) {
-      const currentState = getState();
-      setState(
-        produce((s) => {
-          // Clear and rebuild from the now-updated matchedPtys.
-          // We must re-read the current state so we pick up the
-          // mutations from Phase 1.
-          void currentState;
-          recomputeTree(s);
-        })
-      );
-    }
   };
 }
 

@@ -5,7 +5,8 @@
 import { describe, it, expect } from 'bun:test';
 import { createMetadataChangeHandler } from '../subscriptions';
 import type { AggregateViewState } from '../../aggregate-view-types';
-import { createStore } from 'solid-js/store';
+import { createStore, produce } from 'solid-js/store';
+import { recomputeMatches, recomputeTree } from '../session';
 
 function makePty(overrides: Partial<{ ptyId: string; cwd: string }> = {}) {
   return {
@@ -74,13 +75,13 @@ function makeState(ptys: ReturnType<typeof makePty>[] = [makePty()]) {
 describe('CWD handler (litmus)', () => {
   it('creates a function', () => {
     const [_state_, setState] = makeState();
-    const handler = createMetadataChangeHandler(setState, () => _state_);
+    const handler = createMetadataChangeHandler(setState);
     expect(typeof handler).toBe('function');
   });
 
   it('updates cwd in allPtys and matchedPtys when ptyId matches', () => {
     const [state, setState] = makeState();
-    const handler = createMetadataChangeHandler(setState, () => state);
+    const handler = createMetadataChangeHandler(setState);
 
     handler({ ptyId: 'pty-1', cwd: '/home/user/other-project' });
 
@@ -90,7 +91,7 @@ describe('CWD handler (litmus)', () => {
 
   it('does not update when ptyId is not in the index', () => {
     const [state, setState] = makeState();
-    const handler = createMetadataChangeHandler(setState, () => state);
+    const handler = createMetadataChangeHandler(setState);
 
     handler({ ptyId: 'unknown-pty', cwd: '/somewhere' });
 
@@ -100,7 +101,7 @@ describe('CWD handler (litmus)', () => {
 
   it('does not replace the entry when cwd is unchanged', () => {
     const [state, setState] = makeState();
-    const handler = createMetadataChangeHandler(setState, () => state);
+    const handler = createMetadataChangeHandler(setState);
     const before = state.allPtys[0];
 
     handler({ ptyId: 'pty-1', cwd: '/home/user/project' });
@@ -113,7 +114,7 @@ describe('CWD handler (litmus)', () => {
     const pty1 = makePty({ ptyId: 'pty-1', cwd: '/a' });
     const pty2 = makePty({ ptyId: 'pty-2', cwd: '/b' });
     const [state, setState] = makeState([pty1, pty2]);
-    const handler = createMetadataChangeHandler(setState, () => state);
+    const handler = createMetadataChangeHandler(setState);
 
     handler({ ptyId: 'pty-2', cwd: '/b/updated' });
 
@@ -144,9 +145,17 @@ describe('CWD handler (litmus)', () => {
         ],
       ])
     );
+    // Build the initial tree so flattenedTree is populated before
+    // the targeted metadata patch (which skips recomputeTree).
     setState('expandedSessionIds', new Set(['session-1']));
+    setState(
+      produce((s) => {
+        recomputeMatches(s);
+        recomputeTree(s);
+      })
+    );
 
-    const handler = createMetadataChangeHandler(setState, () => state);
+    const handler = createMetadataChangeHandler(setState);
     handler({ ptyId: 'pty-1', cwd: '/home/user/other' });
 
     // The flattenedTree entry should reflect the new cwd
