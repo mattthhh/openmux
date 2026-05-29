@@ -39,6 +39,19 @@ export function guardScrollbackRender(options: ScrollbackGuardOptions): Scrollba
     lastObservedScrollbackLength,
   } = options;
 
+  // Fast path: when at bottom (viewportOffset === 0), no scrollback rendering is
+  // needed. Skip the full row scan and array allocation entirely.
+  if (desiredViewportOffset === 0) {
+    return {
+      shouldDefer: false,
+      isUserScroll: false,
+      renderViewportOffset: 0,
+      renderScrollbackLength: desiredScrollbackLength,
+      renderRowCache: desiredRowCache,
+      hasMissingScrollback: false,
+    };
+  }
+
   const scrollbackDelta = desiredScrollbackLength - lastObservedScrollbackLength;
   const shouldAutoAdjust = scrollbackDelta !== 0 && lastObservedViewportOffset > 0;
   const expectedViewportOffset = shouldAutoAdjust
@@ -47,11 +60,12 @@ export function guardScrollbackRender(options: ScrollbackGuardOptions): Scrollba
   const isUserScroll = desiredViewportOffset !== expectedViewportOffset;
 
   let hasMissingScrollback = false;
-  const renderRowCache: (TerminalCell[] | null)[] = new Array(rows);
+  // Reuse the desiredRowCache directly when no deferral happens. Only allocate
+  // when we need to swap in the last stable cache (shouldDefer case).
+  let renderRowCache: (TerminalCell[] | null)[] = desiredRowCache;
   for (let y = 0; y < rows; y++) {
     const absoluteY = desiredScrollbackLength - desiredViewportOffset + y;
     const row = desiredRowCache[y];
-    renderRowCache[y] = row;
     if (row === null && absoluteY >= 0 && absoluteY < desiredScrollbackLength) {
       hasMissingScrollback = true;
     }

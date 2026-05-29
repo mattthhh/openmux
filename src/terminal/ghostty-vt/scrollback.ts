@@ -24,7 +24,7 @@ export function fetchScrollbackLine(params: {
   const line = terminal.getScrollbackLine(offset);
   if (!line) return null;
 
-  const converted = convertLine(line, cols, colors);
+  const converted = convertLine(line, 0, line.length, cols, colors);
   cache.set(offset, converted);
   return converted;
 }

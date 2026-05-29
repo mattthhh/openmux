@@ -18,17 +18,36 @@ export interface RowFetchResult {
 
 /**
  * Fetch all rows needed for rendering (optimized: fetch once per row, not per cell)
- * Returns the row cache and any missing scrollback line offsets for prefetching
+ * Returns the row cache and any missing scrollback line offsets for prefetching.
+ * Writes into the pooled row cache to avoid per-frame allocation.
  */
 export function fetchRowsForRendering(
   state: TerminalState,
   emulator: ITerminalEmulator | null,
-  options: RowFetchingOptions
+  options: RowFetchingOptions,
+  pool?: (TerminalCell[] | null)[]
 ): RowFetchResult {
   const { viewportOffset, scrollbackLength, rows } = options;
 
   const currentEmulator = viewportOffset > 0 ? emulator : null;
-  const rowCache: (TerminalCell[] | null)[] = new Array(rows);
+
+  // Reuse pooled array when available, truncating or extending as needed
+  let rowCache: (TerminalCell[] | null)[];
+  if (pool) {
+    if (pool.length > rows) {
+      pool.length = rows;
+    }
+    while (pool.length < rows) {
+      pool.push(null);
+    }
+    rowCache = pool;
+    // Zero-fill to clear stale references
+    for (let i = 0; i < rows; i++) {
+      rowCache[i] = null;
+    }
+  } else {
+    rowCache = new Array(rows);
+  }
 
   // Track missing scrollback lines for prefetching
   let firstMissingOffset = -1;

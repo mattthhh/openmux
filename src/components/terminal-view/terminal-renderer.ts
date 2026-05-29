@@ -99,11 +99,16 @@ export function createTerminalRenderer(params: {
       rowCache: desiredRowCache,
       firstMissingOffset,
       lastMissingOffset,
-    } = fetchRowsForRendering(state, emulator, {
-      viewportOffset: desiredViewportOffset,
-      scrollbackLength: desiredScrollbackLength,
-      rows,
-    });
+    } = fetchRowsForRendering(
+      state,
+      emulator,
+      {
+        viewportOffset: desiredViewportOffset,
+        scrollbackLength: desiredScrollbackLength,
+        rows,
+      },
+      viewState.pooledRowCache
+    );
 
     if (viewState.lastStableScrollbackLength === 0 && desiredScrollbackLength > 0) {
       viewState.lastStableScrollbackLength = desiredScrollbackLength;

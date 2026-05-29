@@ -181,22 +181,27 @@ export function convertCell(cell: GhosttyCell): TerminalCell {
 
 /**
  * Convert a line of GhosttyCell to TerminalCell array with EOL fill.
+ * Accepts an offset into the source pool to avoid viewport.slice() allocation.
  *
- * @param line - Array of GhosttyCell from the terminal
- * @param cols - Number of columns to fill to
+ * @param cells - Flat GhosttyCell pool from getViewport()
+ * @param offset - Starting index in the pool for this row
+ * @param count - Number of cells to read from the pool
+ * @param cols - Total row width (for EOL fill)
  * @param colors - Terminal color scheme for fill cells
  * @returns Array of TerminalCell with EOL padding
  */
 export function convertLine(
-  line: GhosttyCell[],
+  cells: GhosttyCell[],
+  offset: number,
+  count: number,
   cols: number,
   colors: TerminalColors
 ): TerminalCell[] {
   const row: TerminalCell[] = [];
-  const lineLength = Math.min(line.length, cols);
+  const lineLength = Math.min(count, cols, cells.length - offset > 0 ? cells.length - offset : 0);
 
   for (let x = 0; x < lineLength; x++) {
-    row.push(convertCell(line[x]));
+    row.push(convertCell(cells[offset + x]));
   }
 
   // Fill remaining cells with default background color (not last cell's color)
@@ -206,7 +211,6 @@ export function convertLine(
     const bg = extractRgb(colors.background);
 
     for (let x = lineLength; x < cols; x++) {
-      // Create a new object for each cell to avoid shared references
       row.push({
         char: ' ',
         fg,

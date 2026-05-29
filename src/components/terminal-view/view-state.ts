@@ -15,6 +15,8 @@ export interface TerminalViewState {
   lastStableRowCache: (TerminalCell[] | null)[] | null;
   lastObservedViewportOffset: number;
   lastObservedScrollbackLength: number;
+  /** Pooled row cache array — reused across frames to avoid per-render allocation */
+  pooledRowCache: (TerminalCell[] | null)[];
 }
 
 export function createTerminalViewState(): TerminalViewState {
@@ -31,5 +33,6 @@ export function createTerminalViewState(): TerminalViewState {
     lastStableRowCache: null,
     lastObservedViewportOffset: 0,
     lastObservedScrollbackLength: 0,
+    pooledRowCache: [],
   };
 }

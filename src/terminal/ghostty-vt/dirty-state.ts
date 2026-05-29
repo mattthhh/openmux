@@ -40,9 +40,8 @@ export function buildDirtyState({
     const cells: TerminalCell[][] = [];
     if (viewport) {
       for (let y = 0; y < rows; y++) {
-        const start = y * cols;
-        const line = viewport.slice(start, start + cols);
-        cells.push(convertLine(line, cols, colors));
+        const offset = y * cols;
+        cells.push(convertLine(viewport, offset, cols, cols, colors));
       }
     }
 
@@ -65,9 +64,8 @@ export function buildDirtyState({
   } else if (viewport) {
     for (let y = 0; y < rows; y++) {
       if (!terminal.isRowDirty(y)) continue;
-      const start = y * cols;
-      const line = viewport.slice(start, start + cols);
-      dirtyRows.set(y, convertLine(line, cols, colors));
+      const offset = y * cols;
+      dirtyRows.set(y, convertLine(viewport, offset, cols, cols, colors));
     }
 
     if (cachedState) {
