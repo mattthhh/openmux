@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.130](https://github.com/monotykamary/openmux/compare/v0.3.129...v0.3.130) (2026-05-29)
+
+
+### Bug Fixes
+
+* **aggregate-view:** fix stale folder/process names from path-based SolidJS signal mismatch ([e560730](https://github.com/monotykamary/openmux/commit/e560730729c966cb86883be2c986d9a9f572de5e))
+* **aggregate:** prevent git metadata bleed from shared PtyInfo references and unsafe index fallback ([7abf02a](https://github.com/monotykamary/openmux/commit/7abf02abff553b74b453b705f82fa7d931bbb311))
+* **render:** handle wide chars individually in run-length batch rendering ([933422d](https://github.com/monotykamary/openmux/commit/933422d6ce8fe7d850a824a36d25c5f6f261074d))
+
+
+### Performance
+
+* **misc:** reduce host-color-sync polling window and document search signal reads ([6808ab0](https://github.com/monotykamary/openmux/commit/6808ab0b45bebeb917fbf15e0864953e23b45346)), closes [#16](https://github.com/monotykamary/openmux/issues/16) [#12](https://github.com/monotykamary/openmux/issues/12)
+* **render:** batch terminal cell writes into same-style runs with drawText ([8b6fc09](https://github.com/monotykamary/openmux/commit/8b6fc09d63b32fd272ca8f814d9a481f301cf7f5))
+* **search:** upgrade search match lookup to O(1) per-cell with Set-based column index ([4411966](https://github.com/monotykamary/openmux/commit/44119662d912f125ec67593b70b86e2172181762))
+* **terminal:** reduce per-frame allocations in row fetching and scrollback guard ([392c3aa](https://github.com/monotykamary/openmux/commit/392c3aa6bad09323e6fb4d0591aa3c6bf96bd315)), closes [#7](https://github.com/monotykamary/openmux/issues/7) [#8](https://github.com/monotykamary/openmux/issues/8) [#2](https://github.com/monotykamary/openmux/issues/2)
+* **terminal:** replace deferMacrotask with queueMicrotask for frame batching ([a604f43](https://github.com/monotykamary/openmux/commit/a604f43e927eed4685312d1347cdef9c616cc240))
+
 ### [0.3.129](https://github.com/monotykamary/openmux/compare/v0.3.128...v0.3.129) (2026-05-28)
 
 
