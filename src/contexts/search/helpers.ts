@@ -61,18 +61,22 @@ export function calculateScrollOffset(
 }
 
 /**
- * Build spatial index for O(1) match lookup by line
- * Returns Map<lineIndex, Array<{startCol, endCol}>>
+ * Build spatial index for O(1) match lookup by line and column.
+ * Returns Map<lineIndex, Set<column>> where the set contains all column indices
+ * that are part of a match. This avoids iterating match arrays per-cell during rendering.
  */
-export function buildMatchLookup(
-  matches: SearchMatch[]
-): Map<number, Array<{ startCol: number; endCol: number }>> {
-  const lookup = new Map<number, Array<{ startCol: number; endCol: number }>>();
+export function buildMatchLookup(matches: SearchMatch[]): Map<number, Set<number>> {
+  const lookup = new Map<number, Set<number>>();
 
   for (const match of matches) {
-    const existing = lookup.get(match.lineIndex) ?? [];
-    existing.push({ startCol: match.startCol, endCol: match.endCol });
-    lookup.set(match.lineIndex, existing);
+    let colSet = lookup.get(match.lineIndex);
+    if (!colSet) {
+      colSet = new Set<number>();
+      lookup.set(match.lineIndex, colSet);
+    }
+    for (let col = match.startCol; col < match.endCol; col++) {
+      colSet.add(col);
+    }
   }
 
   return lookup;

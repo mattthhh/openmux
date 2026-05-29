@@ -43,8 +43,8 @@ export function SearchProvider(props: SearchProviderProps) {
   let queryEmitter: ((query: string) => void) | null = null;
 
   // Spatial index for O(1) match lookup by line
-  // Map<lineIndex, Array<{startCol, endCol}>>
-  let matchLookup = new Map<number, Array<{ startCol: number; endCol: number }>>();
+  // Map<lineIndex, Set<column>> — column set enables O(1) per-cell match check
+  let matchLookup = new Map<number, Set<number>>();
 
   // Update state and rebuild spatial index
   const updateSearchState = (newState: SearchState | null) => {
@@ -215,15 +215,10 @@ export function SearchProvider(props: SearchProviderProps) {
       return false;
     }
 
-    // O(1) lookup by line using spatial index
-    const lineMatches = matchLookup.get(absoluteY);
-    if (!lineMatches) return false;
-
-    // Check matches on this line (usually very few per line)
-    for (const { startCol, endCol } of lineMatches) {
-      if (x >= startCol && x < endCol) return true;
-    }
-    return false;
+    // O(1) lookup by line + O(1) column check via Set.has
+    const colSet = matchLookup.get(absoluteY);
+    if (!colSet) return false;
+    return colSet.has(x);
   };
 
   // Check if cell is the current match

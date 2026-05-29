@@ -213,7 +213,11 @@ describe('buildMatchLookup', () => {
     const lookup = buildMatchLookup(matches);
 
     expect(lookup.size).toBe(1);
-    expect(lookup.get(5)).toEqual([{ startCol: 10, endCol: 15 }]);
+    const colSet = lookup.get(5)!;
+    expect(colSet.has(9)).toBe(false);
+    expect(colSet.has(10)).toBe(true);
+    expect(colSet.has(14)).toBe(true);
+    expect(colSet.has(15)).toBe(false);
   });
 
   it('groups multiple matches on same line', () => {
@@ -226,11 +230,20 @@ describe('buildMatchLookup', () => {
     const lookup = buildMatchLookup(matches);
 
     expect(lookup.size).toBe(1);
-    expect(lookup.get(5)).toEqual([
-      { startCol: 0, endCol: 5 },
-      { startCol: 10, endCol: 15 },
-      { startCol: 20, endCol: 25 },
-    ]);
+    const colSet = lookup.get(5)!;
+    // Check all three ranges are present
+    expect(colSet.has(0)).toBe(true);
+    expect(colSet.has(4)).toBe(true);
+    expect(colSet.has(10)).toBe(true);
+    expect(colSet.has(14)).toBe(true);
+    expect(colSet.has(20)).toBe(true);
+    expect(colSet.has(24)).toBe(true);
+    // Check gaps are absent
+    expect(colSet.has(5)).toBe(false);
+    expect(colSet.has(9)).toBe(false);
+    expect(colSet.has(15)).toBe(false);
+    expect(colSet.has(19)).toBe(false);
+    expect(colSet.has(25)).toBe(false);
   });
 
   it('handles matches across multiple lines', () => {
@@ -243,9 +256,9 @@ describe('buildMatchLookup', () => {
     const lookup = buildMatchLookup(matches);
 
     expect(lookup.size).toBe(3);
-    expect(lookup.get(1)).toEqual([{ startCol: 0, endCol: 5 }]);
-    expect(lookup.get(3)).toEqual([{ startCol: 10, endCol: 15 }]);
-    expect(lookup.get(5)).toEqual([{ startCol: 20, endCol: 25 }]);
+    expect(lookup.get(1)!.has(2)).toBe(true);
+    expect(lookup.get(3)!.has(12)).toBe(true);
+    expect(lookup.get(5)!.has(22)).toBe(true);
   });
 
   it('handles mixed single and multiple matches per line', () => {
@@ -259,29 +272,10 @@ describe('buildMatchLookup', () => {
     const lookup = buildMatchLookup(matches);
 
     expect(lookup.size).toBe(3);
-    expect(lookup.get(1)).toEqual([{ startCol: 0, endCol: 5 }]);
-    expect(lookup.get(2)).toEqual([
-      { startCol: 0, endCol: 3 },
-      { startCol: 10, endCol: 13 },
-    ]);
-    expect(lookup.get(3)).toEqual([{ startCol: 5, endCol: 10 }]);
-  });
-
-  it('preserves match order within a line', () => {
-    const matches: SearchMatch[] = [
-      { lineIndex: 0, startCol: 20, endCol: 25 },
-      { lineIndex: 0, startCol: 5, endCol: 10 },
-      { lineIndex: 0, startCol: 30, endCol: 35 },
-    ];
-
-    const lookup = buildMatchLookup(matches);
-
-    // Should preserve insertion order
-    expect(lookup.get(0)).toEqual([
-      { startCol: 20, endCol: 25 },
-      { startCol: 5, endCol: 10 },
-      { startCol: 30, endCol: 35 },
-    ]);
+    expect(lookup.get(1)!.has(0)).toBe(true);
+    expect(lookup.get(2)!.has(1)).toBe(true);
+    expect(lookup.get(2)!.has(11)).toBe(true);
+    expect(lookup.get(3)!.has(7)).toBe(true);
   });
 
   it('returns undefined for non-existent line', () => {
