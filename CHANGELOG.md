@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.131](https://github.com/monotykamary/openmux/compare/v0.3.130...v0.3.131) (2026-05-30)
+
+
+### Bug Fixes
+
+* traverse full descendant chain for foreground process detection ([f0b5ce3](https://github.com/monotykamary/openmux/commit/f0b5ce394c0ea5bfbcd6752e2092240429fa5625))
+
 ### [0.3.130](https://github.com/monotykamary/openmux/compare/v0.3.129...v0.3.130) (2026-05-29)
 
 
