@@ -170,9 +170,13 @@ pub fn getExitCode(handle: c_int) c_int {
 // ============================================================================
 
 /// Get the foreground process ID for a PTY.
-/// First tries tcgetpgrp(), then descends into the process tree to find
-/// the actual foreground app (handles nested shells like macOS login shell
-/// → interactive shell → app).
+/// Uses tcgetpgrp() to identify the foreground process group, then
+/// descends into the process tree past intermediate shells.
+/// When tcgetpgrp() returns the shell's own PID, the kernel confirms
+/// the shell is foreground — we return it directly without descending
+/// the process tree. Descending from the shell would find live but
+/// non-foreground children (e.g. a process doing cleanup after yielding
+/// terminal control), causing stale process names in the UI.
 /// Returns: foreground PID (> 0) or ERROR (-1).
 pub fn getForegroundPid(handle: c_int) c_int {
     if (handle <= 0) {
@@ -183,19 +187,22 @@ pub fn getForegroundPid(handle: c_int) c_int {
     const pty = handle_registry.acquireHandle(h) orelse return constants.ERROR;
     defer handle_registry.releaseHandle(h);
 
-    // First try tcgetpgrp - returns foreground process group ID
     const pgid = c.tcgetpgrp(pty.master_fd);
 
     if (pgid > 0 and pgid != pty.pid) {
-        // tcgetpgrp returned a non-shell PID, but it might be an
-        // intermediate shell (e.g. login shell → interactive shell → mole).
-        // Descend further to find the actual foreground app.
+        // tcgetpgrp returned a non-shell PID — a child process has terminal
+        // control. Descend past intermediate shells to find the actual
+        // foreground app (e.g. login shell → interactive shell → mole).
         return process_info.findDeepestDescendant(pgid);
     }
 
-    // tcgetpgrp returned shell's PID (job control not active) -
-    // descend the full tree from the outer shell.
-    return process_info.findDeepestDescendant(pty.pid);
+    // tcgetpgrp returned the shell's own PID (or an error/same-PGID case).
+    // The kernel confirms the shell is the foreground process. Return the
+    // shell PID directly — do NOT descend the process tree. Descending
+    // from the shell would find children that have already yielded terminal
+    // control (e.g. a git process between tcsetpgrp(hand-back) and exit),
+    // causing stale foreground process names.
+    return pty.pid;
 }
 
 /// Get the number of times foreground process has changed.
