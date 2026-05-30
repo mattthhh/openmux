@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.132](https://github.com/monotykamary/openmux/compare/v0.3.131...v0.3.132) (2026-05-30)
+
+
+### Bug Fixes
+
+* **aggregate-view:** resolve stale process names in sidebar ([0b812b4](https://github.com/monotykamary/openmux/commit/0b812b4f9acaab1ff76e7b0f0b7776674f1b5209))
+
 ### [0.3.131](https://github.com/monotykamary/openmux/compare/v0.3.130...v0.3.131) (2026-05-30)
 
 
