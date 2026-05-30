@@ -3,6 +3,7 @@
 This document is generated from the default openmux config.
 
 It mirrors the file created at:
+
 - `~/.config/openmux/config.toml`
 - `$XDG_CONFIG_HOME/openmux/config.toml` (if set)
 
@@ -108,7 +109,7 @@ prefixTimeoutMs = 2_000
   "alt+s" = "session.picker.toggle"
   "alt+t" = "template.overlay.toggle"
   "alt+g" = "aggregate.toggle"
-  "alt+f" = "search.open"
+  "alt+/" = "search.open"
   "alt+p" = "command.palette.toggle"
   "alt+[" = "layout.cycle.prev"
   "alt+]" = "layout.cycle.next"
@@ -212,7 +213,7 @@ backspace = "aggregate.list.delete"
 
 [keybindings.aggregate.preview]
 "alt+escape" = "aggregate.preview.exit"
-"alt+f" = "aggregate.preview.search"
+"alt+/" = "aggregate.preview.search"
 "alt+x" = "aggregate.kill"
 
 [keybindings.aggregate.search]

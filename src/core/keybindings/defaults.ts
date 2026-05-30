@@ -17,7 +17,7 @@ export const DEFAULT_KEYBINDINGS: KeybindingsConfig = {
     'alt+s': 'session.picker.toggle',
     'alt+t': 'template.overlay.toggle',
     'alt+g': 'aggregate.toggle',
-    'alt+f': 'search.open',
+    'alt+/': 'search.open',
     'alt+o': 'file.opener.toggle',
     'alt+d': 'diff.opener.toggle',
     'alt+p': 'command.palette.toggle',
@@ -137,7 +137,7 @@ export const DEFAULT_KEYBINDINGS: KeybindingsConfig = {
     },
     preview: {
       'alt+escape': 'aggregate.preview.exit',
-      'alt+f': 'aggregate.preview.search',
+      'alt+/': 'aggregate.preview.search',
       'alt+x': 'aggregate.kill',
       'alt+n': 'aggregate.preview.new.pane',
       'alt+j': 'aggregate.preview.down',
