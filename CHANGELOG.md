@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.134](https://github.com/monotykamary/openmux/compare/v0.3.133...v0.3.134) (2026-05-30)
+
+
+### Bug Fixes
+
+* **keybindings:** remap search.open from alt+f to alt+/ ([11b8e5e](https://github.com/monotykamary/openmux/commit/11b8e5ed50a1361883908f7c732dbbc0e2e4c4a1))
+* **zig-pty:** trust tcgetpgrp when it returns the shell PID ([5c659ba](https://github.com/monotykamary/openmux/commit/5c659bae4664cb798716581ec15475c01d56a7b0))
+
 ### [0.3.133](https://github.com/monotykamary/openmux/compare/v0.3.132...v0.3.133) (2026-05-30)
 
 
