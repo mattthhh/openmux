@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.133](https://github.com/monotykamary/openmux/compare/v0.3.132...v0.3.133) (2026-05-30)
+
+
+### Bug Fixes
+
+* **aggregate:** skip zombie PIDs in foreground walk, preserve pane placeholder ([70027e0](https://github.com/monotykamary/openmux/commit/70027e003a3b39947dc1a70364ac1ecfb86391a2))
+
 ### [0.3.132](https://github.com/monotykamary/openmux/compare/v0.3.131...v0.3.132) (2026-05-30)
 
 
