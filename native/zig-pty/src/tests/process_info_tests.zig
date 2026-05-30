@@ -136,18 +136,18 @@ test "small buffer for process name truncates safely" {
 }
 
 // ============================================================================
-// Child Process Detection Tests
+// Descendant Process Detection Tests
 // ============================================================================
 
-test "findChildProcess returns parent when no children" {
+test "findDeepestDescendant returns self when no descendants" {
     const pid: c_int = @intCast(std.c.getpid());
     // Test process likely has no children, should return self or a higher pid
-    const result = process_info.findChildProcess(pid);
+    const result = process_info.findDeepestDescendant(pid);
     try std.testing.expect(result == pid or result > pid);
 }
 
-test "findChildProcess with invalid pid returns same pid" {
+test "findDeepestDescendant with invalid pid returns same pid" {
     // Invalid PIDs should return themselves (graceful handling)
-    try std.testing.expectEqual(@as(c_int, 0), process_info.findChildProcess(0));
-    try std.testing.expectEqual(@as(c_int, -1), process_info.findChildProcess(-1));
+    try std.testing.expectEqual(@as(c_int, 0), process_info.findDeepestDescendant(0));
+    try std.testing.expectEqual(@as(c_int, -1), process_info.findDeepestDescendant(-1));
 }

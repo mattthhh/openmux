@@ -170,7 +170,9 @@ pub fn getExitCode(handle: c_int) c_int {
 // ============================================================================
 
 /// Get the foreground process ID for a PTY.
-/// First tries tcgetpgrp(), falls back to child process finding.
+/// First tries tcgetpgrp(), then descends into the process tree to find
+/// the actual foreground app (handles nested shells like macOS login shell
+/// → interactive shell → app).
 /// Returns: foreground PID (> 0) or ERROR (-1).
 pub fn getForegroundPid(handle: c_int) c_int {
     if (handle <= 0) {
@@ -184,13 +186,16 @@ pub fn getForegroundPid(handle: c_int) c_int {
     // First try tcgetpgrp - returns foreground process group ID
     const pgid = c.tcgetpgrp(pty.master_fd);
 
-    // If tcgetpgrp returns a different PID than shell, use it
     if (pgid > 0 and pgid != pty.pid) {
-        return pgid;
+        // tcgetpgrp returned a non-shell PID, but it might be an
+        // intermediate shell (e.g. login shell → interactive shell → mole).
+        // Descend further to find the actual foreground app.
+        return process_info.findDeepestDescendant(pgid);
     }
 
-    // tcgetpgrp returned shell's PID (job control not active) - find children
-    return process_info.findChildProcess(pty.pid);
+    // tcgetpgrp returned shell's PID (job control not active) -
+    // descend the full tree from the outer shell.
+    return process_info.findDeepestDescendant(pty.pid);
 }
 
 /// Get the number of times foreground process has changed.

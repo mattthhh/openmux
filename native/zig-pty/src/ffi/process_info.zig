@@ -51,17 +51,18 @@ pub fn getProcessCwd(pid: c_int, buf: [*]u8, len: usize) c_int {
     return constants.ERROR;
 }
 
-/// Find the most recent child process of a parent.
-/// Used as fallback when tcgetpgrp doesn't return the foreground process.
+/// Find the deepest descendant process of a parent.
+/// Traverses the full descendant chain (not just direct children) to handle
+/// nested shells, e.g. macOS login shell → interactive shell → app like mole.
 ///
-/// Returns: child PID if found, or parent_pid if no children.
-pub fn findChildProcess(parent_pid: c_int) c_int {
+/// Returns: deepest descendant PID if found, or parent_pid if no descendants.
+pub fn findDeepestDescendant(parent_pid: c_int) c_int {
     if (parent_pid <= 0) return parent_pid;
 
     if (builtin.os.tag == .macos) {
-        return macos.findChildProcess(parent_pid);
+        return macos.findDeepestDescendant(parent_pid);
     } else if (builtin.os.tag == .linux) {
-        return linux.findChildProcess(parent_pid);
+        return linux.findDeepestDescendant(parent_pid);
     }
 
     return parent_pid;
@@ -284,35 +285,38 @@ const macos = struct {
         return @intCast(copy_len);
     }
 
-    /// Find the most recent child process of a parent PID.
-    /// Scans all processes and finds children by checking PPID.
-    pub fn findChildProcess(parent_pid: c_int) c_int {
-        if (builtin.os.tag != .macos) return parent_pid;
+    /// Find the deepest descendant process of a parent PID.
+    /// Builds a full PPID → PID map from the process list, then walks
+    /// down the descendant chain choosing the highest-PID child at each
+    /// level until no further descendants exist.
+    pub fn findDeepestDescendant(root_pid: c_int) c_int {
+        if (builtin.os.tag != .macos) return root_pid;
 
         // Get count of all PIDs
         const bytes_needed = c.proc_listpids(1, 0, null, 0); // PROC_ALL_PIDS = 1
-        if (bytes_needed <= 0) return parent_pid;
+        if (bytes_needed <= 0) return root_pid;
 
         const pid_count: usize = @intCast(@divTrunc(bytes_needed, 4));
-        if (pid_count == 0) return parent_pid;
+        if (pid_count == 0) return root_pid;
 
-        // Use stack buffer with reasonable max to avoid huge allocations
-        // 10000 PIDs * 4 bytes = 40KB on stack, which is safe
         const max_pids: usize = @min(pid_count + 100, 10000);
         var pid_buf: [10000 * 4]u8 = undefined;
 
         const actual_bytes = c.proc_listpids(1, 0, @ptrCast(&pid_buf), @intCast(max_pids * 4));
-        if (actual_bytes <= 0) return parent_pid;
+        if (actual_bytes <= 0) return root_pid;
 
         const actual_count: usize = @intCast(@divTrunc(actual_bytes, 4));
 
-        // Find children of parent_pid
-        var child_pids: [64]c_int = undefined;
-        var child_count: usize = 0;
+        // Build PPID → children map (stack-allocated, bounded)
+        // Each parent can have up to 8 children tracked; good enough for
+        // terminal process trees which are typically linear.
+        const MAX_CHILDREN = 8;
+        const ParentEntry = struct { count: usize, pids: [MAX_CHILDREN]c_int };
+        var parent_map: [512]struct { ppid: c_int, entry: ParentEntry } = undefined;
+        var parent_count: usize = 0;
         var info: [PROC_PIDTBSDINFO_SIZE]u8 = undefined;
 
-        var i: usize = 0;
-        while (i < actual_count and child_count < 64) : (i += 1) {
+        for (0..actual_count) |i| {
             const pid_ptr: *align(1) const c_int = @ptrCast(&pid_buf[i * 4]);
             const pid = pid_ptr.*;
             if (pid <= 0) continue;
@@ -322,22 +326,60 @@ const macos = struct {
 
             const ppid_ptr: *align(1) const u32 = @ptrCast(&info[PPID_OFFSET]);
             const ppid: c_int = @intCast(ppid_ptr.*);
+            if (ppid <= 0) continue;
 
-            if (ppid == parent_pid) {
-                child_pids[child_count] = pid;
-                child_count += 1;
+            // Find or create entry for this ppid
+            var found: ?usize = null;
+            for (0..parent_count) |j| {
+                if (parent_map[j].ppid == ppid) {
+                    found = j;
+                    break;
+                }
+            }
+
+            if (found) |j| {
+                var entry = &parent_map[j].entry;
+                if (entry.count < MAX_CHILDREN) {
+                    entry.pids[entry.count] = pid;
+                    entry.count += 1;
+                }
+            } else if (parent_count < parent_map.len) {
+                var entry = ParentEntry{ .count = 1, .pids = undefined };
+                entry.pids[0] = pid;
+                parent_map[parent_count] = .{ .ppid = ppid, .entry = entry };
+                parent_count += 1;
             }
         }
 
-        if (child_count == 0) return parent_pid;
+        // Walk down the descendant chain from root_pid, choosing the
+        // highest-PID child at each level (most recently spawned).
+        var current = root_pid;
+        var visited: [32]c_int = undefined;
+        var visited_count: usize = 0;
 
-        // Return highest PID (most recently created)
-        var max_pid = child_pids[0];
-        for (child_pids[1..child_count]) |pid| {
-            if (pid > max_pid) max_pid = pid;
+        while (true) {
+            // Cycle guard
+            for (0..visited_count) |j| {
+                if (visited[j] == current) return current;
+            }
+            if (visited_count >= visited.len) return current;
+            visited[visited_count] = current;
+            visited_count += 1;
+
+            // Find children of current
+            var best_child: c_int = 0;
+            for (0..parent_count) |j| {
+                if (parent_map[j].ppid != current) continue;
+                const entry = parent_map[j].entry;
+                for (0..entry.count) |k| {
+                    if (entry.pids[k] > best_child) best_child = entry.pids[k];
+                }
+                break;
+            }
+
+            if (best_child == 0) return current;
+            current = best_child;
         }
-
-        return max_pid;
     }
 };
 
@@ -440,32 +482,47 @@ const linux = struct {
         return @intCast(result);
     }
 
-    /// Find the most recent child process from /proc/<pid>/task/<pid>/children.
-    pub fn findChildProcess(parent_pid: c_int) c_int {
-        if (builtin.os.tag != .linux) return parent_pid;
+    /// Find the deepest descendant process from /proc/<pid>/task/<pid>/children.
+    /// Recursively follows the children chain to reach the leaf process.
+    pub fn findDeepestDescendant(root_pid: c_int) c_int {
+        if (builtin.os.tag != .linux) return root_pid;
 
-        var path_buf: [64]u8 = undefined;
-        const path = std.fmt.bufPrintZ(&path_buf, "/proc/{d}/task/{d}/children", .{ parent_pid, parent_pid }) catch return parent_pid;
+        var current = root_pid;
+        var visited: [32]c_int = undefined;
+        var visited_count: usize = 0;
 
-        const fd = c.open(path, c.O_RDONLY);
-        if (fd < 0) return parent_pid;
-        defer _ = c.close(fd);
+        while (true) {
+            // Cycle guard
+            for (0..visited_count) |j| {
+                if (visited[j] == current) return current;
+            }
+            if (visited_count >= visited.len) return current;
+            visited[visited_count] = current;
+            visited_count += 1;
 
-        var children_buf: [256]u8 = undefined;
-        const bytes_read = c.read(fd, &children_buf, children_buf.len - 1);
-        if (bytes_read <= 0) return parent_pid;
+            // Read children of current PID
+            var path_buf: [64]u8 = undefined;
+            const path = std.fmt.bufPrintZ(&path_buf, "/proc/{d}/task/{d}/children", .{ current, current }) catch return current;
 
-        children_buf[@intCast(bytes_read)] = 0;
+            const fd = c.open(path, c.O_RDONLY);
+            if (fd < 0) return current;
+            defer _ = c.close(fd);
 
-        // Parse space-separated PIDs, return highest
-        var max_pid: c_int = parent_pid;
-        var iter = std.mem.tokenizeScalar(u8, children_buf[0..@intCast(bytes_read)], ' ');
-        while (iter.next()) |token| {
-            const pid = std.fmt.parseInt(c_int, token, 10) catch continue;
-            if (pid > max_pid) max_pid = pid;
+            var children_buf: [256]u8 = undefined;
+            const bytes_read = c.read(fd, &children_buf, children_buf.len - 1);
+            if (bytes_read <= 0) return current;
+
+            // Parse space-separated PIDs, pick highest (most recent)
+            var best_child: c_int = 0;
+            var iter = std.mem.tokenizeScalar(u8, children_buf[0..@intCast(bytes_read)], ' ');
+            while (iter.next()) |token| {
+                const pid = std.fmt.parseInt(c_int, token, 10) catch continue;
+                if (pid > best_child) best_child = pid;
+            }
+
+            if (best_child == 0) return current;
+            current = best_child;
         }
-
-        return max_pid;
     }
 };
 
