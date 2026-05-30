@@ -220,55 +220,63 @@ export function createLifecycleHandlers(
     // pending creation orphaned and permanently blocking autoswitch.
     await new Promise<void>((resolve) => queueMicrotask(resolve));
 
-    // NOW remove the pending creation. The refresh has put the real PTY
-    // into allPtys/matchedPtys, so the placeholder is no longer needed.
+    // Remove the pending creation ONLY if the real PTY has landed in
+    // allPtys (confirmed by the refresh). If the snapshot didn't include
+    // the new PTY because the layout hasn't been updated yet (e.g.,
+    // createPaneWithPTY's newPaneWithPty hasn't run), the placeholder
+    // must stay visible until a subsequent refresh picks it up.
     //
-    // IMPORTANT: We must always clean up pending creations, even when
-    // ownership is null (e.g. during cold-start or session-switch races).
-    // Without this fallback, the pending creation's "..." placeholder
-    // persists indefinitely because the if (ownership) guard skips the
-    // entire cleanup block.
+    // Without this guard, the placeholder is removed while the real PTY
+    // isn't in allPtys yet, causing the row to disappear from the
+    // aggregate view until the next full refreshPtys().
     setState(
       produce((s) => {
-        if (ownership) {
-          const matchingInsertion = findMatchingPendingInsertion(s, {
-            ptyId,
-            sessionId: ownership.sessionId,
-            paneId: ownership.paneId,
-          });
+        // Only remove pending creations whose real PTY is confirmed in state.
+        // If the PTY isn't in allPtysIndex yet, the placeholder stays.
+        const ptyIsInState = s.allPtysIndex.has(ptyId) || s.flattenedTreeIndex.has(ptyId);
 
-          if (matchingInsertion) {
-            removePendingPaneCreations(s, (insertion) => insertion.id === matchingInsertion.id);
+        if (ptyIsInState) {
+          if (ownership) {
+            const matchingInsertion = findMatchingPendingInsertion(s, {
+              ptyId,
+              sessionId: ownership.sessionId,
+              paneId: ownership.paneId,
+            });
+
+            if (matchingInsertion) {
+              removePendingPaneCreations(s, (insertion) => insertion.id === matchingInsertion.id);
+            } else {
+              removePendingPaneCreations(
+                s,
+                (insertion) =>
+                  insertion.pendingPtyId === ptyId ||
+                  (!!ownership.paneId && insertion.pendingPaneId === ownership.paneId)
+              );
+            }
           } else {
-            removePendingPaneCreations(
-              s,
-              (insertion) =>
-                insertion.pendingPtyId === ptyId ||
-                (!!ownership.paneId && insertion.pendingPaneId === ownership.paneId)
-            );
+            // ownership is null — try matching by ptyId alone
+            removePendingPaneCreations(s, (insertion) => insertion.pendingPtyId === ptyId);
           }
-        } else {
-          // ownership is null — try matching by ptyId alone
+
+          // Fallback: remove any pending creation whose real PTY has landed
+          // in the flattened tree index.
+          removePendingPaneCreations(
+            s,
+            (insertion) =>
+              insertion.pendingPtyId !== null && s.flattenedTreeIndex.has(insertion.pendingPtyId)
+          );
+
+          // Fallback: remove pending creations whose pendingPtyId
+          // matches the lifecycle ptyId.
           removePendingPaneCreations(s, (insertion) => insertion.pendingPtyId === ptyId);
         }
 
-        // Fallback: remove any pending creation whose real PTY has landed
-        // in the flattened tree index. This catches cases where onCreated
-        // fired during the yield above but the match-by-ptyId still missed
-        // (e.g., the insertion's pendingPtyId was set to a different PTY
-        // due to rapid sequential creations).
-        removePendingPaneCreations(
-          s,
-          (insertion) =>
-            insertion.pendingPtyId !== null && s.flattenedTreeIndex.has(insertion.pendingPtyId)
-        );
-
-        // Fallback: remove pending creations whose pendingPtyId
-        // matches the lifecycle ptyId. This catches cases where
-        // onCreated set pendingPtyId but the primary match-by-ptyId
-        // still missed (e.g. due to stale indexes during rapid
-        // sequential creations).
-        removePendingPaneCreations(s, (insertion) => insertion.pendingPtyId === ptyId);
+        // Schedule a follow-up refresh to pick up the real PTY if it
+        // wasn't in the snapshot yet. The pending creation's placeholder
+        // keeps the row visible in the meantime.
+        if (!ptyIsInState) {
+          void deps.refreshPtys();
+        }
 
         recomputeMatches(s);
         recomputeTree(s);

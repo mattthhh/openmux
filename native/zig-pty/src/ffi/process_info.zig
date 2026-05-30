@@ -285,10 +285,18 @@ const macos = struct {
         return @intCast(copy_len);
     }
 
+    // Process status values (from xnu sys/proc.h)
+    const SZOMB = 5;
+
+    /// Offset of pbi_status within struct proc_bsdinfo.
+    /// Layout: pbi_flags(0), pbi_status(4), pbi_xstatus(8), pbi_pid(12), pbi_ppid(16)
+    const STATUS_OFFSET = 4;
+
     /// Find the deepest descendant process of a parent PID.
     /// Builds a full PPID → PID map from the process list, then walks
     /// down the descendant chain choosing the highest-PID child at each
-    /// level until no further descendants exist.
+    /// level until no further descendants exist. Skips zombie (SZOMB)
+    /// processes to avoid returning stale names from exited children.
     pub fn findDeepestDescendant(root_pid: c_int) c_int {
         if (builtin.os.tag != .macos) return root_pid;
 
@@ -310,10 +318,13 @@ const macos = struct {
         // Build PPID → children map (stack-allocated, bounded)
         // Each parent can have up to 8 children tracked; good enough for
         // terminal process trees which are typically linear.
+        // Also build a set of zombie PIDs so the walk can skip them.
         const MAX_CHILDREN = 8;
         const ParentEntry = struct { count: usize, pids: [MAX_CHILDREN]c_int };
         var parent_map: [512]struct { ppid: c_int, entry: ParentEntry } = undefined;
         var parent_count: usize = 0;
+        var zombie_set: [128]c_int = undefined;
+        var zombie_count: usize = 0;
         var info: [PROC_PIDTBSDINFO_SIZE]u8 = undefined;
 
         for (0..actual_count) |i| {
@@ -323,6 +334,17 @@ const macos = struct {
 
             const result = c.proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, @ptrCast(&info), PROC_PIDTBSDINFO_SIZE);
             if (result <= 0) continue;
+
+            // Check for zombie status — skip these from the children map
+            // so findDeepestDescendant never returns a dead process PID.
+            const status_ptr: *align(1) const u32 = @ptrCast(&info[STATUS_OFFSET]);
+            if (status_ptr.* == SZOMB) {
+                if (zombie_count < zombie_set.len) {
+                    zombie_set[zombie_count] = pid;
+                    zombie_count += 1;
+                }
+                continue;
+            }
 
             const ppid_ptr: *align(1) const u32 = @ptrCast(&info[PPID_OFFSET]);
             const ppid: c_int = @intCast(ppid_ptr.*);
@@ -353,6 +375,8 @@ const macos = struct {
 
         // Walk down the descendant chain from root_pid, choosing the
         // highest-PID child at each level (most recently spawned).
+        // Zombie PIDs are skipped — they represent exited processes whose
+        // names would appear stale in the aggregate view.
         var current = root_pid;
         var visited: [32]c_int = undefined;
         var visited_count: usize = 0;
@@ -366,13 +390,22 @@ const macos = struct {
             visited[visited_count] = current;
             visited_count += 1;
 
-            // Find children of current
+            // Find the best non-zombie child of current
             var best_child: c_int = 0;
             for (0..parent_count) |j| {
                 if (parent_map[j].ppid != current) continue;
                 const entry = parent_map[j].entry;
                 for (0..entry.count) |k| {
-                    if (entry.pids[k] > best_child) best_child = entry.pids[k];
+                    const candidate = entry.pids[k];
+                    // Skip zombie children
+                    var is_zombie = false;
+                    for (0..zombie_count) |z| {
+                        if (zombie_set[z] == candidate) {
+                            is_zombie = true;
+                            break;
+                        }
+                    }
+                    if (!is_zombie and candidate > best_child) best_child = candidate;
                 }
                 break;
             }
@@ -512,17 +545,51 @@ const linux = struct {
             const bytes_read = c.read(fd, &children_buf, children_buf.len - 1);
             if (bytes_read <= 0) return current;
 
-            // Parse space-separated PIDs, pick highest (most recent)
+            // Parse space-separated PIDs, pick highest non-zombie (most recent)
             var best_child: c_int = 0;
             var iter = std.mem.tokenizeScalar(u8, children_buf[0..@intCast(bytes_read)], ' ');
             while (iter.next()) |token| {
                 const pid = std.fmt.parseInt(c_int, token, 10) catch continue;
-                if (pid > best_child) best_child = pid;
+                if (pid > best_child and !isZombie(pid)) best_child = pid;
             }
 
             if (best_child == 0) return current;
             current = best_child;
         }
+    }
+
+    /// Check if a process is a zombie by reading /proc/<pid>/stat.
+    /// Returns true if the process is in state 'Z'.
+    fn isZombie(pid: c_int) bool {
+        if (builtin.os.tag != .linux) return false;
+
+        var path_buf: [32]u8 = undefined;
+        const path = std.fmt.bufPrintZ(&path_buf, "/proc/{d}/stat", .{pid}) catch return true;
+
+        const fd = c.open(path, c.O_RDONLY);
+        if (fd < 0) return true; // Can't read → probably exited, treat as unusable
+        defer _ = c.close(fd);
+
+        var stat_buf: [256]u8 = undefined;
+        const bytes_read = c.read(fd, &stat_buf, stat_buf.len - 1);
+        if (bytes_read <= 0) return true;
+
+        // Format: pid (comm) state ...
+        // Find the closing ')' and check the next character (state)
+        const stat = stat_buf[0..@intCast(bytes_read)];
+        var close_paren: usize = 0;
+        for (stat, 0..) |ch, i| {
+            if (ch == ')') {
+                close_paren = i;
+                break;
+            }
+        }
+
+        // State character is 2 bytes after ')': ') X' where X is the state
+        const state_offset = close_paren + 2;
+        if (state_offset >= stat.len) return false;
+
+        return stat[state_offset] == 'Z';
     }
 };
 
