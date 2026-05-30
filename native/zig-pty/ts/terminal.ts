@@ -314,7 +314,14 @@ export class Terminal implements IPty {
 
       // Get the new foreground process name
       const fgName = this.getForegroundProcessName();
-      if (fgName && fgName !== this._lastForegroundProcessName) {
+      if (fgName) {
+        // Always fire when the counter changes — even if fgName matches
+        // the previously stored name. A fast command (e.g. git status) can
+        // start and exit between two checks, making the foreground go
+        // shell→git→shell. The counter increments twice but we only see
+        // the final name. Without firing here, the consumer (aggregate
+        // view metadata handler) never learns that the foreground changed
+        // back to the shell, leaving a stale process name in the sidebar.
         this._lastForegroundProcessName = fgName;
         this._onForegroundProcessChange.fire(fgName);
       }

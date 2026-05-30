@@ -120,6 +120,12 @@ const lastSeenProcess = new Map<
 
 const PROCESS_CLEAR_DELAY_MS = 500;
 
+/** Reactive version counter bumped each time the lastSeenProcess cache is
+ *  mutated by a timer. PtyTreeRow's label memo calls processCacheVersion()
+ *  via getProcessDisplayName, so a version change forces re-evaluation and
+ *  the stale cached process name is removed from the display. */
+const [processCacheVersion, setProcessCacheVersion] = createSignal(0);
+
 /** Clear the remembered process for a PTY (on destruction). */
 export function clearLastSeenProcess(ptyId: string): void {
   const entry = lastSeenProcess.get(ptyId);
@@ -128,6 +134,9 @@ export function clearLastSeenProcess(ptyId: string): void {
 }
 
 function getProcessDisplayName(pty: PtyInfo): string | null {
+  // Subscribe to cache version so the label memo re-evaluates when the
+  // smoothing timer fires and clears a stale process name.
+  void processCacheVersion();
   const processName = getProcessBaseName(pty.foregroundProcess);
   const normalizedProcessName = processName.toLowerCase();
   const shellName = normalizeProcessName(pty.shell);
@@ -155,6 +164,10 @@ function getProcessDisplayName(pty: PtyInfo): string | null {
     if (!cached.clearTimer) {
       cached.clearTimer = setTimeout(() => {
         lastSeenProcess.delete(pty.ptyId);
+        // Bump version so any PtyTreeRow displaying this PTY re-evaluates
+        // its label memo. Without this, the expired cache entry is deleted
+        // but nothing triggers a re-render — the stale process name sticks.
+        setProcessCacheVersion((v) => v + 1);
       }, PROCESS_CLEAR_DELAY_MS);
     }
     return cached.name;
