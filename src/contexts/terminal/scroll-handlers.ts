@@ -22,31 +22,23 @@ export function createScrollHandlers(
     easing: 0.7,
   });
 
-  let renderCoalesced = false;
-
   // The animator is the sole writer of viewportOffset during animation.
-  // onAnimate writes session state + cache + schedules one coalesced render.
-  // The subscriber must NOT write viewportOffset while the animator is active.
+  // onAnimate writes session + cache + viewState synchronously on every tick.
+  // requestScrollAnimRender updates viewState.scrollState.viewportOffset and
+  // calls requestRenderFrame (which coalesces internally via renderRequested flag).
+  // This avoids the flicker gap where viewState still has the old value while
+  // the animator has already set the new one.
+  // The perf win over the pre-805fc026 approach: we don't call notifySubscribers
+  // (which does FFI + cell conversion) — just a property write + coalesced render.
   animator.setOnAnimate((ptyId, offset) => {
-    // Write to session state (no notification — that's the perf win)
     setScrollOffsetNoNotify(ptyId, offset);
 
-    // Write to the cache so scrollTerminal reads the correct base offset
     const cached = getScrollState(ptyId);
     if (cached) {
       (cached as { viewportOffset: number }).viewportOffset = offset;
     }
 
-    // Coalesce renders: one per frame after all animation ticks
-    if (!renderCoalesced) {
-      renderCoalesced = true;
-      const finalPtyId = ptyId;
-      queueMicrotask(() => {
-        renderCoalesced = false;
-        const finalOffset = cached?.viewportOffset ?? 0;
-        requestScrollAnimRender(finalPtyId, finalOffset);
-      });
-    }
+    requestScrollAnimRender(ptyId, offset);
   });
 
   const handleGetScrollState = (ptyId: string): TerminalScrollState | undefined => {
@@ -92,8 +84,7 @@ export function createScrollHandlers(
   const handleScrollToBottom = (ptyId: string): void => {
     animator.setTarget(ptyId, 0, Number.MAX_SAFE_INTEGER);
     animator.snapToTarget(ptyId);
-    // Synchronously update session + cache — the animator's onAnimate
-    // won't fire (snapToTarget doesn't trigger onAnimate)
+    // Synchronously update session + cache + viewState
     setScrollOffsetNoNotify(ptyId, 0);
     const cached = getScrollState(ptyId);
     if (cached) {
