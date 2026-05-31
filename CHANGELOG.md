@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.136](https://github.com/monotykamary/openmux/compare/v0.3.135...v0.3.136) (2026-05-31)
+
+
+### Performance
+
+* **terminal:** defer emulator prepareUpdate to coalesced macrotask for heavy output ([5fc41b7](https://github.com/monotykamary/openmux/commit/5fc41b7d4516fe863b68d955e7876955d72125c0))
+
 ### [0.3.135](https://github.com/monotykamary/openmux/compare/v0.3.134...v0.3.135) (2026-05-31)
 
 
