@@ -1,5 +1,5 @@
 import type { ITerminalEmulator } from '../../terminal/emulator-interface';
-import { setPtyUpdateEnabled, applyPtyReadThrottle } from '../../effect/bridge';
+import { setPtyUpdateEnabled, applyPtyReadThrottle, flushPtyData } from '../../effect/bridge';
 import { setVisiblePty } from '../../terminal/visible-pty-registry';
 import { getFocusedPtyId } from '../../terminal/focused-pty-registry';
 import { type PtyPriority } from '../../terminal/pty-priority';
@@ -102,6 +102,11 @@ export const attachVisibleEmulator = (ptyId: string, emulator: ITerminalEmulator
 export const reevaluateUpdateGate = (ptyId: string, emulator: ITerminalEmulator | null) => {
   if (getTotalHoldCount(ptyId) > 0) {
     applyUpdateGate(ptyId, true, emulator);
+    // When gaining focus, immediately flush any raw-buffered data so
+    // the emulator state is current without waiting for the next onData.
+    if (ptyId === getFocusedPtyId()) {
+      flushPtyData(ptyId);
+    }
   }
 };
 

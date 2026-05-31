@@ -600,26 +600,29 @@ export function createDataHandler(options: DataHandlerOptions) {
   // The data handler function
   const handleData = (data: string) => {
     const priority = getPriority();
-    // background-hidden: skip all processing, buffer raw data.
-    // Data is replayed when the PTY regains visibility/focus.
-    if (priority === 'background-hidden') {
+
+    // background (visible or hidden): skip all processing, buffer raw data.
+    // Even for background-visible, running every chunk through processChunk
+    // (regex analysis, sync mode parsing, emulator.write) is too expensive
+    // under heavy output like `find / -ls`. The per-chunk cost adds up
+    // to significant event loop pressure that starves the focused pane's
+    // render loop and makes scrolling sluggish.
+    //
+    // Instead, background PTYs just concatenate raw strings (O(1) amortized)
+    // and the 1fps pulse drains the buffer in one batch.
+    // On focus switch, replayRawBufferFull flushes everything immediately.
+    if (priority !== 'focused') {
       if (state.rawBuffer.length < RAW_BUFFER_MAX_SIZE) {
         state.rawBuffer += data;
       }
       return;
     }
 
-    // background-visible and focused: process immediately.
-    // For background-visible, the emulator's updatesEnabled=false means
-    // prepareUpdate and subscriber notifications are skipped, so the cost
-    // per chunk is just lightweight regex/parsing (~0.05ms per 64KB chunk).
-    // The raw buffer from background-hidden periods is replayed first.
+    // Focused PTY: process immediately.
+    // If we have raw-buffered data from a previous background period,
+    // replay it through the full pipeline first.
     if (state.rawBuffer.length > 0) {
-      if (priority === 'focused') {
-        replayRawBufferFull();
-      } else {
-        replayRawBuffer();
-      }
+      replayRawBufferFull();
     }
 
     processChunk(data);
