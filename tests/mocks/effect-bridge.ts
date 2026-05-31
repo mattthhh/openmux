@@ -1,6 +1,31 @@
 import { vi } from 'bun:test';
+import {
+  getScrollState,
+  setScrollOffsetSync,
+  setScrollOffsetNoNotify,
+  scrollToBottom,
+  requestScrollAnimRender,
+  registerScrollOffset,
+  registerScrollOffsetNoNotify,
+  unregisterScrollOffset,
+  registerScrollAnimRender,
+  unregisterScrollAnimRender,
+} from '../../src/effect/bridge/pty-bridge';
 
 export const effectBridgeMocks = {
+  // Re-export real functions needed by scroll-handlers.ts (createScrollHandlers)
+  // and the scroll-state-real integration test.
+  getScrollState,
+  setScrollOffsetSync,
+  setScrollOffsetNoNotify,
+  scrollToBottom,
+  requestScrollAnimRender,
+  registerScrollOffset,
+  registerScrollOffsetNoNotify,
+  unregisterScrollOffset,
+  registerScrollAnimRender,
+  unregisterScrollAnimRender,
+  // Mocks for everything else
   createSessionLegacy: vi.fn(),
   listSessionsLegacy: vi.fn(),
   renameSessionLegacy: vi.fn(),
