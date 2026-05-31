@@ -48,20 +48,26 @@ export function createScrollHandlers(
   const scrollTerminal = (ptyId: string, delta: number): void => {
     const cached = getScrollState(ptyId);
     if (cached) {
-      const currentTarget = animator.getTargetOffset(ptyId);
-      const baseOffset = currentTarget ?? cached.viewportOffset;
+      // Only use the animator's target as base when it's actively chasing.
+      // After animation finishes, the stale targetOffset/curentOffset in
+      // animator.states would cause a jump (e.g. offset adjusted by heavy
+      // output in between, then next scroll uses the old target as base).
+      const active = animator.isAnimating(ptyId);
+      const animTarget = active ? animator.getTargetOffset(ptyId) : undefined;
+      const baseOffset = animTarget ?? cached.viewportOffset;
       const targetOffset = calculateScrollDelta(baseOffset, delta, cached.scrollbackLength);
-      if (currentTarget === undefined) {
+      if (animTarget === undefined) {
         animator.initialize(ptyId, cached.viewportOffset);
       }
       animator.setTarget(ptyId, targetOffset, cached.scrollbackLength);
     } else {
       getScrollStateFromBridge(ptyId).then((state) => {
         if (state) {
-          const currentTarget = animator.getTargetOffset(ptyId);
-          const baseOffset = currentTarget ?? state.viewportOffset;
+          const active = animator.isAnimating(ptyId);
+          const animTarget = active ? animator.getTargetOffset(ptyId) : undefined;
+          const baseOffset = animTarget ?? state.viewportOffset;
           const targetOffset = calculateScrollDelta(baseOffset, delta, state.scrollbackLength);
-          if (currentTarget === undefined) {
+          if (animTarget === undefined) {
             animator.initialize(ptyId, state.viewportOffset);
           }
           animator.setTarget(ptyId, targetOffset, state.scrollbackLength);
@@ -84,14 +90,13 @@ export function createScrollHandlers(
   const handleScrollToBottom = (ptyId: string): void => {
     animator.setTarget(ptyId, 0, Number.MAX_SAFE_INTEGER);
     animator.snapToTarget(ptyId);
-    // Synchronously update session + cache + viewState
     setScrollOffsetNoNotify(ptyId, 0);
     const cached = getScrollState(ptyId);
     if (cached) {
       (cached as { viewportOffset: number }).viewportOffset = 0;
     }
     requestScrollAnimRender(ptyId, 0);
-    scrollToBottomBridge(ptyId);
+    scrollToBottomBridge(ptyId).catch(() => {});
   };
 
   const cleanup = (): void => {
