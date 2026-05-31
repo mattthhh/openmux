@@ -375,9 +375,12 @@ pub const Pty = struct {
             } else if (n == -1) {
                 const err = std.c._errno().*;
                 if (err == c.EINTR) continue;
+                // Non-blocking: return partial write instead of sleeping.
+                // The PTY write buffer may be full during heavy output
+                // (e.g. find / -ls). Sleeping blocks the JS event loop
+                // and makes the entire application unresponsive.
                 if (err == c.EAGAIN or err == c.EWOULDBLOCK) {
-                    sleep_util.sleepMilliseconds(1);
-                    continue;
+                    break;
                 }
                 return constants.ERROR;
             } else {
