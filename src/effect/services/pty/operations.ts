@@ -9,7 +9,7 @@ import * as errore from 'errore';
 import type { PtySession } from '../../models';
 import type { InternalPtySession } from './types';
 import type { PtyState } from './state';
-import { notifySubscribers, notifyScrollSubscribers } from './notification';
+import { notifyScrollSubscribers } from './notification';
 import { HOT_SCROLLBACK_LIMIT } from '../../../terminal/scrollback-config';
 import type { SubscriptionRegistry } from './subscription-manager';
 import { tracePtyEvent, tracePtyChunk } from '../../../terminal/pty-trace';
@@ -66,13 +66,6 @@ export function createOperations(deps: OperationsDeps) {
       return sessionOrError;
     }
     const session = sessionOrError;
-
-    // Auto-scroll to bottom when user types
-    if (session.scrollState.viewportOffset > 0) {
-      session.scrollState.viewportOffset = 0;
-      notifySubscribers(session);
-      notifyScrollSubscribers(session);
-    }
 
     session.pty.write(data);
   }

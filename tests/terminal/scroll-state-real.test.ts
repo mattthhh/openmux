@@ -108,6 +108,12 @@ describe('scroll state: real code integration', () => {
     }
     session.lastScrollbackLength = session.scrollbackLength;
 
+    // Simulate adjustAnimationOffset — the real unified-subscription.ts calls
+    // terminal.adjustAnimationOffset(ptyId, scrollbackDelta) when animating
+    if (animating && scrollbackDelta > 0) {
+      scrollHandlers.adjustAnimationOffset(ptyId, scrollbackDelta);
+    }
+
     const updateScrollState: TerminalScrollState = {
       viewportOffset: session.viewportOffset,
       scrollbackLength: session.scrollbackLength,
@@ -457,5 +463,75 @@ describe('scroll state: real code integration', () => {
     scrollHandlers.scrollTerminal(PTY_ID, 10);
     await drain();
     expect(viewOffset).toBe(775);
+  });
+
+  test('rapid output bursts during animation never snap to 0', async () => {
+    // Simulates: find command running, user scrolling up
+    // Output arrives in rapid bursts, interleaved with animation ticks
+    scrollHandlers.scrollTerminal(PTY_ID, 30);
+
+    // Simulate many rapid output bursts before the first animation tick completes
+    for (let i = 0; i < 10; i++) {
+      session.scrollbackLength += 20;
+      subscriberFires(PTY_ID);
+    }
+
+    await drain();
+    // viewOffset should be 30 + (10 * 20) = 230 (adjusted by output)
+    expect(viewOffset).toBe(230);
+    expect(viewOffset).not.toBe(0);
+    expect(cache.viewportOffset).toBe(230);
+  });
+
+  test('viewOffset never snaps to 0 during idle scrolling', async () => {
+    // Simulates: idle PTY, user scrolling up slowly, no output
+    // ViewOffset should never drop to 0
+    scrollHandlers.scrollTerminal(PTY_ID, 50);
+    await drain();
+    expect(viewOffset).toBe(50);
+
+    // Scroll more — offset should only increase
+    scrollHandlers.scrollTerminal(PTY_ID, 10);
+    await drain();
+    expect(viewOffset).toBe(60);
+
+    // No output, no subscriber fires. ViewOffset stays.
+    expect(viewOffset).toBe(60);
+    expect(scrollHandlers.isAnimating(PTY_ID)).toBe(false);
+
+    // After a pause, scroll more
+    scrollHandlers.scrollTerminal(PTY_ID, 5);
+    await drain();
+    expect(viewOffset).toBe(65);
+  });
+
+  test('output arriving while at bottom does not snap when already at bottom', async () => {
+    // At bottom, output arrives — view should stay at 0
+    expect(viewOffset).toBe(0);
+
+    session.scrollbackLength += 100;
+    subscriberFires(PTY_ID);
+
+    expect(viewOffset).toBe(0); // Still at bottom, correct
+  });
+
+  test('scroll up after rapid output burst uses cache not stale animator', async () => {
+    // Scroll a bit
+    scrollHandlers.scrollTerminal(PTY_ID, 10);
+    await drain();
+    expect(viewOffset).toBe(10);
+
+    // Rapid output bursts
+    for (let i = 0; i < 5; i++) {
+      session.scrollbackLength += 30;
+      subscriberFires(PTY_ID);
+    }
+    // Should be 10 + (5 * 30) = 160
+    expect(viewOffset).toBe(160);
+
+    // Now scroll up more — must use 160 as base, not stale 10
+    scrollHandlers.scrollTerminal(PTY_ID, 20);
+    await drain();
+    expect(viewOffset).toBe(180);
   });
 });
