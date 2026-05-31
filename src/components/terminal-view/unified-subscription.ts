@@ -31,7 +31,6 @@ export interface UnifiedSubscriptionDeps {
   terminal: {
     isPtyActive: (ptyId: string) => boolean;
     getScrollState: (ptyId: string) => TerminalScrollState | undefined;
-    snapAnimator: (ptyId: string, offset: number) => void;
   };
   renderer: { requestRender: () => void };
   viewState: TerminalViewState;
@@ -231,19 +230,7 @@ export function setupUnifiedSubscription(deps: UnifiedSubscriptionDeps): void {
                   }
                 }
 
-                // When the emulator auto-scrolls to bottom (viewportOffset = 0)
-                // while the scroll animator is chasing a non-zero target,
-                // snap the animator to 0. This happens when the user types
-                // while scrolled back (the emulator pushes to bottom on
-                // new output). Without this snap, the animator would keep
-                // chasing its old target, creating a fight between the
-                // animator's offset and the emulator's offset.
-                const previousOffset = viewState.scrollState?.viewportOffset ?? 0;
                 viewState.scrollState = update.scrollState;
-
-                if (update.scrollState.viewportOffset === 0 && previousOffset !== 0) {
-                  terminal.snapAnimator(ptyId, 0);
-                }
 
                 if (
                   viewState.lastScrollbackLength !== null &&
