@@ -60,7 +60,7 @@ const PRIORITY_CONFIGS: Record<PtyPriority, PriorityConfig> = {
     maxSegmentsPerTick: 0,
     emulatorUpdatesEnabled: false,
     renderIntervalMs: Infinity,
-    readThrottleMs: 500,
+    readThrottleMs: -1,
   },
 };
 

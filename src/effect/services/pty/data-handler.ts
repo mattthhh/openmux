@@ -599,15 +599,9 @@ export function createDataHandler(options: DataHandlerOptions) {
 
   // The data handler function
   const handleData = (data: string) => {
-    // For background PTYs, skip all processing and just buffer raw data.
-    // This is the single biggest performance win: a background PTY running
-    // find / -ls generates thousands of chunks/second. Even a trivial function
-    // call with a priority check per chunk adds up across thousands of calls.
-    // By buffering raw data here, we reduce main-thread work to string concatenation.
-    //
-    // The raw buffer is replayed through the full pipeline when the PTY is
-    // drained (drainPending) or when it transitions to focused.
     const priority = getPriority();
+    // background-hidden: skip all processing, buffer raw data.
+    // Data is replayed when the PTY regains visibility/focus.
     if (priority === 'background-hidden') {
       if (state.rawBuffer.length < RAW_BUFFER_MAX_SIZE) {
         state.rawBuffer += data;
@@ -615,21 +609,17 @@ export function createDataHandler(options: DataHandlerOptions) {
       return;
     }
 
-    if (priority === 'background-visible') {
-      if (state.rawBuffer.length < RAW_BUFFER_MAX_SIZE) {
-        state.rawBuffer += data;
-      }
-      // Schedule the drain so the 1fps pulse eventually processes the buffer.
-      // Without this, background-visible PTYs would only drain when explicitly
-      // requested (refresh, resize, etc.), which is too infrequent.
-      scheduleNotify();
-      return;
-    }
-
-    // Focused PTY: process immediately.
-    // If we have raw-buffered data from a previous background period, replay it first.
+    // background-visible and focused: process immediately.
+    // For background-visible, the emulator's updatesEnabled=false means
+    // prepareUpdate and subscriber notifications are skipped, so the cost
+    // per chunk is just lightweight regex/parsing (~0.05ms per 64KB chunk).
+    // The raw buffer from background-hidden periods is replayed first.
     if (state.rawBuffer.length > 0) {
-      replayRawBufferFull();
+      if (priority === 'focused') {
+        replayRawBufferFull();
+      } else {
+        replayRawBuffer();
+      }
     }
 
     processChunk(data);

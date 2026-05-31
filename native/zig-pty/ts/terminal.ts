@@ -345,6 +345,13 @@ export class Terminal implements IPty {
     let chunksSinceYield = 0;
 
     while (this._readLoop && !this._closing && !this._pollingFallback) {
+      // If paused (background-hidden), sleep and check again later.
+      // Data accumulates in the kernel's PTY buffer.
+      if (this._readThrottleMs < 0) {
+        await Bun.sleep(500);
+        continue;
+      }
+
       const n = lib.symbols.bun_pty_read(
         this.handle,
         ptr(this._readBuffer),
@@ -363,7 +370,11 @@ export class Terminal implements IPty {
           if (this._readThrottleMs > 0) {
             await Bun.sleep(this._readThrottleMs);
           } else {
-            await Bun.sleep(0);
+            // Even focused PTYs yield 4ms between read batches to ensure
+            // keyboard/mouse events get processed during heavy output.
+            // Without this, a continuous read loop hogs the event loop
+            // and keystrokes can't reach the stdin handler.
+            await Bun.sleep(4);
           }
         }
         continue;
