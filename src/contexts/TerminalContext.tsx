@@ -25,7 +25,7 @@ import { getFocusedPtyId as getWorkspaceFocusedPtyId } from '../core/workspace-u
 import { useLayout } from './LayoutContext';
 import { useTitle } from './TitleContext';
 import {
-  writeToPty,
+  writeToPtySync,
   resizePty,
   destroyPty,
   destroyAllPtys,
@@ -439,12 +439,9 @@ export function TerminalProvider(props: TerminalProviderProps) {
   const writeToFocused = (data: string) => {
     const focusedPtyId = getFocusedPtyId();
     if (focusedPtyId) {
-      writeToPty(focusedPtyId, data).catch((e) => {
-        console.warn(
-          '[TerminalContext] write to focused PTY failed:',
-          e instanceof Error ? e.message : e
-        );
-      });
+      // Use synchronous write to avoid 100-500ms latency from the async
+      // service layer's microtask hops when the event loop is busy.
+      writeToPtySync(focusedPtyId, data);
     }
   };
 
@@ -461,11 +458,9 @@ export function TerminalProvider(props: TerminalProviderProps) {
     });
   };
 
-  // Write to a specific PTY
+  // Write to a specific PTY (synchronous to avoid async microtask queue delays)
   const handleWriteToPTY = (ptyId: string, data: string) => {
-    writeToPty(ptyId, data).catch((e) => {
-      console.warn('[TerminalContext] write to PTY failed:', e instanceof Error ? e.message : e);
-    });
+    writeToPtySync(ptyId, data);
   };
 
   // Paste from clipboard to the focused PTY
@@ -485,7 +480,7 @@ export function TerminalProvider(props: TerminalProviderProps) {
     }
 
     try {
-      await writeToPty(focusedPtyId, clipboardText);
+      writeToPtySync(focusedPtyId, clipboardText);
     } catch (e) {
       console.warn('[paste] write to PTY failed:', e instanceof Error ? e.message : e);
       return false;

@@ -42,6 +42,8 @@ export {
   refreshPty,
   flushPtyData,
   flushPtyDataIncremental,
+  drainRawToEmulator,
+  writeToPtySync,
   applyPtyReadThrottle,
   wakeReadLoopOnce,
   applyHostColors,

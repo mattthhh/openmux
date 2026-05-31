@@ -49,6 +49,34 @@ export async function createPtySession(options: {
  * TerminalContext discard the promise so keystrokes never block on await.
  * Errors here are non-recoverable (destination PTY gone) and logging is sufficient.
  */
+/** Write to a PTY synchronously — no async, no microtask hop.
+ *  This bypasses the async service layer entirely, going directly
+ *  to the native pty.write(). Used by the keyboard input path
+ *  where latency is critical: the async service layer adds
+ *  microtask hops that can delay writes by 100-500ms when the
+ *  event loop is busy with background PTY I/O. */
+const ptyWriteRegistry = new Map<string, (data: string) => void>();
+
+export function registerPtyWrite(ptyId: string, writer: (data: string) => void): void {
+  ptyWriteRegistry.set(ptyId, writer);
+}
+
+export function unregisterPtyWrite(ptyId: string): void {
+  ptyWriteRegistry.delete(ptyId);
+}
+
+let _lastSyncWriteTime = 0;
+export function writeToPtySync(ptyId: string, data: string): void {
+  _lastSyncWriteTime = performance.now();
+  const writer = ptyWriteRegistry.get(ptyId);
+  if (writer) {
+    writer(data);
+    return;
+  }
+  // Fallback to async if no sync writer registered
+  void writeToPty(ptyId, data);
+}
+
 export async function writeToPty(ptyId: string, data: string): Promise<void> {
   const pty = getPtyService();
   const result = await pty.write(asPtyId(ptyId), data);
@@ -344,6 +372,22 @@ export function unregisterIncrementalFlush(ptyId: string): void {
 export function flushPtyDataIncremental(ptyId: string): void {
   const flush = incrementalFlushRegistry.get(ptyId);
   if (flush) flush();
+}
+
+const rawDrainRegistry = new Map<string, () => void>();
+
+export function registerRawDrain(ptyId: string, drain: () => void): void {
+  rawDrainRegistry.set(ptyId, drain);
+}
+
+export function unregisterRawDrain(ptyId: string): void {
+  rawDrainRegistry.delete(ptyId);
+}
+
+/** Drain raw buffer directly to emulator (bypasses processChunk pipeline). */
+export function drainRawToEmulator(ptyId: string): void {
+  const drain = rawDrainRegistry.get(ptyId);
+  if (drain) drain();
 }
 
 /** Register a read-throttle setter for a PTY (called by session-factory). */

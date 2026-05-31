@@ -4,7 +4,7 @@ import {
   subscribeUnifiedToPty,
   getEmulator,
   setPtyUpdateEnabled,
-  flushPtyDataIncremental,
+  drainRawToEmulator,
   wakeReadLoopOnce,
   applyPtyReadThrottle,
 } from '../../effect/bridge';
@@ -94,24 +94,12 @@ export function setupUnifiedSubscription(deps: UnifiedSubscriptionDeps): void {
           const em = viewState.emulator;
           if (!em || em.isDisposed) return;
 
-          // Temporarily wake the read loop so it drains available data
-          // from the kernel buffer into the raw buffer. Without this,
-          // a paused read loop never reads, and the child process
-          // (e.g. find / -ls) blocks on write(), stalling it completely.
           wakeReadLoopOnce(ptyId, 'background-visible');
+          drainRawToEmulator(ptyId);
 
-          // Drain the raw buffer incrementally (capped), not a full flush.
-          // A full flush would process MB of data through the VT parser
-          // synchronously, blocking the event loop and making the focused
-          // pane sluggish.
-          flushPtyDataIncremental(ptyId);
-
-          // Enable updates so the subscriber callback fires during refresh.
           em.setUpdateEnabled?.(true);
           void setPtyUpdateEnabled(ptyId, true);
 
-          // Force a full refresh: prepareUpdate + notify all subscribers.
-          // The subscriber callback (defined above) will call requestRenderFrame().
           em.refresh?.();
 
           // Schedule disabling updates and pausing reads after the render completes.

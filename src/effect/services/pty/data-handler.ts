@@ -743,6 +743,47 @@ export function createDataHandler(options: DataHandlerOptions) {
     drainPending();
   };
 
+  /**
+   * Write raw data directly to the emulator, bypassing the full pipeline.
+   * Used by the 1fps background pulse for background PTYs where the full
+   * parsing pipeline (clipboard, sync mode, focus tracking) is overkill.
+   * The emulator's updatesEnabled is false, so no cell conversion happens.
+   * Capped at 64KB per call to avoid blocking the event loop with a
+   * massive native VT parse. The raw buffer retains what's left for
+   * subsequent pulses or for replayRawBufferFull on focus switch.
+   */
+  const drainRawToEmulator = () => {
+    if (state.rawBuffer.length === 0) return;
+
+    const MAX_RAW_DRAIN = 65_536; // ~1 screenful of VT data
+
+    if (state.rawBuffer.length <= MAX_RAW_DRAIN) {
+      const raw = state.rawBuffer;
+      state.rawBuffer = '';
+      if (!session.emulator.isDisposed) {
+        session.emulator.write(raw);
+      }
+      return;
+    }
+
+    // Large buffer: process one chunk from the head. The rest stays
+    // buffered and will be processed on the next pulse or on focus switch.
+    // We don't skip to the tail because that would miss escape sequences
+    // that set terminal state (cursor position, colors, scroll regions).
+    let end = MAX_RAW_DRAIN;
+    // Snap forward past the last newline to avoid splitting mid-line.
+    const nlIdx = state.rawBuffer.indexOf('\n', end);
+    if (nlIdx !== -1 && nlIdx < end + 1024) {
+      end = nlIdx + 1;
+    }
+
+    const chunk = state.rawBuffer.slice(0, end);
+    state.rawBuffer = state.rawBuffer.slice(end);
+    if (!session.emulator.isDisposed) {
+      session.emulator.write(chunk);
+    }
+  };
+
   // Cleanup function to clear any pending timeouts
   const cleanup = () => {
     if (state.syncTimeout) {
@@ -751,5 +792,12 @@ export function createDataHandler(options: DataHandlerOptions) {
     }
   };
 
-  return { handleData, cleanup, scheduleNotify, drainPending, incrementalDrain };
+  return {
+    handleData,
+    cleanup,
+    scheduleNotify,
+    drainPending,
+    incrementalDrain,
+    drainRawToEmulator,
+  };
 }

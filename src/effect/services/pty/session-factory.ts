@@ -22,6 +22,10 @@ import {
   registerReadThrottle,
   registerIncrementalFlush,
   unregisterIncrementalFlush,
+  registerRawDrain,
+  unregisterRawDrain,
+  registerPtyWrite,
+  unregisterPtyWrite,
 } from '../../../effect/bridge/pty-bridge';
 import { sendMacOsNotification } from '../../../terminal/desktop-notifications';
 import { forwardNotification } from '../../../shim/notification-forwarder';
@@ -250,7 +254,7 @@ export async function createSession(
   });
 
   // Set up data handler
-  const { handleData, drainPending, incrementalDrain } = createDataHandler({
+  const { handleData, drainPending, incrementalDrain, drainRawToEmulator } = createDataHandler({
     session,
     syncParser,
     commandParser,
@@ -269,6 +273,20 @@ export async function createSession(
   // Incremental drain for the 1fps background pulse (capped, not full flush).
   registerIncrementalFlush(id, () => {
     incrementalDrain();
+  });
+
+  // Raw drain for the 1fps background pulse (bypasses processChunk pipeline).
+  registerRawDrain(id, () => {
+    drainRawToEmulator();
+  });
+
+  // Synchronous write — bypasses the async service layer for zero-latency
+  // keyboard input. The async service layer adds microtask hops that can
+  // delay writes by 100-500ms when the event loop is busy.
+  registerPtyWrite(id, (data: string) => {
+    if (!session.closing) {
+      pty.write(data);
+    }
   });
 
   // Wire up PTY data handler
@@ -300,6 +318,8 @@ export async function createSession(
     }
     unregisterFlushData(id);
     unregisterIncrementalFlush(id);
+    unregisterRawDrain(id);
+    unregisterPtyWrite(id);
     tracePtyEvent('pty-exit', { ptyId: id, exitCode });
     for (const callback of session.exitCallbacks) {
       callback(exitCode);
