@@ -31,6 +31,7 @@ export interface UnifiedSubscriptionDeps {
   terminal: {
     isPtyActive: (ptyId: string) => boolean;
     getScrollState: (ptyId: string) => TerminalScrollState | undefined;
+    setScrollStateCache: (ptyId: string, state: TerminalScrollState) => void;
   };
   renderer: { requestRender: () => void };
   viewState: TerminalViewState;
@@ -245,6 +246,14 @@ export function setupUnifiedSubscription(deps: UnifiedSubscriptionDeps): void {
                 } else {
                   viewState.scrollState = { ...update.scrollState };
                 }
+
+                // Also update the ptyCaches.scrollStates Map (used by
+                // getScrollState in onAnimate) synchronously. usePtySubscription
+                // updates it asynchronously via a stream, so between notifySubscribers
+                // and the stream's await iterator.next(), the Map entry has a stale
+                // viewportOffset. onAnimate reads from the Map and detects a false
+                // external delta, causing snap-to-bottom during stdout.
+                terminal.setScrollStateCache(ptyId, update.scrollState);
 
                 // When scrollback grows while the user is scrolled up,
                 // getCurrentScrollState adjusts session.scrollState.viewportOffset

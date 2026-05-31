@@ -48,6 +48,7 @@ export function createScrollHandlers(
         if (cached.viewportOffset === 0 && lastWritten !== 0) {
           // External scroll-to-bottom (e.g., user typed while scrolled back).
           // Cancel animation and snap to bottom.
+          console.error('[scroll-snap]', ptyId, 'cached=0, lastWritten=', lastWritten);
           animator.setTarget(ptyId, 0, cached.scrollbackLength);
           animator.snapToTarget(ptyId);
           lastWrittenOffset.set(ptyId, 0);
