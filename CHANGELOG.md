@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.135](https://github.com/monotykamary/openmux/compare/v0.3.134...v0.3.135) (2026-05-31)
+
+
+### Refactoring
+
+* address codebase review findings across 11 issues ([b97263e](https://github.com/monotykamary/openmux/commit/b97263e9bccdeb8fe3810ed3d593c1bd32e8b620))
+
 ### [0.3.134](https://github.com/monotykamary/openmux/compare/v0.3.133...v0.3.134) (2026-05-30)
 
 
