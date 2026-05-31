@@ -3,7 +3,7 @@ import type { TerminalCell, UnifiedTerminalUpdate } from '../../core/types';
 import {
   subscribeUnifiedToPty,
   getEmulator,
-  setPtyUpdateEnabled,
+  setUpdateEnabledSync,
   drainRawToEmulator,
   wakeReadLoopOnce,
   applyPtyReadThrottle,
@@ -79,6 +79,14 @@ export function setupUnifiedSubscription(deps: UnifiedSubscriptionDeps): void {
           }
         };
 
+        /** Synchronous render — used for focus changes where a stale frame is visible. */
+        const renderSync = () => {
+          if (!mounted) return;
+          renderRequested = false;
+          setVersion((v) => v + 1);
+          renderer.requestRender();
+        };
+
         /**
          * 1fps background pulse: temporarily wake the read loop to drain
          * one batch from the kernel buffer into the raw buffer, then
@@ -97,8 +105,8 @@ export function setupUnifiedSubscription(deps: UnifiedSubscriptionDeps): void {
           wakeReadLoopOnce(ptyId, 'background-visible');
           drainRawToEmulator(ptyId);
 
+          setUpdateEnabledSync(ptyId, true);
           em.setUpdateEnabled?.(true);
-          void setPtyUpdateEnabled(ptyId, true);
 
           em.refresh?.();
 
@@ -106,8 +114,8 @@ export function setupUnifiedSubscription(deps: UnifiedSubscriptionDeps): void {
           setTimeout(() => {
             if (!mounted) return;
             if (!isFocused()) {
+              setUpdateEnabledSync(ptyId, false);
               em.setUpdateEnabled?.(false);
-              void setPtyUpdateEnabled(ptyId, false);
               // Re-pause the read loop until the next pulse.
               applyPtyReadThrottle(ptyId, 'background-visible');
             }
@@ -283,6 +291,10 @@ export function setupUnifiedSubscription(deps: UnifiedSubscriptionDeps): void {
               // Emulator might have pending writes that were deferred while
               // updates were disabled. Force a refresh to catch up.
               em.refresh?.();
+              // Render synchronously on focus gain — the previous pane's content
+              // is still visible in the framebuffer, causing a stale frame flash.
+              // A sync render here immediately writes the correct content.
+              renderSync();
             }
           });
 

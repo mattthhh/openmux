@@ -26,6 +26,10 @@ import {
   unregisterRawDrain,
   registerPtyWrite,
   unregisterPtyWrite,
+  registerScrollOffset,
+  unregisterScrollOffset,
+  registerUpdateEnabled,
+  unregisterUpdateEnabled,
 } from '../../../effect/bridge/pty-bridge';
 import { sendMacOsNotification } from '../../../terminal/desktop-notifications';
 import { forwardNotification } from '../../../shim/notification-forwarder';
@@ -289,6 +293,26 @@ export async function createSession(
     }
   });
 
+  // Synchronous scroll offset setter — bypasses the async service layer
+  // for zero-latency scroll animation. Each animation tick via the async
+  // path adds a microtask hop; under load these compound into visible lag.
+  registerScrollOffset(id, (offset: number) => {
+    const maxOffset = session.emulator.getScrollbackLength();
+    session.scrollState.viewportOffset = Math.max(0, Math.min(offset, maxOffset));
+    notifySubscribers(session);
+  });
+
+  // Synchronous update-enabled setter — bypasses the async service layer
+  // for zero-latency focus changes. The async path adds microtask hops
+  // that delay update gating during pane switches.
+  // Note: this only syncs the service-layer session state. The caller
+  // (visibility.ts) separately calls emulator.setUpdateEnabled() directly.
+  registerUpdateEnabled(id, (_enabled: boolean) => {
+    // The service-layer setUpdateEnabled does session.emulator.setUpdateEnabled(enabled)
+    // which is the same emulator we already have. No-op since the caller does it too.
+    // This registry exists so setUpdateEnabledSync() doesn't fall back to the async path.
+  });
+
   // Wire up PTY data handler
   pty.onData((data: string) => {
     if (data.length > 0) {
@@ -320,6 +344,8 @@ export async function createSession(
     unregisterIncrementalFlush(id);
     unregisterRawDrain(id);
     unregisterPtyWrite(id);
+    unregisterScrollOffset(id);
+    unregisterUpdateEnabled(id);
     tracePtyEvent('pty-exit', { ptyId: id, exitCode });
     for (const callback of session.exitCallbacks) {
       callback(exitCode);

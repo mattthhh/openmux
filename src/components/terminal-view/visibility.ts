@@ -1,5 +1,5 @@
 import type { ITerminalEmulator } from '../../terminal/emulator-interface';
-import { setPtyUpdateEnabled, applyPtyReadThrottle, flushPtyData } from '../../effect/bridge';
+import { setUpdateEnabledSync, applyPtyReadThrottle, flushPtyData } from '../../effect/bridge';
 import { setVisiblePty } from '../../terminal/visible-pty-registry';
 import { getFocusedPtyId } from '../../terminal/focused-pty-registry';
 import { type PtyPriority } from '../../terminal/pty-priority';
@@ -29,13 +29,13 @@ const applyUpdateGate = (ptyId: string, enabled: boolean, emulator?: ITerminalEm
   if (enabled && ptyId !== getFocusedPtyId()) {
     // Still tell the service layer the PTY is "visible" (for cleanup tracking)
     // but don't enable the emulator's incremental update notifications.
-    void setPtyUpdateEnabled(ptyId, false);
+    setUpdateEnabledSync(ptyId, false);
     if (emulator && !emulator.isDisposed) {
       emulator.setUpdateEnabled?.(false);
     }
     return;
   }
-  void setPtyUpdateEnabled(ptyId, enabled);
+  setUpdateEnabledSync(ptyId, enabled);
   if (emulator && !emulator.isDisposed) {
     emulator.setUpdateEnabled?.(enabled);
   }

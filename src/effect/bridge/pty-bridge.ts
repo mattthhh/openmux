@@ -65,6 +65,46 @@ export function unregisterPtyWrite(ptyId: string): void {
   ptyWriteRegistry.delete(ptyId);
 }
 
+const ptyScrollOffsetRegistry = new Map<string, (offset: number) => void>();
+
+export function registerScrollOffset(ptyId: string, setter: (offset: number) => void): void {
+  ptyScrollOffsetRegistry.set(ptyId, setter);
+}
+
+export function unregisterScrollOffset(ptyId: string): void {
+  ptyScrollOffsetRegistry.delete(ptyId);
+}
+
+export function setScrollOffsetSync(ptyId: string, offset: number): void {
+  const setter = ptyScrollOffsetRegistry.get(ptyId);
+  if (setter) {
+    setter(offset);
+    return;
+  }
+  // Fallback to async
+  void setScrollOffset(ptyId, offset);
+}
+
+const ptyUpdateEnabledRegistry = new Map<string, (enabled: boolean) => void>();
+
+export function registerUpdateEnabled(ptyId: string, setter: (enabled: boolean) => void): void {
+  ptyUpdateEnabledRegistry.set(ptyId, setter);
+}
+
+export function unregisterUpdateEnabled(ptyId: string): void {
+  ptyUpdateEnabledRegistry.delete(ptyId);
+}
+
+export function setUpdateEnabledSync(ptyId: string, enabled: boolean): void {
+  const setter = ptyUpdateEnabledRegistry.get(ptyId);
+  if (setter) {
+    setter(enabled);
+    return;
+  }
+  // Fallback to async
+  void setPtyUpdateEnabled(ptyId, enabled);
+}
+
 let _lastSyncWriteTime = 0;
 export function writeToPtySync(ptyId: string, data: string): void {
   _lastSyncWriteTime = performance.now();

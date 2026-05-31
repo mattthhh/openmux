@@ -8,7 +8,7 @@ import { clampScrollOffset, calculateScrollDelta } from '../../core/scroll-utils
 import { ScrollAnimator } from '../../terminal/scroll-animation';
 import {
   getScrollState as getScrollStateFromBridge,
-  setScrollOffset as setScrollOffsetBridge,
+  setScrollOffsetSync,
   scrollToBottom as scrollToBottomBridge,
 } from '../../effect/bridge';
 
@@ -24,11 +24,11 @@ export function createScrollHandlers(
 ) {
   /** Animated scroll controller — chases target offset per frame */
   const animator = new ScrollAnimator({
-    speed: 2,
-    easing: 0.5,
+    speed: 12,
+    easing: 0.7,
   });
 
-  // Track the last offset we wrote per-pty via setScrollOffsetBridge.
+  // Track the last offset we wrote per-pty via setScrollOffsetSync.
   // This lets us distinguish "cache hasn't caught up with our write" from
   // "something externally changed the offset". Without this, the onAnimate
   // callback would misinterpret stale cache values as external adjustments
@@ -55,7 +55,7 @@ export function createScrollHandlers(
           animator.setTarget(ptyId, 0, cached.scrollbackLength);
           animator.snapToTarget(ptyId);
           lastWrittenOffset.set(ptyId, 0);
-          setScrollOffsetBridge(ptyId, 0);
+          setScrollOffsetSync(ptyId, 0);
           return;
         }
         // External adjustment (e.g., new output shifted the offset).
@@ -66,7 +66,7 @@ export function createScrollHandlers(
     }
 
     lastWrittenOffset.set(ptyId, offset);
-    setScrollOffsetBridge(ptyId, offset);
+    setScrollOffsetSync(ptyId, offset);
   });
 
   /**
@@ -124,7 +124,7 @@ export function createScrollHandlers(
     animator.setTarget(ptyId, clampedOffset, cached?.scrollbackLength ?? clampedOffset);
     animator.snapToTarget(ptyId);
     lastWrittenOffset.set(ptyId, clampedOffset);
-    setScrollOffsetBridge(ptyId, clampedOffset);
+    setScrollOffsetSync(ptyId, clampedOffset);
   };
 
   /**
