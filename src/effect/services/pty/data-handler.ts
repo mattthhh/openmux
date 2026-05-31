@@ -232,9 +232,11 @@ export function createDataHandler(options: DataHandlerOptions) {
   const maxSegmentsPerTick = 16;
   const maxCharsPerTick = 65_536;
   const maxBudgetMs = 8;
-  const minDrainIntervalMs = 16;
+  const minDrainIntervalMs = 0;
+  const sustainedDrainIntervalMs = 50;
   const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
   let lastDrainTime = 0;
+  let firstDrainAfterData = true;
 
   const state: DataHandlerState = {
     pendingSegments: [],
@@ -341,6 +343,7 @@ export function createDataHandler(options: DataHandlerOptions) {
 
   const drainPending = (drainOptions?: { force?: boolean }) => {
     lastDrainTime = now();
+    firstDrainAfterData = false;
     session.pendingNotify = false;
 
     if (session.emulator.isDisposed) {
@@ -485,13 +488,17 @@ export function createDataHandler(options: DataHandlerOptions) {
   };
 
   // Helper to schedule notification (uses macrotask to yield for rendering)
-  // Rate-limited to enforce a minimum gap between drain cycles so the I/O
-  // poll can process mouse/keyboard events during heavy output.
+  // Adaptive rate-limiting: the first drain after new data arrives runs
+  // immediately (0ms delay) for responsive typing. If the PTY has been
+  // draining continuously for longer than sustainedThresholdMs, the
+  // interval increases to sustainedDrainIntervalMs (50ms) to guarantee
+  // I/O yield time for mouse/keyboard events during heavy output.
   const scheduleNotify = () => {
     if (!session.pendingNotify) {
       session.pendingNotify = true;
       const sinceLastDrain = now() - lastDrainTime;
-      const delay = sinceLastDrain < minDrainIntervalMs ? minDrainIntervalMs - sinceLastDrain : 0;
+      const interval = firstDrainAfterData ? minDrainIntervalMs : sustainedDrainIntervalMs;
+      const delay = sinceLastDrain < interval ? interval - sinceLastDrain : 0;
       if (delay > 0) {
         setTimeout(() => {
           if (session.pendingNotify) drainPending();
@@ -505,6 +512,7 @@ export function createDataHandler(options: DataHandlerOptions) {
   // The data handler function
   const handleData = (data: string) => {
     tracePtyChunk('pty-in', data, { ptyId: session.id });
+    firstDrainAfterData = true;
     updateFocusTracking(data);
     const kittySignals = analyzeKitty(data);
     const hasKittyQuery = kittySignals.hasKittyQuery;
