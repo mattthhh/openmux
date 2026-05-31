@@ -51,7 +51,7 @@ const DEFAULT_SPRING_CONFIG: ScrollSpringConfig = {
 export class ScrollAnimator {
   private states = new Map<string, ScrollAnimationState>();
   private config: ScrollSpringConfig;
-  private timerId: ReturnType<typeof setTimeout> | null = null;
+  private loopScheduled = false;
   private onAnimate: ((ptyId: string, offset: number) => void) | null = null;
   private activePtyIds = new Set<string>();
 
@@ -240,32 +240,20 @@ export class ScrollAnimator {
 
   /** Ensure the animation loop is running */
   private ensureLoop(): void {
-    if (this.timerId !== null) return;
-    this.timerId = setTimeout(this.loop, 0);
+    if (this.loopScheduled) return;
+    this.loopScheduled = true;
+    queueMicrotask(() => {
+      this.loopScheduled = false;
+      this.tick();
+      if (this.activePtyIds.size > 0) {
+        this.ensureLoop();
+      }
+    });
   }
-
-  /** The animation loop — schedules itself via setTimeout(0) for macrotask pacing */
-  private loop = (): void => {
-    if (this.activePtyIds.size === 0) {
-      this.timerId = null;
-      return;
-    }
-
-    this.tick();
-
-    if (this.activePtyIds.size > 0) {
-      this.timerId = setTimeout(this.loop, 0);
-    } else {
-      this.timerId = null;
-    }
-  };
 
   /** Stop the animation loop */
   private stopLoop(): void {
-    if (this.timerId !== null) {
-      clearTimeout(this.timerId);
-      this.timerId = null;
-    }
+    this.loopScheduled = false;
   }
 
   /** Clean up all state and stop the loop */

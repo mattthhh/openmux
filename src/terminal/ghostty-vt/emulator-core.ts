@@ -475,24 +475,41 @@ export class GhosttyVTEmulatorCore {
   private scheduleDeferredNotify(): void {
     if (this._notifyScheduled) return;
     this._notifyScheduled = true;
-    this._notifyTimer = setTimeout(() => {
-      this._notifyTimer = null;
-      if (this._disposed) return;
-      this._notifyScheduled = false;
-      // Only flush if writes are still dirty (they may have been flushed
-      // by getDirtyUpdate/getTerminalState called before this timer fires).
-      // If writes were flushed but subscribers haven't been notified, deliver
-      // the pendingUpdate now.
-      if (this._writeDirty) {
-        this.flushDeferredNotify();
-      } else if (this.pendingUpdate) {
-        // Writes were flushed by an eager reader (getDirtyUpdate), but
-        // subscribers haven't been notified. Deliver the update now.
-        for (const callback of this.updateCallbacks) {
-          callback();
+    // For the focused PTY, use queueMicrotask for near-immediate notification.
+    // setTimeout(0) defers to I/O which can delay the update by hundreds of ms
+    // under load, causing stale renders and laggy scrolling.
+    // For background PTYs, setTimeout(0) is fine — it yields to I/O and
+    // coalesces heavy output before the 1fps pulse reads the state.
+    //
+    // Microtasks run before the next macrotask (before I/O, before timers),
+    // so the update+render completes before any new I/O events arrive.
+    // Coalescing still works via _writeDirty/_notifyScheduled flags.
+    if (this.updatesEnabled) {
+      queueMicrotask(() => {
+        if (this._disposed) return;
+        this._notifyScheduled = false;
+        if (this._writeDirty) {
+          this.flushDeferredNotify();
+        } else if (this.pendingUpdate) {
+          for (const callback of this.updateCallbacks) {
+            callback();
+          }
         }
-      }
-    }, 0);
+      });
+    } else {
+      this._notifyTimer = setTimeout(() => {
+        this._notifyTimer = null;
+        if (this._disposed) return;
+        this._notifyScheduled = false;
+        if (this._writeDirty) {
+          this.flushDeferredNotify();
+        } else if (this.pendingUpdate) {
+          for (const callback of this.updateCallbacks) {
+            callback();
+          }
+        }
+      }, 0);
+    }
   }
 
   /**
