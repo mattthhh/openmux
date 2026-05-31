@@ -107,6 +107,8 @@ export interface TerminalContextValue {
   setScrollOffset: (ptyId: string, offset: number) => void;
   /** Scroll terminal to bottom (live content) */
   scrollToBottom: (ptyId: string) => void;
+  /** Snap the scroll animator to an offset (e.g., emulator auto-scrolled) */
+  snapAnimator: (ptyId: string, offset: number) => void;
   /** Get cached emulator synchronously (for selection text extraction) */
   getEmulatorSync: (ptyId: string) => ITerminalEmulator | null;
   /** Get focused emulator synchronously */
@@ -511,6 +513,7 @@ export function TerminalProvider(props: TerminalProviderProps) {
     scrollTerminal: scrollHandlers.scrollTerminal,
     setScrollOffset: scrollHandlers.handleSetScrollOffset,
     scrollToBottom: scrollHandlers.handleScrollToBottom,
+    snapAnimator: scrollHandlers.snapAnimator,
     getEmulatorSync: cacheAccessors.getEmulatorSync,
     getFocusedEmulator: cacheAccessors.getFocusedEmulator,
     getTerminalStateSync: cacheAccessors.getTerminalStateSync,

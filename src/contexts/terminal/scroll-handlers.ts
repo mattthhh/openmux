@@ -54,30 +54,30 @@ export function createScrollHandlers(
     if (cached) {
       const externalDelta = cached.viewportOffset - lastWritten;
       if (externalDelta !== 0) {
-        if (cached.viewportOffset === 0 && lastWritten !== 0) {
-          // External scroll-to-bottom (e.g., user typed while scrolled back).
-          // Cancel animation and snap to bottom.
-          animator.setTarget(ptyId, 0, cached.scrollbackLength);
-          animator.snapToTarget(ptyId);
-          lastWrittenOffset.set(ptyId, 0);
-          setScrollOffsetSync(ptyId, 0);
-          return;
-        }
         // External adjustment (e.g., new output shifted the offset).
         // Rebase the animator relative to the external change.
+        //
+        // NOTE: we intentionally do NOT snap to bottom when
+        // cached.viewportOffset === 0 here. That detection was a false
+        // positive factory: the cache can be stale or replaced by the
+        // subscriber at any point, producing viewportOffset = 0 when
+        // no genuine scroll-to-bottom happened. The result was the
+        // animator snapping to bottom mid-scroll-up.
+        //
+        // Auto-scroll-to-bottom is handled by handleScrollToBottom()
+        // (called from TerminalContext when the user types while scrolled
+        // back), which explicitly snaps the animator. And the subscriber
+        // callback updates viewState.scrollState with the emulator's
+        // viewport offset, so the render always reflects the emulator's
+        // state.
         animator.adjustOffset(ptyId, externalDelta);
         offset += externalDelta;
       }
     }
 
     lastWrittenOffset.set(ptyId, offset);
-    // Skip the expensive notifySubscribers — just update the offset.
-    // The render callback reads the latest offset from the session.
     setScrollOffsetNoNotify(ptyId, offset);
 
-    // Coalesce: schedule one render after all animation ticks complete.
-    // All animation microticks run before this queued microtask,
-    // so the render sees the latest offset when it fires.
     if (!renderCoalesced) {
       renderCoalesced = true;
       const finalPtyId = ptyId;
@@ -180,6 +180,13 @@ export function createScrollHandlers(
     handleScrollToBottom,
     /** Expose animator for external offset adjustments (e.g., scrollback reflow) */
     adjustAnimationOffset: (ptyId: string, delta: number) => animator.adjustOffset(ptyId, delta),
+    /** Snap the animator to a specific offset (e.g., emulator auto-scrolled to bottom) */
+    snapAnimator: (ptyId: string, offset: number) => {
+      const cached = getScrollState(ptyId);
+      animator.setTarget(ptyId, offset, cached?.scrollbackLength ?? Number.MAX_SAFE_INTEGER);
+      animator.snapToTarget(ptyId);
+      lastWrittenOffset.set(ptyId, offset);
+    },
     /** Remove animator state for a destroyed PTY */
     removeAnimation,
     cleanup,
