@@ -147,26 +147,6 @@ export function requestScrollAnimRender(ptyId: string, offset: number): void {
   }
 }
 
-// Scroll animation snap — snaps the animator to a target offset.
-// Used when the emulator auto-scrolls to bottom (subscriber detects
-// viewportOffset = 0 while the animator is chasing a non-zero target).
-const scrollAnimSnapRegistry = new Map<string, (offset: number) => void>();
-
-export function registerScrollAnimSnap(ptyId: string, snap: (offset: number) => void): void {
-  scrollAnimSnapRegistry.set(ptyId, snap);
-}
-
-export function unregisterScrollAnimSnap(ptyId: string): void {
-  scrollAnimSnapRegistry.delete(ptyId);
-}
-
-export function snapScrollAnimation(ptyId: string, offset: number): void {
-  const snap = scrollAnimSnapRegistry.get(ptyId);
-  if (snap) {
-    snap(offset);
-  }
-}
-
 const ptyUpdateEnabledRegistry = new Map<string, (enabled: boolean) => void>();
 
 export function registerUpdateEnabled(ptyId: string, setter: (enabled: boolean) => void): void {

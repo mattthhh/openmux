@@ -31,7 +31,6 @@ export interface UnifiedSubscriptionDeps {
   terminal: {
     isPtyActive: (ptyId: string) => boolean;
     getScrollState: (ptyId: string) => TerminalScrollState | undefined;
-    adjustAnimationOffset: (ptyId: string, delta: number) => void;
   };
   renderer: { requestRender: () => void };
   viewState: TerminalViewState;
@@ -231,13 +230,27 @@ export function setupUnifiedSubscription(deps: UnifiedSubscriptionDeps): void {
                   }
                 }
 
-                viewState.scrollState = update.scrollState;
+                // Mutate scrollState in-place instead of replacing the reference.
+                // The cacheUpdater from registerScrollCacheUpdate mutates the same
+                // object via its viewportOffset property. If we replace the reference,
+                // the cacheUpdater targets the stale object and the next onAnimate
+                // call reads the wrong viewportOffset from the new object, causing
+                // false external deltas (including false snap-to-bottom).
+                const existingScroll = viewState.scrollState;
+                if (existingScroll) {
+                  existingScroll.viewportOffset = update.scrollState.viewportOffset;
+                  existingScroll.scrollbackLength = update.scrollState.scrollbackLength;
+                  existingScroll.isAtBottom = update.scrollState.isAtBottom;
+                  existingScroll.isAtScrollbackLimit = update.scrollState.isAtScrollbackLimit;
+                } else {
+                  viewState.scrollState = { ...update.scrollState };
+                }
 
                 // When scrollback grows while the user is scrolled up,
                 // getCurrentScrollState adjusts session.scrollState.viewportOffset
-                // by the scrollback delta to keep the view stable. Tell the
-                // animator about this adjustment so it doesn't overwrite it
-                // on the next tick with its stale offset.
+                // by the scrollback delta. Since we mutate the cache in-place,
+                // the next onAnimate call will detect the external delta and
+                // adjust the animator accordingly.
                 if (
                   viewState.lastScrollbackLength !== null &&
                   viewState.scrollState.viewportOffset > 0
@@ -245,7 +258,6 @@ export function setupUnifiedSubscription(deps: UnifiedSubscriptionDeps): void {
                   const scrollbackDelta =
                     viewState.scrollState.scrollbackLength - viewState.lastScrollbackLength;
                   if (scrollbackDelta > 0 && viewState.emulator) {
-                    terminal.adjustAnimationOffset(ptyId, scrollbackDelta);
                     const start = Math.max(
                       0,
                       viewState.scrollState.scrollbackLength - recentPrefetchWindow

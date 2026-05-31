@@ -24,24 +24,44 @@ export function createScrollHandlers(
   });
 
   // Track the last offset we wrote per-pty via setScrollOffsetNoNotify.
+  // This lets us distinguish "cache hasn't caught up with our write" from
+  // "something externally changed the offset". Without this, the onAnimate
+  // callback would misinterpret stale cache values as external adjustments
+  // and cancel legitimate scroll-up animations.
   const lastWrittenOffset = new Map<string, number>();
 
   // Coalesce animation renders: the animator runs a tight microtask loop,
   // but we only need ONE render request per frame.
   let renderCoalesced = false;
 
-  // When the animator steps, just update the session offset without
-  // notifying subscribers. The animator owns the scroll offset during
-  // animation — nothing else should override it.
-  //
-  // External adjustments (scrollback growth while scrolled up) are
-  // handled by adjustAnimationOffset(), called from the subscriber in
-  // unified-subscription.ts after it detects a scrollback length change.
-  // We do NOT read the cache in onAnimate because the cache is unreliable:
-  // it's replaced by the subscriber at any point and the in-place mutation
-  // from registerScrollCacheUpdate can race with those replacements,
-  // producing false external deltas that snap the animator to bottom.
+  // When the animator steps, apply the new offset via the no-notify path
+  // and schedule a coalesced render. The cache is kept in sync via
+  // registerScrollCacheUpdate which mutates the same object the subscriber
+  // mutates, so external adjustment detection works correctly.
   animator.setOnAnimate((ptyId, offset) => {
+    const cached = getScrollState(ptyId);
+    const lastWritten = lastWrittenOffset.get(ptyId) ?? 0;
+
+    if (cached) {
+      const externalDelta = cached.viewportOffset - lastWritten;
+      if (externalDelta !== 0) {
+        if (cached.viewportOffset === 0 && lastWritten !== 0) {
+          // External scroll-to-bottom (e.g., user typed while scrolled back).
+          // Cancel animation and snap to bottom.
+          animator.setTarget(ptyId, 0, cached.scrollbackLength);
+          animator.snapToTarget(ptyId);
+          lastWrittenOffset.set(ptyId, 0);
+          setScrollOffsetNoNotify(ptyId, 0);
+          queueMicrotask(() => requestScrollAnimRender(ptyId, 0));
+          return;
+        }
+        // External adjustment (e.g., new output shifted the offset).
+        // Rebase the animator relative to the external change.
+        animator.adjustOffset(ptyId, externalDelta);
+        offset += externalDelta;
+      }
+    }
+
     lastWrittenOffset.set(ptyId, offset);
     setScrollOffsetNoNotify(ptyId, offset);
 
@@ -147,13 +167,6 @@ export function createScrollHandlers(
     handleScrollToBottom,
     /** Expose animator for external offset adjustments (e.g., scrollback reflow) */
     adjustAnimationOffset: (ptyId: string, delta: number) => animator.adjustOffset(ptyId, delta),
-    /** Snap the animator to a specific offset (e.g., emulator auto-scrolled to bottom) */
-    snapAnimator: (ptyId: string, offset: number) => {
-      const cached = getScrollState(ptyId);
-      animator.setTarget(ptyId, offset, cached?.scrollbackLength ?? Number.MAX_SAFE_INTEGER);
-      animator.snapToTarget(ptyId);
-      lastWrittenOffset.set(ptyId, offset);
-    },
     /** Remove animator state for a destroyed PTY */
     removeAnimation,
     cleanup,
