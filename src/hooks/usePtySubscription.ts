@@ -6,7 +6,7 @@
 import { onPtyExit, subscribeUnifiedToPty, getEmulator } from '../effect/bridge';
 import type { TerminalScrollState, UnifiedTerminalUpdate } from '../core/types';
 import type { ITerminalEmulator } from '../terminal/emulator-interface';
-import { runStream, streamFromSubscription, tap } from '../effect/stream-utils';
+import { runStream, streamFromSubscription } from '../effect/stream-utils';
 
 /**
  * Caches used for synchronous access to PTY state
@@ -41,23 +41,15 @@ export async function subscribeToPtyWithCaches(
       console.warn(`[usePtySubscription] Failed to cache emulator for ${ptyId}:`, error);
     });
 
-  // Subscribe to unified updates (terminal + scroll combined)
-  // This eliminates race conditions from separate subscriptions
-  const unifiedStream = tap(
-    streamFromSubscription<UnifiedTerminalUpdate>(({ emit }) => subscribeUnifiedToPty(ptyId, emit)),
-    (update) => {
-      if (options?.cacheScrollState !== false) {
-        const existing = caches.scrollStates.get(ptyId);
-        if (existing) {
-          existing.viewportOffset = update.scrollState.viewportOffset;
-          existing.scrollbackLength = update.scrollState.scrollbackLength;
-          existing.isAtBottom = update.scrollState.isAtBottom;
-          existing.isAtScrollbackLimit = update.scrollState.isAtScrollbackLimit;
-        } else {
-          caches.scrollStates.set(ptyId, { ...update.scrollState });
-        }
-      }
-    }
+  // Subscribe to unified updates (terminal + scroll combined).
+  // Scroll state is updated synchronously by the TerminalView's
+  // unified-subscription.ts callback (via setScrollStateCache), which
+  // runs inside notifySubscribers. We do NOT update scrollState here
+  // because this tap processes updates asynchronously (via the stream's
+  // await iterator.next()) and would overwrite the cache with stale
+  // values from earlier updates, causing false snap-to-bottom.
+  const unifiedStream = streamFromSubscription<UnifiedTerminalUpdate>(({ emit }) =>
+    subscribeUnifiedToPty(ptyId, emit)
   );
   const stopUpdates = runStream(unifiedStream, { label: 'pty-unified-updates' });
 
