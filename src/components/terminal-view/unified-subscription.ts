@@ -1,6 +1,6 @@
 import { createEffect, on, onCleanup } from 'solid-js';
 import type { TerminalCell, UnifiedTerminalUpdate } from '../../core/types';
-import { subscribeUnifiedToPty, getEmulator } from '../../effect/bridge';
+import { subscribeUnifiedToPty, getEmulator, setPtyUpdateEnabled } from '../../effect/bridge';
 import { getKittyGraphicsRenderer } from '../../terminal/kitty-graphics';
 import * as errore from 'errore';
 import { TerminalSubscriptionError } from '../../effect/errors';
@@ -8,9 +8,13 @@ import {
   attachVisibleEmulator,
   clearVisiblePty,
   registerVisiblePty,
+  reevaluateUpdateGate,
   unregisterVisiblePty,
 } from './visibility';
 import type { TerminalViewState } from './view-state';
+
+/** Interval for 1fps background pane updates (Erlang-inspired low-priority scheduling). */
+const BACKGROUND_PULSE_INTERVAL_MS = 1000;
 
 export interface UnifiedSubscriptionDeps {
   getPtyId: () => string;
@@ -20,6 +24,7 @@ export interface UnifiedSubscriptionDeps {
   setVersion: (updater: (value: number) => number) => void;
   kittyPaneKey: string;
   recentPrefetchWindow: number;
+  isFocused: () => boolean;
 }
 
 export function setupUnifiedSubscription(deps: UnifiedSubscriptionDeps): void {
@@ -31,6 +36,7 @@ export function setupUnifiedSubscription(deps: UnifiedSubscriptionDeps): void {
     setVersion,
     kittyPaneKey,
     recentPrefetchWindow,
+    isFocused,
   } = deps;
 
   createEffect(
@@ -41,6 +47,8 @@ export function setupUnifiedSubscription(deps: UnifiedSubscriptionDeps): void {
         let mounted = true;
         // Frame batching: coalesce multiple updates into single render per event loop tick.
         let renderRequested = false;
+        // 1fps pulse timer for background-visible panes.
+        let backgroundPulseTimer: ReturnType<typeof setInterval> | null = null;
 
         // Cache for terminal rows (structural sharing).
         let cachedRows: TerminalCell[][] = [];
@@ -62,6 +70,38 @@ export function setupUnifiedSubscription(deps: UnifiedSubscriptionDeps): void {
               }
             });
           }
+        };
+
+        /**
+         * 1fps background pulse: temporarily enable emulator updates,
+         * trigger a single prepareUpdate + subscriber notification cycle,
+         * then disable updates again. This is the Erlang-inspired approach —
+         * a low-priority process gets a scheduled time slice, does all its
+         * work in one burst, then yields completely until the next slice.
+         */
+        const triggerBackgroundPulse = () => {
+          if (!mounted) return;
+          const em = viewState.emulator;
+          if (!em || em.isDisposed) return;
+
+          // Enable updates so the subscriber callback fires during refresh.
+          em.setUpdateEnabled?.(true);
+          void setPtyUpdateEnabled(ptyId, true);
+
+          // Force a full refresh: prepareUpdate + notify all subscribers.
+          // The subscriber callback (defined above) will call requestRenderFrame().
+          em.refresh?.();
+
+          // Schedule disabling updates after the render completes.
+          // Use setTimeout(0) to ensure the subscriber callback and render
+          // have time to process before we gate updates off again.
+          setTimeout(() => {
+            if (!mounted) return;
+            if (!isFocused()) {
+              em.setUpdateEnabled?.(false);
+              void setPtyUpdateEnabled(ptyId, false);
+            }
+          }, 0);
         };
 
         const executePrefetch = async () => {
@@ -205,6 +245,37 @@ export function setupUnifiedSubscription(deps: UnifiedSubscriptionDeps): void {
           // Now safe to enable updates - subscription is active and will catch immediate updates
           attachVisibleEmulator(ptyId, em);
 
+          // Start the 1fps background pulse timer for non-focused panes.
+          // The pulse temporarily enables emulator updates for a single
+          // prepareUpdate + render cycle, then disables them again.
+          // For focused panes, updates stay enabled via attachVisibleEmulator
+          // and the subscriber callback fires on every emulator update.
+          const startBackgroundPulse = () => {
+            if (backgroundPulseTimer) return;
+            backgroundPulseTimer = setInterval(() => {
+              if (!mounted || isFocused()) return;
+              triggerBackgroundPulse();
+            }, BACKGROUND_PULSE_INTERVAL_MS);
+          };
+
+          startBackgroundPulse();
+
+          // Re-evaluate update gating when focus changes.
+          // When a pane gains focus, attachVisibleEmulator enables full updates.
+          // When a pane loses focus, updates are disabled (1fps pulse takes over).
+          createEffect(() => {
+            const focused = isFocused();
+            if (!mounted || !em) return;
+            // Re-evaluate the visibility/update gate based on current focus state.
+            // This enables/disables incremental emulator updates appropriately.
+            reevaluateUpdateGate(ptyId, em);
+            if (focused) {
+              // Emulator might have pending writes that were deferred while
+              // updates were disabled. Force a refresh to catch up.
+              em.refresh?.();
+            }
+          });
+
           requestRenderFrame();
         };
 
@@ -212,6 +283,10 @@ export function setupUnifiedSubscription(deps: UnifiedSubscriptionDeps): void {
 
         onCleanup(() => {
           mounted = false;
+          if (backgroundPulseTimer) {
+            clearInterval(backgroundPulseTimer);
+            backgroundPulseTimer = null;
+          }
           if (unsubscribe) {
             unsubscribe();
           }

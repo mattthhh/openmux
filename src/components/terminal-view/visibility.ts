@@ -1,10 +1,29 @@
 import type { ITerminalEmulator } from '../../terminal/emulator-interface';
 import { setPtyUpdateEnabled } from '../../effect/bridge';
+import { setVisiblePty } from '../../terminal/visible-pty-registry';
+import { getFocusedPtyId } from '../../terminal/focused-pty-registry';
 
 const visiblePtyCounts = new Map<string, number>();
 const activityPtyCounts = new Map<string, number>();
 
+/**
+ * Enable/disable emulator updates for a PTY.
+ * Only the focused PTY gets full updates. Background-visible PTYs have
+ * updates disabled — the 1fps render pulse in unified-subscription.ts
+ * temporarily enables them for a single prepareUpdate + render cycle.
+ */
 const applyUpdateGate = (ptyId: string, enabled: boolean, emulator?: ITerminalEmulator | null) => {
+  // If the PTY is not focused, never enable full incremental updates.
+  // The 1fps pulse handler manages update gating for background panes.
+  if (enabled && ptyId !== getFocusedPtyId()) {
+    // Still tell the service layer the PTY is "visible" (for cleanup tracking)
+    // but don't enable the emulator's incremental update notifications.
+    void setPtyUpdateEnabled(ptyId, false);
+    if (emulator && !emulator.isDisposed) {
+      emulator.setUpdateEnabled?.(false);
+    }
+    return;
+  }
   void setPtyUpdateEnabled(ptyId, enabled);
   if (emulator && !emulator.isDisposed) {
     emulator.setUpdateEnabled?.(enabled);
@@ -58,6 +77,7 @@ const clearPtyUpdates = (
 
 export const registerVisiblePty = (ptyId: string) => {
   retainPtyUpdates(visiblePtyCounts, ptyId);
+  setVisiblePty(ptyId, true);
 };
 
 export const attachVisibleEmulator = (ptyId: string, emulator: ITerminalEmulator | null) => {
@@ -67,10 +87,23 @@ export const attachVisibleEmulator = (ptyId: string, emulator: ITerminalEmulator
   }
 };
 
+/** Re-evaluate update gating for a PTY after focus changes. */
+export const reevaluateUpdateGate = (ptyId: string, emulator: ITerminalEmulator | null) => {
+  if (getTotalHoldCount(ptyId) > 0) {
+    applyUpdateGate(ptyId, true, emulator);
+  }
+};
+
 export const unregisterVisiblePty = (ptyId: string, emulator: ITerminalEmulator | null) => {
   releasePtyUpdates(visiblePtyCounts, ptyId, emulator);
+  if (getTotalHoldCount(ptyId) <= 0) {
+    setVisiblePty(ptyId, false);
+  }
 };
 
 export const clearVisiblePty = (ptyId: string, emulator?: ITerminalEmulator | null) => {
   clearPtyUpdates(visiblePtyCounts, ptyId, emulator);
+  if (getTotalHoldCount(ptyId) <= 0) {
+    setVisiblePty(ptyId, false);
+  }
 };

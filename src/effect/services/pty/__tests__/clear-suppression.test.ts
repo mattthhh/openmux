@@ -224,6 +224,7 @@ describe('createDataHandler pi redraw integration', () => {
       copyToClipboard: async () => true,
       session,
       syncParser: createSyncModeParser(),
+      getPriority: () => 'focused' as const,
     });
 
     handleData('\x1b[?2026h\x1b[2J\x1b[H\x1b[3Jhello\x1b[?2026l');
@@ -240,6 +241,7 @@ describe('createDataHandler pi redraw integration', () => {
       copyToClipboard: async () => true,
       session,
       syncParser: createSyncModeParser(),
+      getPriority: () => 'focused' as const,
     });
 
     handleData('\x1b[?2026h\x1b[2J\x1b[H\x1b[3Jhello\x1b[?2026l');
@@ -255,6 +257,7 @@ describe('createDataHandler pi redraw integration', () => {
       copyToClipboard: async () => true,
       session,
       syncParser: createSyncModeParser(),
+      getPriority: () => 'focused' as const,
     });
 
     handleData('\x1b[?2026h\x1b[2J\x1b[H\x1b[3Jline 1\r\nline 2\r\nline 3\r\nline 4\x1b[?2026l');
@@ -269,6 +272,7 @@ describe('createDataHandler pi redraw integration', () => {
       copyToClipboard: async () => true,
       session,
       syncParser: createSyncModeParser(),
+      getPriority: () => 'focused' as const,
     });
 
     handleData('\x1b[?2026hplain output\x1b[?2026l');
@@ -284,6 +288,7 @@ describe('createDataHandler pi redraw integration', () => {
       copyToClipboard: async () => true,
       session,
       syncParser: createSyncModeParser(),
+      getPriority: () => 'focused' as const,
       syncTimeoutMs: 100,
     });
 
@@ -308,6 +313,7 @@ describe('createDataHandler pi redraw integration', () => {
       copyToClipboard: async () => true,
       session,
       syncParser: createSyncModeParser(),
+      getPriority: () => 'focused' as const,
       syncTimeoutMs: 100,
     });
 

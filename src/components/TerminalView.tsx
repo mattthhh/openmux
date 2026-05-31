@@ -48,6 +48,7 @@ export function TerminalView(props: TerminalViewProps) {
     setVersion,
     kittyPaneKey,
     recentPrefetchWindow,
+    isFocused: () => props.isFocused,
   });
 
   const renderTerminal = createTerminalRenderer({

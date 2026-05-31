@@ -5,6 +5,13 @@
 import type { SyncModeParser } from '../../../terminal/sync-mode-parser';
 import type { InternalPtySession } from './types';
 import { deferMacrotask } from '../../../core/scheduling';
+import {
+  getPriorityConfig,
+  resolvePtyPriority,
+  type PtyPriority,
+} from '../../../terminal/pty-priority';
+import { getFocusedPtyId } from '../../../terminal/focused-pty-registry';
+import { isPtyVisible } from '../../../terminal/visible-pty-registry';
 import { tracePtyChunk, tracePtyEvent } from '../../../terminal/pty-trace';
 import * as errore from 'errore';
 import { DataHandlerError } from '../../errors';
@@ -22,6 +29,12 @@ interface DataHandlerOptions {
   syncTimeoutMs?: number;
   /** Injected clipboard writer — avoids importing the bridge singleton (breaks circular dep) */
   copyToClipboard: (text: string) => Promise<boolean>;
+  /**
+   * Returns the current priority for this PTY.
+   * Defaults to registry-based resolution (focused-pty-registry + visible-pty-registry).
+   * Override for testing to avoid singleton state pollution.
+   */
+  getPriority?: () => PtyPriority;
 }
 
 interface DataHandlerState {
@@ -229,15 +242,16 @@ function processClipboardResponses(
  */
 export function createDataHandler(options: DataHandlerOptions) {
   const { session, syncParser, commandParser, syncTimeoutMs = 100 } = options;
-  const maxSegmentsPerTick = 16;
-  const maxCharsPerTick = 65_536;
-  const maxBudgetMs = 8;
-  const minDrainIntervalMs = 0;
-  const sustainedDrainIntervalMs = 50;
-  const sustainedDataGapMs = 100;
   const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
   let lastDrainTime = 0;
-  let lastDataTime = 0;
+
+  const defaultGetPriority = () => {
+    const visible = isPtyVisible(session.id);
+    const focused = getFocusedPtyId();
+    if (!visible && focused === null) return 'focused' as PtyPriority;
+    return resolvePtyPriority(session.id, focused, visible);
+  };
+  const getPriority = options.getPriority ?? defaultGetPriority;
 
   const state: DataHandlerState = {
     pendingSegments: [],
@@ -357,6 +371,7 @@ export function createDataHandler(options: DataHandlerOptions) {
     }
 
     const force = drainOptions?.force ?? false;
+    const config = getPriorityConfig(getPriority());
     const piRedraw = state.piFullRedrawPending;
     // Snapshot scrollback length before writing a pi full redraw so we can
     // detect and undo any LF-triggered scrollback growth.
@@ -397,7 +412,7 @@ export function createDataHandler(options: DataHandlerOptions) {
           continue;
         }
 
-        if (batchLen > 0 && batchLen + segment.length > maxCharsPerTick) {
+        if (batchLen > 0 && batchLen + segment.length > config.maxCharsPerTick) {
           break;
         }
 
@@ -406,9 +421,9 @@ export function createDataHandler(options: DataHandlerOptions) {
         segmentsProcessed += 1;
         state.pendingSegments.shift();
 
-        if (segmentsProcessed >= maxSegmentsPerTick) break;
-        if (batchLen >= maxCharsPerTick) break;
-        if (now() - start >= maxBudgetMs) break;
+        if (segmentsProcessed >= config.maxSegmentsPerTick) break;
+        if (batchLen >= config.maxCharsPerTick) break;
+        if (now() - start >= config.drainBudgetMs) break;
       }
 
       if (batchLen === 0 && state.pendingSegments.length > 0) {
@@ -487,23 +502,28 @@ export function createDataHandler(options: DataHandlerOptions) {
     }
   };
 
-  // Helper to schedule notification (uses macrotask to yield for rendering)
-  // Adaptive rate-limiting: if data arrived recently (within 100ms), the
-  // PTY is in sustained-output mode and drains are spaced 50ms apart to
-  // guarantee I/O yield time for mouse/keyboard events. If the last data
-  // was more than 100ms ago, we're in interactive mode and drain immediately.
+  // Priority-aware scheduling: the drain interval is determined by
+  // the PTY's current priority level (focused = 0ms, background-visible = 1000ms).
+  // Background-hidden PTYs are not drained at all — data accumulates in
+  // pendingSegments until the PTY becomes visible or focused.
+  // This replaces the previous adaptive heuristic — the priority system
+  // is the single source of truth for scheduling decisions.
   const scheduleNotify = () => {
     if (!session.pendingNotify) {
+      const priority = getPriority();
+      if (priority === 'background-hidden') return;
       session.pendingNotify = true;
+      const config = getPriorityConfig(priority);
       const sinceLastDrain = now() - lastDrainTime;
-      const sinceLastData = now() - lastDataTime;
-      const isSustained = sinceLastData < sustainedDataGapMs;
-      const interval = isSustained ? sustainedDrainIntervalMs : minDrainIntervalMs;
+      const interval = config.drainIntervalMs;
       const delay = sinceLastDrain < interval ? interval - sinceLastDrain : 0;
       if (delay > 0) {
-        setTimeout(() => {
-          if (session.pendingNotify) drainPending();
-        }, delay);
+        setTimeout(
+          () => {
+            if (session.pendingNotify) drainPending();
+          },
+          Math.min(delay, 2_147_483_647)
+        );
       } else {
         deferMacrotask(drainPending);
       }
@@ -513,7 +533,6 @@ export function createDataHandler(options: DataHandlerOptions) {
   // The data handler function
   const handleData = (data: string) => {
     tracePtyChunk('pty-in', data, { ptyId: session.id });
-    lastDataTime = now();
     updateFocusTracking(data);
     const kittySignals = analyzeKitty(data);
     const hasKittyQuery = kittySignals.hasKittyQuery;

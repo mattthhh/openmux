@@ -102,6 +102,7 @@ describe('createDataHandler', () => {
       session,
       syncParser: createSyncModeParser(),
       syncTimeoutMs: 50,
+      getPriority: () => 'focused' as const,
     });
 
     const segments = Array.from({ length: 20 }, (_, i) => String.fromCharCode(65 + i));
@@ -123,6 +124,7 @@ describe('createDataHandler', () => {
       session,
       syncParser: createSyncModeParser(),
       syncTimeoutMs: 10,
+      getPriority: () => 'focused' as const,
     });
 
     handler.handleData('\x1b[?2026hHello');
@@ -145,6 +147,7 @@ describe('createDataHandler', () => {
       session,
       syncParser: createSyncModeParser(),
       syncTimeoutMs: 50,
+      getPriority: () => 'focused' as const,
     });
 
     handler.handleData('query');
@@ -161,6 +164,7 @@ describe('createDataHandler', () => {
       session,
       syncParser: createSyncModeParser(),
       syncTimeoutMs: 50,
+      getPriority: () => 'focused' as const,
     });
 
     handler.handleData('\x1b_Ga=q,i=1;AAAA\x1b\\');
@@ -188,6 +192,7 @@ describe('createDataHandler', () => {
       session,
       syncParser: createSyncModeParser(),
       syncTimeoutMs: 50,
+      getPriority: () => 'focused' as const,
     });
 
     handler.handleData('\x1b_Ga=q,i=1;AAAA\x1b\\content');
@@ -206,6 +211,7 @@ describe('createDataHandler', () => {
       session,
       syncParser: createSyncModeParser(),
       syncTimeoutMs: 50,
+      getPriority: () => 'focused' as const,
     });
 
     // Enable focus tracking via data handler

@@ -29,16 +29,22 @@ type ClipboardPasteHandler = (ptyId: string) => void;
 /** Callback invoked before clipboard paste to exit copy mode if active */
 type CopyModeExitCallback = () => void;
 
+type FocusChangeCallback = (focusedPtyId: string | null, previousPtyId: string | null) => void;
+
 let focusedPtyId: string | null = null;
 let clipboardPasteHandler: ClipboardPasteHandler | null = null;
 let copyModeExitCallback: CopyModeExitCallback | null = null;
+let focusChangeCallback: FocusChangeCallback | null = null;
 
 /**
  * Set the currently focused PTY ID.
  * Called by the App component when focus changes.
  */
 export function setFocusedPty(ptyId: string | null): void {
+  if (ptyId === focusedPtyId) return;
+  const previous = focusedPtyId;
   focusedPtyId = ptyId;
+  focusChangeCallback?.(ptyId, previous);
 }
 
 /**
@@ -78,4 +84,12 @@ export function triggerClipboardPaste(): boolean {
  */
 export function getFocusedPtyId(): string | null {
   return focusedPtyId;
+}
+
+/**
+ * Register a callback invoked when the focused PTY changes.
+ * Used by the visibility system to re-evaluate emulator update gating.
+ */
+export function onFocusChange(callback: FocusChangeCallback): void {
+  focusChangeCallback = callback;
 }
