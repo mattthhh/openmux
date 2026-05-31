@@ -232,7 +232,9 @@ export function createDataHandler(options: DataHandlerOptions) {
   const maxSegmentsPerTick = 8;
   const maxCharsPerTick = 32_768;
   const maxBudgetMs = 4;
+  const minDrainIntervalMs = 4;
   const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
+  let lastDrainTime = 0;
 
   const state: DataHandlerState = {
     pendingSegments: [],
@@ -338,6 +340,7 @@ export function createDataHandler(options: DataHandlerOptions) {
   };
 
   const drainPending = (drainOptions?: { force?: boolean }) => {
+    lastDrainTime = now();
     session.pendingNotify = false;
 
     if (session.emulator.isDisposed) {
@@ -482,10 +485,20 @@ export function createDataHandler(options: DataHandlerOptions) {
   };
 
   // Helper to schedule notification (uses macrotask to yield for rendering)
+  // Rate-limited to enforce a minimum gap between drain cycles so the I/O
+  // poll can process mouse/keyboard events during heavy output.
   const scheduleNotify = () => {
     if (!session.pendingNotify) {
       session.pendingNotify = true;
-      deferMacrotask(drainPending);
+      const sinceLastDrain = now() - lastDrainTime;
+      const delay = sinceLastDrain < minDrainIntervalMs ? minDrainIntervalMs - sinceLastDrain : 0;
+      if (delay > 0) {
+        setTimeout(() => {
+          if (session.pendingNotify) drainPending();
+        }, delay);
+      } else {
+        deferMacrotask(drainPending);
+      }
     }
   };
 

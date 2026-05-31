@@ -69,6 +69,8 @@ export class GhosttyVTEmulatorCore {
   private _writeDirty = false;
   private _notifyScheduled = false;
   private _notifyTimer: ReturnType<typeof setTimeout> | null = null;
+  private _lastNotifyTime = 0;
+  private static readonly _MIN_NOTIFY_INTERVAL_MS = 16;
 
   private scrollbackCache = new ScrollbackCache(1000);
   private scrollbackSnapshotDirty = true;
@@ -467,16 +469,25 @@ export class GhosttyVTEmulatorCore {
 
   /**
    * Schedule a deferred prepareUpdate + subscriber notification.
-   * Uses setTimeout(0) to yield to the event loop between drain and render,
-   * ensuring I/O events (mouse, keyboard) are processed during heavy output.
-   * Multiple writes within the same event loop tick are still coalesced
-   * since _notifyScheduled prevents duplicate scheduling.
+   * Uses rate-limited setTimeout to cap notification frequency at ~60fps.
+   * After a quiet period, the delay is 0ms (immediate); for consecutive
+   * notifications, a minimum 16ms gap is enforced so the main thread is
+   * not saturated by prepareUpdate + render under heavy output.
+   * Multiple writes within the same interval are coalesced since
+   * _notifyScheduled prevents duplicate scheduling.
    */
   private scheduleDeferredNotify(): void {
     if (this._notifyScheduled) return;
     this._notifyScheduled = true;
+    const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    const sinceLast = now - this._lastNotifyTime;
+    const delay =
+      sinceLast < GhosttyVTEmulatorCore._MIN_NOTIFY_INTERVAL_MS
+        ? GhosttyVTEmulatorCore._MIN_NOTIFY_INTERVAL_MS - sinceLast
+        : 0;
     this._notifyTimer = setTimeout(() => {
       this._notifyTimer = null;
+      this._lastNotifyTime = typeof performance !== 'undefined' ? performance.now() : Date.now();
       if (this._disposed) return;
       this._notifyScheduled = false;
       // Only flush if writes are still dirty (they may have been flushed
@@ -492,7 +503,7 @@ export class GhosttyVTEmulatorCore {
           callback();
         }
       }
-    }, 0);
+    }, delay);
   }
 
   /**
