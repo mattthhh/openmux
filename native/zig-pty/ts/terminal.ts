@@ -43,8 +43,11 @@ export class Terminal implements IPty {
   private _drainRequested: boolean = false;
   private _pollingFallback: boolean = false;
   // Read throttle: sleep this many ms between drain yield cycles for background PTYs.
-  // 0 = no throttle (focused), positive = background priority.
+  // 0 = no throttle (focused), positive = background priority, -1 = paused (hidden).
   private _readThrottleMs: number = 0;
+  // Wake resolver: when set, resolving this promise interrupts the current
+  // Bun.sleep in the read loop, so setReadThrottleMs takes effect immediately.
+  private _throttleWakeResolve: (() => void) | null = null;
   // Foreground process change tracking
   private _onForegroundProcessChange = new EventEmitter<string>();
   private _lastForegroundChangeCount = 0;
@@ -112,12 +115,19 @@ export class Terminal implements IPty {
 
   /**
    * Set read throttle: sleep this many ms between drain yield cycles.
-   * 0 = no throttle (focused), positive = background priority.
+   * 0 = no throttle (focused), positive = background priority, -1 = paused.
    * This reduces CPU usage and event loop pressure for background PTYs
    * with heavy output (e.g. find / -ls in a split pane).
+   *
+   * Wakes the read loop immediately so the new throttle takes effect
+   * without waiting for the current sleep to expire.
    */
   setReadThrottleMs(ms: number): void {
     this._readThrottleMs = ms;
+    // Wake the read loop so it picks up the new throttle value immediately.
+    if (this._throttleWakeResolve) {
+      this._throttleWakeResolve();
+    }
   }
 
   get onData() {
@@ -163,6 +173,10 @@ export class Terminal implements IPty {
     this._pollingFallback = false;
     this._draining = false;
     this._drainRequested = false;
+    if (this._throttleWakeResolve) {
+      this._throttleWakeResolve();
+      this._throttleWakeResolve = null;
+    }
 
     if (this.handle >= 0) {
       lib.symbols.bun_pty_kill(this.handle);
@@ -341,14 +355,46 @@ export class Terminal implements IPty {
     }
   }
 
+  /**
+   * Sleep for the current throttle interval, but wake immediately
+   * if setReadThrottleMs is called (via _throttleWakeResolve).
+   * Returns true if woken early by a throttle change.
+   */
+  private async _throttleSleep(): Promise<boolean> {
+    if (this._readThrottleMs < 0) {
+      // Paused: sleep 500ms, wakeable
+      const wakePromise = new Promise<void>((resolve) => {
+        this._throttleWakeResolve = resolve;
+      });
+      const timerPromise = new Promise<void>((resolve) => setTimeout(resolve, 500));
+      await Promise.race([timerPromise, wakePromise]);
+      this._throttleWakeResolve = null;
+      return this._readThrottleMs >= 0; // woken early = throttle changed away from paused
+    }
+    if (this._readThrottleMs > 0) {
+      const wakePromise = new Promise<void>((resolve) => {
+        this._throttleWakeResolve = resolve;
+      });
+      const timerPromise = new Promise<void>((resolve) =>
+        setTimeout(resolve, this._readThrottleMs)
+      );
+      await Promise.race([timerPromise, wakePromise]);
+      this._throttleWakeResolve = null;
+      return this._readThrottleMs === 0; // woken early = throttle changed to focused
+    }
+    // Focused: 4ms yield (not interruptible — focused PTYs need consistent pacing)
+    await Bun.sleep(4);
+    return false;
+  }
+
   private async _drainAvailableData(): Promise<void> {
     let chunksSinceYield = 0;
 
     while (this._readLoop && !this._closing && !this._pollingFallback) {
-      // If paused (background-hidden), sleep and check again later.
+      // If paused (background-hidden), sleep until woken.
       // Data accumulates in the kernel's PTY buffer.
       if (this._readThrottleMs < 0) {
-        await Bun.sleep(500);
+        await this._throttleSleep();
         continue;
       }
 
@@ -367,15 +413,7 @@ export class Terminal implements IPty {
         chunksSinceYield += 1;
         if (chunksSinceYield >= DRAIN_YIELD_INTERVAL) {
           chunksSinceYield = 0;
-          if (this._readThrottleMs > 0) {
-            await Bun.sleep(this._readThrottleMs);
-          } else {
-            // Even focused PTYs yield 4ms between read batches to ensure
-            // keyboard/mouse events get processed during heavy output.
-            // Without this, a continuous read loop hogs the event loop
-            // and keystrokes can't reach the stdin handler.
-            await Bun.sleep(4);
-          }
+          await this._throttleSleep();
         }
         continue;
       }
