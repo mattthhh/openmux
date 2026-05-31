@@ -37,6 +37,9 @@ interface DataHandlerOptions {
   getPriority?: () => PtyPriority;
 }
 
+/** Maximum size for the raw-buffer used by hidden PTYs (4 MiB). */
+const RAW_BUFFER_MAX_SIZE = 4 * 1024 * 1024;
+
 interface DataHandlerState {
   pendingSegments: string[];
   syncTimeout: ReturnType<typeof setTimeout> | null;
@@ -46,6 +49,13 @@ interface DataHandlerState {
   pendingResponses: { fence: number; responses: string[] }[];
   segmentCounter: number;
   processedCounter: number;
+  /**
+   * Raw data buffer for background-hidden PTYs.
+   * While a PTY is hidden, all parsing is skipped and raw data accumulates here.
+   * When the PTY regains visibility/focus, the buffer is replayed through the
+   * full pipeline before resuming normal operation.
+   */
+  rawBuffer: string;
 }
 
 const ESC = '\x1b';
@@ -261,6 +271,7 @@ export function createDataHandler(options: DataHandlerOptions) {
     pendingResponses: [],
     segmentCounter: 0,
     processedCounter: 0,
+    rawBuffer: '',
   };
   let kittyProbeBuffer = '';
   let focusProbeBuffer = '';
@@ -362,7 +373,20 @@ export function createDataHandler(options: DataHandlerOptions) {
 
     if (session.emulator.isDisposed) {
       state.pendingSegments = [];
+      state.rawBuffer = '';
       return;
+    }
+
+    // If we have raw-buffered data from a hidden period, process it first.
+    // For force drains (background pulse, focus transition), process the
+    // entire buffer. For budgeted drains, process one chunk per cycle.
+    const force = drainOptions?.force ?? false;
+    if (state.rawBuffer.length > 0) {
+      if (force) {
+        replayRawBufferFull();
+      } else {
+        replayRawBuffer();
+      }
     }
 
     if (state.pendingSegments.length === 0) {
@@ -370,7 +394,6 @@ export function createDataHandler(options: DataHandlerOptions) {
       return;
     }
 
-    const force = drainOptions?.force ?? false;
     const config = getPriorityConfig(getPriority());
     const piRedraw = state.piFullRedrawPending;
     // Snapshot scrollback length before writing a pi full redraw so we can
@@ -530,8 +553,90 @@ export function createDataHandler(options: DataHandlerOptions) {
     }
   };
 
+  /**
+   * Replay raw-buffered data through the full pipeline (single chunk).
+   * Only processes one maxCharsPerTick worth of data per call.
+   * The caller (drainPending) calls this repeatedly across drain cycles
+   * until the buffer is exhausted.
+   */
+  const replayRawBuffer = () => {
+    if (state.rawBuffer.length === 0) return;
+
+    const maxChunk = getPriorityConfig(getPriority()).maxCharsPerTick;
+
+    if (state.rawBuffer.length <= maxChunk) {
+      const raw = state.rawBuffer;
+      state.rawBuffer = '';
+      processChunk(raw);
+      return;
+    }
+
+    // Process one chunk's worth of data. The rest stays buffered.
+    let end = maxChunk;
+    const nl = state.rawBuffer.indexOf('\n', end);
+    if (nl !== -1 && nl < end + 1024) {
+      end = nl + 1;
+    } else {
+      end = Math.min(end, state.rawBuffer.length);
+    }
+
+    const chunk = state.rawBuffer.slice(0, end);
+    state.rawBuffer = state.rawBuffer.slice(end);
+    processChunk(chunk);
+  };
+
+  /**
+   * Replay the ENTIRE raw buffer in one go (for focus transitions and force drains).
+   * This may block the event loop for large buffers, but the user expects
+   * immediate data when switching focus to a previously hidden PTY.
+   */
+  const replayRawBufferFull = () => {
+    if (state.rawBuffer.length === 0) return;
+    const raw = state.rawBuffer;
+    state.rawBuffer = '';
+    processChunk(raw);
+  };
+
   // The data handler function
   const handleData = (data: string) => {
+    // For background PTYs, skip all processing and just buffer raw data.
+    // This is the single biggest performance win: a background PTY running
+    // find / -ls generates thousands of chunks/second. Even a trivial function
+    // call with a priority check per chunk adds up across thousands of calls.
+    // By buffering raw data here, we reduce main-thread work to string concatenation.
+    //
+    // The raw buffer is replayed through the full pipeline when the PTY is
+    // drained (drainPending) or when it transitions to focused.
+    const priority = getPriority();
+    if (priority === 'background-hidden') {
+      if (state.rawBuffer.length < RAW_BUFFER_MAX_SIZE) {
+        state.rawBuffer += data;
+      }
+      return;
+    }
+
+    if (priority === 'background-visible') {
+      if (state.rawBuffer.length < RAW_BUFFER_MAX_SIZE) {
+        state.rawBuffer += data;
+      }
+      // Schedule the drain so the 1fps pulse eventually processes the buffer.
+      // Without this, background-visible PTYs would only drain when explicitly
+      // requested (refresh, resize, etc.), which is too infrequent.
+      scheduleNotify();
+      return;
+    }
+
+    // Focused PTY: process immediately.
+    // If we have raw-buffered data from a previous background period, replay it first.
+    if (state.rawBuffer.length > 0) {
+      replayRawBufferFull();
+    }
+
+    processChunk(data);
+  };
+
+  // The core processing pipeline — extracted so replayRawBuffer can call it.
+  const processChunk = (data: string) => {
     tracePtyChunk('pty-in', data, { ptyId: session.id });
     updateFocusTracking(data);
     const kittySignals = analyzeKitty(data);
@@ -646,5 +751,5 @@ export function createDataHandler(options: DataHandlerOptions) {
     }
   };
 
-  return { handleData, cleanup, scheduleNotify };
+  return { handleData, cleanup, scheduleNotify, drainPending };
 }

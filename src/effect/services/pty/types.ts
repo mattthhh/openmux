@@ -54,6 +54,8 @@ export interface InternalPtySession {
   /** Foreground process name that most recently enabled focus tracking (normalized lowercase basename). */
   focusTrackingOwnerProcess: string | null;
   pendingNotify: boolean;
+  /** Flush pending data handler buffer and drain segments. Set by session-factory. */
+  flushData?: () => void;
   scrollState: {
     viewportOffset: number;
     /** Track last scrollback length to detect when new content is added */

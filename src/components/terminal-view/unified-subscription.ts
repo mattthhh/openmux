@@ -1,6 +1,11 @@
 import { createEffect, on, onCleanup } from 'solid-js';
 import type { TerminalCell, UnifiedTerminalUpdate } from '../../core/types';
-import { subscribeUnifiedToPty, getEmulator, setPtyUpdateEnabled } from '../../effect/bridge';
+import {
+  subscribeUnifiedToPty,
+  getEmulator,
+  setPtyUpdateEnabled,
+  flushPtyData,
+} from '../../effect/bridge';
 import { getKittyGraphicsRenderer } from '../../terminal/kitty-graphics';
 import * as errore from 'errore';
 import { TerminalSubscriptionError } from '../../effect/errors';
@@ -83,6 +88,10 @@ export function setupUnifiedSubscription(deps: UnifiedSubscriptionDeps): void {
           if (!mounted) return;
           const em = viewState.emulator;
           if (!em || em.isDisposed) return;
+
+          // Flush any raw-buffered data through the pipeline before refreshing.
+          // This ensures the emulator has the latest VT state for the render.
+          flushPtyData(ptyId);
 
           // Enable updates so the subscriber callback fires during refresh.
           em.setUpdateEnabled?.(true);

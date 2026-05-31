@@ -306,6 +306,25 @@ export async function refreshPty(ptyId: string): Promise<void> {
   emulator.refresh?.();
 }
 
+/** Flush buffered PTY data (replay raw buffer + drain pending segments). */
+const flushDataRegistry = new Map<string, () => void>();
+
+/** Register a flush function for a PTY (called by session-factory). */
+export function registerFlushData(ptyId: string, flush: () => void): void {
+  flushDataRegistry.set(ptyId, flush);
+}
+
+/** Unregister a flush function (called on PTY destroy). */
+export function unregisterFlushData(ptyId: string): void {
+  flushDataRegistry.delete(ptyId);
+}
+
+/** Flush buffered PTY data (replay raw buffer + drain pending segments). */
+export function flushPtyData(ptyId: string): void {
+  const flush = flushDataRegistry.get(ptyId);
+  if (flush) flush();
+}
+
 /** Apply host colors to all PTYs */
 export async function applyHostColors(colors: TerminalColors): Promise<void> {
   const pty = getPtyService();

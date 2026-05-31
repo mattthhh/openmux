@@ -40,6 +40,7 @@ export {
   getEmulatorSync,
   setPtyUpdateEnabled,
   refreshPty,
+  flushPtyData,
   applyHostColors,
   subscribeToPtyLifecycle,
   subscribeToAllTitleChanges,

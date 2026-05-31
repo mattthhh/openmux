@@ -11,6 +11,8 @@ import { makeCols, makeRows } from '../../../../src/effect/types';
 import { PtySpawnError } from '../../../../src/effect/errors';
 import { ScrollbackArchiveManager } from '../../../../src/terminal/scrollback-archive';
 import { mockGhostty, resetGhosttySymbols } from '../../../mocks/ghostty-ffi';
+import { resetFocusedPtyRegistry } from '../../../../src/terminal/focused-pty-registry';
+import { resetVisiblePtyRegistry } from '../../../../src/terminal/visible-pty-registry';
 
 let spawnAsync: typeof import('../../../../native/zig-pty/ts/index').spawnAsync;
 
@@ -47,6 +49,8 @@ describe('createSession', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     resetGhosttySymbols();
+    resetFocusedPtyRegistry();
+    resetVisiblePtyRegistry();
     mockGhostty.symbols = mockGhosttySymbols;
   });
 

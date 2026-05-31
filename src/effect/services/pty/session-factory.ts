@@ -16,6 +16,7 @@ import { makePtyId } from '../../types';
 import type { InternalPtySession } from './types';
 import type { TerminalColors } from '../../../terminal/terminal-colors';
 import { tracePtyEvent } from '../../../terminal/pty-trace';
+import { registerFlushData, unregisterFlushData } from '../../../effect/bridge/pty-bridge';
 import { sendMacOsNotification } from '../../../terminal/desktop-notifications';
 import { forwardNotification } from '../../../shim/notification-forwarder';
 import { notifySubscribers } from './notification';
@@ -243,12 +244,20 @@ export async function createSession(
   });
 
   // Set up data handler
-  const { handleData } = createDataHandler({
+  const { handleData, drainPending } = createDataHandler({
     session,
     syncParser,
     commandParser,
     copyToClipboard: deps.copyToClipboard,
   });
+
+  // Expose flush function for background pulse to trigger drain.
+  // Uses force drain to bypass the 1000ms interval and process
+  // raw-buffered data immediately before em.refresh().
+  session.flushData = () => {
+    drainPending({ force: true });
+  };
+  registerFlushData(id, session.flushData);
 
   // Wire up PTY data handler
   pty.onData((data: string) => {
@@ -277,6 +286,7 @@ export async function createSession(
     if (session.closing) {
       return;
     }
+    unregisterFlushData(id);
     tracePtyEvent('pty-exit', { ptyId: id, exitCode });
     for (const callback of session.exitCallbacks) {
       callback(exitCode);

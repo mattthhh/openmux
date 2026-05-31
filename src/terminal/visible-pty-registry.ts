@@ -27,3 +27,8 @@ export function setVisiblePty(ptyId: string, visible: boolean): void {
 export function isPtyVisible(ptyId: string): boolean {
   return visiblePtys.has(ptyId);
 }
+
+/** Reset the visible PTY registry (for testing). */
+export function resetVisiblePtyRegistry(): void {
+  visiblePtys.clear();
+}

@@ -79,11 +79,17 @@ export function triggerClipboardPaste(): boolean {
   return false;
 }
 
-/**
- * Get the currently focused PTY ID (for debugging/testing).
- */
+/** Get the currently focused PTY ID (for debugging/testing). */
 export function getFocusedPtyId(): string | null {
   return focusedPtyId;
+}
+
+/** Reset the focused PTY registry (for testing). */
+export function resetFocusedPtyRegistry(): void {
+  focusedPtyId = null;
+  clipboardPasteHandler = null;
+  copyModeExitCallback = null;
+  focusChangeCallback = null;
 }
 
 /**
