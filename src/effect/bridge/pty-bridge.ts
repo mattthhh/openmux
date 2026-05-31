@@ -6,6 +6,7 @@
 
 import type { Cols, Rows } from '../types';
 import { asPtyId } from '../types';
+import { getPriorityConfig, type PtyPriority } from '../../terminal/pty-priority';
 import type {
   TerminalCell,
   TerminalState,
@@ -309,6 +310,9 @@ export async function refreshPty(ptyId: string): Promise<void> {
 /** Flush buffered PTY data (replay raw buffer + drain pending segments). */
 const flushDataRegistry = new Map<string, () => void>();
 
+/** Read-throttle setter for PTYs (setReadThrottleMs). */
+const throttleRegistry = new Map<string, (ms: number) => void>();
+
 /** Register a flush function for a PTY (called by session-factory). */
 export function registerFlushData(ptyId: string, flush: () => void): void {
   flushDataRegistry.set(ptyId, flush);
@@ -317,12 +321,26 @@ export function registerFlushData(ptyId: string, flush: () => void): void {
 /** Unregister a flush function (called on PTY destroy). */
 export function unregisterFlushData(ptyId: string): void {
   flushDataRegistry.delete(ptyId);
+  throttleRegistry.delete(ptyId);
 }
 
 /** Flush buffered PTY data (replay raw buffer + drain pending segments). */
 export function flushPtyData(ptyId: string): void {
   const flush = flushDataRegistry.get(ptyId);
   if (flush) flush();
+}
+
+/** Register a read-throttle setter for a PTY (called by session-factory). */
+export function registerReadThrottle(ptyId: string, setter: (ms: number) => void): void {
+  throttleRegistry.set(ptyId, setter);
+}
+
+/** Set the read throttle for a PTY based on its current priority. */
+export function applyPtyReadThrottle(ptyId: string, priority: PtyPriority): void {
+  const setter = throttleRegistry.get(ptyId);
+  if (setter) {
+    setter(getPriorityConfig(priority).readThrottleMs);
+  }
 }
 
 /** Apply host colors to all PTYs */

@@ -1,18 +1,29 @@
 import type { ITerminalEmulator } from '../../terminal/emulator-interface';
-import { setPtyUpdateEnabled } from '../../effect/bridge';
+import { setPtyUpdateEnabled, applyPtyReadThrottle } from '../../effect/bridge';
 import { setVisiblePty } from '../../terminal/visible-pty-registry';
 import { getFocusedPtyId } from '../../terminal/focused-pty-registry';
+import { type PtyPriority } from '../../terminal/pty-priority';
 
 const visiblePtyCounts = new Map<string, number>();
 const activityPtyCounts = new Map<string, number>();
 
 /**
- * Enable/disable emulator updates for a PTY.
+ * Enable/disable emulator updates for a PTY and set read throttle.
  * Only the focused PTY gets full updates. Background-visible PTYs have
  * updates disabled — the 1fps render pulse in unified-subscription.ts
  * temporarily enables them for a single prepareUpdate + render cycle.
  */
 const applyUpdateGate = (ptyId: string, enabled: boolean, emulator?: ITerminalEmulator | null) => {
+  // Compute the priority for this PTY
+  const priority: PtyPriority = enabled
+    ? ptyId === getFocusedPtyId()
+      ? 'focused'
+      : 'background-visible'
+    : 'background-hidden';
+
+  // Apply read throttle to the PTY's native read loop
+  applyPtyReadThrottle(ptyId, priority);
+
   // If the PTY is not focused, never enable full incremental updates.
   // The 1fps pulse handler manages update gating for background panes.
   if (enabled && ptyId !== getFocusedPtyId()) {

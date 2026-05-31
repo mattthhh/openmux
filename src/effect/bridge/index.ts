@@ -41,6 +41,7 @@ export {
   setPtyUpdateEnabled,
   refreshPty,
   flushPtyData,
+  applyPtyReadThrottle,
   applyHostColors,
   subscribeToPtyLifecycle,
   subscribeToAllTitleChanges,

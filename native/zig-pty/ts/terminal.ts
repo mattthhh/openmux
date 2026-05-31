@@ -42,6 +42,9 @@ export class Terminal implements IPty {
   private _draining: boolean = false;
   private _drainRequested: boolean = false;
   private _pollingFallback: boolean = false;
+  // Read throttle: sleep this many ms between drain yield cycles for background PTYs.
+  // 0 = no throttle (focused), positive = background priority.
+  private _readThrottleMs: number = 0;
   // Foreground process change tracking
   private _onForegroundProcessChange = new EventEmitter<string>();
   private _lastForegroundChangeCount = 0;
@@ -105,6 +108,16 @@ export class Terminal implements IPty {
 
   get process(): string {
     return 'shell';
+  }
+
+  /**
+   * Set read throttle: sleep this many ms between drain yield cycles.
+   * 0 = no throttle (focused), positive = background priority.
+   * This reduces CPU usage and event loop pressure for background PTYs
+   * with heavy output (e.g. find / -ls in a split pane).
+   */
+  setReadThrottleMs(ms: number): void {
+    this._readThrottleMs = ms;
   }
 
   get onData() {
@@ -347,7 +360,11 @@ export class Terminal implements IPty {
         chunksSinceYield += 1;
         if (chunksSinceYield >= DRAIN_YIELD_INTERVAL) {
           chunksSinceYield = 0;
-          await Bun.sleep(0);
+          if (this._readThrottleMs > 0) {
+            await Bun.sleep(this._readThrottleMs);
+          } else {
+            await Bun.sleep(0);
+          }
         }
         continue;
       }

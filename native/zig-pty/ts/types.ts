@@ -36,6 +36,7 @@ export interface IPty {
   getCwd(pid?: number): string | null;
   getProcessName(pid?: number): string | null;
   getForegroundProcessName(): string | null;
+  setReadThrottleMs(ms: number): void;
 }
 
 // Legacy aliases

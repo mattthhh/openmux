@@ -30,6 +30,8 @@ export interface PriorityConfig {
   emulatorUpdatesEnabled: boolean;
   /** Minimum interval between renders (ms). 0 = every notification. */
   renderIntervalMs: number;
+  /** Read throttle: ms to sleep between PTY read yield cycles. 0 = no throttle. */
+  readThrottleMs: number;
 }
 
 const PRIORITY_CONFIGS: Record<PtyPriority, PriorityConfig> = {
@@ -40,6 +42,7 @@ const PRIORITY_CONFIGS: Record<PtyPriority, PriorityConfig> = {
     maxSegmentsPerTick: 16,
     emulatorUpdatesEnabled: true,
     renderIntervalMs: 0,
+    readThrottleMs: 0,
   },
   'background-visible': {
     drainIntervalMs: 1000,
@@ -48,6 +51,7 @@ const PRIORITY_CONFIGS: Record<PtyPriority, PriorityConfig> = {
     maxSegmentsPerTick: 64,
     emulatorUpdatesEnabled: false,
     renderIntervalMs: 1000,
+    readThrottleMs: 50,
   },
   'background-hidden': {
     drainIntervalMs: Infinity,
@@ -56,6 +60,7 @@ const PRIORITY_CONFIGS: Record<PtyPriority, PriorityConfig> = {
     maxSegmentsPerTick: 0,
     emulatorUpdatesEnabled: false,
     renderIntervalMs: Infinity,
+    readThrottleMs: 500,
   },
 };
 

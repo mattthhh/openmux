@@ -16,7 +16,11 @@ import { makePtyId } from '../../types';
 import type { InternalPtySession } from './types';
 import type { TerminalColors } from '../../../terminal/terminal-colors';
 import { tracePtyEvent } from '../../../terminal/pty-trace';
-import { registerFlushData, unregisterFlushData } from '../../../effect/bridge/pty-bridge';
+import {
+  registerFlushData,
+  unregisterFlushData,
+  registerReadThrottle,
+} from '../../../effect/bridge/pty-bridge';
 import { sendMacOsNotification } from '../../../terminal/desktop-notifications';
 import { forwardNotification } from '../../../shim/notification-forwarder';
 import { notifySubscribers } from './notification';
@@ -258,6 +262,7 @@ export async function createSession(
     drainPending({ force: true });
   };
   registerFlushData(id, session.flushData);
+  registerReadThrottle(id, (ms: number) => pty.setReadThrottleMs(ms));
 
   // Wire up PTY data handler
   pty.onData((data: string) => {
