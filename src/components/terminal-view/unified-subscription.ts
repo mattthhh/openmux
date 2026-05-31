@@ -1,11 +1,15 @@
 import { createEffect, on, onCleanup } from 'solid-js';
-import type { TerminalCell, UnifiedTerminalUpdate } from '../../core/types';
+import type { TerminalCell, TerminalScrollState, UnifiedTerminalUpdate } from '../../core/types';
 import {
   subscribeUnifiedToPty,
   getEmulator,
   drainRawToEmulator,
   wakeReadLoopOnce,
   applyPtyReadThrottle,
+  registerScrollAnimRender,
+  unregisterScrollAnimRender,
+  registerScrollCacheUpdate,
+  unregisterScrollCacheUpdate,
 } from '../../effect/bridge';
 import { getKittyGraphicsRenderer } from '../../terminal/kitty-graphics';
 import * as errore from 'errore';
@@ -24,7 +28,10 @@ const BACKGROUND_PULSE_INTERVAL_MS = 1000;
 
 export interface UnifiedSubscriptionDeps {
   getPtyId: () => string;
-  terminal: { isPtyActive: (ptyId: string) => boolean };
+  terminal: {
+    isPtyActive: (ptyId: string) => boolean;
+    getScrollState: (ptyId: string) => TerminalScrollState | undefined;
+  };
   renderer: { requestRender: () => void };
   viewState: TerminalViewState;
   setVersion: (updater: (value: number) => number) => void;
@@ -273,6 +280,35 @@ export function setupUnifiedSubscription(deps: UnifiedSubscriptionDeps): void {
           // Now safe to enable updates - subscription is active and will catch immediate updates
           attachVisibleEmulator(ptyId, em);
 
+          // Register the scroll animation render callback.
+          // When the scroll animator updates the viewport offset (many times
+          // per frame), it calls setScrollOffsetNoNotify which only updates
+          // session.scrollState.viewportOffset — no notifySubscribers.
+          // After all animation ticks complete, it calls this callback to
+          // update the viewState and schedule a render.
+          registerScrollAnimRender(ptyId, (offset: number) => {
+            if (!mounted) return;
+            const ss = viewState.scrollState;
+            if (ss.viewportOffset !== offset) {
+              viewState.scrollState = {
+                ...ss,
+                viewportOffset: offset,
+              };
+            }
+            requestRenderFrame();
+          });
+
+          // Keep the TerminalContext's scroll state cache in sync with
+          // the animator's no-notify writes, so the next onAnimate call
+          // doesn't misinterpret the stale cache as an external adjustment.
+          registerScrollCacheUpdate(ptyId, (offset: number) => {
+            const cached = terminal.getScrollState(ptyId);
+            if (cached) {
+              // Mutate in place — the cache is a plain object reference.
+              (cached as { viewportOffset: number }).viewportOffset = offset;
+            }
+          });
+
           // Start the 1fps background pulse timer for non-focused panes.
           // The pulse temporarily enables emulator updates for a single
           // prepareUpdate + render cycle, then disables them again.
@@ -322,6 +358,8 @@ export function setupUnifiedSubscription(deps: UnifiedSubscriptionDeps): void {
           if (unsubscribe) {
             unsubscribe();
           }
+          unregisterScrollAnimRender(ptyId);
+          unregisterScrollCacheUpdate(ptyId);
           if (terminal.isPtyActive(ptyId)) {
             unregisterVisiblePty(ptyId, viewState.emulator);
           } else {

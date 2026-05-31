@@ -9,16 +9,11 @@ import { ScrollAnimator } from '../../terminal/scroll-animation';
 import {
   getScrollState as getScrollStateFromBridge,
   setScrollOffsetSync,
+  setScrollOffsetNoNotify,
   scrollToBottom as scrollToBottomBridge,
+  requestScrollAnimRender,
 } from '../../effect/bridge';
 
-/**
- * Creates scroll handlers for TerminalContext.
- *
- * scrollTerminal (mouse wheel) uses the ScrollAnimator for smooth chase.
- * setScrollOffset (direct positioning: scrollbar drag, copy mode, search)
- * and scrollToBottom bypass animation and snap immediately.
- */
 export function createScrollHandlers(
   getScrollState: (ptyId: string) => TerminalScrollState | undefined
 ) {
@@ -35,8 +30,18 @@ export function createScrollHandlers(
   // and cancel legitimate scroll-up animations.
   const lastWrittenOffset = new Map<string, number>();
 
-  // When the animator steps, apply the new offset via the bridge
-  // which triggers notifyScrollSubscribers → subscriber → render.
+  // Coalesce animation renders: the animator runs a tight microtask loop,
+  // but we only need ONE render request per frame. The microtask that
+  // sets renderCoalesced=true is the one that finally triggers the render
+  // (after all pending animation ticks complete).
+  let renderCoalesced = false;
+
+  // When the animator steps, apply the new offset WITHOUT notifying
+  // subscribers. The animator's chase loop runs hundreds of microtask
+  // ticks per scroll event. Calling notifySubscribers (which does FFI
+  // calls and possible cell conversion) on every step blocks the main
+  // thread for tens of milliseconds. Instead, we just update the
+  // session's viewportOffset and schedule one coalesced render.
   //
   // We detect external adjustments (new output while scrolled back, or
   // auto-scroll-to-bottom on typing) by comparing the cache's
@@ -66,7 +71,22 @@ export function createScrollHandlers(
     }
 
     lastWrittenOffset.set(ptyId, offset);
-    setScrollOffsetSync(ptyId, offset);
+    // Skip the expensive notifySubscribers — just update the offset.
+    // The render callback reads the latest offset from the session.
+    setScrollOffsetNoNotify(ptyId, offset);
+
+    // Coalesce: schedule one render after all animation ticks complete.
+    // All animation microticks run before this queued microtask,
+    // so the render sees the latest offset when it fires.
+    if (!renderCoalesced) {
+      renderCoalesced = true;
+      const finalPtyId = ptyId;
+      queueMicrotask(() => {
+        renderCoalesced = false;
+        const finalOffset = lastWrittenOffset.get(finalPtyId) ?? 0;
+        requestScrollAnimRender(finalPtyId, finalOffset);
+      });
+    }
   });
 
   /**
@@ -146,7 +166,7 @@ export function createScrollHandlers(
   };
 
   /**
-   * Remove state for a destroyed PTY
+   * Remove state state for a destroyed PTY
    */
   const removeAnimation = (ptyId: string): void => {
     animator.remove(ptyId);

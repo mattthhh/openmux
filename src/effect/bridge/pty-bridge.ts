@@ -66,13 +66,22 @@ export function unregisterPtyWrite(ptyId: string): void {
 }
 
 const ptyScrollOffsetRegistry = new Map<string, (offset: number) => void>();
+const ptyScrollOffsetNoNotifyRegistry = new Map<string, (offset: number) => void>();
 
 export function registerScrollOffset(ptyId: string, setter: (offset: number) => void): void {
   ptyScrollOffsetRegistry.set(ptyId, setter);
 }
 
+export function registerScrollOffsetNoNotify(
+  ptyId: string,
+  setter: (offset: number) => void
+): void {
+  ptyScrollOffsetNoNotifyRegistry.set(ptyId, setter);
+}
+
 export function unregisterScrollOffset(ptyId: string): void {
   ptyScrollOffsetRegistry.delete(ptyId);
+  ptyScrollOffsetNoNotifyRegistry.delete(ptyId);
 }
 
 export function setScrollOffsetSync(ptyId: string, offset: number): void {
@@ -83,6 +92,59 @@ export function setScrollOffsetSync(ptyId: string, offset: number): void {
   }
   // Fallback to async
   void setScrollOffset(ptyId, offset);
+}
+
+/**
+ * Update scroll offset without notifying subscribers.
+ * Used by the scroll animator for chase steps — the viewport offset
+ * changes many times per frame but the content hasn't changed,
+ * so calling notifySubscribers (with its FFI calls and possible cell
+ * conversion) on every step is wasteful and blocks the main thread.
+ * The render picks up the latest offset from the session state directly.
+ */
+// Cache updater for scroll offset (no notification).
+// When the animator updates the offset without notifying subscribers,
+// we still need to keep the TerminalContext's cache in sync so
+// the next onAnimate call doesn't misinterpret stale cache values
+// as external adjustments.
+const scrollCacheUpdateRegistry = new Map<string, (offset: number) => void>();
+
+export function registerScrollCacheUpdate(ptyId: string, updater: (offset: number) => void): void {
+  scrollCacheUpdateRegistry.set(ptyId, updater);
+}
+
+export function unregisterScrollCacheUpdate(ptyId: string): void {
+  scrollCacheUpdateRegistry.delete(ptyId);
+}
+
+export function setScrollOffsetNoNotify(ptyId: string, offset: number): void {
+  const setter = ptyScrollOffsetNoNotifyRegistry.get(ptyId);
+  if (setter) {
+    setter(offset);
+  }
+  const cacheUpdater = scrollCacheUpdateRegistry.get(ptyId);
+  if (cacheUpdater) {
+    cacheUpdater(offset);
+  }
+}
+
+// Scroll animation render callback — called once per frame after all
+// animation ticks complete. Bypasses notifySubscribers entirely.
+const scrollAnimRenderRegistry = new Map<string, (offset: number) => void>();
+
+export function registerScrollAnimRender(ptyId: string, render: (offset: number) => void): void {
+  scrollAnimRenderRegistry.set(ptyId, render);
+}
+
+export function unregisterScrollAnimRender(ptyId: string): void {
+  scrollAnimRenderRegistry.delete(ptyId);
+}
+
+export function requestScrollAnimRender(ptyId: string, offset: number): void {
+  const render = scrollAnimRenderRegistry.get(ptyId);
+  if (render) {
+    render(offset);
+  }
 }
 
 const ptyUpdateEnabledRegistry = new Map<string, (enabled: boolean) => void>();

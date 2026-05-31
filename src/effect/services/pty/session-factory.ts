@@ -27,6 +27,7 @@ import {
   registerPtyWrite,
   unregisterPtyWrite,
   registerScrollOffset,
+  registerScrollOffsetNoNotify,
   unregisterScrollOffset,
   registerUpdateEnabled,
   unregisterUpdateEnabled,
@@ -300,6 +301,17 @@ export async function createSession(
     const maxOffset = session.emulator.getScrollbackLength();
     session.scrollState.viewportOffset = Math.max(0, Math.min(offset, maxOffset));
     notifySubscribers(session);
+  });
+
+  // Scroll offset setter for the animator (no notification).
+  // The animator's chase loop runs hundreds of microtask ticks per
+  // scroll event. Calling notifySubscribers (FFI + possible cell
+  // conversion) on every tick blocks the main thread. Instead,
+  // this setter just updates the session state. The TerminalView
+  // reads the scroll offset directly from the session in its
+  // render callback, so the latest offset is always visible.
+  registerScrollOffsetNoNotify(id, (offset: number) => {
+    session.scrollState.viewportOffset = offset;
   });
 
   // Synchronous update-enabled setter — bypasses the async service layer
