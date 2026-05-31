@@ -4,7 +4,9 @@ import {
   subscribeUnifiedToPty,
   getEmulator,
   setPtyUpdateEnabled,
-  flushPtyData,
+  flushPtyDataIncremental,
+  wakeReadLoopOnce,
+  applyPtyReadThrottle,
 } from '../../effect/bridge';
 import { getKittyGraphicsRenderer } from '../../terminal/kitty-graphics';
 import * as errore from 'errore';
@@ -78,20 +80,31 @@ export function setupUnifiedSubscription(deps: UnifiedSubscriptionDeps): void {
         };
 
         /**
-         * 1fps background pulse: temporarily enable emulator updates,
-         * trigger a single prepareUpdate + subscriber notification cycle,
-         * then disable updates again. This is the Erlang-inspired approach —
-         * a low-priority process gets a scheduled time slice, does all its
-         * work in one burst, then yields completely until the next slice.
+         * 1fps background pulse: temporarily wake the read loop to drain
+         * one batch from the kernel buffer into the raw buffer, then
+         * process the raw buffer incrementally (capped, not full flush)
+         * before refreshing the display.
+         *
+         * This is the Erlang-inspired approach — a low-priority process
+         * gets a scheduled time slice, does limited work in one burst,
+         * then yields completely until the next slice.
          */
         const triggerBackgroundPulse = () => {
           if (!mounted) return;
           const em = viewState.emulator;
           if (!em || em.isDisposed) return;
 
-          // Flush any raw-buffered data through the pipeline before refreshing.
-          // This ensures the emulator has the latest VT state for the render.
-          flushPtyData(ptyId);
+          // Temporarily wake the read loop so it drains available data
+          // from the kernel buffer into the raw buffer. Without this,
+          // a paused read loop never reads, and the child process
+          // (e.g. find / -ls) blocks on write(), stalling it completely.
+          wakeReadLoopOnce(ptyId, 'background-visible');
+
+          // Drain the raw buffer incrementally (capped), not a full flush.
+          // A full flush would process MB of data through the VT parser
+          // synchronously, blocking the event loop and making the focused
+          // pane sluggish.
+          flushPtyDataIncremental(ptyId);
 
           // Enable updates so the subscriber callback fires during refresh.
           em.setUpdateEnabled?.(true);
@@ -101,14 +114,14 @@ export function setupUnifiedSubscription(deps: UnifiedSubscriptionDeps): void {
           // The subscriber callback (defined above) will call requestRenderFrame().
           em.refresh?.();
 
-          // Schedule disabling updates after the render completes.
-          // Use setTimeout(0) to ensure the subscriber callback and render
-          // have time to process before we gate updates off again.
+          // Schedule disabling updates and pausing reads after the render completes.
           setTimeout(() => {
             if (!mounted) return;
             if (!isFocused()) {
               em.setUpdateEnabled?.(false);
               void setPtyUpdateEnabled(ptyId, false);
+              // Re-pause the read loop until the next pulse.
+              applyPtyReadThrottle(ptyId, 'background-visible');
             }
           }, 0);
         };

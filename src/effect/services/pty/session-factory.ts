@@ -20,6 +20,8 @@ import {
   registerFlushData,
   unregisterFlushData,
   registerReadThrottle,
+  registerIncrementalFlush,
+  unregisterIncrementalFlush,
 } from '../../../effect/bridge/pty-bridge';
 import { sendMacOsNotification } from '../../../terminal/desktop-notifications';
 import { forwardNotification } from '../../../shim/notification-forwarder';
@@ -248,7 +250,7 @@ export async function createSession(
   });
 
   // Set up data handler
-  const { handleData, drainPending } = createDataHandler({
+  const { handleData, drainPending, incrementalDrain } = createDataHandler({
     session,
     syncParser,
     commandParser,
@@ -263,6 +265,11 @@ export async function createSession(
   };
   registerFlushData(id, session.flushData);
   registerReadThrottle(id, (ms: number) => pty.setReadThrottleMs(ms));
+
+  // Incremental drain for the 1fps background pulse (capped, not full flush).
+  registerIncrementalFlush(id, () => {
+    incrementalDrain();
+  });
 
   // Wire up PTY data handler
   pty.onData((data: string) => {
@@ -292,6 +299,7 @@ export async function createSession(
       return;
     }
     unregisterFlushData(id);
+    unregisterIncrementalFlush(id);
     tracePtyEvent('pty-exit', { ptyId: id, exitCode });
     for (const callback of session.exitCallbacks) {
       callback(exitCode);

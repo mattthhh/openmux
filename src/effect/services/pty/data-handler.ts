@@ -736,6 +736,13 @@ export function createDataHandler(options: DataHandlerOptions) {
     }
   };
 
+  // Incremental flush: drain without force (uses capped replayRawBuffer).
+  // This is used by the 1fps background pulse to avoid processing the
+  // entire raw buffer through the VT pipeline in one shot.
+  const incrementalDrain = () => {
+    drainPending();
+  };
+
   // Cleanup function to clear any pending timeouts
   const cleanup = () => {
     if (state.syncTimeout) {
@@ -744,5 +751,5 @@ export function createDataHandler(options: DataHandlerOptions) {
     }
   };
 
-  return { handleData, cleanup, scheduleNotify, drainPending };
+  return { handleData, cleanup, scheduleNotify, drainPending, incrementalDrain };
 }

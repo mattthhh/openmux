@@ -51,13 +51,11 @@ const PRIORITY_CONFIGS: Record<PtyPriority, PriorityConfig> = {
     maxSegmentsPerTick: 64,
     emulatorUpdatesEnabled: false,
     renderIntervalMs: 1000,
-    // 200ms read throttle for background-visible PTYs. Since we raw-buffer
-    // all data (no per-chunk VT parsing), we just need to read often enough
-    // to prevent the kernel's PTY buffer from overflowing (~64KB default).
-    // At 200ms intervals with 8KB per read, this handles ~320KB/s which
-    // is enough for command output. find / -ls can exceed this, but the
-    // raw buffer will just be larger when drained at the 1fps pulse.
-    readThrottleMs: 200,
+    // Paused like background-hidden. The 1fps pulse temporarily wakes
+    // the read loop to drain one batch, then pauses again. This eliminates
+    // all per-chunk overhead (FFI + decode + EventEmitter dispatch) for
+    // background PTYs. find / -ls just blocks on write until we drain.
+    readThrottleMs: -1,
   },
   'background-hidden': {
     drainIntervalMs: Infinity,

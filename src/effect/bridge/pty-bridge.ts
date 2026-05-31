@@ -330,6 +330,22 @@ export function flushPtyData(ptyId: string): void {
   if (flush) flush();
 }
 
+const incrementalFlushRegistry = new Map<string, () => void>();
+
+export function registerIncrementalFlush(ptyId: string, flush: () => void): void {
+  incrementalFlushRegistry.set(ptyId, flush);
+}
+
+export function unregisterIncrementalFlush(ptyId: string): void {
+  incrementalFlushRegistry.delete(ptyId);
+}
+
+/** Flush buffered PTY data incrementally (capped, not full pipeline). */
+export function flushPtyDataIncremental(ptyId: string): void {
+  const flush = incrementalFlushRegistry.get(ptyId);
+  if (flush) flush();
+}
+
 /** Register a read-throttle setter for a PTY (called by session-factory). */
 export function registerReadThrottle(ptyId: string, setter: (ms: number) => void): void {
   throttleRegistry.set(ptyId, setter);
@@ -340,6 +356,16 @@ export function applyPtyReadThrottle(ptyId: string, priority: PtyPriority): void
   const setter = throttleRegistry.get(ptyId);
   if (setter) {
     setter(getPriorityConfig(priority).readThrottleMs);
+  }
+}
+
+/** Temporarily wake a paused read loop to drain one batch from the kernel buffer. */
+export function wakeReadLoopOnce(ptyId: string, _priority: PtyPriority): void {
+  const setter = throttleRegistry.get(ptyId);
+  if (setter) {
+    // Temporarily set a real throttle so the read loop reads one batch.
+    // The pulse will set it back to paused after draining.
+    setter(0); // focused speed = read immediately
   }
 }
 
