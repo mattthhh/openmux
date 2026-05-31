@@ -144,7 +144,7 @@ beforeEach(() => {
 });
 
 describe('GhosttyVTEmulator', () => {
-  it('tracks dirty rows while disabled but defers update callbacks until enabled', () => {
+  it('defers update callbacks while disabled and refreshes on re-enable', () => {
     const emulator = new GhosttyVTEmulator(2, 1, getDefaultColors());
     const terminal = terminalState.last;
     expect(terminal).not.toBeNull();
@@ -153,13 +153,13 @@ describe('GhosttyVTEmulator', () => {
     emulator.onUpdate(updateSpy);
     updateSpy.mockClear();
 
-    const updateCallsBefore = terminal!.updateCalls;
-
     emulator.setUpdateEnabled(false);
     emulator.write('hello');
 
+    // VT data is parsed immediately (write goes to the native terminal)
     expect(terminal!.writeCalls).toContain('hello');
-    expect(terminal!.updateCalls).toBeGreaterThan(updateCallsBefore);
+    // When updates are disabled, prepareUpdate is skipped entirely to avoid
+    // wasted cell conversion. A full refresh happens on re-enable instead.
     expect(updateSpy).not.toHaveBeenCalled();
 
     emulator.setUpdateEnabled(true);

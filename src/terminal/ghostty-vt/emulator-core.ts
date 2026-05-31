@@ -61,6 +61,15 @@ export class GhosttyVTEmulatorCore {
   private updatesEnabled = true;
   private needsFullRefresh = false;
 
+  // Deferred notification: write() parses VT data immediately but defers
+  // prepareUpdate + subscriber notification to a coalesced macrotask.
+  // Multiple writes within the same event loop tick are merged into
+  // a single prepareUpdate + notification, eliminating redundant cell
+  // conversion work under heavy output (e.g. bun test --parallel).
+  private _writeDirty = false;
+  private _notifyScheduled = false;
+  private _notifyTimer: ReturnType<typeof setTimeout> | null = null;
+
   private scrollbackCache = new ScrollbackCache(1000);
   private scrollbackSnapshotDirty = true;
   private decoder = new TextDecoder();
@@ -117,23 +126,28 @@ export class GhosttyVTEmulatorCore {
 
     this.titleParser.processData(text);
     const stripped = stripProblematicOscSequences(text);
-    if (stripped.length > 0) {
-      this.scrollbackSnapshotDirty = true;
-      this.terminal.write(stripped);
-    }
+    if (stripped.length === 0) return;
 
-    // Always prepare update to track dirty rows (needed for activity tracking)
-    // but only notify subscribers when updates are enabled
-    this.prepareUpdate(false);
+    this.scrollbackSnapshotDirty = true;
+    // Parse VT data into the native terminal state immediately.
+    this.terminal.write(stripped);
 
     if (!this.updatesEnabled) {
+      // When updates are disabled, skip the expensive prepareUpdate (cell
+      // conversion). needsFullRefresh=true forces a full update when the
+      // PTY becomes visible again. cancelDeferredNotify was already called
+      // by setUpdateEnabled(false), so _writeDirty is guaranteed false.
       this.needsFullRefresh = true;
       return;
     }
 
-    for (const callback of this.updateCallbacks) {
-      callback();
-    }
+    // Mark as dirty so the deferred notification knows to prepareUpdate.
+    this._writeDirty = true;
+
+    // Defer prepareUpdate + subscriber notification to a coalesced macrotask.
+    // Multiple writes within the same event loop tick are merged into a
+    // single prepareUpdate call, eliminating redundant cell conversion work.
+    this.scheduleDeferredNotify();
   }
 
   resize(cols: number, rows: number): void {
@@ -144,6 +158,8 @@ export class GhosttyVTEmulatorCore {
     this._rows = rows;
     this.scrollbackSnapshotDirty = true;
     this.terminal.resize(cols, rows);
+    // Cancel any pending write notification — resize handles its own.
+    this.cancelDeferredNotify();
     if (!this.updatesEnabled) {
       this.needsFullRefresh = true;
       return;
@@ -169,6 +185,7 @@ export class GhosttyVTEmulatorCore {
     this.currentTitle = '';
     this.scrollbackCache.clear();
     this.scrollbackSnapshotDirty = true;
+    this.cancelDeferredNotify();
     if (!this.updatesEnabled) {
       this.needsFullRefresh = true;
       return;
@@ -182,6 +199,7 @@ export class GhosttyVTEmulatorCore {
   dispose(): void {
     if (this._disposed) return;
     this._disposed = true;
+    this.cancelDeferredNotify();
     this.terminal.free();
 
     this.cachedState = null;
@@ -202,6 +220,14 @@ export class GhosttyVTEmulatorCore {
 
   getDirtyUpdate(scrollState: TerminalScrollState): DirtyTerminalUpdate {
     this.scrollState = scrollState;
+
+    // If writes are pending, flush them now so the update reflects
+    // the latest VT state. This can happen when getDirtyUpdate is called
+    // from notifySubscribers before the deferred notification fires.
+    if (this._writeDirty) {
+      this._writeDirty = false;
+      this.prepareUpdate(false);
+    }
 
     if (this.pendingUpdate) {
       const mergedScrollState: TerminalScrollState = {
@@ -256,6 +282,15 @@ export class GhosttyVTEmulatorCore {
       }
       return createEmptyTerminalState(this._cols, this._rows, this.colors, this.modes);
     }
+
+    // Flush any pending writes so the returned state is current.
+    // This is called for search, selection, and other operations that
+    // need to read the terminal state outside the normal render cycle.
+    if (this._writeDirty) {
+      this._writeDirty = false;
+      this.prepareUpdate(false);
+    }
+
     if (this.cachedState) {
       return { ...(this.cachedState as TerminalState) };
     }
@@ -304,6 +339,7 @@ export class GhosttyVTEmulatorCore {
     this.colors = cloneColors(colors);
     this.scrollbackSnapshotDirty = true;
     this.scrollbackCache.clear();
+    this.cancelDeferredNotify();
 
     const oscSequence = buildOscColorSequence(colors);
     if (oscSequence) {
@@ -340,7 +376,12 @@ export class GhosttyVTEmulatorCore {
 
   onUpdate(callback: () => void): () => void {
     this.updateCallbacks.add(callback);
-    if (this.pendingUpdate) {
+    // If there's already a prepared update, fire immediately.
+    // If there are pending writes (not yet prepareUpdated), flush
+    // them so the callback sees the current state.
+    if (this._writeDirty) {
+      this.flushDeferredNotify();
+    } else if (this.pendingUpdate) {
       callback();
     }
     return () => {
@@ -355,6 +396,7 @@ export class GhosttyVTEmulatorCore {
     if (!enabled) {
       this.needsFullRefresh = true;
       this.pendingUpdate = null;
+      this.cancelDeferredNotify();
       return;
     }
 
@@ -384,6 +426,7 @@ export class GhosttyVTEmulatorCore {
     this.pendingUpdate = null;
     this.scrollbackCache.clear();
     this.scrollbackSnapshotDirty = true;
+    this.cancelDeferredNotify();
     if (this.updatesEnabled) {
       this.prepareUpdate(true);
       for (const callback of this.updateCallbacks) {
@@ -420,6 +463,65 @@ export class GhosttyVTEmulatorCore {
       applyColorRemapToRow(line, this.colorRemap);
     }
     return line;
+  }
+
+  /**
+   * Schedule a deferred prepareUpdate + subscriber notification.
+   * Uses setTimeout(0) to yield to the event loop between drain and render,
+   * ensuring I/O events (mouse, keyboard) are processed during heavy output.
+   * Multiple writes within the same event loop tick are still coalesced
+   * since _notifyScheduled prevents duplicate scheduling.
+   */
+  private scheduleDeferredNotify(): void {
+    if (this._notifyScheduled) return;
+    this._notifyScheduled = true;
+    this._notifyTimer = setTimeout(() => {
+      this._notifyTimer = null;
+      if (this._disposed) return;
+      this._notifyScheduled = false;
+      // Only flush if writes are still dirty (they may have been flushed
+      // by getDirtyUpdate/getTerminalState called before this timer fires).
+      // If writes were flushed but subscribers haven't been notified, deliver
+      // the pendingUpdate now.
+      if (this._writeDirty) {
+        this.flushDeferredNotify();
+      } else if (this.pendingUpdate) {
+        // Writes were flushed by an eager reader (getDirtyUpdate), but
+        // subscribers haven't been notified. Deliver the update now.
+        for (const callback of this.updateCallbacks) {
+          callback();
+        }
+      }
+    }, 0);
+  }
+
+  /**
+   * Cancel any pending deferred notification and clear dirty flags.
+   * Used by operations that handle their own notification (resize, reset,
+   * setColors, refresh, setUpdateEnabled, dispose).
+   */
+  private cancelDeferredNotify(): void {
+    this._writeDirty = false;
+    this._notifyScheduled = false;
+    if (this._notifyTimer !== null) {
+      clearTimeout(this._notifyTimer);
+      this._notifyTimer = null;
+    }
+  }
+
+  /**
+   * Flush all pending writes: prepareUpdate + notify subscribers.
+   * Called from the deferred queueMicrotask, or eagerly when a caller
+   * needs the update to be available immediately (e.g. getTerminalState,
+   * getDirtyUpdate with stale state, force-kitty-drain).
+   */
+  private flushDeferredNotify(): void {
+    if (!this._writeDirty) return;
+    this._writeDirty = false;
+    this.prepareUpdate(false);
+    for (const callback of this.updateCallbacks) {
+      callback();
+    }
   }
 
   private prepareUpdate(forceFull: boolean): void {
