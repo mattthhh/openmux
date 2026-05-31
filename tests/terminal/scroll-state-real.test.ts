@@ -151,7 +151,7 @@ describe('scroll state: real code integration', () => {
     handlers.handleScrollToBottom(ptyId);
   }
 
-  test('scenario 1: scroll up during output — offset stays at target', async () => {
+  test('scenario 1: scroll up during output - offset stays at target', async () => {
     scrollHandlers.scrollTerminal(PTY_ID, 5);
     await drain();
 
@@ -166,7 +166,7 @@ describe('scroll state: real code integration', () => {
     expect(viewOffset).toBe(15);
   });
 
-  test('scenario 2: scroll up while idle — offset stays at target', async () => {
+  test('scenario 2: scroll up while idle - offset stays at target', async () => {
     scrollHandlers.scrollTerminal(PTY_ID, 10);
     await drain();
 
@@ -179,7 +179,7 @@ describe('scroll state: real code integration', () => {
     expect(viewOffset).toBe(10);
   });
 
-  test('scenario 3: keypress snap to bottom — all state resets to 0', async () => {
+  test('scenario 3: keypress snap to bottom - all state resets to 0', async () => {
     scrollHandlers.scrollTerminal(PTY_ID, 50);
     await drain();
     expect(viewOffset).toBe(50);
@@ -192,7 +192,7 @@ describe('scroll state: real code integration', () => {
     expect(session.viewportOffset).toBe(0);
   });
 
-  test('scenario 4: scroll up after snap — starts from 0 not old position', async () => {
+  test('scenario 4: scroll up after snap - starts from 0 not old position', async () => {
     scrollHandlers.scrollTerminal(PTY_ID, 300);
     await drain();
     expect(viewOffset).toBe(300);
@@ -201,7 +201,7 @@ describe('scroll state: real code integration', () => {
     await drain();
     expect(viewOffset).toBe(0);
 
-    // Scroll up a little — must start from 0
+    // Scroll up a little - must start from 0
     scrollHandlers.scrollTerminal(PTY_ID, 5);
     await drain();
 
@@ -237,8 +237,6 @@ describe('scroll state: real code integration', () => {
     // Don't drain yet — animator is still running
 
     // NOW the async scrollToBottomBridge resolves (setScrollOffset(0))
-    // This is what happens in the real app: the async call sets session.offset = 0
-    // and fires notifyScrollSubscribers
     session.viewportOffset = 0; // async bridge clobbers the session state
     const scrollbackDelta = session.scrollbackLength - session.lastScrollbackLength;
     const adjustedOffset = scrollbackDelta !== 0 && 0 > 0 ? 0 + scrollbackDelta : 0;
@@ -257,26 +255,36 @@ describe('scroll state: real code integration', () => {
     }
 
     await drain();
-
-    // The animator should have fixed it... or does the session clobber persist?
-    // The onAnimate writes session.offset via setScrollOffsetNoNotify
-    // But the async bridge already set session.offset = 0
-    // The animator's onAnimate will set it back on the next tick
-    // But between ticks, session.offset is 0, which is wrong
-    //
-    // For viewOffset: if the subscriber wrote 0 (because isAnimating was false
-    // between the snapToTarget and the user's scroll), we get a flicker to 0.
-    //
-    // The key question: was isAnimating true when the subscriber fired?
-    // After handleScrollToBottom's snapToTarget, isAnimating = false.
-    // Then scrollTerminal sets a new target and isAnimating = true.
-    // But there's a window: between snapToTarget and the next ensureLoop microtask,
-    // isAnimating is FALSE. If the async bridge resolves in that window,
-    // the subscriber writes 0 to viewOffset.
     expect(viewOffset).toBe(5);
   });
 
-  test('TIMING: subscriber fires right after animator deactivates — no stale offset', async () => {
+  test('no async clobber: scrollToBottom then scroll up stays correct', async () => {
+    // Simulates: keypress → handleScrollToBottom → user scrolls up
+    // The old async scrollToBottomBridge would clobber after animation finished.
+    // The fix uses setScrollOffsetSync which fires notifySubscribers synchronously.
+
+    // User is scrolled up
+    scrollHandlers.scrollTerminal(PTY_ID, 50);
+    await drain();
+    expect(viewOffset).toBe(50);
+
+    // Keypress triggers handleScrollToBottom (sync — no async bridge anymore)
+    scrollHandlers.handleScrollToBottom(PTY_ID);
+    expect(viewOffset).toBe(0);
+
+    // User scrolls up immediately
+    scrollHandlers.scrollTerminal(PTY_ID, 10);
+    await drain();
+    expect(viewOffset).toBe(10);
+
+    // After drain, verify nothing clobbered the position
+    // (no stale async bridge to fire)
+    await drain();
+    expect(viewOffset).toBe(10);
+    expect(scrollHandlers.isAnimating(PTY_ID)).toBe(false);
+  });
+
+  test('TIMING: subscriber fires right after animator deactivates - no stale offset', async () => {
     scrollHandlers.scrollTerminal(PTY_ID, 5);
     // Wait for animation to COMPLETE
     await drain();
@@ -299,7 +307,7 @@ describe('scroll state: real code integration', () => {
   });
 
   test('TIMING: subscriber fires between onAnimate ticks during scroll', async () => {
-    // Scroll and DON'T drain — let animation run one tick at a time
+    // Scroll and DON'T drain - let animation run one tick at a time
     scrollHandlers.scrollTerminal(PTY_ID, 20);
 
     // Run just one microtask (one tick of the animator)
@@ -342,7 +350,7 @@ describe('scroll state: real code integration', () => {
     //    user is at bottom (viewportOffset=0 → no adjustment).
     //    But let's say we manually simulate the cache adjusting.
 
-    // 3. User scrolls up 5 — should use cache.viewportOffset (0) as base.
+    // 3. User scrolls up 5 - should use cache.viewportOffset (0) as base.
     //    This is correct: starts from 0, goes to 5.
     scrollHandlers.scrollTerminal(PTY_ID, 5);
     await drain();
@@ -379,13 +387,13 @@ describe('scroll state: real code integration', () => {
     await drain();
     expect(viewOffset).toBe(100);
 
-    // 2. Heavy output arrives — adjusts offset upward
+    // 2. Heavy output arrives - adjusts offset upward
     session.scrollbackLength += 500;
     subscriberFires(PTY_ID);
     expect(viewOffset).toBe(600); // 100 + 500
 
     // 3. handleScrollToBottom is called (e.g., keypress while user is scrolled up
-    //    in a different context — this shouldn't normally happen, but the async
+    //    in a different context - this shouldn't normally happen, but the async
     //    scrollToBottomBridge might clobber).
     //    More importantly: if the user presses a key to type, scrollToBottom fires.
     //    This sets animator state targetOffset=0.
@@ -404,7 +412,7 @@ describe('scroll state: real code integration', () => {
     subscriberFires(PTY_ID);
     expect(viewOffset).toBe(310); // 10 + 300
 
-    // 6. User scrolls up more — SHOULD base from 310 (cache)
+    // 6. User scrolls up more - SHOULD base from 310 (cache)
     //    but stale animator targetOffset is 10 from step 4!
     scrollHandlers.scrollTerminal(PTY_ID, 5);
     await drain();

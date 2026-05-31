@@ -10,7 +10,6 @@ import {
   getScrollState as getScrollStateFromBridge,
   setScrollOffsetSync,
   setScrollOffsetNoNotify,
-  scrollToBottom as scrollToBottomBridge,
   requestScrollAnimRender,
 } from '../../effect/bridge';
 
@@ -96,7 +95,10 @@ export function createScrollHandlers(
       (cached as { viewportOffset: number }).viewportOffset = 0;
     }
     requestScrollAnimRender(ptyId, 0);
-    scrollToBottomBridge(ptyId).catch(() => {});
+    // Sync notifySubscribers immediately — the async scrollToBottomBridge
+    // fires later and clobbers session.viewportOffset after the user has
+    // scrolled back up, causing a snap-to-bottom race.
+    setScrollOffsetSync(ptyId, 0);
   };
 
   const cleanup = (): void => {
