@@ -8,8 +8,6 @@ import {
   applyPtyReadThrottle,
   registerScrollAnimRender,
   unregisterScrollAnimRender,
-  registerScrollCacheUpdate,
-  unregisterScrollCacheUpdate,
 } from '../../effect/bridge';
 import { getKittyGraphicsRenderer } from '../../terminal/kitty-graphics';
 import * as errore from 'errore';
@@ -318,31 +316,16 @@ export function setupUnifiedSubscription(deps: UnifiedSubscriptionDeps): void {
           attachVisibleEmulator(ptyId, em);
 
           // Register the scroll animation render callback.
-          // When the scroll animator updates the viewport offset (many times
-          // per frame), it calls setScrollOffsetNoNotify which only updates
-          // session.scrollState.viewportOffset — no notifySubscribers.
-          // After all animation ticks complete, it calls this callback to
-          // update the viewState and schedule a render.
+          // onAnimate updates session + cache, then calls this to update
+          // viewState and schedule a render. This is the ONLY writer of
+          // viewportOffset to viewState during animation.
           registerScrollAnimRender(ptyId, (offset: number) => {
             if (!mounted) return;
             const ss = viewState.scrollState;
-            if (ss.viewportOffset !== offset) {
-              viewState.scrollState = {
-                ...ss,
-                viewportOffset: offset,
-              };
+            if (ss && ss.viewportOffset !== offset) {
+              ss.viewportOffset = offset;
             }
             requestRenderFrame();
-          });
-
-          // Keep the terminal context's scroll state cache in sync with
-          // the animator's no-notify writes. scrollTerminal reads from
-          // this cache when starting a new animation (no active animation).
-          registerScrollCacheUpdate(ptyId, (offset: number) => {
-            const cached = terminal.getScrollState(ptyId);
-            if (cached) {
-              (cached as { viewportOffset: number }).viewportOffset = offset;
-            }
           });
 
           // Start the 1fps background pulse timer for non-focused panes.
@@ -395,7 +378,6 @@ export function setupUnifiedSubscription(deps: UnifiedSubscriptionDeps): void {
             unsubscribe();
           }
           unregisterScrollAnimRender(ptyId);
-          unregisterScrollCacheUpdate(ptyId);
           if (terminal.isPtyActive(ptyId)) {
             unregisterVisiblePty(ptyId, viewState.emulator);
           } else {

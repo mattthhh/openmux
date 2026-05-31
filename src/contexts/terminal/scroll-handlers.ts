@@ -22,28 +22,28 @@ export function createScrollHandlers(
     easing: 0.7,
   });
 
-  // Track the last offset we wrote per-pty via setScrollOffsetNoNotify.
-  const lastWrittenOffset = new Map<string, number>();
-
-  // Coalesce animation renders.
   let renderCoalesced = false;
 
-  // The animator is the sole owner of the scroll offset during animation.
-  // onAnimate ONLY writes the offset and schedules a render. It does NOT
-  // read from the cache or detect external adjustments. All external changes
-  // go through explicit paths:
-  //   - Scrollback growth: subscriber calls adjustAnimationOffset()
-  //   - Keypress snap-to-bottom: keyboard handler calls handleScrollToBottom()
+  // The animator is the sole writer of viewportOffset during animation.
+  // onAnimate writes session state + cache + schedules one coalesced render.
+  // The subscriber must NOT write viewportOffset while the animator is active.
   animator.setOnAnimate((ptyId, offset) => {
-    lastWrittenOffset.set(ptyId, offset);
+    // Write to session state (no notification — that's the perf win)
     setScrollOffsetNoNotify(ptyId, offset);
 
+    // Write to the cache so scrollTerminal reads the correct base offset
+    const cached = getScrollState(ptyId);
+    if (cached) {
+      (cached as { viewportOffset: number }).viewportOffset = offset;
+    }
+
+    // Coalesce renders: one per frame after all animation ticks
     if (!renderCoalesced) {
       renderCoalesced = true;
       const finalPtyId = ptyId;
       queueMicrotask(() => {
         renderCoalesced = false;
-        const finalOffset = lastWrittenOffset.get(finalPtyId) ?? 0;
+        const finalOffset = cached?.viewportOffset ?? 0;
         requestScrollAnimRender(finalPtyId, finalOffset);
       });
     }
@@ -61,7 +61,6 @@ export function createScrollHandlers(
       const targetOffset = calculateScrollDelta(baseOffset, delta, cached.scrollbackLength);
       if (currentTarget === undefined) {
         animator.initialize(ptyId, cached.viewportOffset);
-        lastWrittenOffset.set(ptyId, cached.viewportOffset);
       }
       animator.setTarget(ptyId, targetOffset, cached.scrollbackLength);
     } else {
@@ -72,7 +71,6 @@ export function createScrollHandlers(
           const targetOffset = calculateScrollDelta(baseOffset, delta, state.scrollbackLength);
           if (currentTarget === undefined) {
             animator.initialize(ptyId, state.viewportOffset);
-            lastWrittenOffset.set(ptyId, state.viewportOffset);
           }
           animator.setTarget(ptyId, targetOffset, state.scrollbackLength);
         }
@@ -87,25 +85,30 @@ export function createScrollHandlers(
       : Math.max(0, offset);
     animator.setTarget(ptyId, clampedOffset, cached?.scrollbackLength ?? clampedOffset);
     animator.snapToTarget(ptyId);
-    lastWrittenOffset.set(ptyId, clampedOffset);
+    setScrollOffsetNoNotify(ptyId, clampedOffset);
     setScrollOffsetSync(ptyId, clampedOffset);
   };
 
   const handleScrollToBottom = (ptyId: string): void => {
     animator.setTarget(ptyId, 0, Number.MAX_SAFE_INTEGER);
     animator.snapToTarget(ptyId);
-    lastWrittenOffset.set(ptyId, 0);
+    // Synchronously update session + cache — the animator's onAnimate
+    // won't fire (snapToTarget doesn't trigger onAnimate)
+    setScrollOffsetNoNotify(ptyId, 0);
+    const cached = getScrollState(ptyId);
+    if (cached) {
+      (cached as { viewportOffset: number }).viewportOffset = 0;
+    }
+    requestScrollAnimRender(ptyId, 0);
     scrollToBottomBridge(ptyId);
   };
 
   const cleanup = (): void => {
     animator.cleanup();
-    lastWrittenOffset.clear();
   };
 
   const removeAnimation = (ptyId: string): void => {
     animator.remove(ptyId);
-    lastWrittenOffset.delete(ptyId);
   };
 
   return {
