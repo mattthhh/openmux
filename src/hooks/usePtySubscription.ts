@@ -47,7 +47,15 @@ export async function subscribeToPtyWithCaches(
     streamFromSubscription<UnifiedTerminalUpdate>(({ emit }) => subscribeUnifiedToPty(ptyId, emit)),
     (update) => {
       if (options?.cacheScrollState !== false) {
-        caches.scrollStates.set(ptyId, update.scrollState);
+        const existing = caches.scrollStates.get(ptyId);
+        if (existing) {
+          existing.viewportOffset = update.scrollState.viewportOffset;
+          existing.scrollbackLength = update.scrollState.scrollbackLength;
+          existing.isAtBottom = update.scrollState.isAtBottom;
+          existing.isAtScrollbackLimit = update.scrollState.isAtScrollbackLimit;
+        } else {
+          caches.scrollStates.set(ptyId, { ...update.scrollState });
+        }
       }
     }
   );
