@@ -26,7 +26,7 @@ import {
   getWorkspacePaneCount,
   calculateMasterStackLayout,
 } from '../core/operations/master-stack-layout';
-import { deferMacrotask, deferNextTick } from '../core/scheduling';
+import { deferNextTick } from '../core/scheduling';
 import { containsPane, updatePaneInNode } from '../core/layout-tree';
 import {
   layoutReducer,
@@ -154,8 +154,8 @@ export function LayoutProvider(props: LayoutProviderProps) {
     applyState(currentState);
   };
 
-  // Fast path for SET_PANE_PTY - direct store path update instead of reconcile
-  // This avoids diffing the entire workspaces object for a single property change
+  // Direct produce mutation for SET_PANE_PTY.
+  // Only touches the targeted pane's ptyId field — no layout recalc needed.
   const applySetPanePty = (paneId: string, ptyId: string) => {
     const wsId = state.activeWorkspaceId;
 
@@ -181,16 +181,14 @@ export function LayoutProvider(props: LayoutProviderProps) {
     );
   };
 
-  // Fast path for NEW_PANE - use produce for direct mutations instead of reconcile
-  // This avoids the overhead of diffing the entire workspaces object
+  // Direct produce mutation for NEW_PANE.
+  // Creates the pane, recalculates layout, and returns the new pane ID.
   const applyNewPane = (title?: string, ptyId?: string) => {
     const wsId = state.activeWorkspaceId;
     const newPaneId = generatePaneId();
 
-    // Use produce for efficient in-place updates
     setState(
       produce((draft) => {
-        // Ensure workspace exists
         if (!draft.workspaces[wsId]) {
           draft.workspaces[wsId] = createWorkspace(wsId, draft.config.defaultLayoutMode);
         }
@@ -203,17 +201,14 @@ export function LayoutProvider(props: LayoutProviderProps) {
         };
 
         if (!workspace.mainPane) {
-          // First pane becomes main
           workspace.mainPane = newPane;
           workspace.focusedPaneId = newPaneId;
         } else {
-          // New pane goes to stack
           workspace.stackPanes.push(newPane);
           workspace.focusedPaneId = newPaneId;
           workspace.activeStackIndex = workspace.stackPanes.length - 1;
         }
 
-        // Recalculate layout with split-aware rectangles
         draft.workspaces[wsId] = calculateMasterStackLayout(
           workspace,
           draft.viewport,
@@ -228,8 +223,8 @@ export function LayoutProvider(props: LayoutProviderProps) {
     return newPaneId;
   };
 
-  // Fast path for FOCUS_PANE - produce direct mutation avoids reconcile overhead.
-  // FOCUS_PANE is the most frequent action (fires on every pane click) and only
+  // Direct produce mutation for FOCUS_PANE.
+  // This is the most frequent action (fires on every pane click) and only
   // changes focusedPaneId (+ activeStackIndex when switching stack tabs).
   const applyFocusPane = (paneId: string) => {
     const wsId = state.activeWorkspaceId;
@@ -256,42 +251,42 @@ export function LayoutProvider(props: LayoutProviderProps) {
     );
   };
 
-  // Helper to dispatch actions through the reducer
-  // Uses reconcile for efficient diffing
+  // Dispatch actions through the appropriate path:
+  // 1. Produce-based fast paths for frequent, targeted mutations (SET_PANE_PTY,
+  //    NEW_PANE, FOCUS_PANE) — direct setState with produce, no unwrap/reconcile.
+  // 2. Batch path for layout-heavy actions (CLOSE_PANE, CLOSE_PANE_BY_ID) —
+  //    queued and flushed together to avoid layout thrashing.
+  // 3. Reducer path for all other actions — immutable state calculation via
+  //    layoutReducer, then reconciled back into the store.
+  //
+  // All paths are synchronous. SolidJS batches rendering automatically within
+  // a single microtask, so there's no need for deferred timing.
   const dispatch = (action: LayoutAction) => {
-    // SET_PANE_PTY uses fast direct path update - defer to avoid blocking animations
-    if (action.type === 'SET_PANE_PTY') {
-      deferMacrotask(() => applySetPanePty(action.paneId, action.ptyId));
-      return;
-    }
+    switch (action.type) {
+      case 'SET_PANE_PTY':
+        applySetPanePty(action.paneId, action.ptyId);
+        return;
 
-    // NEW_PANE uses fast produce path - defer to avoid blocking animations in other panes
-    if (action.type === 'NEW_PANE') {
-      deferMacrotask(() => applyNewPane(action.title));
-      return;
-    }
+      case 'NEW_PANE':
+        applyNewPane(action.title);
+        return;
 
-    // FOCUS_PANE uses fast produce path - avoids reconcile for the most common action
-    if (action.type === 'FOCUS_PANE') {
-      applyFocusPane((action as { type: 'FOCUS_PANE'; paneId: string }).paneId);
-      return;
-    }
+      case 'FOCUS_PANE':
+        applyFocusPane(action.paneId);
+        return;
 
-    // Actions that affect layout (can cause expensive re-renders) are batched
-    // to reduce stutter when rapidly creating/closing panes
-    const batchableActions = ['CLOSE_PANE', 'CLOSE_PANE_BY_ID'];
-
-    if (batchableActions.includes(action.type)) {
-      pendingActions.push(action);
-      if (!flushScheduled) {
-        flushScheduled = true;
-        // Defer to next event loop iteration to allow pending rendering to complete.
-        deferNextTick(flushActions);
+      case 'CLOSE_PANE':
+      case 'CLOSE_PANE_BY_ID': {
+        pendingActions.push(action);
+        if (!flushScheduled) {
+          flushScheduled = true;
+          deferNextTick(flushActions);
+        }
+        return;
       }
-      return;
     }
 
-    // Non-batchable actions apply directly
+    // All other actions go through the immutable reducer
     const currentState = unwrap(state);
     const newState = layoutReducer(currentState, action);
     applyState(newState);

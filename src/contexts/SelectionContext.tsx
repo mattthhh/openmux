@@ -8,10 +8,17 @@
  * - Shift+click to override app mouse tracking
  */
 
-import { createContext, useContext, createSignal, onCleanup, type ParentProps } from 'solid-js';
+import {
+  createContext,
+  useContext,
+  createSignal,
+  onMount,
+  onCleanup,
+  type ParentProps,
+} from 'solid-js';
 import type { SelectionBounds } from '../core/types';
 import { deferMacrotask } from '../core/scheduling';
-import { copyToClipboard } from '../effect/bridge';
+import { copyToClipboard, subscribeToPtyLifecycle } from '../effect/bridge';
 import {
   type SelectionPoint,
   type SelectionRange,
@@ -161,6 +168,18 @@ export function SelectionProvider(props: SelectionProviderProps) {
     if (notificationTimer) {
       clearTimeout(notificationTimer);
     }
+  });
+
+  // Auto-cleanup: remove selections for destroyed PTYs
+  onMount(() => {
+    subscribeToPtyLifecycle((event) => {
+      if (event.type === 'destroyed' && selections.has(event.ptyId)) {
+        selections.delete(event.ptyId);
+        notifyChange();
+      }
+    }).then((unsub) => {
+      onCleanup(unsub);
+    });
   });
 
   // Increment version to trigger re-render

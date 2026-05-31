@@ -1,3 +1,17 @@
+/**
+ * Kitty graphics bridge.
+ *
+ * Creates and wires the KittyGraphicsRenderer into the global singleton
+ * (getKittyGraphicsRenderer) so that the terminal layer can access it
+ * without reaching back through the UI component tree.
+ *
+ * The renderer is inherently process-global (one per terminal multiplexer),
+ * so a global singleton is the right pattern. The DI threading through
+ * App.tsx → setupAppEffects exists only to guarantee initialization order
+ * (OpenTUI renderer must exist before kitty graphics can render), not for
+ * dependency injection.
+ */
+
 import { onCleanup, onMount } from 'solid-js';
 import { deferNextTick } from '../../core/scheduling';
 import {

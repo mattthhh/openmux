@@ -1,5 +1,10 @@
 /**
- * Theme context for styling configuration
+ * Theme context for styling configuration.
+ *
+ * Merge strategy: flat objects (pane, statusBar) use shallow spread.
+ * Nested objects (ui) require manual deep-merge to preserve defaults.
+ * If Theme types gain new nested properties, they must be added to the
+ * manual deep-merge block below.
  */
 
 import { createContext, useContext, type ParentProps } from 'solid-js';

@@ -414,8 +414,6 @@ export const DEFAULT_COMMAND_PALETTE_COMMANDS: CommandPaletteCommand[] = [
   ...WORKSPACE_COMMANDS,
 ];
 
-export const AGGREGATE_VIEW_PALETTE_COMMANDS: CommandPaletteCommand[] = AGGREGATE_VIEW_COMMANDS;
-
 /** Return the appropriate command list for the current view context. */
 export function getCommandsForContext(aggregateOpen: boolean): CommandPaletteCommand[] {
   return aggregateOpen ? AGGREGATE_VIEW_COMMANDS : DEFAULT_COMMAND_PALETTE_COMMANDS;

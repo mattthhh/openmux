@@ -3,8 +3,6 @@
  */
 
 import { useTerminalDimensions, useRenderer } from '@opentui/solid';
-import { createSignal } from 'solid-js';
-import { useAppActions } from './components/app/app-actions';
 import {
   useConfig,
   useLayout,
@@ -19,18 +17,19 @@ import { useSearch } from './contexts/SearchContext';
 import { useSession } from './contexts/SessionContext';
 import { useAggregateView } from './contexts/AggregateViewContext';
 import { useTitle } from './contexts/TitleContext';
+import { useAppActions } from './components/app/app-actions';
 import { PaneContainer } from './components';
 import { getFocusedPtyId } from './core/workspace-utils';
-import { resolveAggregatePreviewPtyId, findPtyLocation } from './components/aggregate/utils';
+import { resolveAggregatePreviewPtyId } from './components/aggregate/utils';
 import { onShimDetached } from './effect/bridge';
 import { createPaneResizeHandlers, createPasteHandler } from './components/app';
 import { readFromClipboard } from './effect/bridge';
-import { setClipboardPasteHandler, setCopyModeExitCallback } from './terminal/focused-pty-registry';
+import { setClipboardPasteHandler } from './terminal/focused-pty-registry';
 import { setupKeyboardRouting } from './components/app/keyboard-routing';
 import { usePtyCreation } from './components/app/pty-creation';
 import { AppOverlays } from './components/app/AppOverlays';
 import { getCommandsForContext } from './core/command-palette';
-import type { AggregateCommandActions } from './components/app/app-actions';
+import { createAggregateCommandActionsBridge } from './components/app/aggregate-command-bridge';
 import {
   createKittyGraphicsBridge,
   type RendererWithNative,
@@ -127,95 +126,22 @@ function AppContent() {
     splitPane: layout.splitPane,
   });
 
-  // Aggregate view command palette actions — bridges aggregate-view context
-  // methods into the executeCommandAction routing so the command palette can
-  // act on the aggregate-selected PTY instead of the workspace focused pane.
-  //
-  // The state manager's methods (handleNewPaneInSession, handleJumpToPty) are
-  // only available once AggregateView mounts. We use a signal so the command
-  // palette resolves to the real implementation at call time — the AggregateView
-  // writes the actions into this signal via onActionsReady.
-  const [aggregateStateActions, setAggregateStateActions] = createSignal<{
-    handleNewPaneInSession: () => Promise<void>;
-    handleJumpToPty: () => Promise<boolean>;
-    handleOpenFileInSession: (entry: {
-      absolutePath: string;
-      isFolderAction: boolean;
-      rootDir?: string;
-    }) => Promise<void>;
-    handleOpenDiffInSession: (
-      target: import('./core/diff-opener').DiffTarget,
-      rootDir: string,
-      fullCommand: string
-    ) => Promise<void>;
-  } | null>(null);
+  // Aggregate command actions bridge — wires AggregateViewContext methods
+  // and AggregateStateManager's onActionsReady callback into a single
+  // AggregateCommandActions object for the command palette and opener routing.
+  const { actions: aggregateCommandActions, onActionsReady } = createAggregateCommandActionsBridge({
+    aggregateView,
+    layout,
+    terminal,
+    session,
+    titleContext,
+    keyboardState,
+    copyMode,
+    selection,
+    search,
+    overlays,
+  });
 
-  const aggregateCommandActions: AggregateCommandActions = {
-    togglePreviewZoom: aggregateView.togglePreviewZoom,
-    handleNewPaneInSession: () =>
-      aggregateStateActions()?.handleNewPaneInSession() ?? Promise.resolve(),
-    handleJumpToPty: () => aggregateStateActions()?.handleJumpToPty() ?? Promise.resolve(false),
-    handleOpenFileInSession: (entry) =>
-      aggregateStateActions()?.handleOpenFileInSession(entry) ?? Promise.resolve(),
-    handleOpenDiffInSession: (target, rootDir, fullCommand) =>
-      aggregateStateActions()?.handleOpenDiffInSession(target, rootDir, fullCommand) ??
-      Promise.resolve(),
-    killSelectedPty: (ptyId: string) => overlays.confirmationHandlers.handleRequestKillPty(ptyId),
-    navigateUp: aggregateView.navigateUp,
-    navigateDown: aggregateView.navigateDown,
-    navigateToPrevPty: aggregateView.navigateToPrevPty,
-    navigateToNextPty: aggregateView.navigateToNextPty,
-    toggleShowInactive: aggregateView.toggleShowInactive,
-    openPtyPicker: aggregateView.openPtyPicker,
-    toggleSessionExpanded: aggregateView.toggleSessionExpanded,
-    expandAllSessions: aggregateView.expandAllSessions,
-    collapseAllSessions: aggregateView.collapseAllSessions,
-    enterPreviewSearch: async () => {
-      const ptyId = resolveAggregatePreviewPtyId({
-        selectedPtyId: aggregateView.state.selectedPtyId,
-        selectedIndex: aggregateView.state.selectedIndex,
-        flattenedTree: aggregateView.state.flattenedTree,
-        activeSessionId: session.state.activeSessionId,
-        workspaces: layout.state.workspaces,
-      });
-      if (!ptyId) return;
-      selection.clearAllSelections();
-      await search.enterSearchMode(ptyId);
-      keyboardState.enterSearchMode();
-    },
-    enterPreviewCopyMode: () => {
-      const ptyId = resolveAggregatePreviewPtyId({
-        selectedPtyId: aggregateView.state.selectedPtyId,
-        selectedIndex: aggregateView.state.selectedIndex,
-        flattenedTree: aggregateView.state.flattenedTree,
-        activeSessionId: session.state.activeSessionId,
-        workspaces: layout.state.workspaces,
-      });
-      if (!ptyId) return;
-      selection.clearAllSelections();
-      keyboardState.enterCopyMode();
-      copyMode.enterCopyMode(ptyId, (id) => terminal.getTerminalStateSync(id));
-    },
-    renameSelectedPty: () => {
-      const ptyId = aggregateView.state.selectedPtyId;
-      if (!ptyId) return;
-      // Resolve PTY to pane ID — prefer current session layout, then aggregate tree
-      const loc = findPtyLocation(ptyId, layout.state.workspaces);
-      const paneId = loc?.paneId;
-      if (!paneId) return;
-      const currentTitle = titleContext.getTitle(paneId) ?? 'shell';
-      overlays.setPaneRenameState({
-        show: true,
-        paneId,
-        value: currentTitle,
-      });
-    },
-    pasteToPreviewPty: () => terminal.pasteToFocused(),
-    getSelectedPtyId: () => aggregateView.state.selectedPtyId,
-    closeAggregateView: aggregateView.closeAggregateView,
-  };
-
-  // Single source of truth for all action handlers
   const appActions = useAppActions({
     config,
     layout,
@@ -283,7 +209,7 @@ function AppContent() {
     pasteHandler,
     setUpdateLabel,
     setClipboardPasteHandler,
-    setCopyModeExitCallback,
+    setCopyModeExitCallback: () => {},
     readFromClipboard,
     writeToPTY: terminal.writeToPTY,
     onShimDetached,
@@ -342,7 +268,6 @@ function AppContent() {
       }}
       backgroundColor="transparent"
     >
-      {/* Main pane area */}
       <PaneContainer />
 
       <AppOverlays
@@ -355,7 +280,7 @@ function AppContent() {
         onDiffOpenerSelect={appActions.handleDiffOpenerSelect}
         onToggleDiffOpener={appActions.handleToggleDiffOpener}
         onToggleConsole={appActions.actions.onToggleConsole!}
-        onAggregateActionsReady={setAggregateStateActions}
+        onAggregateActionsReady={onActionsReady}
       />
     </box>
   );

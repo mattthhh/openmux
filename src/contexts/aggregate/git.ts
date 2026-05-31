@@ -6,24 +6,6 @@ import type { GitRepoMetadata } from '../git-metadata-cache';
 import type { GitInfo } from '../../effect/services/pty/helpers';
 import type { GitDiffStats, PtyInfo } from './types';
 
-const EMPTY_GIT_FIELDS = {
-  gitBranch: undefined,
-  gitDiffStats: undefined,
-  gitDirty: false,
-  gitStaged: 0,
-  gitUnstaged: 0,
-  gitUntracked: 0,
-  gitConflicted: 0,
-  gitAhead: undefined,
-  gitBehind: undefined,
-  gitStashCount: undefined,
-  gitState: undefined,
-  gitDetached: false,
-  gitRepoKey: undefined,
-  gitIsWorktree: false,
-  gitCommonDir: null,
-} as const;
-
 export interface GitMetadataFields {
   gitBranch: string | undefined;
   gitDiffStats: GitDiffStats | undefined;
@@ -103,15 +85,6 @@ export function areGitDiffStatsEqual(
   if (!a && !b) return true;
   if (!a || !b) return false;
   return a.added === b.added && a.removed === b.removed && a.binary === b.binary;
-}
-
-/** Clear all git metadata fields on a PTY, returning a new object.
- *  Used when a PTY changes CWD — the old repo's metadata is stale. */
-export function clearGitMetadata(pty: PtyInfo): PtyInfo {
-  if (!hasGitMetadata(pty)) {
-    return pty;
-  }
-  return { ...pty, ...EMPTY_GIT_FIELDS };
 }
 
 /** Clear git metadata fields in-place on a mutable PTY object.

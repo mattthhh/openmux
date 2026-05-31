@@ -147,12 +147,18 @@ async function writeStartupErrorLog(error: unknown): Promise<void> {
     try: () => fs.mkdirSync(dir, { recursive: true }),
     catch: (e: unknown) => new StartupLogError({ reason: String(e), cause: e }),
   });
-  if (mkdirResult instanceof StartupLogError) return;
+  if (mkdirResult instanceof StartupLogError) {
+    console.warn('Failed to create startup error log directory:', mkdirResult.message);
+    return;
+  }
 
-  errore.try<void, StartupLogError>({
+  const writeResult = errore.try<void, StartupLogError>({
     try: () => fs.writeFileSync(logPath, `${message}\n`, 'utf8'),
     catch: (e: unknown) => new StartupLogError({ reason: 'Write failed', cause: e }),
   });
+  if (writeResult instanceof StartupLogError) {
+    console.warn('Failed to write startup error log:', writeResult.message);
+  }
 }
 
 async function main() {

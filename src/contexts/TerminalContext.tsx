@@ -371,6 +371,10 @@ export function TerminalProvider(props: TerminalProviderProps) {
         cacheScrollState: shouldCacheScrollState,
       })
         .then((unsub) => {
+          if (!isActive) {
+            unsub();
+            return;
+          }
           const currentPtyId = sessionPtyMap.get(sessionId)?.get(paneId);
           const currentOwner = ptyToSessionMap.get(ptyId);
           if (
@@ -418,7 +422,7 @@ export function TerminalProvider(props: TerminalProviderProps) {
     }
 
     return getSessionPtyMapping(sessionId).then((mappingInfo) => {
-      if (!mappingInfo) return;
+      if (!mappingInfo || !isActive) return;
       for (const ptyId of mappingInfo.mapping.values()) {
         const unsub = unsubscribeFns.get(ptyId);
         if (unsub) {
@@ -435,8 +439,12 @@ export function TerminalProvider(props: TerminalProviderProps) {
   const writeToFocused = (data: string) => {
     const focusedPtyId = getFocusedPtyId();
     if (focusedPtyId) {
-      // Fire and forget for responsive typing
-      writeToPty(focusedPtyId, data);
+      writeToPty(focusedPtyId, data).catch((e) => {
+        console.warn(
+          '[TerminalContext] write to focused PTY failed:',
+          e instanceof Error ? e.message : e
+        );
+      });
     }
   };
 
@@ -448,14 +456,16 @@ export function TerminalProvider(props: TerminalProviderProps) {
     pixelWidth?: number,
     pixelHeight?: number
   ) => {
-    // Fire and forget
-    resizePty(ptyId, cols, rows, pixelWidth, pixelHeight);
+    resizePty(ptyId, cols, rows, pixelWidth, pixelHeight).catch((e) => {
+      console.warn('[TerminalContext] resize PTY failed:', e instanceof Error ? e.message : e);
+    });
   };
 
   // Write to a specific PTY
   const handleWriteToPTY = (ptyId: string, data: string) => {
-    // Fire and forget for responsive typing
-    writeToPty(ptyId, data);
+    writeToPty(ptyId, data).catch((e) => {
+      console.warn('[TerminalContext] write to PTY failed:', e instanceof Error ? e.message : e);
+    });
   };
 
   // Paste from clipboard to the focused PTY
@@ -474,7 +484,12 @@ export function TerminalProvider(props: TerminalProviderProps) {
       return false;
     }
 
-    writeToPty(focusedPtyId, clipboardText);
+    try {
+      await writeToPty(focusedPtyId, clipboardText);
+    } catch (e) {
+      console.warn('[paste] write to PTY failed:', e instanceof Error ? e.message : e);
+      return false;
+    }
     return true;
   };
 

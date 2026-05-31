@@ -477,3 +477,10 @@ Instead, use:
 - Simple inline comments when necessary: `// Brief explanation`
 - Group related functions with a single comment or whitespace, not decorative borders
 - Session restores reuse existing PTYs when possible, otherwise new PTYs are created from stored CWDs.
+
+### Test Organization
+
+- **Unit tests**: Co-located in `__tests__/` directories next to the module they test (e.g., `src/contexts/aggregate/__tests__/`).
+- **Integration tests**: In the top-level `tests/` directory, organized by module path (e.g., `tests/contexts/layout-reducer/`, `tests/effect/services/pty/`).
+- **Naming**: Test files must contain `.test.` in the filename for Bun's test runner to discover them.
+- When in doubt: if the test imports primarily from a single module and tests its internals, co-locate it. If the test spans multiple modules or contexts, put it in `tests/`.
