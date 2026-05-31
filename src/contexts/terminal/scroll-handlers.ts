@@ -23,58 +23,25 @@ export function createScrollHandlers(
     easing: 0.7,
   });
 
-  // Track the last offset we wrote per-pty via setScrollOffsetSync.
-  // This lets us distinguish "cache hasn't caught up with our write" from
-  // "something externally changed the offset". Without this, the onAnimate
-  // callback would misinterpret stale cache values as external adjustments
-  // and cancel legitimate scroll-up animations.
+  // Track the last offset we wrote per-pty via setScrollOffsetNoNotify.
   const lastWrittenOffset = new Map<string, number>();
 
   // Coalesce animation renders: the animator runs a tight microtask loop,
-  // but we only need ONE render request per frame. The microtask that
-  // sets renderCoalesced=true is the one that finally triggers the render
-  // (after all pending animation ticks complete).
+  // but we only need ONE render request per frame.
   let renderCoalesced = false;
 
-  // When the animator steps, apply the new offset WITHOUT notifying
-  // subscribers. The animator's chase loop runs hundreds of microtask
-  // ticks per scroll event. Calling notifySubscribers (which does FFI
-  // calls and possible cell conversion) on every step blocks the main
-  // thread for tens of milliseconds. Instead, we just update the
-  // session's viewportOffset and schedule one coalesced render.
+  // When the animator steps, just update the session offset without
+  // notifying subscribers. The animator owns the scroll offset during
+  // animation — nothing else should override it.
   //
-  // We detect external adjustments (new output while scrolled back, or
-  // auto-scroll-to-bottom on typing) by comparing the cache's
-  // viewportOffset with our last written value. If the cache has moved
-  // independently of our writes, an external adjustment happened.
+  // External adjustments (scrollback growth while scrolled up) are
+  // handled by adjustAnimationOffset(), called from the subscriber in
+  // unified-subscription.ts after it detects a scrollback length change.
+  // We do NOT read the cache in onAnimate because the cache is unreliable:
+  // it's replaced by the subscriber at any point and the in-place mutation
+  // from registerScrollCacheUpdate can race with those replacements,
+  // producing false external deltas that snap the animator to bottom.
   animator.setOnAnimate((ptyId, offset) => {
-    const cached = getScrollState(ptyId);
-    const lastWritten = lastWrittenOffset.get(ptyId) ?? 0;
-
-    if (cached) {
-      const externalDelta = cached.viewportOffset - lastWritten;
-      if (externalDelta !== 0) {
-        // External adjustment (e.g., new output shifted the offset).
-        // Rebase the animator relative to the external change.
-        //
-        // NOTE: we intentionally do NOT snap to bottom when
-        // cached.viewportOffset === 0 here. That detection was a false
-        // positive factory: the cache can be stale or replaced by the
-        // subscriber at any point, producing viewportOffset = 0 when
-        // no genuine scroll-to-bottom happened. The result was the
-        // animator snapping to bottom mid-scroll-up.
-        //
-        // Auto-scroll-to-bottom is handled by handleScrollToBottom()
-        // (called from TerminalContext when the user types while scrolled
-        // back), which explicitly snaps the animator. And the subscriber
-        // callback updates viewState.scrollState with the emulator's
-        // viewport offset, so the render always reflects the emulator's
-        // state.
-        animator.adjustOffset(ptyId, externalDelta);
-        offset += externalDelta;
-      }
-    }
-
     lastWrittenOffset.set(ptyId, offset);
     setScrollOffsetNoNotify(ptyId, offset);
 
@@ -166,7 +133,7 @@ export function createScrollHandlers(
   };
 
   /**
-   * Remove state state for a destroyed PTY
+   * Remove state for a destroyed PTY
    */
   const removeAnimation = (ptyId: string): void => {
     animator.remove(ptyId);
