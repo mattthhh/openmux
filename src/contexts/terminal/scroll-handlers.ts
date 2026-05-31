@@ -114,6 +114,7 @@ export function createScrollHandlers(
     handleSetScrollOffset,
     handleScrollToBottom,
     adjustAnimationOffset: (ptyId: string, delta: number) => animator.adjustOffset(ptyId, delta),
+    isAnimating: (ptyId: string) => animator.isAnimating(ptyId),
     removeAnimation,
     cleanup,
   };

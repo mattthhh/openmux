@@ -33,6 +33,7 @@ export interface UnifiedSubscriptionDeps {
     getScrollState: (ptyId: string) => TerminalScrollState | undefined;
     setScrollStateCache: (ptyId: string, state: TerminalScrollState) => void;
     adjustAnimationOffset: (ptyId: string, delta: number) => void;
+    isAnimating: (ptyId: string) => boolean;
   };
   renderer: { requestRender: () => void };
   viewState: TerminalViewState;
@@ -235,14 +236,24 @@ export function setupUnifiedSubscription(deps: UnifiedSubscriptionDeps): void {
                 // Mutate scrollState in-place instead of replacing the reference.
                 // registerScrollCacheUpdate mutates the same object, so replacing
                 // it would orphan the old reference.
+                // When the animator is active, it owns viewportOffset — skip
+                // writing it here to prevent the two-writer flicker. We still
+                // update scrollbackLength, isAtBottom, isAtScrollbackLimit.
+                const animating = terminal.isAnimating(ptyId);
                 const existingScroll = viewState.scrollState;
                 if (existingScroll) {
-                  existingScroll.viewportOffset = update.scrollState.viewportOffset;
+                  if (!animating) {
+                    existingScroll.viewportOffset = update.scrollState.viewportOffset;
+                  }
                   existingScroll.scrollbackLength = update.scrollState.scrollbackLength;
                   existingScroll.isAtBottom = update.scrollState.isAtBottom;
                   existingScroll.isAtScrollbackLimit = update.scrollState.isAtScrollbackLimit;
                 } else {
-                  viewState.scrollState = { ...update.scrollState };
+                  const copy = { ...update.scrollState };
+                  if (animating)
+                    copy.viewportOffset =
+                      viewState.scrollState?.viewportOffset ?? copy.viewportOffset;
+                  viewState.scrollState = copy;
                 }
 
                 // Also update the ptyCaches.scrollStates Map (used by
