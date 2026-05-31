@@ -382,7 +382,13 @@ export function createDataHandler(options: DataHandlerOptions) {
     // entire buffer. For budgeted drains, process one chunk per cycle.
     const force = drainOptions?.force ?? false;
     if (state.rawBuffer.length > 0) {
-      if (force) {
+      // For the focused PTY, always replay the full raw buffer.
+      // The drain budget (8ms) will limit how much work we do per cycle,
+      // and any remaining segments will be processed in the next drain.
+      // For background PTYs, only replay the full buffer on force drains
+      // (focus transitions, background pulses).
+      const priority = getPriority();
+      if (force || priority === 'focused') {
         replayRawBufferFull();
       } else {
         replayRawBuffer();
@@ -536,6 +542,19 @@ export function createDataHandler(options: DataHandlerOptions) {
       const priority = getPriority();
       if (priority === 'background-hidden') return;
       session.pendingNotify = true;
+
+      // For the focused PTY, use queueMicrotask for immediate drain.
+      // deferMacrotask (setTimeout(0)) defers past I/O and can delay
+      // focus switches and scroll rendering by seconds under load.
+      if (priority === 'focused') {
+        queueMicrotask(() => {
+          if (session.pendingNotify) {
+            drainPending();
+          }
+        });
+        return;
+      }
+
       const config = getPriorityConfig(priority);
       const sinceLastDrain = now() - lastDrainTime;
       const interval = config.drainIntervalMs;
@@ -618,14 +637,21 @@ export function createDataHandler(options: DataHandlerOptions) {
       return;
     }
 
-    // Focused PTY: process immediately.
-    // If we have raw-buffered data from a previous background period,
-    // replay it through the full pipeline first.
-    if (state.rawBuffer.length > 0) {
-      replayRawBufferFull();
+    // Focused PTY: accumulate data and schedule a microtask drain.
+    // Processing every chunk through processChunk synchronously blocks
+    // the main thread under heavy output (find / -ls produces thousands
+    // of chunks/second). The regex analysis, sync mode parsing, and
+    // emulator.write all add up to significant event loop pressure.
+    //
+    // Instead, we buffer the raw data (like background PTYs) and
+    // schedule a drain via queueMicrotask. The drain budget (8ms)
+    // ensures we yield between cycles for user input. queueMicrotask
+    // runs before the next macrotask, so the drain+render completes
+    // before new I/O events, keeping the UI responsive.
+    if (state.rawBuffer.length < RAW_BUFFER_MAX_SIZE) {
+      state.rawBuffer += data;
     }
-
-    processChunk(data);
+    scheduleNotify();
   };
 
   // The core processing pipeline — extracted so replayRawBuffer can call it.

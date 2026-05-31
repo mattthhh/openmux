@@ -293,15 +293,23 @@ describe('createDataHandler pi redraw integration', () => {
     });
 
     handleData('\x1b[?2026h\x1b[2J\x1b[H\x1b[3Jhello');
-    vi.advanceTimersByTime(50);
-    handleData(' world');
-    vi.advanceTimersByTime(60);
+    // Flush microtask drain
     await Promise.resolve();
-
+    await Promise.resolve();
+    handleData(' world');
+    // Flush microtask drain
+    await Promise.resolve();
+    await Promise.resolve();
+    // 0ms total on fake timers — sync timeout (100ms) has not fired
     expect(emulatorWrites).toEqual([]);
 
     handleData('\x1b[?2026l');
-    await flushFakeTimers();
+    // Flush microtask drain only — don't run all timers
+    // (runAllTimers would fire the sync timeout out of order)
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
 
     expect(emulatorWrites).toEqual(['\x1b[H\x1b[Jhello world']);
   });

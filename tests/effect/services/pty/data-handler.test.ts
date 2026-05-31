@@ -113,8 +113,9 @@ describe('createDataHandler', () => {
     await flushTimers();
 
     const writes = emulator.write.mock.calls.map(([data]) => data as string);
-    expect(writes.length).toBe(2);
+    // All segments should be written (possibly batched into fewer writes)
     expect(writes.join('')).toBe(segments.join(''));
+    expect(writes.length).toBeLessThanOrEqual(segments.length);
   });
 
   it('flushes sync mode buffer after timeout', async () => {
@@ -156,7 +157,7 @@ describe('createDataHandler', () => {
     expect(pty.write).toHaveBeenCalledWith('\x1b_Gi=1;OK\x1b\\');
   });
 
-  it('flushes immediately when kitty queries are present', () => {
+  it('flushes immediately when kitty queries are present', async () => {
     const { session, emulator } = createSession();
 
     const handler = createDataHandler({
@@ -168,6 +169,9 @@ describe('createDataHandler', () => {
     });
 
     handler.handleData('\x1b_Ga=q,i=1;AAAA\x1b\\');
+
+    // Focused PTY buffers data and drains via queueMicrotask
+    await flushTimers();
 
     expect(emulator.write).toHaveBeenCalledTimes(1);
   });
