@@ -50,12 +50,12 @@ interface DataHandlerState {
   segmentCounter: number;
   processedCounter: number;
   /**
-   * Raw data buffer for background-hidden PTYs.
-   * While a PTY is hidden, all parsing is skipped and raw data accumulates here.
-   * When the PTY regains visibility/focus, the buffer is replayed through the
-   * full pipeline before resuming normal operation.
+   * Raw data buffer for background/hidden PTYs.
+   * Uses an array of chunks instead of string concatenation to avoid
+   * O(n²) copying as the buffer grows under heavy output (find / -ls).
    */
-  rawBuffer: string;
+  rawChunks: string[];
+  rawBufferLength: number;
 }
 
 const ESC = '\x1b';
@@ -271,7 +271,8 @@ export function createDataHandler(options: DataHandlerOptions) {
     pendingResponses: [],
     segmentCounter: 0,
     processedCounter: 0,
-    rawBuffer: '',
+    rawChunks: [],
+    rawBufferLength: 0,
   };
   let kittyProbeBuffer = '';
   let focusProbeBuffer = '';
@@ -367,13 +368,25 @@ export function createDataHandler(options: DataHandlerOptions) {
     }
   };
 
+  const rawBufferIsEmpty = () => state.rawBufferLength === 0;
+  const rawBufferJoin = () => state.rawChunks.join('');
+  const rawBufferClear = () => {
+    state.rawChunks = [];
+    state.rawBufferLength = 0;
+  };
+  const rawBufferAppend = (data: string) => {
+    state.rawChunks.push(data);
+    state.rawBufferLength += data.length;
+  };
+
   const drainPending = (drainOptions?: { force?: boolean }) => {
     lastDrainTime = now();
     session.pendingNotify = false;
 
     if (session.emulator.isDisposed) {
       state.pendingSegments = [];
-      state.rawBuffer = '';
+      state.rawChunks = [];
+      state.rawBufferLength = 0;
       return;
     }
 
@@ -381,7 +394,7 @@ export function createDataHandler(options: DataHandlerOptions) {
     // For force drains (background pulse, focus transition), process the
     // entire buffer. For budgeted drains, process one chunk per cycle.
     const force = drainOptions?.force ?? false;
-    if (state.rawBuffer.length > 0) {
+    if (!rawBufferIsEmpty()) {
       // For the focused PTY, always replay the full raw buffer.
       // The drain budget (8ms) will limit how much work we do per cycle,
       // and any remaining segments will be processed in the next drain.
@@ -579,28 +592,30 @@ export function createDataHandler(options: DataHandlerOptions) {
    * until the buffer is exhausted.
    */
   const replayRawBuffer = () => {
-    if (state.rawBuffer.length === 0) return;
+    if (rawBufferIsEmpty()) return;
 
     const maxChunk = getPriorityConfig(getPriority()).maxCharsPerTick;
 
-    if (state.rawBuffer.length <= maxChunk) {
-      const raw = state.rawBuffer;
-      state.rawBuffer = '';
+    if (state.rawBufferLength <= maxChunk) {
+      const raw = rawBufferJoin();
+      rawBufferClear();
       processChunk(raw);
       return;
     }
 
-    // Process one chunk's worth of data. The rest stays buffered.
+    // Large buffer: join, slice, and keep the remainder.
+    const raw = rawBufferJoin();
     let end = maxChunk;
-    const nl = state.rawBuffer.indexOf('\n', end);
+    const nl = raw.indexOf('\n', end);
     if (nl !== -1 && nl < end + 1024) {
       end = nl + 1;
     } else {
-      end = Math.min(end, state.rawBuffer.length);
+      end = Math.min(end, raw.length);
     }
 
-    const chunk = state.rawBuffer.slice(0, end);
-    state.rawBuffer = state.rawBuffer.slice(end);
+    const chunk = raw.slice(0, end);
+    state.rawChunks = [raw.slice(end)];
+    state.rawBufferLength -= end;
     processChunk(chunk);
   };
 
@@ -610,9 +625,9 @@ export function createDataHandler(options: DataHandlerOptions) {
    * immediate data when switching focus to a previously hidden PTY.
    */
   const replayRawBufferFull = () => {
-    if (state.rawBuffer.length === 0) return;
-    const raw = state.rawBuffer;
-    state.rawBuffer = '';
+    if (state.rawBufferLength === 0) return;
+    const raw = rawBufferJoin();
+    rawBufferClear();
     processChunk(raw);
   };
 
@@ -631,8 +646,8 @@ export function createDataHandler(options: DataHandlerOptions) {
     // and the 1fps pulse drains the buffer in one batch.
     // On focus switch, replayRawBufferFull flushes everything immediately.
     if (priority !== 'focused') {
-      if (state.rawBuffer.length < RAW_BUFFER_MAX_SIZE) {
-        state.rawBuffer += data;
+      if (state.rawBufferLength < RAW_BUFFER_MAX_SIZE) {
+        rawBufferAppend(data);
       }
       return;
     }
@@ -648,8 +663,8 @@ export function createDataHandler(options: DataHandlerOptions) {
     // ensures we yield between cycles for user input. queueMicrotask
     // runs before the next macrotask, so the drain+render completes
     // before new I/O events, keeping the UI responsive.
-    if (state.rawBuffer.length < RAW_BUFFER_MAX_SIZE) {
-      state.rawBuffer += data;
+    if (state.rawBufferLength < RAW_BUFFER_MAX_SIZE) {
+      rawBufferAppend(data);
     }
     scheduleNotify();
   };
@@ -779,13 +794,13 @@ export function createDataHandler(options: DataHandlerOptions) {
    * subsequent pulses or for replayRawBufferFull on focus switch.
    */
   const drainRawToEmulator = () => {
-    if (state.rawBuffer.length === 0) return;
+    if (rawBufferIsEmpty()) return;
 
     const MAX_RAW_DRAIN = 65_536; // ~1 screenful of VT data
 
-    if (state.rawBuffer.length <= MAX_RAW_DRAIN) {
-      const raw = state.rawBuffer;
-      state.rawBuffer = '';
+    if (state.rawBufferLength <= MAX_RAW_DRAIN) {
+      const raw = rawBufferJoin();
+      rawBufferClear();
       if (!session.emulator.isDisposed) {
         session.emulator.write(raw);
       }
@@ -794,17 +809,17 @@ export function createDataHandler(options: DataHandlerOptions) {
 
     // Large buffer: process one chunk from the head. The rest stays
     // buffered and will be processed on the next pulse or on focus switch.
-    // We don't skip to the tail because that would miss escape sequences
-    // that set terminal state (cursor position, colors, scroll regions).
+    const raw = rawBufferJoin();
     let end = MAX_RAW_DRAIN;
     // Snap forward past the last newline to avoid splitting mid-line.
-    const nlIdx = state.rawBuffer.indexOf('\n', end);
+    const nlIdx = raw.indexOf('\n', end);
     if (nlIdx !== -1 && nlIdx < end + 1024) {
       end = nlIdx + 1;
     }
 
-    const chunk = state.rawBuffer.slice(0, end);
-    state.rawBuffer = state.rawBuffer.slice(end);
+    const chunk = raw.slice(0, end);
+    state.rawChunks = [raw.slice(end)];
+    state.rawBufferLength -= end;
     if (!session.emulator.isDisposed) {
       session.emulator.write(chunk);
     }

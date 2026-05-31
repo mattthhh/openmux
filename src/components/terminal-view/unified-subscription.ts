@@ -3,10 +3,8 @@ import type { TerminalCell, UnifiedTerminalUpdate } from '../../core/types';
 import {
   subscribeUnifiedToPty,
   getEmulator,
-  setUpdateEnabledSync,
   drainRawToEmulator,
   wakeReadLoopOnce,
-  applyPtyReadThrottle,
 } from '../../effect/bridge';
 import { getKittyGraphicsRenderer } from '../../terminal/kitty-graphics';
 import * as errore from 'errore';
@@ -102,24 +100,18 @@ export function setupUnifiedSubscription(deps: UnifiedSubscriptionDeps): void {
           const em = viewState.emulator;
           if (!em || em.isDisposed) return;
 
+          // Only drain the kernel buffer — write raw data to the emulator
+          // so the native VT state is current. This keeps the child process
+          // unblocked (it can write to the PTY without the kernel buffer
+          // filling up). But do NOT enable updates or render — cell
+          // conversion and rendering are expensive under heavy output
+          // (find / -ls produces megabytes per second) and block the
+          // main thread, starving the focused pane's input handling.
+          //
+          // When the pane gains focus, setUpdateEnabled(true) triggers a
+          // full refresh + render at that point.
           wakeReadLoopOnce(ptyId, 'background-visible');
           drainRawToEmulator(ptyId);
-
-          setUpdateEnabledSync(ptyId, true);
-          em.setUpdateEnabled?.(true);
-
-          em.refresh?.();
-
-          // Schedule disabling updates and pausing reads after the render completes.
-          setTimeout(() => {
-            if (!mounted) return;
-            if (!isFocused()) {
-              setUpdateEnabledSync(ptyId, false);
-              em.setUpdateEnabled?.(false);
-              // Re-pause the read loop until the next pulse.
-              applyPtyReadThrottle(ptyId, 'background-visible');
-            }
-          }, 0);
         };
 
         const executePrefetch = async () => {
