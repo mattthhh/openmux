@@ -112,7 +112,7 @@ describe('createDataHandler', () => {
     await flushTimers();
 
     const writes = emulator.write.mock.calls.map(([data]) => data as string);
-    expect(writes.length).toBe(3);
+    expect(writes.length).toBe(2);
     expect(writes.join('')).toBe(segments.join(''));
   });
 

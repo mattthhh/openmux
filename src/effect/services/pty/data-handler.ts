@@ -229,10 +229,10 @@ function processClipboardResponses(
  */
 export function createDataHandler(options: DataHandlerOptions) {
   const { session, syncParser, commandParser, syncTimeoutMs = 100 } = options;
-  const maxSegmentsPerTick = 8;
-  const maxCharsPerTick = 32_768;
-  const maxBudgetMs = 4;
-  const minDrainIntervalMs = 4;
+  const maxSegmentsPerTick = 16;
+  const maxCharsPerTick = 65_536;
+  const maxBudgetMs = 8;
+  const minDrainIntervalMs = 16;
   const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
   let lastDrainTime = 0;
 
