@@ -234,9 +234,10 @@ export function createDataHandler(options: DataHandlerOptions) {
   const maxBudgetMs = 8;
   const minDrainIntervalMs = 0;
   const sustainedDrainIntervalMs = 50;
+  const sustainedDataGapMs = 100;
   const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
   let lastDrainTime = 0;
-  let firstDrainAfterData = true;
+  let lastDataTime = 0;
 
   const state: DataHandlerState = {
     pendingSegments: [],
@@ -343,7 +344,6 @@ export function createDataHandler(options: DataHandlerOptions) {
 
   const drainPending = (drainOptions?: { force?: boolean }) => {
     lastDrainTime = now();
-    firstDrainAfterData = false;
     session.pendingNotify = false;
 
     if (session.emulator.isDisposed) {
@@ -488,16 +488,17 @@ export function createDataHandler(options: DataHandlerOptions) {
   };
 
   // Helper to schedule notification (uses macrotask to yield for rendering)
-  // Adaptive rate-limiting: the first drain after new data arrives runs
-  // immediately (0ms delay) for responsive typing. If the PTY has been
-  // draining continuously for longer than sustainedThresholdMs, the
-  // interval increases to sustainedDrainIntervalMs (50ms) to guarantee
-  // I/O yield time for mouse/keyboard events during heavy output.
+  // Adaptive rate-limiting: if data arrived recently (within 100ms), the
+  // PTY is in sustained-output mode and drains are spaced 50ms apart to
+  // guarantee I/O yield time for mouse/keyboard events. If the last data
+  // was more than 100ms ago, we're in interactive mode and drain immediately.
   const scheduleNotify = () => {
     if (!session.pendingNotify) {
       session.pendingNotify = true;
       const sinceLastDrain = now() - lastDrainTime;
-      const interval = firstDrainAfterData ? minDrainIntervalMs : sustainedDrainIntervalMs;
+      const sinceLastData = now() - lastDataTime;
+      const isSustained = sinceLastData < sustainedDataGapMs;
+      const interval = isSustained ? sustainedDrainIntervalMs : minDrainIntervalMs;
       const delay = sinceLastDrain < interval ? interval - sinceLastDrain : 0;
       if (delay > 0) {
         setTimeout(() => {
@@ -512,7 +513,7 @@ export function createDataHandler(options: DataHandlerOptions) {
   // The data handler function
   const handleData = (data: string) => {
     tracePtyChunk('pty-in', data, { ptyId: session.id });
-    firstDrainAfterData = true;
+    lastDataTime = now();
     updateFocusTracking(data);
     const kittySignals = analyzeKitty(data);
     const hasKittyQuery = kittySignals.hasKittyQuery;
