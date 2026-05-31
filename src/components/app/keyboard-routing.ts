@@ -34,6 +34,7 @@ export function setupKeyboardRouting(params: {
   clearAllSelections: () => void;
   getFocusedEmulator: () => ITerminalEmulator | null;
   writeToFocused: (data: string) => void;
+  scrollToBottom: () => void;
   isOverlayActive: () => boolean;
   handleCopyModeKey: (event: KeyboardEvent) => void;
 }) {
@@ -53,6 +54,7 @@ export function setupKeyboardRouting(params: {
     clearAllSelections,
     getFocusedEmulator,
     writeToFocused,
+    scrollToBottom,
     isOverlayActive,
     handleCopyModeKey,
   } = params;
@@ -128,6 +130,7 @@ export function setupKeyboardRouting(params: {
           clearAllSelections,
           getFocusedEmulator,
           writeToFocused,
+          scrollToBottom,
         });
       }
     },

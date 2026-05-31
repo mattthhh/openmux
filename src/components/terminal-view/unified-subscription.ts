@@ -32,6 +32,7 @@ export interface UnifiedSubscriptionDeps {
     isPtyActive: (ptyId: string) => boolean;
     getScrollState: (ptyId: string) => TerminalScrollState | undefined;
     setScrollStateCache: (ptyId: string, state: TerminalScrollState) => void;
+    adjustAnimationOffset: (ptyId: string, delta: number) => void;
   };
   renderer: { requestRender: () => void };
   viewState: TerminalViewState;
@@ -232,11 +233,8 @@ export function setupUnifiedSubscription(deps: UnifiedSubscriptionDeps): void {
                 }
 
                 // Mutate scrollState in-place instead of replacing the reference.
-                // The cacheUpdater from registerScrollCacheUpdate mutates the same
-                // object via its viewportOffset property. If we replace the reference,
-                // the cacheUpdater targets the stale object and the next onAnimate
-                // call reads the wrong viewportOffset from the new object, causing
-                // false external deltas (including false snap-to-bottom).
+                // registerScrollCacheUpdate mutates the same object, so replacing
+                // it would orphan the old reference.
                 const existingScroll = viewState.scrollState;
                 if (existingScroll) {
                   existingScroll.viewportOffset = update.scrollState.viewportOffset;
@@ -248,25 +246,25 @@ export function setupUnifiedSubscription(deps: UnifiedSubscriptionDeps): void {
                 }
 
                 // Also update the ptyCaches.scrollStates Map (used by
-                // getScrollState in onAnimate) synchronously. usePtySubscription
-                // updates it asynchronously via a stream, so between notifySubscribers
-                // and the stream's await iterator.next(), the Map entry has a stale
-                // viewportOffset. onAnimate reads from the Map and detects a false
-                // external delta, causing snap-to-bottom during stdout.
+                // getScrollState in scrollTerminal for starting new animations).
                 terminal.setScrollStateCache(ptyId, update.scrollState);
 
                 // When scrollback grows while the user is scrolled up,
                 // getCurrentScrollState adjusts session.scrollState.viewportOffset
-                // by the scrollback delta. Since we mutate the cache in-place,
-                // the next onAnimate call will detect the external delta and
-                // adjust the animator accordingly.
+                // When scrollback grows while the user is scrolled up,
+                // getCurrentScrollState adjusts session.scrollState.viewportOffset
+                // by the scrollback delta. The animator doesn't know about this
+                // adjustment, so tell it explicitly.
                 if (
                   viewState.lastScrollbackLength !== null &&
                   viewState.scrollState.viewportOffset > 0
                 ) {
                   const scrollbackDelta =
                     viewState.scrollState.scrollbackLength - viewState.lastScrollbackLength;
-                  if (scrollbackDelta > 0 && viewState.emulator) {
+                  if (scrollbackDelta > 0) {
+                    terminal.adjustAnimationOffset(ptyId, scrollbackDelta);
+                  }
+                  if (viewState.emulator) {
                     const start = Math.max(
                       0,
                       viewState.scrollState.scrollbackLength - recentPrefetchWindow
@@ -326,13 +324,12 @@ export function setupUnifiedSubscription(deps: UnifiedSubscriptionDeps): void {
             requestRenderFrame();
           });
 
-          // Keep the TerminalContext's scroll state cache in sync with
-          // the animator's no-notify writes, so the next onAnimate call
-          // doesn't misinterpret the stale cache as an external adjustment.
+          // Keep the terminal context's scroll state cache in sync with
+          // the animator's no-notify writes. scrollTerminal reads from
+          // this cache when starting a new animation (no active animation).
           registerScrollCacheUpdate(ptyId, (offset: number) => {
             const cached = terminal.getScrollState(ptyId);
             if (cached) {
-              // Mutate in place — the cache is a plain object reference.
               (cached as { viewportOffset: number }).viewportOffset = offset;
             }
           });
