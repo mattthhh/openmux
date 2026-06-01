@@ -188,6 +188,7 @@ export function Pane(props: PaneProps) {
   };
 
   const handleMouseDown = (event: OpenTUIMouseEvent) => {
+    process.stderr.write(`[mousedown] pty=${props.ptyId?.slice(-6)} x=${event.x} y=${event.y}\n`);
     event.preventDefault();
     if (copyMode.isActive() && copyMode.getActivePtyId() !== props.ptyId) {
       copyMode.exitCopyMode();
@@ -200,6 +201,9 @@ export function Pane(props: PaneProps) {
     // Check if clicking on scrollbar (pane-specific)
     if (isOnScrollbar(relX, relY) && props.ptyId) {
       const scrollState = getScrollState(props.ptyId);
+      process.stderr.write(
+        `[mousedown] scrollbar click! vp=${scrollState?.viewportOffset} isAtBtm=${scrollState?.isAtBottom} relX=${relX} relY=${relY}\n`
+      );
       scrollbarDrag = {
         isDragging: true,
         startY: relY,
@@ -211,7 +215,13 @@ export function Pane(props: PaneProps) {
     }
 
     if (!props.ptyId) return;
-    if (!isInsideContent(relX, relY)) return;
+    if (!isInsideContent(relX, relY)) {
+      const scrollState = getScrollState(props.ptyId!);
+      process.stderr.write(
+        `[mousedown] not in content! relX=${relX} innerW=${innerWidth()} relY=${relY} vp=${scrollState?.viewportOffset} isAtBtm=${scrollState?.isAtBottom}\n`
+      );
+      return;
+    }
 
     // Try selection first (shared logic)
     const handled = mouseHandler.handleSelectionMouseDown(

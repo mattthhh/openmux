@@ -47,6 +47,9 @@ export function createScrollHandlers(
 
   const scrollTerminal = (ptyId: string, delta: number): void => {
     const cached = getScrollState(ptyId);
+    process.stderr.write(
+      `[scrollTerminal] pty=${ptyId.slice(-6)} delta=${delta} cachedVp=${cached?.viewportOffset} scrollbackLen=${cached?.scrollbackLength}\n`
+    );
     if (cached) {
       // Only use the animator's target as base when it's actively chasing.
       // After animation finishes, the stale targetOffset/curentOffset in
@@ -84,6 +87,9 @@ export function createScrollHandlers(
 
   const handleSetScrollOffset = (ptyId: string, offset: number): void => {
     const cached = getScrollState(ptyId);
+    process.stderr.write(
+      `[setScrollOffset] pty=${ptyId.slice(-6)} offset=${offset} cachedVp=${cached?.viewportOffset}\n`
+    );
     const clampedOffset = cached
       ? clampScrollOffset(offset, cached.scrollbackLength)
       : Math.max(0, offset);
