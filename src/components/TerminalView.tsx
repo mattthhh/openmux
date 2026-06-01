@@ -5,6 +5,7 @@
 
 import { createSignal, createEffect, on, Show } from 'solid-js';
 import { useRenderer } from '@opentui/solid';
+import type { MouseEvent as OpenTUIMouseEvent } from '@opentui/core';
 import { useTerminal } from '../contexts/TerminalContext';
 import { useSelection } from '../contexts/SelectionContext';
 import { useCopyMode } from '../contexts/copy-mode';
@@ -133,6 +134,28 @@ export function TerminalView(props: TerminalViewProps) {
     })
   );
 
+  // Scrollbar click handling: during heavy stdout rendering, OpenTUI may route
+  // mouse events to this inner box instead of the parent Pane's box. When the
+  // inner box has no handler, the scrollbar click is silently dropped.
+  // Handle it here so the scrollbar is always clickable regardless of which box
+  // OpenTUI chooses for event delivery.
+  const handleMouseDown = (event: OpenTUIMouseEvent) => {
+    const ptyId = props.ptyId;
+    if (!ptyId) return;
+    const scrollState = terminal.getScrollState(ptyId);
+    if (!scrollState || scrollState.isAtBottom) return;
+    // offsetX/Y already accounts for the Pane's left/top border (+1).
+    // relX/Y should be in content-area coordinates (0 = first content col/row).
+    const relX = event.x - (props.offsetX ?? 0);
+    const relY = event.y - (props.offsetY ?? 0);
+    if (relX !== props.width - 1) return;
+    if (relY < 0 || relY >= props.height) return;
+    event.preventDefault();
+    const ratio = 1 - relY / Math.max(1, props.height - 1);
+    const offset = Math.round(ratio * scrollState.scrollbackLength);
+    terminal.setScrollOffset(ptyId, offset);
+  };
+
   return (
     <Show
       when={version() > 0}
@@ -143,6 +166,7 @@ export function TerminalView(props: TerminalViewProps) {
             height: props.height,
           }}
           backgroundColor="transparent"
+          onMouseDown={handleMouseDown}
         />
       }
     >
@@ -152,6 +176,7 @@ export function TerminalView(props: TerminalViewProps) {
           height: props.height,
         }}
         backgroundColor="transparent"
+        onMouseDown={handleMouseDown}
         renderAfter={renderTerminal}
       />
     </Show>
