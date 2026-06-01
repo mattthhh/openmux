@@ -25,10 +25,6 @@ export function unregisterShimmerRow(ptyId: string): void {
   rowPositions.delete(ptyId);
 }
 
-export function getShimmerRowPosition(ptyId: string): ShimmerRowPosition | undefined {
-  return rowPositions.get(ptyId);
-}
-
 export function getAllShimmerRowPositions(): ReadonlyMap<string, ShimmerRowPosition> {
   return rowPositions;
 }

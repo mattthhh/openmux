@@ -12,5 +12,5 @@ export {
 } from './useActivitySubscriptions';
 export { useSessionDrag, type DragState } from './useSessionDrag';
 export { useAggregatePreviewSupport } from './useAggregatePreviewSupport';
-export { useShimmerRenderTime, useShimmerStateVersion } from './useShimmerRenderTime';
+export { useShimmerStateVersion } from './useShimmerRenderTime';
 export { useShimmerPostProcess } from './useShimmerPostProcess';

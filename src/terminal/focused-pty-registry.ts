@@ -29,17 +29,9 @@ type ClipboardPasteHandler = (ptyId: string) => void;
 /** Callback invoked before clipboard paste to exit copy mode if active */
 type CopyModeExitCallback = () => void;
 
-type FocusChangeCallback = (focusedPtyId: string | null, previousPtyId: string | null) => void;
-
 let focusedPtyId: string | null = null;
 let clipboardPasteHandler: ClipboardPasteHandler | null = null;
 let copyModeExitCallback: CopyModeExitCallback | null = null;
-let focusChangeCallback: FocusChangeCallback | null = null;
-
-/**
- * Callback to synchronously update read throttles on focus change.
- * Set by the bridge layer to avoid circular imports.
- */
 let readThrottleCallback:
   | ((ptyId: string, priority: 'focused' | 'background-visible') => void)
   | null = null;
@@ -58,7 +50,6 @@ export function setFocusedPty(ptyId: string | null): void {
   if (ptyId === focusedPtyId) return;
   const previous = focusedPtyId;
   focusedPtyId = ptyId;
-  focusChangeCallback?.(ptyId, previous);
   // Synchronously update read throttles so the new focused PTY reads data
   // immediately and the old PTY stops contending for event loop time.
   // The SolidJS effect in unified-subscription.ts also calls
@@ -117,16 +108,7 @@ export function resetFocusedPtyRegistry(): void {
   focusedPtyId = null;
   clipboardPasteHandler = null;
   copyModeExitCallback = null;
-  focusChangeCallback = null;
   readThrottleCallback = null;
-}
-
-/**
- * Register a callback invoked when the focused PTY changes.
- * Used by the visibility system to re-evaluate emulator update gating.
- */
-export function onFocusChange(callback: FocusChangeCallback): void {
-  focusChangeCallback = callback;
 }
 
 /**

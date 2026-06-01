@@ -1,6 +1,6 @@
 /**
  * Shimmer activity tracking tests.
- * Tests for recordPtyStdoutActivity, hasRecentPtyStdoutActivity, and hasMeaningfulActivity.
+ * Tests for recordPtyStdoutActivity, hasRecentPtyStdoutActivity.
  */
 
 import { describe, it, expect, beforeEach } from 'bun:test';
@@ -10,43 +10,10 @@ import {
   clearPtyStdoutActivity,
   clonePtyStdoutActivity,
   hasActiveShimmer,
-  hasMeaningfulActivity,
   suppressPtyShimmer,
   unsuppressPtyShimmer,
   setShimmerFocusedPty,
 } from '../shimmer';
-import type { PtyInfo } from '../../contexts/aggregate-view-types';
-
-// Helper to create a mock PTY info
-function createMockPtyInfo(overrides: Partial<PtyInfo> = {}): PtyInfo {
-  return {
-    ptyId: 'pty-1',
-    sessionId: 'session-1',
-    cwd: '/home/user/project',
-    workspaceId: 1,
-    paneId: 'pane-1',
-    gitBranch: 'main',
-    gitDiffStats: undefined,
-    gitDirty: false,
-    gitStaged: 0,
-    gitUnstaged: 0,
-    gitUntracked: 0,
-    gitConflicted: 0,
-    gitAhead: undefined,
-    gitBehind: undefined,
-    gitStashCount: undefined,
-    gitState: undefined,
-    gitDetached: false,
-    gitRepoKey: undefined,
-    gitIsWorktree: false,
-    gitCommonDir: null,
-    foregroundProcess: 'nvim',
-    shell: 'zsh',
-    title: 'nvim',
-    sessionMetadata: undefined,
-    ...overrides,
-  };
-}
 
 describe('shimmer activity tracking', () => {
   beforeEach(() => {
@@ -184,115 +151,6 @@ describe('shimmer activity tracking', () => {
 
     it('is safe to call on non-existent PTY', () => {
       expect(() => clearPtyStdoutActivity('non-existent')).not.toThrow();
-    });
-  });
-
-  describe('hasMeaningfulActivity', () => {
-    it('returns true for active non-background process', () => {
-      const pty = createMockPtyInfo({
-        foregroundProcess: 'nvim',
-      });
-
-      // Record activity
-      const now = Date.now();
-      recordPtyStdoutActivity(pty.ptyId, now);
-      recordPtyStdoutActivity(pty.ptyId, now + 100);
-
-      expect(hasMeaningfulActivity(pty)).toBe(true);
-    });
-
-    it('returns false when no foreground process', () => {
-      const pty = createMockPtyInfo({
-        foregroundProcess: undefined,
-      });
-
-      const now = Date.now();
-      recordPtyStdoutActivity(pty.ptyId, now);
-      recordPtyStdoutActivity(pty.ptyId, now + 100);
-
-      expect(hasMeaningfulActivity(pty)).toBe(false);
-    });
-
-    it('returns false for background processes (webpack)', () => {
-      const pty = createMockPtyInfo({
-        foregroundProcess: 'webpack --watch',
-      });
-
-      const now = Date.now();
-      recordPtyStdoutActivity(pty.ptyId, now);
-      recordPtyStdoutActivity(pty.ptyId, now + 100);
-
-      expect(hasMeaningfulActivity(pty)).toBe(false);
-    });
-
-    it('returns false for background processes (jest)', () => {
-      const pty = createMockPtyInfo({
-        foregroundProcess: 'jest --watch',
-      });
-
-      const now = Date.now();
-      recordPtyStdoutActivity(pty.ptyId, now);
-      recordPtyStdoutActivity(pty.ptyId, now + 100);
-
-      expect(hasMeaningfulActivity(pty)).toBe(false);
-    });
-
-    it('returns false for background processes (npm run watch)', () => {
-      const pty = createMockPtyInfo({
-        foregroundProcess: 'npm run watch',
-      });
-
-      const now = Date.now();
-      recordPtyStdoutActivity(pty.ptyId, now);
-      recordPtyStdoutActivity(pty.ptyId, now + 100);
-
-      expect(hasMeaningfulActivity(pty)).toBe(false);
-    });
-
-    it('returns false for background processes (vite)', () => {
-      const pty = createMockPtyInfo({
-        foregroundProcess: 'vite',
-      });
-
-      const now = Date.now();
-      recordPtyStdoutActivity(pty.ptyId, now);
-      recordPtyStdoutActivity(pty.ptyId, now + 100);
-
-      expect(hasMeaningfulActivity(pty)).toBe(false);
-    });
-
-    it('returns false when no recent activity recorded', () => {
-      const pty = createMockPtyInfo({
-        foregroundProcess: 'nvim',
-      });
-
-      // No activity recorded
-      expect(hasMeaningfulActivity(pty)).toBe(false);
-    });
-
-    it('returns true for coding agents like codex', () => {
-      const pty = createMockPtyInfo({
-        foregroundProcess: 'codex',
-        title: 'codex - working',
-      });
-
-      const now = Date.now();
-      recordPtyStdoutActivity(pty.ptyId, now);
-      recordPtyStdoutActivity(pty.ptyId, now + 100);
-
-      expect(hasMeaningfulActivity(pty)).toBe(true);
-    });
-
-    it('returns true for coding agents like claude', () => {
-      const pty = createMockPtyInfo({
-        foregroundProcess: 'claude-code',
-      });
-
-      const now = Date.now();
-      recordPtyStdoutActivity(pty.ptyId, now);
-      recordPtyStdoutActivity(pty.ptyId, now + 100);
-
-      expect(hasMeaningfulActivity(pty)).toBe(true);
     });
   });
 });
