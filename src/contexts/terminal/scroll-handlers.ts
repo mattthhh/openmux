@@ -83,6 +83,15 @@ export function createScrollHandlers(
     animator.setTarget(ptyId, clampedOffset, cached?.scrollbackLength ?? clampedOffset);
     animator.snapToTarget(ptyId);
     setScrollOffsetNoNotify(ptyId, clampedOffset);
+    // Write the offset directly to viewState via the render callback.
+    // The subscriber doesn't write viewportOffset from the absolute value
+    // (single-writer rule), so we must go through requestScrollAnimRender.
+    requestScrollAnimRender(ptyId, clampedOffset);
+    // Update the cache too — the subscriber's setScrollStateCache also
+    // doesn't write viewportOffset from the absolute value.
+    if (cached) {
+      (cached as { viewportOffset: number }).viewportOffset = clampedOffset;
+    }
     setScrollOffsetSync(ptyId, clampedOffset);
   };
 
