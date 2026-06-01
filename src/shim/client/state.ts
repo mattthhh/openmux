@@ -162,11 +162,28 @@ export class ShimPtyRegistry {
 
   private applyUnifiedUpdate(ptyId: string, update: UnifiedTerminalUpdate): void {
     const existing = this.ptyStates.get(ptyId);
-    // Preserve the client's viewportOffset — it's managed locally by the
-    // animator and not synced to the server. Server notifications always
-    // carry viewportOffset=0 from the server's stale session state.
-    const viewportOffset =
-      existing?.scrollState.viewportOffset ?? update.scrollState.viewportOffset;
+    // viewportOffset single-writer rule: same as unified-subscription.ts
+    // and TerminalContext.setScrollStateCache. The server's
+    // update.scrollState.viewportOffset mirrors the server's session state
+    // which can be stale or reset to 0. Never trust it directly.
+    // Instead, adjust by scrollback growth delta to preserve the client's
+    // visual position. The only absolute-value writers are the animator
+    // and user actions (handleScrollToBottom, handleSetScrollOffset).
+    let viewportOffset: number;
+    if (existing?.scrollState) {
+      viewportOffset = existing.scrollState.viewportOffset;
+      const scrollbackDelta =
+        update.scrollState.scrollbackLength - existing.scrollState.scrollbackLength;
+      if (scrollbackDelta > 0 && viewportOffset > 0) {
+        viewportOffset += scrollbackDelta;
+      }
+      if (viewportOffset > update.scrollState.scrollbackLength) {
+        viewportOffset = update.scrollState.scrollbackLength;
+      }
+    } else {
+      // First update for this PTY — accept the server's initial value.
+      viewportOffset = update.scrollState.viewportOffset;
+    }
 
     if (update.terminalUpdate.isFull && update.terminalUpdate.fullState) {
       const fullState = update.terminalUpdate.fullState;
