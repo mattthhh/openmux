@@ -273,11 +273,19 @@ export function setupUnifiedSubscription(deps: UnifiedSubscriptionDeps): void {
                   //   1. handleScrollToBottom (keypress) → sets 0
                   //   2. handleSetScrollOffset (scrollbar/copy-mode) → sets absolute
                   //   3. requestScrollAnimRender callback (animator ticks) → sets absolute
-                  if (!animating && viewState.lastScrollbackLength !== null) {
-                    const scrollbackDelta =
-                      update.scrollState.scrollbackLength - viewState.lastScrollbackLength;
-                    if (scrollbackDelta > 0 && existingScroll.viewportOffset > 0) {
-                      existingScroll.viewportOffset += scrollbackDelta;
+                  if (!animating) {
+                    if (viewState.lastScrollbackLength !== null) {
+                      // Subsequent updates: adjust by scrollback growth delta only.
+                      const scrollbackDelta =
+                        update.scrollState.scrollbackLength - viewState.lastScrollbackLength;
+                      if (scrollbackDelta > 0 && existingScroll.viewportOffset > 0) {
+                        existingScroll.viewportOffset += scrollbackDelta;
+                      }
+                    } else {
+                      // First subscriber callback — accept the server's viewportOffset.
+                      // The component just mounted, so there's no existing position
+                      // to preserve. The server value IS the initial state.
+                      existingScroll.viewportOffset = update.scrollState.viewportOffset;
                     }
                   }
                   existingScroll.scrollbackLength = update.scrollState.scrollbackLength;
