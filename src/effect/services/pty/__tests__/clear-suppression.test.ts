@@ -19,6 +19,8 @@ function createMockSession() {
   let scrollbackArchiverResetCount = 0;
   let scrollbackScheduleCount = 0;
   let scrollbackLength = 0;
+  let scrollbackTailTrim = 0;
+  let resetTailTrimCalls = 0;
 
   const emulator = {
     cols: 80,
@@ -36,7 +38,7 @@ function createMockSession() {
     reset() {},
     dispose() {},
     getScrollbackLength() {
-      return scrollbackLength;
+      return Math.max(0, scrollbackLength - scrollbackTailTrim);
     },
     getScrollbackLine() {
       return null;
@@ -85,6 +87,13 @@ function createMockSession() {
     },
     search() {
       return Promise.resolve([] as never);
+    },
+    eraseScrollbackTail(lines: number) {
+      scrollbackTailTrim += lines;
+    },
+    resetScrollbackTailTrim() {
+      scrollbackTailTrim = 0;
+      resetTailTrimCalls += 1;
     },
   } satisfies Partial<ITerminalEmulator> as ITerminalEmulator;
 
@@ -151,6 +160,8 @@ function createMockSession() {
     getScrollbackArchiverResetCount: () => scrollbackArchiverResetCount,
     getScrollbackScheduleCount: () => scrollbackScheduleCount,
     getScrollbackLength: () => scrollbackLength,
+    getScrollbackTailTrim: () => scrollbackTailTrim,
+    getResetTailTrimCalls: () => resetTailTrimCalls,
     setScrollbackLength: (n: number) => {
       scrollbackLength = n;
     },
@@ -350,13 +361,25 @@ describe('createDataHandler pi redraw integration', () => {
   });
 });
 
-describe('createDataHandler pi redraw scrollback trim', () => {
-  it('calls trimScrollback when scrollback grows after pi full redraw', async () => {
-    const { session, getScrollbackLength, setScrollbackLength } = createMockSession();
-    let trimScrollbackCalls: number[] = [];
-    (session.emulator as any).trimScrollback = (lines: number) => {
-      trimScrollbackCalls.push(lines);
-    };
+describe('createDataHandler pi redraw scrollback tail trim', () => {
+  it('resets tail trim before measuring pre-write scrollback on pi full redraw', async () => {
+    const { session, getResetTailTrimCalls } = createMockSession();
+    const { handleData } = createDataHandler({
+      copyToClipboard: async () => true,
+      session,
+      syncParser: createSyncModeParser(),
+      getPriority: () => 'focused' as const,
+    });
+
+    handleData('\x1b[?2026h\x1b[2J\x1b[H\x1b[3Jhello\x1b[?2026l');
+    await waitForDrain();
+
+    // The drain should have called resetScrollbackTailTrim before measuring
+    expect(getResetTailTrimCalls()).toBeGreaterThanOrEqual(1);
+  });
+
+  it('calls eraseScrollbackTail when scrollback grows after pi full redraw', async () => {
+    const { session, getScrollbackTailTrim, setScrollbackLength } = createMockSession();
 
     // Override emulator.write to simulate scrollback growth after write.
     const originalWrite = session.emulator.write.bind(session.emulator);
@@ -364,6 +387,8 @@ describe('createDataHandler pi redraw scrollback trim', () => {
     (session.emulator as any).write = (data: string | Uint8Array) => {
       originalWrite(data);
       writeCount++;
+      // Simulate that the first write (pi full redraw) pushed 2 lines
+      // into scrollback that should be trimmed.
       if (writeCount === 1) {
         setScrollbackLength(2);
       }
@@ -379,28 +404,22 @@ describe('createDataHandler pi redraw scrollback trim', () => {
     handleData('\x1b[?2026h\x1b[2J\x1b[H\x1b[3Jhello\x1b[?2026l');
     await waitForDrain();
 
-    expect(trimScrollbackCalls).toEqual([2]);
+    // The growth delta (2 - 0) should be hidden from the tail
+    expect(getScrollbackTailTrim()).toBe(2);
   });
 
-  it('accumulates trim across multiple pi full redraws (resize scenario)', async () => {
-    const { session, setScrollbackLength, getScrollbackLength } = createMockSession();
-    let trimScrollbackCalls: number[] = [];
-    (session.emulator as any).trimScrollback = (lines: number) => {
-      trimScrollbackCalls.push(lines);
-      // Simulate the real trim: decrease scrollback by the trimmed amount
-      setScrollbackLength(Math.max(0, getScrollbackLength() - lines));
-    };
+  it('tail trim persists across subsequent writes (not reset by write)', async () => {
+    const { session, getScrollbackTailTrim, setScrollbackLength } = createMockSession();
 
-    // Override emulator.write to simulate scrollback growth on each pi redraw.
+    // Override emulator.write to simulate scrollback growth on first write.
     const originalWrite = session.emulator.write.bind(session.emulator);
     let writeCount = 0;
     (session.emulator as any).write = (data: string | Uint8Array) => {
-      writeCount++;
-      // Simulate reflow scrollback appearing before each write (like a
-      // resize-down would create). In the real terminal, reflow from resize
-      // makes scrollback = N before the pi redraw write occurs.
-      setScrollbackLength(2 + writeCount * 3);
       originalWrite(data);
+      writeCount++;
+      if (writeCount === 1) {
+        setScrollbackLength(3);
+      }
     };
 
     const { handleData } = createDataHandler({
@@ -410,27 +429,59 @@ describe('createDataHandler pi redraw scrollback trim', () => {
       getPriority: () => 'focused' as const,
     });
 
-    // Three consecutive pi full redraws (e.g. from resize)
     handleData('\x1b[?2026h\x1b[2J\x1b[H\x1b[3Jhello\x1b[?2026l');
     await waitForDrain();
-    handleData('\x1b[?2026h\x1b[2J\x1b[H\x1b[3Jworld\x1b[?2026l');
-    await waitForDrain();
-    handleData('\x1b[?2026h\x1b[2J\x1b[H\x1b[3Jagain\x1b[?2026l');
+
+    const trimAfterRedraw = getScrollbackTailTrim();
+    expect(trimAfterRedraw).toBe(3);
+
+    // Now send normal (non-sync-mode) data — the tail trim should persist
+    // because write() no longer resets scrollback_tail_trim.
+    (session.emulator as any).write = originalWrite;
+    handleData('more data\n');
     await waitForDrain();
 
-    // Each redraw trims ALL scrollback (reflow from resize, not just delta)
-    expect(trimScrollbackCalls).toEqual([5, 8, 11]);
-    // After all trims, scrollback should be 0
-    expect(getScrollbackLength()).toBe(0);
+    // The trim should NOT have been reset by the normal write
+    expect(getScrollbackTailTrim()).toBe(trimAfterRedraw);
+  });
+
+  it('tail trim is reset when next pi full redraw starts', async () => {
+    const { session, getResetTailTrimCalls, setScrollbackLength } = createMockSession();
+
+    // Override emulator.write to simulate scrollback growth on each pi redraw.
+    const originalWrite = session.emulator.write.bind(session.emulator);
+    let writeCount = 0;
+    (session.emulator as any).write = (data: string | Uint8Array) => {
+      originalWrite(data);
+      writeCount++;
+      if (writeCount <= 2) {
+        setScrollbackLength(writeCount * 2);
+      }
+    };
+
+    const { handleData } = createDataHandler({
+      copyToClipboard: async () => true,
+      session,
+      syncParser: createSyncModeParser(),
+      getPriority: () => 'focused' as const,
+    });
+
+    handleData('\x1b[?2026h\x1b[2J\x1b[H\x1b[3Jhello\x1b[?2026l');
+    await waitForDrain();
+
+    const resetsAfterFirst = getResetTailTrimCalls();
+
+    // Send a second pi full redraw — the old tail trim should be reset
+    // before measuring the new pre-write scrollback
+    handleData('\x1b[?2026h\x1b[2J\x1b[H\x1b[3Jworld\x1b[?2026l');
+    await waitForDrain();
+
+    // Reset should have been called again for the second redraw
+    expect(getResetTailTrimCalls()).toBeGreaterThan(resetsAfterFirst);
   });
 
   it('does not trim scrollback for non-pi normal output', async () => {
-    const { session } = createMockSession();
-    let trimScrollbackCalls: number[] = [];
-    (session.emulator as any).trimScrollback = (lines: number) => {
-      trimScrollbackCalls.push(lines);
-    };
-
+    const { session, getScrollbackTailTrim } = createMockSession();
     const { handleData } = createDataHandler({
       copyToClipboard: async () => true,
       session,
@@ -441,6 +492,7 @@ describe('createDataHandler pi redraw scrollback trim', () => {
     handleData('just normal output\nwith newlines\n');
     await waitForDrain();
 
-    expect(trimScrollbackCalls).toEqual([]);
+    // No pi full redraw — no tail trim should be applied
+    expect(getScrollbackTailTrim()).toBe(0);
   });
 });

@@ -416,13 +416,18 @@ export function createDataHandler(options: DataHandlerOptions) {
 
     const config = getPriorityConfig(getPriority());
     const piRedraw = state.piFullRedrawPending;
+    // Before a pi full redraw, reset any lingering virtual tail trim so we
+    // get an accurate pre-write scrollback measurement. The previous trim
+    // was from a prior redraw cycle; its hidden lines have been superseded
+    // by the new frame about to be written.
+    if (piRedraw && typeof session.emulator.resetScrollbackTailTrim === 'function') {
+      session.emulator.resetScrollbackTailTrim();
+    }
     // Snapshot scrollback length before writing a pi full redraw so we can
-    // detect and undo any LF-triggered scrollback growth.
-    // The virtual tail trim (from prior pi redraws) is NOT reset here —
-    // it accumulates across redraws so that duplicate lines from all
-    // pi redraws in a resize burst are hidden. getScrollbackLength()
-    // already subtracts the tail trim, so preWriteScrollback correctly
-    // reflects the "visible" scrollback length.
+    // detect and hide any LF-triggered scrollback growth (duplicate lines
+    // that pi pushed into scrollback). getScrollbackLength() already
+    // subtracts any active tail trim, so preWriteScrollback reflects the
+    // "visible" scrollback length.
     const preWriteScrollback = piRedraw ? session.emulator.getScrollbackLength() : 0;
     const start = now();
     let batch = '';
@@ -526,34 +531,36 @@ export function createDataHandler(options: DataHandlerOptions) {
       // scheduleNotify calls should use setTimeout(0) to yield to the event
       // loop, preventing microtask chain starvation under sustained output.
       isFirstDrainInBurst = false;
-      // Don't let the archiver capture reflow garbage during a pi-redraw.
-      // Any scrollback present is from a prior resize-down's reflow, not
-      // legitimate content overflow. The trim below will remove it all.
+      // Don't let the archiver capture duplicate content during a pi-redraw.
+      // The pi redraw replaces the viewport in-place; any scrollback lines
+      // it pushes are duplicates that eraseScrollbackTail will hide. Archiving
+      // them would create duplicate entries in the user's scroll history.
       if (!piRedraw) {
         session.scrollbackArchiver?.schedule();
       }
     }
 
-    // After writing a pi full redraw, trim ALL scrollback from the head.
-    // With scrollbackLimit: 0, any scrollback in the native terminal is
-    // reflow garbage from a prior resize-down — the normalized pi prefix
-    // (HOME + ERASE_BELOW) does not push content to scrollback, so no
-    // new growth occurs during the write itself. The previous code only
-    // trimmed the growth delta (postWrite - preWrite), which is always 0
-    // because reflow creates the scrollback during resize, not during the
-    // write. Trimming the full postWriteScrollback eliminates all reflow
-    // artifacts and keeps scrollback at 0 across resize+redraw cycles.
+    // After writing a pi full redraw, detect and hide any scrollback lines
+    // that the redraw pushed into the tail. The normalized pi prefix
+    // (CSI H + CSI J) is non-scrolling, so it should not produce any growth.
+    // However, LF-triggered scrolls from cursor-positioned output and
+    // resize reflow can push duplicate lines into scrollback. We hide only
+    // the growth delta (post - pre) from the tail, preserving the user's
+    // pre-pi history (curl output, shell prompts, etc.) and pi's unique
+    // earlier content. The virtual tail trim persists across write() calls
+    // and is reset at the start of the next pi redraw cycle.
     if (piRedraw && wrote && !session.emulator.isDisposed) {
       const postWriteScrollback = session.emulator.getScrollbackLength();
-      if (postWriteScrollback > 0) {
-        tracePtyEvent('pi-redraw-scrollback-trim', {
+      const growth = postWriteScrollback - preWriteScrollback;
+      if (growth > 0) {
+        tracePtyEvent('pi-redraw-scrollback-growth', {
           ptyId: session.id,
-          trimmed: postWriteScrollback,
+          growth,
           preWriteScrollback,
           postWriteScrollback,
         });
-        if (typeof session.emulator.trimScrollback === 'function') {
-          session.emulator.trimScrollback(postWriteScrollback);
+        if (typeof session.emulator.eraseScrollbackTail === 'function') {
+          session.emulator.eraseScrollbackTail(growth);
         }
       }
       state.piFullRedrawPending = false;
