@@ -162,6 +162,11 @@ export class ShimPtyRegistry {
 
   private applyUnifiedUpdate(ptyId: string, update: UnifiedTerminalUpdate): void {
     const existing = this.ptyStates.get(ptyId);
+    // Preserve the client's viewportOffset — it's managed locally by the
+    // animator and not synced to the server. Server notifications always
+    // carry viewportOffset=0 from the server's stale session state.
+    const viewportOffset =
+      existing?.scrollState.viewportOffset ?? update.scrollState.viewportOffset;
 
     if (update.terminalUpdate.isFull && update.terminalUpdate.fullState) {
       const fullState = update.terminalUpdate.fullState;
@@ -171,7 +176,7 @@ export class ShimPtyRegistry {
       this.ptyStates.set(ptyId, {
         terminalState: fullState,
         cachedRows: [...fullState.cells],
-        scrollState: update.scrollState,
+        scrollState: { ...update.scrollState, viewportOffset },
         title: existing?.title ?? '',
       });
     } else if (existing?.terminalState) {
@@ -196,7 +201,7 @@ export class ShimPtyRegistry {
       this.ptyStates.set(ptyId, {
         terminalState: nextState,
         cachedRows,
-        scrollState: update.scrollState,
+        scrollState: { ...update.scrollState, viewportOffset },
         title: existing.title,
       });
     } else {
@@ -205,7 +210,7 @@ export class ShimPtyRegistry {
         cachedRows: update.terminalUpdate.fullState?.cells
           ? [...update.terminalUpdate.fullState.cells]
           : [],
-        scrollState: update.scrollState,
+        scrollState: { ...update.scrollState, viewportOffset },
         title: existing?.title ?? '',
       });
     }

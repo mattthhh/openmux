@@ -30,22 +30,9 @@ export function createScrollHandlers(
   // The perf win over the pre-805fc026 approach: we don't call notifySubscribers
   // (which does FFI + cell conversion) — just a property write + coalesced render.
   animator.setOnAnimate((ptyId, offset) => {
-    const cached = getScrollState(ptyId);
-    const prevCacheOffset = cached?.viewportOffset;
-
-    if (offset === 0 && prevCacheOffset !== undefined && prevCacheOffset > 0) {
-      const trace = new Error('ANIMATOR-SNAP-TRACE').stack ?? '';
-      const frameLines = trace.split('\n').slice(1, 6).join('\n  ');
-      console.warn(
-        `[scroll-snap] animator.onAnimate: offset ${prevCacheOffset} → 0` +
-          ` | animating=${animator.isAnimating(ptyId)}` +
-          ` | target=${animator.getTargetOffset(ptyId)}` +
-          `\n  ${frameLines}`
-      );
-    }
-
     setScrollOffsetNoNotify(ptyId, offset);
 
+    const cached = getScrollState(ptyId);
     if (cached) {
       (cached as { viewportOffset: number }).viewportOffset = offset;
     }

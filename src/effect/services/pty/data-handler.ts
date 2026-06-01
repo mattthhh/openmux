@@ -351,13 +351,6 @@ export function createDataHandler(options: DataHandlerOptions) {
   };
 
   const resetScrollbackState = () => {
-    const trace = new Error('SCROLL-RESET-TRACE').stack ?? '';
-    const frameLines = trace.split('\n').slice(1, 6).join('\n  ');
-    console.warn(
-      `[scroll-snap] resetScrollbackState: viewportOffset ${session.scrollState.viewportOffset} → 0` +
-        ` | scrollbackLength=${session.emulator.getScrollbackLength()}` +
-        `\n  ${frameLines}`
-    );
     session.scrollbackArchive.reset();
     session.scrollbackArchiver?.reset();
     session.scrollState.viewportOffset = 0;

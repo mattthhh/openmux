@@ -15,9 +15,6 @@ export function getCurrentScrollState(session: InternalPtySession): TerminalScro
   const scrollbackLength = session.emulator.getScrollbackLength();
   const liveScrollbackLength = session.liveEmulator.getScrollbackLength();
 
-  const previousViewportOffset = session.scrollState.viewportOffset;
-  const previousLastScrollbackLength = session.scrollState.lastScrollbackLength;
-
   const scrollbackDelta = scrollbackLength - session.scrollState.lastScrollbackLength;
   // Only adjust for scrollback GROWTH (new content added at the bottom).
   // When scrollback SHRINKS (archiver trims oldest lines from the top),
@@ -39,20 +36,6 @@ export function getCurrentScrollState(session: InternalPtySession): TerminalScro
     session.scrollbackArchive.clearCache();
   }
   session.scrollState.lastIsAtBottom = isAtBottom;
-
-  // Trace unexpected snap-to-bottom: viewportOffset transitions to 0
-  // without being at 0 before. This catches the exact call site and
-  // shows the delta that caused the transition.
-  if (isAtBottom && previousViewportOffset > 0) {
-    const trace = new Error('SCROLL-SNAP-TRACE').stack ?? '';
-    const frameLines = trace.split('\n').slice(1, 6).join('\n  ');
-    console.warn(
-      `[scroll-snap] viewportOffset ${previousViewportOffset} → 0` +
-        ` | scrollbackLength=${scrollbackLength} prevLen=${previousLastScrollbackLength}` +
-        ` | delta=${scrollbackDelta}` +
-        `\n  ${frameLines}`
-    );
-  }
 
   return {
     viewportOffset: session.scrollState.viewportOffset,
