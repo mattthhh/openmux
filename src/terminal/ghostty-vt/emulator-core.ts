@@ -283,6 +283,12 @@ export class GhosttyVTEmulatorCore {
   resetScrollbackTailTrim(): void {
     if (this._disposed) return;
     this.terminal.resetScrollbackTailTrim();
+    this.scrollbackCache.clear();
+    this.scrollbackSnapshotDirty = true;
+    this.scrollState = {
+      ...this.scrollState,
+      scrollbackLength: this.terminal.getScrollbackLength(),
+    };
   }
 
   getTerminalState(): TerminalState {

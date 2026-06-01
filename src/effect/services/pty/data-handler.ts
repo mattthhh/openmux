@@ -416,15 +416,13 @@ export function createDataHandler(options: DataHandlerOptions) {
 
     const config = getPriorityConfig(getPriority());
     const piRedraw = state.piFullRedrawPending;
-    // Before a pi full redraw, reset any lingering virtual tail trim so we
-    // get an accurate pre-write scrollback measurement. The previous trim
-    // was from a prior redraw cycle and its lines have been superseded by
-    // the new frame about to be written.
-    if (piRedraw && typeof session.emulator.resetScrollbackTailTrim === 'function') {
-      session.emulator.resetScrollbackTailTrim();
-    }
     // Snapshot scrollback length before writing a pi full redraw so we can
     // detect and undo any LF-triggered scrollback growth.
+    // The virtual tail trim (from prior pi redraws) is NOT reset here —
+    // it accumulates across redraws so that duplicate lines from all
+    // pi redraws in a resize burst are hidden. getScrollbackLength()
+    // already subtracts the tail trim, so preWriteScrollback correctly
+    // reflects the "visible" scrollback length.
     const preWriteScrollback = piRedraw ? session.emulator.getScrollbackLength() : 0;
     const start = now();
     let batch = '';
@@ -432,12 +430,16 @@ export function createDataHandler(options: DataHandlerOptions) {
     let segmentsProcessed = 0;
     let wrote = false;
 
+    const suppressClear = shouldSuppressClearScreen(session) && !piRedraw;
+
     if (force) {
       while (state.pendingSegments.length > 0) {
         let segment = state.pendingSegments.shift() ?? '';
         if (segment.length === 0) continue;
-        // Suppress ALL clear sequences during resize suppression window
-        if (shouldSuppressClearScreen(session)) {
+        // Suppress ALL clear sequences during resize suppression window,
+        // but NOT for pi full redraw segments — they've already been
+        // normalized and their CSI J is the non-scrolling erase-to-end-of-screen.
+        if (suppressClear) {
           segment = segment
             .replace(SCROLLBACK_CLEAR_REGEX, '')
             .replace(SCROLLBACK_CLEAR_C1_REGEX, '');
@@ -482,8 +484,10 @@ export function createDataHandler(options: DataHandlerOptions) {
 
       if (batch.length > 0) {
         // Suppress ALL clear sequences during resize suppression window (both CSI 2 J and CSI 3 J)
-        // Shells send these during SIGWINCH handling - dropping them preserves reflowed content
-        if (shouldSuppressClearScreen(session)) {
+        // Shells send these during SIGWINCH handling - dropping them preserves reflowed content.
+        // Skip suppression for pi full redraw batches — they've already been normalized
+        // and their CSI J is the non-scrolling erase-to-end-of-screen.
+        if (suppressClear) {
           // First suppress CSI 3 J (scrollback clear) to prevent resetScrollbackState()
           batch = batch.replace(SCROLLBACK_CLEAR_REGEX, '').replace(SCROLLBACK_CLEAR_C1_REGEX, '');
           // Then suppress CSI 2 J (screen clear)
@@ -525,22 +529,26 @@ export function createDataHandler(options: DataHandlerOptions) {
       session.scrollbackArchiver?.schedule();
     }
 
-    // After writing a pi full redraw, check if any scrollback grew from
-    // LF-triggered scrolls and virtually trim the duplicate tail lines.
-    // With cursor-positioned frames (like OpenTUI), there should be zero
-    // growth. This is a safety net for edge cases.
+    // After writing a pi full redraw, trim ALL scrollback from the head.
+    // With scrollbackLimit: 0, any scrollback in the native terminal is
+    // reflow garbage from a prior resize-down — the normalized pi prefix
+    // (HOME + ERASE_BELOW) does not push content to scrollback, so no
+    // new growth occurs during the write itself. The previous code only
+    // trimmed the growth delta (postWrite - preWrite), which is always 0
+    // because reflow creates the scrollback during resize, not during the
+    // write. Trimming the full postWriteScrollback eliminates all reflow
+    // artifacts and keeps scrollback at 0 across resize+redraw cycles.
     if (piRedraw && wrote && !session.emulator.isDisposed) {
       const postWriteScrollback = session.emulator.getScrollbackLength();
-      const growth = postWriteScrollback - preWriteScrollback;
-      if (growth > 0) {
-        tracePtyEvent('pi-redraw-scrollback-growth', {
+      if (postWriteScrollback > 0) {
+        tracePtyEvent('pi-redraw-scrollback-trim', {
           ptyId: session.id,
-          growth,
+          trimmed: postWriteScrollback,
           preWriteScrollback,
           postWriteScrollback,
         });
-        if (typeof session.emulator.eraseScrollbackTail === 'function') {
-          session.emulator.eraseScrollbackTail(growth);
+        if (typeof session.emulator.trimScrollback === 'function') {
+          session.emulator.trimScrollback(postWriteScrollback);
         }
       }
       state.piFullRedrawPending = false;

@@ -67,6 +67,13 @@ export interface ITerminalEmulator {
   eraseScrollbackTail?(lines: number): void;
 
   /**
+   * Physically trim the oldest N scrollback lines.
+   * Used after pi full redraws to keep scrollback length stable — the
+   * duplicates pushed by pi's frame are artifacts, not genuine history.
+   */
+  trimScrollback?(lines: number): void;
+
+  /**
    * Reset the virtual scrollback tail trim to zero.
    * Called when the pi full redraw cycle is complete and the trimmed lines
    * have been superseded by new content, so it is safe to expose the tail again.
