@@ -171,15 +171,11 @@ export class ShimPtyRegistry {
     // and user actions (handleScrollToBottom, handleSetScrollOffset).
     let viewportOffset: number;
     if (existing?.scrollState) {
-      // Reconcile: same approach as unified-subscription.ts.
-      // Trust the server unless it says 0 and the cache has the user's
-      // scroll position. handleScrollToBottom writes 0 to the cache
-      // directly, so when that happens server and cache both say 0.
-      if (update.scrollState.viewportOffset === 0 && existing.scrollState.viewportOffset > 0) {
-        // Server says 0 but cache has user's scroll pos: preserve it.
-        viewportOffset = existing.scrollState.viewportOffset;
-      } else {
-        viewportOffset = update.scrollState.viewportOffset;
+      viewportOffset = existing.scrollState.viewportOffset;
+      const scrollbackDelta =
+        update.scrollState.scrollbackLength - existing.scrollState.scrollbackLength;
+      if (scrollbackDelta > 0 && viewportOffset > 0) {
+        viewportOffset += scrollbackDelta;
       }
       if (viewportOffset > update.scrollState.scrollbackLength) {
         viewportOffset = update.scrollState.scrollbackLength;

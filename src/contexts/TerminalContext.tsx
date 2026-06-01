@@ -523,15 +523,13 @@ export function TerminalProvider(props: TerminalProviderProps) {
       const existing = ptyCaches.scrollStates.get(ptyId);
       const animating = scrollHandlers.isAnimating(ptyId);
       if (existing) {
-        // Reconcile viewportOffset: same approach as the subscriber in
-        // unified-subscription.ts. Trust the server value unless it says 0
-        // while the absolute-value writer left the cache at > 0 (stale
-        // server reset from resetScrollbackState or getCurrentScrollState).
+        // Same single-writer rule as viewState: never set viewportOffset
+        // from the absolute value. Only adjust by scrollback growth delta,
+        // matching the subscriber's logic in unified-subscription.ts.
         if (!animating) {
-          if (state.viewportOffset === 0 && existing.viewportOffset > 0) {
-            // Server says 0 but cache has user's scroll pos: preserve it.
-          } else {
-            existing.viewportOffset = state.viewportOffset;
+          const scrollbackDelta = state.scrollbackLength - existing.scrollbackLength;
+          if (scrollbackDelta > 0 && existing.viewportOffset > 0) {
+            existing.viewportOffset += scrollbackDelta;
           }
         }
         existing.scrollbackLength = state.scrollbackLength;
