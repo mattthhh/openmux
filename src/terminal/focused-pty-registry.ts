@@ -37,14 +37,42 @@ let copyModeExitCallback: CopyModeExitCallback | null = null;
 let focusChangeCallback: FocusChangeCallback | null = null;
 
 /**
+ * Callback to synchronously update read throttles on focus change.
+ * Set by the bridge layer to avoid circular imports.
+ */
+let readThrottleCallback:
+  | ((ptyId: string, priority: 'focused' | 'background-visible') => void)
+  | null = null;
+
+/**
  * Set the currently focused PTY ID.
  * Called by the App component when focus changes.
+ *
+ * Immediately updates read throttles for both PTYs so the new focused
+ * PTY starts reading at full speed and the old PTY pauses. Without this,
+ * read throttle changes wait for SolidJS effect propagation (microtask
+ * batch), which can be delayed by seconds under heavy output from the
+ * previously-focused PTY's drain cycle.
  */
 export function setFocusedPty(ptyId: string | null): void {
   if (ptyId === focusedPtyId) return;
   const previous = focusedPtyId;
   focusedPtyId = ptyId;
   focusChangeCallback?.(ptyId, previous);
+  // Synchronously update read throttles so the new focused PTY reads data
+  // immediately and the old PTY stops contending for event loop time.
+  // The SolidJS effect in unified-subscription.ts also calls
+  // applyPtyReadThrottle, but that may be delayed by the microtask chain.
+  if (readThrottleCallback) {
+    if (ptyId) {
+      readThrottleCallback(ptyId, 'focused');
+    }
+    if (previous) {
+      // Use background-visible — the SolidJS effect will correct this if
+      // the PTY is actually hidden (different workspace).
+      readThrottleCallback(previous, 'background-visible');
+    }
+  }
 }
 
 /**
@@ -90,6 +118,7 @@ export function resetFocusedPtyRegistry(): void {
   clipboardPasteHandler = null;
   copyModeExitCallback = null;
   focusChangeCallback = null;
+  readThrottleCallback = null;
 }
 
 /**
@@ -98,4 +127,14 @@ export function resetFocusedPtyRegistry(): void {
  */
 export function onFocusChange(callback: FocusChangeCallback): void {
   focusChangeCallback = callback;
+}
+
+/**
+ * Register a callback to synchronously update read throttles on focus change.
+ * Called by the bridge layer during initialization.
+ */
+export function setReadThrottleCallback(
+  callback: ((ptyId: string, priority: 'focused' | 'background-visible') => void) | null
+): void {
+  readThrottleCallback = callback;
 }

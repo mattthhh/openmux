@@ -511,6 +511,10 @@ export function createDataHandler(options: DataHandlerOptions) {
     }
 
     if (wrote) {
+      // Data was written to the emulator — we're in a burst. Subsequent
+      // scheduleNotify calls should use setTimeout(0) to yield to the event
+      // loop, preventing microtask chain starvation under sustained output.
+      isFirstDrainInBurst = false;
       session.scrollbackArchiver?.schedule();
     }
 
@@ -542,8 +546,24 @@ export function createDataHandler(options: DataHandlerOptions) {
 
     if (state.pendingSegments.length > 0) {
       scheduleNotify();
+    } else {
+      // Burst ended — reset so the next data arrival uses queueMicrotask
+      // for fast first-drain response.
+      isFirstDrainInBurst = true;
     }
   };
+
+  // Tracks whether this is the first schedule after an idle period.
+  // First drain uses queueMicrotask for fast response; subsequent
+  // drains within a burst use setTimeout(0) to yield to the event loop,
+  // preventing the microtask chain from starving user input and focus
+  // changes under sustained heavy output (find / -ls).
+  //
+  // The flag is reset to false inside drainPending after data is actually
+  // written to the emulator (not just buffered by sync mode). This ensures
+  // that if a drain runs but produces no output (sync mode still buffering),
+  // the next schedule still uses queueMicrotask for fast response.
+  let isFirstDrainInBurst = true;
 
   // Priority-aware scheduling: the drain interval is determined by
   // the PTY's current priority level (focused = 0ms, background-visible = 1000ms).
@@ -557,15 +577,35 @@ export function createDataHandler(options: DataHandlerOptions) {
       if (priority === 'background-hidden') return;
       session.pendingNotify = true;
 
-      // For the focused PTY, use queueMicrotask for immediate drain.
-      // deferMacrotask (setTimeout(0)) defers past I/O and can delay
-      // focus switches and scroll rendering by seconds under load.
+      // For the focused PTY, use a hybrid scheduling strategy:
+      // - First drain after idle: queueMicrotask (fast response to new data)
+      // - Subsequent drains within a burst: setTimeout(0) (yields to event loop)
+      //
+      // Under sustained heavy output (find / -ls), a purely microtask-based
+      // scheduleNotify creates a self-perpetuating chain: drainPending processes
+      // some data, then calls scheduleNotify again, which queues another
+      // queueMicrotask, which processes more data, and so on. This chain
+      // never yields to the macrotask queue, starving user input (keyboard,
+      // mouse), SolidJS effect propagation (focus changes), and the new
+      // focused PTY's read loop wake-up.
+      //
+      // setTimeout(0) yields between drain cycles, allowing the event loop
+      // to process I/O callbacks, timers, and UI events. The ~0-4ms delay
+      // per yield is invisible to the user but critical for responsiveness.
       if (priority === 'focused') {
-        queueMicrotask(() => {
-          if (session.pendingNotify) {
-            drainPending();
-          }
-        });
+        if (isFirstDrainInBurst) {
+          queueMicrotask(() => {
+            if (session.pendingNotify) {
+              drainPending();
+            }
+          });
+        } else {
+          setTimeout(() => {
+            if (session.pendingNotify) {
+              drainPending();
+            }
+          }, 0);
+        }
         return;
       }
 

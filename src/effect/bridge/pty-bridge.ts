@@ -20,6 +20,11 @@ import { isShimClient } from '../../shim/mode';
 import * as ShimClient from '../../shim/client';
 import { getPtyService } from './services-instance';
 import type { PtySpawnError } from '../errors';
+import { setReadThrottleCallback } from '../../terminal/focused-pty-registry';
+
+// Register the read throttle callback so setFocusedPty can synchronously
+// update throttles on focus change, without waiting for SolidJS effects.
+setReadThrottleCallback(applyPtyReadThrottle);
 
 /** Create a PTY session */
 export async function createPtySession(options: {
@@ -173,6 +178,13 @@ export function writeToPtySync(ptyId: string, data: string): void {
   const writer = ptyWriteRegistry.get(ptyId);
   if (writer) {
     writer(data);
+    // After a keyboard write, flush any already-processed emulator state
+    // and schedule a render. This ensures the visual effect of Ctrl+C,
+    // typed characters, etc. appears in the same event loop tick as the
+    // keystroke, rather than waiting for the next drain cycle.
+    // Without this, a microtask or setTimeout(0) delay is added before
+    // the emulator's pendingUpdate propagates to the subscriber and renders.
+    flushPtyData(ptyId);
     return;
   }
   // Fallback to async if no sync writer registered

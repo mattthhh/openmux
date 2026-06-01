@@ -69,6 +69,11 @@ export class GhosttyVTEmulatorCore {
   private _writeDirty = false;
   private _notifyScheduled = false;
   private _notifyTimer: ReturnType<typeof setTimeout> | null = null;
+  // Tracks whether this is the first notification after an idle period.
+  // First notification uses queueMicrotask for fast response; subsequent
+  // notifications use setTimeout(0) to yield to the event loop, preventing
+  // microtask chain starvation under sustained heavy output.
+  private _notifyIsFirstInBurst = true;
 
   private scrollbackCache = new ScrollbackCache(1000);
   private scrollbackSnapshotDirty = true;
@@ -467,47 +472,62 @@ export class GhosttyVTEmulatorCore {
 
   /**
    * Schedule a deferred prepareUpdate + subscriber notification.
-   * Uses setTimeout(0) to yield to the event loop between write and render,
-   * ensuring I/O events (mouse, keyboard) are processed during heavy output.
+   *
+   * Hybrid scheduling strategy to prevent microtask chain starvation:
+   * - First notification after idle: queueMicrotask (fast response to new data)
+   * - Subsequent notifications within a burst: setTimeout(0) (yields to event loop)
+   *
+   * Under sustained heavy output (find / -ls), a purely queueMicrotask-based
+   * notification creates a self-perpetuating chain: write triggers scheduleDeferredNotify,
+   * the microtask runs flushDeferredNotify which calls notifySubscribers, which triggers
+   * requestRenderFrame (another microtask), and the data handler's drainPending calls
+   * emulator.write again, scheduling another notification. This chain never yields
+   * to the macrotask queue, starving user input and focus changes.
+   *
+   * setTimeout(0) yields between notification cycles, allowing the event loop to
+   * process I/O callbacks, timers, and UI events. The ~0-4ms delay per yield is
+   * invisible to the user but critical for responsiveness under heavy output.
+   *
    * Multiple writes within the same event loop tick are coalesced since
    * _notifyScheduled prevents duplicate scheduling.
    */
   private scheduleDeferredNotify(): void {
     if (this._notifyScheduled) return;
     this._notifyScheduled = true;
-    // For the focused PTY, use queueMicrotask for near-immediate notification.
-    // setTimeout(0) defers to I/O which can delay the update by hundreds of ms
-    // under load, causing stale renders and laggy scrolling.
+    // For the focused PTY (updatesEnabled), use hybrid scheduling:
+    // first notification uses queueMicrotask for near-immediate response,
+    // subsequent notifications use setTimeout(0) to yield to the event loop.
     // For background PTYs, setTimeout(0) is fine — it yields to I/O and
     // coalesces heavy output before the 1fps pulse reads the state.
-    //
-    // Microtasks run before the next macrotask (before I/O, before timers),
-    // so the update+render completes before any new I/O events arrive.
-    // Coalescing still works via _writeDirty/_notifyScheduled flags.
-    if (this.updatesEnabled) {
-      queueMicrotask(() => {
-        if (this._disposed) return;
-        this._notifyScheduled = false;
-        if (this._writeDirty) {
-          this.flushDeferredNotify();
-        } else if (this.pendingUpdate) {
-          for (const callback of this.updateCallbacks) {
-            callback();
-          }
+    const notifyCallback = () => {
+      if (this._disposed) return;
+      this._notifyScheduled = false;
+      if (this._writeDirty) {
+        this.flushDeferredNotify();
+      } else if (this.pendingUpdate) {
+        for (const callback of this.updateCallbacks) {
+          callback();
         }
-      });
+      } else {
+        // Burst ended — reset so next write uses queueMicrotask for fast response
+        this._notifyIsFirstInBurst = true;
+      }
+    };
+
+    if (this.updatesEnabled) {
+      if (this._notifyIsFirstInBurst) {
+        this._notifyIsFirstInBurst = false;
+        queueMicrotask(notifyCallback);
+      } else {
+        this._notifyTimer = setTimeout(() => {
+          this._notifyTimer = null;
+          notifyCallback();
+        }, 0);
+      }
     } else {
       this._notifyTimer = setTimeout(() => {
         this._notifyTimer = null;
-        if (this._disposed) return;
-        this._notifyScheduled = false;
-        if (this._writeDirty) {
-          this.flushDeferredNotify();
-        } else if (this.pendingUpdate) {
-          for (const callback of this.updateCallbacks) {
-            callback();
-          }
-        }
+        notifyCallback();
       }, 0);
     }
   }
@@ -520,6 +540,7 @@ export class GhosttyVTEmulatorCore {
   private cancelDeferredNotify(): void {
     this._writeDirty = false;
     this._notifyScheduled = false;
+    this._notifyIsFirstInBurst = true;
     if (this._notifyTimer !== null) {
       clearTimeout(this._notifyTimer);
       this._notifyTimer = null;
