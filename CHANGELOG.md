@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.139](https://github.com/monotykamary/openmux/compare/v0.3.138...v0.3.139) (2026-06-01)
+
+
+### Bug Fixes
+
+* **scrollback:** persist virtual tail trim across write() calls ([ee2b9ef](https://github.com/monotykamary/openmux/commit/ee2b9ef9fbbe90df66d80f22e6ea006d73a78e5c))
+* **scroll:** restore macrotask pacing and synchronous render to prevent frame drops under load ([b5b8797](https://github.com/monotykamary/openmux/commit/b5b87977a6b69c21c9b81cd27f2d606b5c4f8ec6))
+* **terminal:** delegate trimScrollback and suppress archiver on pi redraw ([48d34ee](https://github.com/monotykamary/openmux/commit/48d34ee6a91096194a8f049c30cd7b1254f0a182))
+* **terminal:** replace virtual tail trim with physical head trim for pi redraw scrollback ([b4dab5b](https://github.com/monotykamary/openmux/commit/b4dab5b4c539ae2fa576b4d02ebe30e287a092cf))
+
+
+### Performance
+
+* **terminal:** cell pool, idle pulse skip, convertLine clamp, scrollback cache ([745ffda](https://github.com/monotykamary/openmux/commit/745ffdabdc0e9b0f79ae77b3c68a83ce4e654e45))
+
 ### [0.3.138](https://github.com/monotykamary/openmux/compare/v0.3.137...v0.3.138) (2026-06-01)
 
 
