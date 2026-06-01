@@ -171,15 +171,14 @@ export class ShimPtyRegistry {
     // and user actions (handleScrollToBottom, handleSetScrollOffset).
     let viewportOffset: number;
     if (existing?.scrollState) {
-      // Same reconciliation as unified-subscription.ts:
-      // trust the server unless it says 0 while the existing state
-      // (mutated by handleScrollToBottom or onAnimate) says >0.
-      const serverOffset = update.scrollState.viewportOffset;
-      if (serverOffset === 0 && existing.scrollState.viewportOffset > 0) {
-        // Server says 0 but cache has user's scroll pos: preserve it.
-        viewportOffset = existing.scrollState.viewportOffset;
-      } else {
-        viewportOffset = serverOffset;
+      viewportOffset = existing.scrollState.viewportOffset;
+      const scrollbackDelta =
+        update.scrollState.scrollbackLength - existing.scrollState.scrollbackLength;
+      if (scrollbackDelta > 0 && viewportOffset > 0) {
+        viewportOffset += scrollbackDelta;
+      }
+      if (viewportOffset > update.scrollState.scrollbackLength) {
+        viewportOffset = update.scrollState.scrollbackLength;
       }
     } else {
       // First update for this PTY — accept the server's initial value.

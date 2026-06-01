@@ -242,35 +242,67 @@ export function setupUnifiedSubscription(deps: UnifiedSubscriptionDeps): void {
                 // in update.scrollState. That value mirrors session.scrollState,
                 // which is a SHARED state written by onAnimate, handleScrollToBottom,
                 // etc. Writing it here creates a race: if the session's
+                // viewportOffset is stale or reset, the subscriber propagates
+                // that wrong value to viewState, causing snap-to-bottom.
+                //
+                // Instead, the subscriber only ADJUSTS viewportOffset by the
+                // scrollback growth delta. The three legitimate writers are:
+                //   1. handleScrollToBottom (keypress) → sets 0
+                //   2. handleSetScrollOffset (scrollbar/copy-mode) → sets absolute
+                //   3. requestScrollAnimRender callback (animator ticks) → sets absolute
+                //
+                // scrollbackLength, isAtBottom, isAtScrollbackLimit are metadata
+                // that don't affect viewport position and are safe to set directly.
                 const animating = terminal.isAnimating(ptyId);
                 const existingScroll = viewState.scrollState;
                 if (existingScroll) {
+                  // viewportOffset single-writer rule:
+                  // The subscriber NEVER copies the absolute value from
+                  // update.scrollState.viewportOffset. That value mirrors
+                  // session.scrollState, a SHARED state written by onAnimate,
+                  // handleScrollToBottom, resetScrollbackState, etc.
+                  // Writing it here creates a race: if the session's
+                  // viewportOffset is stale or reset to 0, the subscriber
+                  // propagates the wrong value to viewState.
+                  //
+                  // Instead, the subscriber only ADJUSTS viewportOffset:
+                  //   1. Increase by scrollback growth delta (new content at bottom)
+                  //   2. Clamp to [0, scrollbackLength] (handles clears/trims)
+                  //
+                  // The three legitimate absolute-value writers are:
+                  //   1. handleScrollToBottom (keypress) → sets 0
+                  //   2. handleSetScrollOffset (scrollbar/copy-mode) → sets absolute
+                  //   3. requestScrollAnimRender callback (animator ticks) → sets absolute
                   if (!animating) {
-                    // Reconcile viewportOffset: trust the server value in most
-                    // cases, but guard against the snap-to-bottom race where
-                    // resetScrollbackState clears session.viewportOffset to 0
-                    // while the user is scrolled up. handleScrollToBottom writes
-                    // 0 to BOTH the server (session) and the cache synchronously
-                    // before the subscriber runs. So server=0 + cache=0 means
-                    // intentional scroll-to-bottom, but server=0 + cache>0 means
-                    // a stale reset that would incorrectly snap the user down.
-                    const serverOffset = update.scrollState.viewportOffset;
-                    if (serverOffset === 0 && existingScroll.viewportOffset > 0) {
-                      const cached = terminal.getScrollState(ptyId);
-                      if (!cached || cached.viewportOffset > 0) {
-                        // Cache confirms user is scrolled up — don't snap.
-                      } else {
-                        existingScroll.viewportOffset = 0;
+                    if (viewState.lastScrollbackLength !== null) {
+                      // Subsequent updates: adjust by scrollback growth delta only.
+                      const scrollbackDelta =
+                        update.scrollState.scrollbackLength - viewState.lastScrollbackLength;
+                      if (scrollbackDelta > 0 && existingScroll.viewportOffset > 0) {
+                        existingScroll.viewportOffset += scrollbackDelta;
                       }
                     } else {
-                      existingScroll.viewportOffset = serverOffset;
+                      // First subscriber callback — accept the server's viewportOffset.
+                      // The component just mounted, so there's no existing position
+                      // to preserve. The server value IS the initial state.
+                      existingScroll.viewportOffset = update.scrollState.viewportOffset;
                     }
                   }
                   existingScroll.scrollbackLength = update.scrollState.scrollbackLength;
+                  // Clamp after updating scrollbackLength: if scrollback was
+                  // cleared or trimmed, viewportOffset must not exceed the
+                  // new scrollbackLength. This handles CSI 3 J (scrollback
+                  // clear) and archiver trims without trusting the absolute
+                  // value from the server.
+                  if (existingScroll.viewportOffset > existingScroll.scrollbackLength) {
+                    existingScroll.viewportOffset = existingScroll.scrollbackLength;
+                  }
                   existingScroll.isAtBottom = existingScroll.viewportOffset === 0;
                   existingScroll.isAtScrollbackLimit = update.scrollState.isAtScrollbackLimit;
                 } else {
                   // First subscriber call — accept the server's initial value.
+                  // The component just mounted, so there's no existing position
+                  // to preserve.
                   const copy = { ...update.scrollState };
                   viewState.scrollState = copy;
                 }
@@ -278,6 +310,24 @@ export function setupUnifiedSubscription(deps: UnifiedSubscriptionDeps): void {
                 // Also update the ptyCaches.scrollStates Map (used by
                 // getScrollState in scrollTerminal for starting new animations).
                 terminal.setScrollStateCache(ptyId, update.scrollState);
+
+                // Sync viewState.viewportOffset from the cache when they diverge.
+                // The absolute-value writers (handleScrollToBottom, handleSetScrollOffset,
+                // onAnimate) write viewportOffset to the cache directly. They also
+                // call requestScrollAnimRender to write to viewState — but that
+                // depends on the scrollAnimRenderRegistry, which may not have an
+                // entry yet (e.g., during mount) or may have been unregistered
+                // during a ptyId change. When viewState goes stale, the delta-only
+                // rule above won't fix it because delta is 0 or viewportOffset is
+                // already 0. Sync from the cache (which was written by the absolute-
+                // value writer) to recover.
+                if (existingScroll) {
+                  const cached = terminal.getScrollState(ptyId);
+                  if (cached && cached.viewportOffset !== existingScroll.viewportOffset) {
+                    existingScroll.viewportOffset = cached.viewportOffset;
+                    existingScroll.isAtBottom = cached.viewportOffset === 0;
+                  }
+                }
 
                 // When scrollback grows while the user is scrolled up,
                 // getCurrentScrollState adjusts session.scrollState.viewportOffset
