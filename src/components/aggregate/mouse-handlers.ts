@@ -146,13 +146,21 @@ export function createAggregateMouseHandlers(deps: MouseHandlerDeps) {
     // Check if clicking on scrollbar
     if (isOnScrollbar(ptyId, relX, relY)) {
       const scrollState = getScrollState(ptyId);
+      const offset = yToScrollOffset(ptyId, relY);
+      console.warn(
+        '[aggregate-pane] scrollbar click detected pty=%s vp=%s offset=%s isAtBottom=%s',
+        ptyId.slice(-6),
+        scrollState?.viewportOffset,
+        offset,
+        scrollState?.isAtBottom
+      );
       scrollbarDrag = {
         isDragging: true,
         startY: relY,
         startOffset: scrollState?.viewportOffset ?? 0,
       };
       // Jump to clicked position
-      setScrollOffset(ptyId, yToScrollOffset(ptyId, relY));
+      setScrollOffset(ptyId, offset);
       return;
     }
 
