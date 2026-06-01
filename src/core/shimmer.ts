@@ -44,7 +44,7 @@ export function setShimmerFocusedPty(ptyId: string | null): void {
 const recentlyCompletedShimmer = new Map<string, number>();
 
 /** Shimmer animation state per PTY - tracks completed sweeps and queued activity */
-interface ShimmerState {
+export interface ShimmerState {
   startTime: number;
   duration: number; // Animation duration in ms (typically 2500ms)
   sweepDuration: number; // Duration of one complete sweep
@@ -57,7 +57,7 @@ interface ShimmerState {
   sawUnfocusedActivity: boolean;
 }
 
-const shimmerStates = new Map<string, ShimmerState>();
+export const shimmerStates = new Map<string, ShimmerState>();
 const shimmerStateListeners = new Set<() => void>();
 
 function notifyShimmerStateListeners(): void {
@@ -104,7 +104,7 @@ export function unsuppressPtyShimmer(ptyId: string): void {
   return;
 }
 
-interface ShimmerConfig {
+export interface ShimmerConfig {
   /** Sweep duration in milliseconds */
   sweepDuration: number;
   /** Half-width of the shimmer band in characters */
@@ -118,7 +118,7 @@ interface ShimmerConfig {
 }
 
 /** Default shimmer configuration */
-const DEFAULT_CONFIG: ShimmerConfig = {
+export const DEFAULT_CONFIG: ShimmerConfig = {
   sweepDuration: 2500, // 2.5 seconds for full sweep
   bandHalfWidth: 5,
   padding: 10,
@@ -162,7 +162,7 @@ function rgbToHex(r: number, g: number, b: number): string {
  * Cosine-smooth falloff for shimmer band
  * Returns 0-1 intensity based on distance from band center
  */
-function shimmerIntensity(distance: number, bandHalfWidth: number): number {
+export function shimmerIntensity(distance: number, bandHalfWidth: number): number {
   if (distance > bandHalfWidth) return 0;
   const x = (Math.PI * distance) / bandHalfWidth;
   return 0.5 * (1 + Math.cos(x));
@@ -545,4 +545,32 @@ export function subscribeToShimmerStateChange(callback: () => void): () => void 
   return () => {
     shimmerStateListeners.delete(callback);
   };
+}
+
+/**
+ * Get the current sweep position for a PTY's shimmer animation.
+ * Used by the native post-processor to build the cellMask.
+ * Returns null if the PTY has no active shimmer.
+ */
+export function getShimmerSweepPosition(
+  ptyId: string,
+  textLength: number,
+  now: number = Date.now()
+): number | null {
+  const state = shimmerStates.get(ptyId);
+  if (!state) return null;
+
+  const elapsed = now - state.startTime;
+  const totalElapsed = now - state.totalStartTime;
+  const sweepElapsed = elapsed % state.sweepDuration;
+
+  // Check max total duration cap
+  if (totalElapsed > MAX_TOTAL_SHIMMER_MS) return null;
+
+  // Check if animation has fully expired with no queued activity
+  if (elapsed > state.duration && !state.hasQueuedActivity) return null;
+
+  const sweepProgress = sweepElapsed / state.sweepDuration;
+  const totalLength = textLength + DEFAULT_CONFIG.padding * 2;
+  return sweepProgress * totalLength - DEFAULT_CONFIG.padding;
 }

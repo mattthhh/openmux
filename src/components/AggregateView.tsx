@@ -8,6 +8,7 @@
 
 import { Show, createEffect, createMemo } from 'solid-js';
 import type { MouseEvent as OpentuiMouseEvent } from '@opentui/core';
+import { useRenderer } from '@opentui/solid';
 import { useAggregateView } from '../contexts/AggregateViewContext';
 import type { DiffTarget } from '../core/diff-opener';
 import { useSession } from '../contexts/SessionContext';
@@ -24,6 +25,7 @@ import {
 } from './aggregate/list-viewport';
 import { calculateLayoutDimensions, getHintsText } from './aggregate';
 import { truncateHintRight } from './overlay-hints';
+import { useShimmerPostProcess } from './aggregate/hooks';
 import {
   ListPane,
   PreviewPane,
@@ -167,6 +169,10 @@ export function AggregateView(props: AggregateViewProps) {
 
     return aggregate.state.selectedIndex;
   });
+
+  // Wire shimmer post-processor to renderer for native colorMatrix animation
+  const renderer = useRenderer();
+  useShimmerPostProcess(renderer, () => aggregate.state.showAggregateView);
 
   const mouseHandlers = AggregateMouseController({
     isActive: () => aggregate.state.showAggregateView,
