@@ -12,6 +12,7 @@ import {
 import { getKittyGraphicsRenderer } from '../../terminal/kitty-graphics';
 import * as errore from 'errore';
 import { TerminalSubscriptionError } from '../../effect/errors';
+import { isShimClient } from '../../shim/mode';
 import {
   attachVisibleEmulator,
   clearVisiblePty,
@@ -239,10 +240,19 @@ export function setupUnifiedSubscription(deps: UnifiedSubscriptionDeps): void {
                 // update scrollbackLength, isAtBottom, isAtScrollbackLimit.
                 const animating = terminal.isAnimating(ptyId);
                 const existingScroll = viewState.scrollState;
+                // In shim mode, the server sends a stale viewportOffset (always 0)
+                // because the client's animator never syncs scroll position to the
+                // server. Reject viewportOffset=0 from shim updates to prevent snap.
+                const shimRejectZero =
+                  isShimClient() &&
+                  update.scrollState.viewportOffset === 0 &&
+                  !animating;
                 if (existingScroll) {
                   if (!animating) {
                     const prevOffset = existingScroll.viewportOffset;
-                    existingScroll.viewportOffset = update.scrollState.viewportOffset;
+                    if (!shimRejectZero || prevOffset === 0) {
+                      existingScroll.viewportOffset = update.scrollState.viewportOffset;
+                    }
                     if (existingScroll.viewportOffset === 0 && prevOffset > 0) {
                       const trace = new Error('SUBSCRIBER-SNAP-TRACE').stack ?? '';
                       const frameLines = trace.split('\n').slice(1, 6).join('\n  ');
@@ -259,7 +269,7 @@ export function setupUnifiedSubscription(deps: UnifiedSubscriptionDeps): void {
                   existingScroll.isAtScrollbackLimit = update.scrollState.isAtScrollbackLimit;
                 } else {
                   const copy = { ...update.scrollState };
-                  if (animating)
+                  if (animating || shimRejectZero)
                     copy.viewportOffset =
                       viewState.scrollState?.viewportOffset ?? copy.viewportOffset;
                   viewState.scrollState = copy;
@@ -267,6 +277,20 @@ export function setupUnifiedSubscription(deps: UnifiedSubscriptionDeps): void {
 
                 // Also update the ptyCaches.scrollStates Map (used by
                 // getScrollState in scrollTerminal for starting new animations).
+                // Apply the same shim guard — don't overwrite cache with
+                // server-sent zero when the client has a non-zero offset.
+                if (isShimClient() && update.scrollState.viewportOffset === 0) {
+                  const cached = terminal.getScrollState(ptyId);
+                  if (cached && cached.viewportOffset > 0) {
+                    update = {
+                      ...update,
+                      scrollState: {
+                        ...update.scrollState,
+                        viewportOffset: cached.viewportOffset,
+                      },
+                    };
+                  }
+                }
                 terminal.setScrollStateCache(ptyId, update.scrollState);
 
                 // When scrollback grows while the user is scrolled up,
