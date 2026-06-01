@@ -200,6 +200,11 @@ export function Pane(props: PaneProps) {
     // Check if clicking on scrollbar (pane-specific)
     if (isOnScrollbar(relX, relY) && props.ptyId) {
       const scrollState = getScrollState(props.ptyId);
+      console.warn(
+        '[pane] scrollbar click detected vp=%s isAtBottom=%s',
+        scrollState?.viewportOffset,
+        scrollState?.isAtBottom
+      );
       scrollbarDrag = {
         isDragging: true,
         startY: relY,

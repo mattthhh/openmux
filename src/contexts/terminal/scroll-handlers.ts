@@ -84,6 +84,12 @@ export function createScrollHandlers(
 
   const handleSetScrollOffset = (ptyId: string, offset: number): void => {
     const cached = getScrollState(ptyId);
+    console.warn(
+      '[scrollbar] handleSetScrollOffset called pty=%s offset=%s cacheVp=%s',
+      ptyId.slice(-6),
+      offset,
+      cached?.viewportOffset
+    );
     const clampedOffset = cached
       ? clampScrollOffset(offset, cached.scrollbackLength)
       : Math.max(0, offset);
