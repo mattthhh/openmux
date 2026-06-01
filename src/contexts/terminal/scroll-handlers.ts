@@ -35,6 +35,7 @@ export function createScrollHandlers(
     const cached = getScrollState(ptyId);
     if (cached) {
       (cached as { viewportOffset: number }).viewportOffset = offset;
+      cached.isAtBottom = offset === 0;
     }
 
     requestScrollAnimRender(ptyId, offset);
@@ -91,6 +92,7 @@ export function createScrollHandlers(
     // doesn't write viewportOffset from the absolute value.
     if (cached) {
       (cached as { viewportOffset: number }).viewportOffset = clampedOffset;
+      cached.isAtBottom = clampedOffset === 0;
     }
     setScrollOffsetSync(ptyId, clampedOffset);
   };
@@ -102,6 +104,7 @@ export function createScrollHandlers(
     const cached = getScrollState(ptyId);
     if (cached) {
       (cached as { viewportOffset: number }).viewportOffset = 0;
+      cached.isAtBottom = true;
     }
     requestScrollAnimRender(ptyId, 0);
     // Sync notifySubscribers immediately — the async scrollToBottomBridge

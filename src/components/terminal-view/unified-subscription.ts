@@ -367,8 +367,9 @@ export function setupUnifiedSubscription(deps: UnifiedSubscriptionDeps): void {
           registerScrollAnimRender(ptyId, (offset: number) => {
             if (!mounted) return;
             const ss = viewState.scrollState;
-            if (ss && ss.viewportOffset !== offset) {
+            if (ss) {
               ss.viewportOffset = offset;
+              ss.isAtBottom = offset === 0;
             }
             requestRenderFrame();
           });
