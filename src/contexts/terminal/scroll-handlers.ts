@@ -81,6 +81,11 @@ export function createScrollHandlers(
     const clampedOffset = cached
       ? clampScrollOffset(offset, cached.scrollbackLength)
       : Math.max(0, offset);
+    // Initialize the animator's currentOffset to the clicked position.
+    // Without this, the animator retains its old currentOffset from
+    // a previous trackpad scroll, and the next tick overwrites the
+    // correct value written by requestScrollAnimRender below.
+    animator.initialize(ptyId, clampedOffset);
     animator.setTarget(ptyId, clampedOffset, cached?.scrollbackLength ?? clampedOffset);
     setScrollOffsetNoNotify(ptyId, clampedOffset);
     // Write the offset directly to viewState via the render callback.
