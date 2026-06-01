@@ -16,7 +16,12 @@ export function getCurrentScrollState(session: InternalPtySession): TerminalScro
   const liveScrollbackLength = session.liveEmulator.getScrollbackLength();
 
   const scrollbackDelta = scrollbackLength - session.scrollState.lastScrollbackLength;
-  if (scrollbackDelta !== 0 && session.scrollState.viewportOffset > 0) {
+  // Only adjust for scrollback GROWTH (new content added at the bottom).
+  // When scrollback SHRINKS (archiver trims oldest lines from the top),
+  // the user's offset from the bottom is unchanged — lines removed
+  // above them don't affect their viewport position. The clamping
+  // below handles the edge case where offset exceeds the new length.
+  if (scrollbackDelta > 0 && session.scrollState.viewportOffset > 0) {
     const nextOffset = session.scrollState.viewportOffset + scrollbackDelta;
     session.scrollState.viewportOffset = Math.max(0, Math.min(nextOffset, scrollbackLength));
   }
