@@ -177,7 +177,7 @@ function AppContent() {
   const { setUpdateLabel, confirmationState, handleShimDetached } = overlays;
   const { exitSearchMode, setSearchQuery, nextMatch, prevMatch } = search;
   const { clearAllSelections } = selection;
-  const { writeToFocused, getFocusedEmulator } = terminal;
+  const { writeToFocused, getFocusedEmulator, requestSnapToBottom } = terminal;
 
   setupAppEffects({
     getWidth: width,
@@ -255,6 +255,10 @@ function AppContent() {
     clearAllSelections,
     getFocusedEmulator,
     writeToFocused,
+    requestSnapToBottom: () => {
+      const id = getFocusedPtyId(layout.activeWorkspace);
+      if (id) requestSnapToBottom(id);
+    },
     isOverlayActive: () => sessionState.showSessionPicker || session.showTemplateOverlay,
     handleCopyModeKey: appActions.handleCopyModeKey,
   });

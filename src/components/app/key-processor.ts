@@ -10,6 +10,9 @@ export interface KeyProcessorDeps {
   clearAllSelections: () => void;
   getFocusedEmulator: () => ITerminalEmulator | null;
   writeToFocused: (data: string) => void;
+  /** Hook called when a printable key is about to be written to the PTY.
+   * Used for snap-to-bottom — deferred to subscriber cycle via flag. */
+  onKeyWrite?: () => void;
 }
 
 /**
@@ -38,6 +41,7 @@ export function processNormalModeKey(event: KeyboardEvent, deps: KeyProcessorDep
   );
 
   if (sequence) {
+    deps.onKeyWrite?.();
     deps.writeToFocused(sequence);
   }
 }

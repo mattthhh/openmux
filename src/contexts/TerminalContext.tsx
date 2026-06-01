@@ -34,6 +34,7 @@ import {
   subscribeToPtyLifecycle,
   getSessionPtyMapping,
   waitForShimClient,
+  setScrollOffsetSync,
 } from '../effect/bridge';
 import {
   subscribeToPtyWithCaches,
@@ -107,6 +108,10 @@ export interface TerminalContextValue {
   setScrollOffset: (ptyId: string, offset: number) => void;
   /** Scroll terminal to bottom (live content) */
   scrollToBottom: (ptyId: string) => void;
+  /** Request snap-to-bottom on next subscriber update (single-writer pattern).
+   * Sets a flag consumed by setScrollStateCache inside the subscriber cycle,
+   * rather than writing viewportOffset directly. Also syncs the server. */
+  requestSnapToBottom: (ptyId: string) => void;
   /** Adjust the scroll animator's offset when scrollback grows (e.g., new output) */
   adjustAnimationOffset: (ptyId: string, delta: number) => void;
   /** Check if scroll animation is active for a PTY */
@@ -187,6 +192,8 @@ export function TerminalProvider(props: TerminalProviderProps) {
 
   // Create scroll handlers (extracted for reduced file size)
   const scrollHandlers = createScrollHandlers(getScrollState);
+
+  const pendingSnaps = new Set<string>();
 
   // Create PTY lifecycle handlers (extracted for reduced file size)
   const ptyLifecycleHandlers = createPtyLifecycleHandlers({
@@ -517,16 +524,27 @@ export function TerminalProvider(props: TerminalProviderProps) {
     scrollTerminal: scrollHandlers.scrollTerminal,
     setScrollOffset: scrollHandlers.handleSetScrollOffset,
     scrollToBottom: scrollHandlers.handleScrollToBottom,
+    requestSnapToBottom: (ptyId: string) => {
+      pendingSnaps.add(ptyId);
+      setScrollOffsetSync(ptyId, 0);
+    },
     adjustAnimationOffset: scrollHandlers.adjustAnimationOffset,
     isAnimating: scrollHandlers.isAnimating,
     setScrollStateCache: (ptyId: string, state: TerminalScrollState) => {
       const existing = ptyCaches.scrollStates.get(ptyId);
       const animating = scrollHandlers.isAnimating(ptyId);
       if (existing) {
-        // Same single-writer rule as viewState: never set viewportOffset
-        // from the absolute value. Only adjust by scrollback growth delta,
-        // matching the subscriber's logic in unified-subscription.ts.
-        if (!animating) {
+        // Single-writer pattern: requestSnapToBottom sets a flag consumed here.
+        // The subscriber calls setScrollStateCache during its update cycle,
+        // which is the right point to reset the cache to 0 — after delta
+        // adjustment in viewState but before cache-sync propagates it.
+        const snapRequested = pendingSnaps.delete(ptyId);
+        if (snapRequested) {
+          existing.viewportOffset = 0;
+        } else if (!animating) {
+          // Same single-writer rule as viewState: never set viewportOffset
+          // from the absolute value. Only adjust by scrollback growth delta,
+          // matching the subscriber's logic in unified-subscription.ts.
           const scrollbackDelta = state.scrollbackLength - existing.scrollbackLength;
           if (scrollbackDelta > 0 && existing.viewportOffset > 0) {
             existing.viewportOffset += scrollbackDelta;
