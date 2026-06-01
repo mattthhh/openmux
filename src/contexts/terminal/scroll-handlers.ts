@@ -60,6 +60,12 @@ export function createScrollHandlers(
         animator.initialize(ptyId, cached.viewportOffset);
       }
       animator.setTarget(ptyId, targetOffset, cached.scrollbackLength);
+      // Update the cache immediately so isOnScrollbar in Pane.tsx
+      // sees the new viewport position before the first animator tick.
+      // Without this, the cache stays at viewportOffset=0/isAtBottom=true
+      // during heavy stdout, and scrollbar clicks are ignored.
+      (cached as { viewportOffset: number }).viewportOffset = targetOffset;
+      cached.isAtBottom = targetOffset === 0;
     } else {
       getScrollStateFromBridge(ptyId).then((state) => {
         if (state) {
