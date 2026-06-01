@@ -254,6 +254,9 @@ pub const ResponseHandler = struct {
                     }
                 }
             },
+            .glyph => {
+                // Glyph protocol not handled in VT-only context
+            },
         }
     }
 
