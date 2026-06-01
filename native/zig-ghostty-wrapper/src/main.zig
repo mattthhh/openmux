@@ -12,6 +12,7 @@ comptime {
     @export(&terminal.write, .{ .name = "ghostty_terminal_write" });
     @export(&terminal.trimScrollback, .{ .name = "ghostty_terminal_trim_scrollback" });
     @export(&terminal.eraseScrollbackTail, .{ .name = "ghostty_terminal_erase_scrollback_tail" });
+    @export(&terminal.resetScrollbackTailTrim, .{ .name = "ghostty_terminal_reset_scrollback_tail_trim" });
 
     // Render state API
     @export(&terminal.renderStateUpdate, .{ .name = "ghostty_render_state_update" });

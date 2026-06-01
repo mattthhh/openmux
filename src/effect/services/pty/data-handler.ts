@@ -416,6 +416,13 @@ export function createDataHandler(options: DataHandlerOptions) {
 
     const config = getPriorityConfig(getPriority());
     const piRedraw = state.piFullRedrawPending;
+    // Before a pi full redraw, reset any lingering virtual tail trim so we
+    // get an accurate pre-write scrollback measurement. The previous trim
+    // was from a prior redraw cycle and its lines have been superseded by
+    // the new frame about to be written.
+    if (piRedraw && typeof session.emulator.resetScrollbackTailTrim === 'function') {
+      session.emulator.resetScrollbackTailTrim();
+    }
     // Snapshot scrollback length before writing a pi full redraw so we can
     // detect and undo any LF-triggered scrollback growth.
     const preWriteScrollback = piRedraw ? session.emulator.getScrollbackLength() : 0;

@@ -280,6 +280,11 @@ export class GhosttyVTEmulatorCore {
     };
   }
 
+  resetScrollbackTailTrim(): void {
+    if (this._disposed) return;
+    this.terminal.resetScrollbackTailTrim();
+  }
+
   getTerminalState(): TerminalState {
     if (this._disposed) {
       if (this.cachedState) {

@@ -35,6 +35,7 @@ pub const setPixelSize = lifecycle.setPixelSize;
 pub const write = lifecycle.write;
 pub const trimScrollback = lifecycle.trimScrollback;
 pub const eraseScrollbackTail = lifecycle.eraseScrollbackTail;
+pub const resetScrollbackTailTrim = lifecycle.resetScrollbackTailTrim;
 
 pub const renderStateUpdate = render_state.renderStateUpdate;
 pub const renderStateGetCols = render_state.renderStateGetCols;
