@@ -94,6 +94,22 @@ export function setupUnifiedSubscription(deps: UnifiedSubscriptionDeps): void {
           renderer.requestRender();
         };
 
+        // Register the scroll animation render callback synchronously.
+        // handleScrollToBottom (keypress) and onAnimate (mouse wheel) call
+        // requestScrollAnimRender to write viewportOffset to viewState.
+        // The registry entry must exist before any scroll-handler code runs
+        // — the old placement inside the async init() left a gap where
+        // requestScrollAnimRender silently failed, breaking keypress-to-bottom.
+        registerScrollAnimRender(ptyId, (offset: number) => {
+          if (!mounted) return;
+          const ss = viewState.scrollState;
+          if (ss) {
+            ss.viewportOffset = offset;
+            ss.isAtBottom = offset === 0;
+          }
+          requestRenderFrame();
+        });
+
         /**
          * 1fps background pulse: temporarily wake the read loop to drain
          * one batch from the kernel buffer into the raw buffer, then
@@ -385,20 +401,6 @@ export function setupUnifiedSubscription(deps: UnifiedSubscriptionDeps): void {
 
           // Now safe to enable updates - subscription is active and will catch immediate updates
           attachVisibleEmulator(ptyId, em);
-
-          // Register the scroll animation render callback.
-          // onAnimate updates session + cache, then calls this to update
-          // viewState and schedule a render. This is the ONLY writer of
-          // viewportOffset to viewState during animation.
-          registerScrollAnimRender(ptyId, (offset: number) => {
-            if (!mounted) return;
-            const ss = viewState.scrollState;
-            if (ss) {
-              ss.viewportOffset = offset;
-              ss.isAtBottom = offset === 0;
-            }
-            requestRenderFrame();
-          });
 
           // Start the 1fps background pulse timer for non-focused panes.
           // The pulse temporarily enables emulator updates for a single
