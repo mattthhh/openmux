@@ -90,6 +90,7 @@ export function createAggregateKeyboardHandler(deps: AggregateKeyboardDeps) {
     navigateToPrevPty: deps.navigateToPrevPty,
     handleNewPaneInSession: deps.handleNewPaneInSession,
     onRequestKillPty: deps.onRequestKillPty,
+    requestSnapToBottom: deps.requestSnapToBottom,
   };
 
   const { handleSearchModeKeys } = createAggregateSearchHandler(searchDeps);

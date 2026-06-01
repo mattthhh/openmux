@@ -24,6 +24,7 @@ export function createAggregatePreviewHandler(deps: PreviewDeps) {
         emulator
       );
       if (inputStr) {
+        deps.requestSnapToBottom?.(selectedPtyId);
         writeToPty(selectedPtyId, inputStr);
       }
     }

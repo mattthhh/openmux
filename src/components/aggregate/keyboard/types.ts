@@ -72,6 +72,8 @@ export interface PreviewDeps {
   navigateToPrevPty: () => void;
   handleNewPaneInSession: () => Promise<void>;
   onRequestKillPty?: (ptyId: string) => void;
+  /** Snap focused PTY to bottom on key forward */
+  requestSnapToBottom?: (ptyId: string) => void;
 }
 
 /** Dependencies for the global orchestrator (prefix, mode routing, copy mode) */
@@ -109,6 +111,7 @@ export interface GlobalDeps {
  * Kept for backward compatibility with tests that construct a single deps object.
  */
 export interface AggregateKeyboardDeps extends ListDeps, SearchDeps, PreviewDeps, GlobalDeps {
+  requestSnapToBottom?: (ptyId: string) => void;
   getSelectedPtyId: () => string | null;
   enterPreviewMode: () => void;
   onToggleSessionPicker?: () => void;

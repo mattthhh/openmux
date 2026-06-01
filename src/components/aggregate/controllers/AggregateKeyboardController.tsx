@@ -219,6 +219,7 @@ export function AggregateKeyboardController(props: AggregateKeyboardControllerPr
     scrollListDown: aggregate.scrollListDown,
     setListScrollOffset: aggregate.setListScrollOffset,
     togglePtyPicker: aggregate.openPtyPicker,
+    requestSnapToBottom: terminal.requestSnapToBottom,
   };
 
   // Create keyboard handler
