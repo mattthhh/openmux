@@ -21,6 +21,11 @@ export function createScrollHandlers(
     easing: 0.7,
   });
 
+  // Track which PTYs had handleScrollToBottom explicitly called.
+  // The subscriber callback uses this to reject stale viewportOffset=0
+  // updates that would snap the viewport to bottom unexpectedly.
+  const userRequestedScrollToBottom = new Set<string>();
+
   // The animator is the sole writer of viewportOffset during animation.
   // onAnimate writes session + cache + viewState synchronously on every tick.
   // requestScrollAnimRender updates viewState.scrollState.viewportOffset and
@@ -45,6 +50,8 @@ export function createScrollHandlers(
   };
 
   const scrollTerminal = (ptyId: string, delta: number): void => {
+    // Any user scroll clears the scroll-to-bottom request flag.
+    userRequestedScrollToBottom.delete(ptyId);
     const cached = getScrollState(ptyId);
     if (cached) {
       // Only use the animator's target as base when it's actively chasing.
@@ -87,6 +94,7 @@ export function createScrollHandlers(
   };
 
   const handleScrollToBottom = (ptyId: string): void => {
+    userRequestedScrollToBottom.add(ptyId);
     animator.setTarget(ptyId, 0, Number.MAX_SAFE_INTEGER);
     animator.snapToTarget(ptyId);
     setScrollOffsetNoNotify(ptyId, 0);
@@ -103,6 +111,7 @@ export function createScrollHandlers(
 
   const cleanup = (): void => {
     animator.cleanup();
+    userRequestedScrollToBottom.clear();
   };
 
   const removeAnimation = (ptyId: string): void => {
@@ -116,6 +125,7 @@ export function createScrollHandlers(
     handleScrollToBottom,
     adjustAnimationOffset: (ptyId: string, delta: number) => animator.adjustOffset(ptyId, delta),
     isAnimating: (ptyId: string) => animator.isAnimating(ptyId),
+    wasScrollToBottomRequested: (ptyId: string) => userRequestedScrollToBottom.has(ptyId),
     removeAnimation,
     cleanup,
   };

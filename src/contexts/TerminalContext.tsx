@@ -111,6 +111,8 @@ export interface TerminalContextValue {
   adjustAnimationOffset: (ptyId: string, delta: number) => void;
   /** Check if scroll animation is active for a PTY */
   isAnimating: (ptyId: string) => boolean;
+  /** Whether handleScrollToBottom was explicitly called for a PTY (user keypress) */
+  wasScrollToBottomRequested: (ptyId: string) => boolean;
   /** Update ptyCaches.scrollStates synchronously from unified-subscription */
   setScrollStateCache: (ptyId: string, state: TerminalScrollState) => void;
   /** Get cached emulator synchronously (for selection text extraction) */
@@ -519,6 +521,7 @@ export function TerminalProvider(props: TerminalProviderProps) {
     scrollToBottom: scrollHandlers.handleScrollToBottom,
     adjustAnimationOffset: scrollHandlers.adjustAnimationOffset,
     isAnimating: scrollHandlers.isAnimating,
+    wasScrollToBottomRequested: scrollHandlers.wasScrollToBottomRequested,
     setScrollStateCache: (ptyId: string, state: TerminalScrollState) => {
       const existing = ptyCaches.scrollStates.get(ptyId);
       const animating = scrollHandlers.isAnimating(ptyId);

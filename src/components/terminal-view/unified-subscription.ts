@@ -32,6 +32,7 @@ export interface UnifiedSubscriptionDeps {
     setScrollStateCache: (ptyId: string, state: TerminalScrollState) => void;
     adjustAnimationOffset: (ptyId: string, delta: number) => void;
     isAnimating: (ptyId: string) => boolean;
+    wasScrollToBottomRequested: (ptyId: string) => boolean;
   };
   renderer: { requestRender: () => void };
   viewState: TerminalViewState;
@@ -241,7 +242,19 @@ export function setupUnifiedSubscription(deps: UnifiedSubscriptionDeps): void {
                 const existingScroll = viewState.scrollState;
                 if (existingScroll) {
                   if (!animating) {
-                    existingScroll.viewportOffset = update.scrollState.viewportOffset;
+                    const updateOffset = update.scrollState.viewportOffset;
+                    // Reject stale snap-to-bottom: only accept viewportOffset=0
+                    // from subscriber if the user explicitly scrolled to bottom
+                    // (keypress) or is already near the bottom.
+                    if (
+                      updateOffset === 0 &&
+                      existingScroll.viewportOffset > 2 &&
+                      !terminal.wasScrollToBottomRequested(ptyId)
+                    ) {
+                      // Skip — this is a stale zero that would snap the viewport.
+                    } else {
+                      existingScroll.viewportOffset = updateOffset;
+                    }
                   }
                   existingScroll.scrollbackLength = update.scrollState.scrollbackLength;
                   existingScroll.isAtBottom = update.scrollState.isAtBottom;
