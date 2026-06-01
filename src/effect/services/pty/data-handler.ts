@@ -416,9 +416,6 @@ export function createDataHandler(options: DataHandlerOptions) {
 
     const config = getPriorityConfig(getPriority());
     const piRedraw = state.piFullRedrawPending;
-    // Snapshot scrollback length before writing a pi full redraw so we can
-    // detect and undo any LF-triggered scrollback growth.
-    const preWriteScrollback = piRedraw ? session.emulator.getScrollbackLength() : 0;
     const start = now();
     let batch = '';
     let batchLen = 0;
@@ -518,24 +515,7 @@ export function createDataHandler(options: DataHandlerOptions) {
       session.scrollbackArchiver?.schedule();
     }
 
-    // After writing a pi full redraw, check if any scrollback grew from
-    // LF-triggered scrolls and virtually trim the duplicate tail lines.
-    // With cursor-positioned frames (like OpenTUI), there should be zero
-    // growth. This is a safety net for edge cases.
-    if (piRedraw && wrote && !session.emulator.isDisposed) {
-      const postWriteScrollback = session.emulator.getScrollbackLength();
-      const growth = postWriteScrollback - preWriteScrollback;
-      if (growth > 0) {
-        tracePtyEvent('pi-redraw-scrollback-growth', {
-          ptyId: session.id,
-          growth,
-          preWriteScrollback,
-          postWriteScrollback,
-        });
-        if (typeof session.emulator.eraseScrollbackTail === 'function') {
-          session.emulator.eraseScrollbackTail(growth);
-        }
-      }
+    if (piRedraw && wrote) {
       state.piFullRedrawPending = false;
     }
 
