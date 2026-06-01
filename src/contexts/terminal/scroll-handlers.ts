@@ -50,8 +50,9 @@ export function createScrollHandlers(
   };
 
   const scrollTerminal = (ptyId: string, delta: number): void => {
-    // Any user scroll clears the scroll-to-bottom request flag.
-    userRequestedScrollToBottom.delete(ptyId);
+    // Don't clear the scrollToBottom flag here — phantom scroll events
+    // or mouse jitter would defeat the guard. The flag is cleared in the
+    // subscriber callback when a non-zero viewportOffset is applied.
     const cached = getScrollState(ptyId);
     if (cached) {
       // Only use the animator's target as base when it's actively chasing.
@@ -87,6 +88,8 @@ export function createScrollHandlers(
     const clampedOffset = cached
       ? clampScrollOffset(offset, cached.scrollbackLength)
       : Math.max(0, offset);
+    // Non-zero absolute scroll clears the scroll-to-bottom flag.
+    if (clampedOffset > 0) userRequestedScrollToBottom.delete(ptyId);
     animator.setTarget(ptyId, clampedOffset, cached?.scrollbackLength ?? clampedOffset);
     animator.snapToTarget(ptyId);
     setScrollOffsetNoNotify(ptyId, clampedOffset);
@@ -126,6 +129,8 @@ export function createScrollHandlers(
     adjustAnimationOffset: (ptyId: string, delta: number) => animator.adjustOffset(ptyId, delta),
     isAnimating: (ptyId: string) => animator.isAnimating(ptyId),
     wasScrollToBottomRequested: (ptyId: string) => userRequestedScrollToBottom.has(ptyId),
+    /** Called by the subscriber when it applies a non-zero viewportOffset — clears the guard. */
+    clearScrollToBottomRequested: (ptyId: string) => userRequestedScrollToBottom.delete(ptyId),
     removeAnimation,
     cleanup,
   };

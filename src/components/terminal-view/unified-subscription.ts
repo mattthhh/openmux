@@ -33,6 +33,7 @@ export interface UnifiedSubscriptionDeps {
     adjustAnimationOffset: (ptyId: string, delta: number) => void;
     isAnimating: (ptyId: string) => boolean;
     wasScrollToBottomRequested: (ptyId: string) => boolean;
+    clearScrollToBottomRequested: (ptyId: string) => void;
   };
   renderer: { requestRender: () => void };
   viewState: TerminalViewState;
@@ -254,6 +255,10 @@ export function setupUnifiedSubscription(deps: UnifiedSubscriptionDeps): void {
                       // Skip — this is a stale zero that would snap the viewport.
                     } else {
                       existingScroll.viewportOffset = updateOffset;
+                    }
+                    // Clear the flag once the user has moved away from bottom
+                    if (updateOffset > 0) {
+                      terminal.clearScrollToBottomRequested(ptyId);
                     }
                   }
                   existingScroll.scrollbackLength = update.scrollState.scrollbackLength;
