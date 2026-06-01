@@ -128,13 +128,14 @@ export function setupUnifiedSubscription(deps: UnifiedSubscriptionDeps): void {
           const em = viewState.emulator;
           if (!em || em.isDisposed) return;
 
-          // Drain the kernel buffer into the raw buffer, then pause the
-          // read loop again. The two-step approach is critical:
+          // Always wake the read loop to drain the kernel buffer — this keeps
+          // the child process unblocked even when there's no new data for the
+          // emulator. The kernel buffer can fill up from background writes
+          // (e.g. find / -ls) and block the child on write(), which would
+          // stall the PTY. The two-step approach is critical:
           //
           // 1. wakeReadLoopOnce temporarily sets readThrottleMs=0 so the
-          //    read loop reads one batch from the kernel buffer. This
-          //    keeps the child process unblocked (it can write to the PTY
-          //    without the kernel buffer filling up).
+          //    read loop reads one batch from the kernel buffer.
           //
           // 2. After yielding, we pause the read loop again. Without
           //    this, the read loop runs continuously (reading 8 chunks +
@@ -144,18 +145,20 @@ export function setupUnifiedSubscription(deps: UnifiedSubscriptionDeps): void {
           //    per-chunk overhead events per second that crowd out the
           //    focused pane's drain/render microtasks.
           //
-          // 3. drainRawToEmulator writes up to 64KB from the raw buffer
-          //    to the emulator (VT parse only, no cell conversion).
-          //
           // The setTimeout(0) for re-pausing runs after the read loop's
-          // current drain completes (it's async and yields between
-          // batches), so the wake + drain actually happens before we
-          // pause again.
+          // current drain completes (it's async and yields between batches),
+          // so the wake actually happens before we pause again.
           wakeReadLoopOnce(ptyId, 'background-visible');
           setTimeout(() => {
             if (!mounted || isFocused()) return;
             applyPtyReadThrottle(ptyId, 'background-visible');
           }, 0);
+
+          // Skip the emulator drain when there's no pending data — no write()
+          // has been called since the last pulse, so drainRawToEmulator would
+          // be a no-op. This eliminates unnecessary FFI + VT parse work for
+          // idle background panes that haven't received new output.
+          if (em.hasPendingData && !em.hasPendingData()) return;
           drainRawToEmulator(ptyId);
         };
 

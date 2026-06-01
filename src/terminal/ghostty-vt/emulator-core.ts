@@ -75,7 +75,7 @@ export class GhosttyVTEmulatorCore {
   // microtask chain starvation under sustained heavy output.
   private _notifyIsFirstInBurst = true;
 
-  private scrollbackCache = new ScrollbackCache(1000);
+  private scrollbackCache = new ScrollbackCache(2000);
   private scrollbackSnapshotDirty = true;
   private decoder = new TextDecoder();
 
@@ -392,6 +392,15 @@ export class GhosttyVTEmulatorCore {
     return () => {
       this.updateCallbacks.delete(callback);
     };
+  }
+
+  /** Check if the emulator has pending data that hasn't been rendered yet.
+   * Used by the background pulse to skip unnecessary wake+drain cycles
+   * when the PTY has received no new data since the last pulse.
+   * This is true whenever write() is called while updates are disabled
+   * (setUpdateEnabled(false)), which is the case for background panes. */
+  hasPendingData(): boolean {
+    return this.needsFullRefresh;
   }
 
   setUpdateEnabled(enabled: boolean): void {

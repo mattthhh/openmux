@@ -156,6 +156,13 @@ export interface ITerminalEmulator {
   setUpdateEnabled?(enabled: boolean): void;
 
   /**
+   * Check if the emulator has pending data that hasn't been rendered yet.
+   * True when write() was called while updates were disabled (background panes).
+   * Used by the background pulse to skip unnecessary wake+drain cycles.
+   */
+  hasPendingData?(): boolean;
+
+  /**
    * Force a refresh of cached state and notify subscribers.
    * Used after operations that change terminal dimensions but may have been
    * missed by subscribers due to visibility races.

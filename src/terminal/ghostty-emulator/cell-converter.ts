@@ -28,6 +28,139 @@ export interface RGB {
   b: number;
 }
 
+// Pre-allocated partial cell for spreading into convertCell results.
+// Provides default values for all boolean/numeric fields.
+// fg and bg are always overridden by callers — they're never inherited.
+const SPACE_CELL_DEFAULTS = {
+  char: ' ',
+  bold: false,
+  italic: false,
+  underline: false,
+  strikethrough: false,
+  inverse: false,
+  blink: false,
+  dim: false,
+  width: 1 as const,
+  defaultBg: false,
+};
+
+// TerminalCell pool: reuses objects across frames to reduce GC pressure.
+// convertCell is called for every visible cell on every frame, so
+// allocation overhead accumulates fast (~1.9K cells/frame for a
+// 80×24 terminal). The pool returns an existing TerminalCell when
+// all its fields match an existing entry, otherwise creates a new one.
+//
+// Pool keys pack mutable cell state into a single number for fast lookup:
+//   bits 0-7:   fg.r, bits 8-15: fg.g, bits 16-23: fg.b
+//   Similar for bg and flags — see poolKey().
+//
+// In practice the hit rate is moderate (many unique color combos),
+// so the pool uses a bounded Map with LRU eviction.
+const CELL_POOL_MAX = 4096;
+const cellPool = new Map<number, TerminalCell>();
+
+function poolKey(
+  char: string,
+  fgR: number,
+  fgG: number,
+  fgB: number,
+  bgR: number,
+  bgG: number,
+  bgB: number,
+  flags: number,
+  width: 1 | 2,
+  defaultBg: boolean,
+  hyperlinkId: number | undefined
+): number {
+  // Combine char code, fg/bg colors, and flags into a hash.
+  // Uses FNV-1a-inspired mixing to reduce collision probability
+  // across the full terminal cell space. Hash quality matters because
+  // a collision returns the wrong cached cell — wrong char or colors.
+  let h = 2166136261; // FNV offset basis
+  h ^= char.charCodeAt(0);
+  h = Math.imul(h, 16777619); // FNV prime
+  h ^= fgR;
+  h = Math.imul(h, 16777619);
+  h ^= fgG;
+  h = Math.imul(h, 16777619);
+  h ^= fgB;
+  h = Math.imul(h, 16777619);
+  h ^= bgR;
+  h = Math.imul(h, 16777619);
+  h ^= bgG;
+  h = Math.imul(h, 16777619);
+  h ^= bgB;
+  h = Math.imul(h, 16777619);
+  h ^= flags;
+  h = Math.imul(h, 16777619);
+  h ^= width;
+  h = Math.imul(h, 16777619);
+  h ^= defaultBg ? 1 : 0;
+  h = Math.imul(h, 16777619);
+  if (hyperlinkId !== undefined) {
+    h ^= hyperlinkId;
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0; // Ensure unsigned 32-bit
+}
+
+function cellsEqual(a: TerminalCell, b: TerminalCell): boolean {
+  return (
+    a.char === b.char &&
+    a.fg.r === b.fg.r &&
+    a.fg.g === b.fg.g &&
+    a.fg.b === b.fg.b &&
+    a.bg.r === b.bg.r &&
+    a.bg.g === b.bg.g &&
+    a.bg.b === b.bg.b &&
+    a.bold === b.bold &&
+    a.italic === b.italic &&
+    a.underline === b.underline &&
+    a.strikethrough === b.strikethrough &&
+    a.inverse === b.inverse &&
+    a.blink === b.blink &&
+    a.dim === b.dim &&
+    a.width === b.width &&
+    a.defaultBg === b.defaultBg &&
+    a.hyperlinkId === b.hyperlinkId
+  );
+}
+
+function pooledCell(cell: TerminalCell): TerminalCell {
+  const key = poolKey(
+    cell.char,
+    cell.fg.r,
+    cell.fg.g,
+    cell.fg.b,
+    cell.bg.r,
+    cell.bg.g,
+    cell.bg.b,
+    // Pack boolean flags into a bitmask for the key
+    (cell.bold ? 1 : 0) |
+      (cell.italic ? 2 : 0) |
+      (cell.underline ? 4 : 0) |
+      (cell.strikethrough ? 8 : 0) |
+      (cell.inverse ? 16 : 0) |
+      (cell.blink ? 32 : 0) |
+      (cell.dim ? 64 : 0),
+    cell.width,
+    !!cell.defaultBg,
+    cell.hyperlinkId
+  );
+  const existing = cellPool.get(key);
+  // Verify the pooled cell actually matches — hash collisions would return
+  // the wrong cell (wrong char or colors), which is a rendering bug.
+  if (existing && cellsEqual(existing, cell)) return existing;
+
+  if (cellPool.size >= CELL_POOL_MAX) {
+    // Evict oldest entry (first key in insertion order)
+    const firstKey = cellPool.keys().next().value;
+    if (firstKey !== undefined) cellPool.delete(firstKey);
+  }
+  cellPool.set(key, cell);
+  return cell;
+}
+
 /**
  * Safely extract RGB values, ensuring they are valid numbers.
  * Converts NaN, undefined, and non-numbers to 0.
@@ -61,46 +194,29 @@ export function convertCell(cell: GhosttyCell): TerminalCell {
   // Kitty graphics placeholder cells encode image IDs in colors; keep them invisible.
   // Kitty cells always have a non-default bg (the image renders over it).
   if (cell.codepoint === KITTY_PLACEHOLDER) {
-    return {
-      char: ' ',
+    return pooledCell({
+      ...SPACE_CELL_DEFAULTS,
       fg: bg,
       bg,
-      bold: false,
-      italic: false,
-      underline: false,
-      strikethrough: false,
-      inverse: false,
-      blink: false,
-      dim: false,
-      width: 1,
-      defaultBg: false,
-    };
+    });
   }
 
   // Zero-width characters render as space but preserve background color
   // Only strip foreground to prevent invisible colored text
   if (isZeroWidthChar(cell.codepoint)) {
-    return {
-      char: ' ',
+    return pooledCell({
+      ...SPACE_CELL_DEFAULTS,
       fg: bg, // fg = bg (invisible)
-      bg: bg,
-      bold: false,
-      italic: false,
-      underline: false,
-      strikethrough: false,
-      inverse: false,
-      blink: false,
-      dim: false,
-      width: 1,
+      bg,
       defaultBg,
-    };
+    });
   }
 
   // Space-like characters (braille blank, typographic spaces, etc.) should be
   // normalized to regular space to avoid rendering inconsistencies between
   // terminals. The colors are preserved so backgrounds render correctly.
   if (isSpaceLikeChar(cell.codepoint)) {
-    return {
+    return pooledCell({
       char: ' ',
       fg,
       bg,
@@ -113,26 +229,18 @@ export function convertCell(cell: GhosttyCell): TerminalCell {
       dim: (cell.flags & CellFlags.FAINT) !== 0,
       width: 1, // Normalize to width 1 for consistent rendering
       defaultBg,
-    };
+    });
   }
 
   // Width=0 cells are spacer/continuation cells for wide characters
   // They should render as empty space with the cell's background color
   if (cell.width === 0) {
-    return {
-      char: ' ',
+    return pooledCell({
+      ...SPACE_CELL_DEFAULTS,
       fg,
       bg,
-      bold: false,
-      italic: false,
-      underline: false,
-      strikethrough: false,
-      inverse: false,
-      blink: false,
-      dim: false,
-      width: 1,
       defaultBg,
-    };
+    });
   }
 
   // Check for INVISIBLE flag (CellFlags.INVISIBLE = 32)
@@ -143,26 +251,18 @@ export function convertCell(cell: GhosttyCell): TerminalCell {
   // width=1, it's likely corrupted cell data (e.g., from byte misalignment in
   // fast-rendering demos). Filter these out to prevent random Chinese chars.
   if (isCjkIdeograph(cell.codepoint) && cell.width !== 2) {
-    return {
-      char: ' ',
+    return pooledCell({
+      ...SPACE_CELL_DEFAULTS,
       fg,
       bg,
-      bold: false,
-      italic: false,
-      underline: false,
-      strikethrough: false,
-      inverse: false,
-      blink: false,
-      dim: false,
-      width: 1,
       defaultBg,
-    };
+    });
   }
 
   // Convert codepoint to character
   const char = codepointToChar(cell.codepoint, isInvisible);
 
-  return {
+  return pooledCell({
     char,
     fg,
     bg,
@@ -176,7 +276,7 @@ export function convertCell(cell: GhosttyCell): TerminalCell {
     width: cell.width as 1 | 2,
     hyperlinkId: cell.hyperlink_id,
     defaultBg,
-  };
+  });
 }
 
 /**
@@ -198,7 +298,11 @@ export function convertLine(
   colors: TerminalColors
 ): TerminalCell[] {
   const row: TerminalCell[] = [];
-  const lineLength = Math.min(count, cols, cells.length - offset > 0 ? cells.length - offset : 0);
+  // Clamp source count to cols — never convert more cells than the row displays.
+  // After a resize the viewport pool may be wider than the new terminal width,
+  // so converting extra cells wastes CPU and creates objects that are never used.
+  const sourceCount = Math.min(count, cols);
+  const lineLength = Math.min(sourceCount, cells.length - offset > 0 ? cells.length - offset : 0);
 
   for (let x = 0; x < lineLength; x++) {
     row.push(convertCell(cells[offset + x]));
@@ -207,24 +311,24 @@ export function convertLine(
   // Fill remaining cells with default background color (not last cell's color)
   // Using default prevents "smearing" where colored backgrounds extend to EOL
   if (lineLength < cols) {
-    const fg = extractRgb(colors.foreground);
-    const bg = extractRgb(colors.background);
-
+    const eolCell: TerminalCell = {
+      char: ' ',
+      fg: extractRgb(colors.foreground),
+      bg: extractRgb(colors.background),
+      bold: false,
+      italic: false,
+      underline: false,
+      strikethrough: false,
+      inverse: false,
+      blink: false,
+      dim: false,
+      width: 1,
+      defaultBg: true,
+    };
+    // Reuse the same object for all EOL padding — these cells are
+    // never mutated downstream (structural sharing treats them as read-only).
     for (let x = lineLength; x < cols; x++) {
-      row.push({
-        char: ' ',
-        fg,
-        bg,
-        bold: false,
-        italic: false,
-        underline: false,
-        strikethrough: false,
-        inverse: false,
-        blink: false,
-        dim: false,
-        width: 1,
-        defaultBg: true,
-      });
+      row.push(eolCell);
     }
   }
 
@@ -240,25 +344,24 @@ export function convertLine(
  */
 export function createEmptyRow(cols: number, colors: TerminalColors): TerminalCell[] {
   const row: TerminalCell[] = [];
-  const fg = extractRgb(colors.foreground);
-  const bg = extractRgb(colors.background);
-
+  const cell: TerminalCell = {
+    char: ' ',
+    fg: extractRgb(colors.foreground),
+    bg: extractRgb(colors.background),
+    bold: false,
+    italic: false,
+    underline: false,
+    strikethrough: false,
+    inverse: false,
+    blink: false,
+    dim: false,
+    width: 1,
+    defaultBg: true,
+  };
+  // Reuse the same object for all cells — empty rows are read-only
+  // and never mutated downstream (structural sharing treats them as immutable).
   for (let x = 0; x < cols; x++) {
-    // Create a new object for each cell to avoid shared references
-    row.push({
-      char: ' ',
-      fg,
-      bg,
-      bold: false,
-      italic: false,
-      underline: false,
-      strikethrough: false,
-      inverse: false,
-      blink: false,
-      dim: false,
-      width: 1,
-      defaultBg: true,
-    });
+    row.push(cell);
   }
   return row;
 }

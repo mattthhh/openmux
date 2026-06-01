@@ -35,7 +35,7 @@ export type RemoteEmulatorDeps = {
 export class RemoteEmulator implements ITerminalEmulator, IKittyGraphicsEmulator {
   private ptyId: string;
   private deps: RemoteEmulatorDeps;
-  private scrollbackCache = new ScrollbackCache(1000);
+  private scrollbackCache = new ScrollbackCache(2000);
   private disposed = false;
 
   /**
