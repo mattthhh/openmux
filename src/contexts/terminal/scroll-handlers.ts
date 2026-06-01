@@ -107,12 +107,6 @@ export function createScrollHandlers(
       cached.isAtBottom = true;
     }
     requestScrollAnimRender(ptyId, 0);
-    console.error(
-      `[scroll] handleScrollToBottom ptyId=${ptyId} len=${cached?.scrollbackLength ?? '?'}`
-    );
-    // Sync notifySubscribers immediately — the async scrollToBottomBridge
-    // fires later and clobbers session.viewportOffset after the user has
-    // scrolled back up, causing a snap-to-bottom race.
     setScrollOffsetSync(ptyId, 0);
   };
 

@@ -10,7 +10,6 @@ export interface KeyProcessorDeps {
   clearAllSelections: () => void;
   getFocusedEmulator: () => ITerminalEmulator | null;
   writeToFocused: (data: string) => void;
-  scrollToBottom: () => void;
 }
 
 /**
@@ -40,6 +39,5 @@ export function processNormalModeKey(event: KeyboardEvent, deps: KeyProcessorDep
 
   if (sequence) {
     deps.writeToFocused(sequence);
-    deps.scrollToBottom();
   }
 }

@@ -354,8 +354,6 @@ export function setupUnifiedSubscription(deps: UnifiedSubscriptionDeps): void {
 
                 // When scrollback grows while the user is scrolled up,
                 // getCurrentScrollState adjusts session.scrollState.viewportOffset
-                // When scrollback grows while the user is scrolled up,
-                // getCurrentScrollState adjusts session.scrollState.viewportOffset
                 // by the scrollback delta. The animator doesn't know about this
                 // adjustment, so tell it explicitly.
                 if (
