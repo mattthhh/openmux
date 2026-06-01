@@ -103,17 +103,12 @@ export function setupUnifiedSubscription(deps: UnifiedSubscriptionDeps): void {
         // requestScrollAnimRender silently failed, breaking keypress-to-bottom.
         registerScrollAnimRender(ptyId, (offset: number) => {
           if (!mounted) {
-            console.error('[scroll-anim-cb] mounted=false');
             return;
           }
           const ss = viewState.scrollState;
           if (ss) {
             ss.viewportOffset = offset;
             ss.isAtBottom = offset === 0;
-            if (offset === 0)
-              console.error(`[scroll-anim-cb] set viewportOffset=0, prev was ${ss.viewportOffset}`);
-          } else {
-            console.error('[scroll-anim-cb] viewState.scrollState is null');
           }
           requestRenderFrame();
         });

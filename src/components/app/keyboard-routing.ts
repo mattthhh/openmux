@@ -62,92 +62,76 @@ export function setupKeyboardRouting(params: {
   useKeyboard(
     async (event: OpenTuiKeyEvent) => {
       const normalizedEvent = normalizeKeyEvent(event);
-      try {
-        // Handle copy mode BEFORE async overlay routing to avoid:
-        // 1. Microtask delays that can interleave event processing and drop inputs
-        // 2. Overlay handlers accidentally consuming copy mode events
-        if (keyboardHandler.mode === 'copy') {
-          handleCopyModeKey(normalizedEvent);
-          return;
-        }
 
-        // Handle search mode before async overlay routing for the same reasons
-        if (keyboardHandler.mode === 'search') {
-          handleSearchKeyboard(normalizedEvent, {
-            exitSearchMode,
-            keyboardExitSearchMode,
-            setSearchQuery,
-            nextMatch,
-            prevMatch,
-            getSearchState,
-            keybindings: config.keybindings().search,
-            vimEnabled: getVimEnabled,
-            getVimMode: getSearchVimMode,
-            setVimMode: setSearchVimMode,
-            getVimHandler: getSearchVimHandler,
-          });
-          return;
-        }
+      // Handle copy mode BEFORE async overlay routing to avoid:
+      // 1. Microtask delays that can interleave event processing and drop inputs
+      // 2. Overlay handlers accidentally consuming copy mode events
+      if (keyboardHandler.mode === 'copy') {
+        handleCopyModeKey(normalizedEvent);
+        return;
+      }
 
-        // Route to overlays via KeyboardRouter (handles confirmation, session picker, aggregate view)
-        // Use event.sequence for printable chars (handles shift for uppercase/symbols)
-        // Fall back to event.name for special keys
-        const charCode = normalizedEvent.sequence?.charCodeAt(0) ?? 0;
-        const isPrintableChar =
-          normalizedEvent.sequence?.length === 1 && charCode >= 32 && charCode < 127;
-        const keyToPass = isPrintableChar ? normalizedEvent.sequence! : normalizedEvent.key;
-
-        console.warn('[kbd] pre-route key=%s mode=%s', normalizedEvent.key, keyboardHandler.mode);
-        const routeResult = await routeKeyboardEventSync({
-          key: keyToPass,
-          ctrl: normalizedEvent.ctrl,
-          alt: normalizedEvent.alt,
-          shift: normalizedEvent.shift,
-          sequence: normalizedEvent.sequence,
-          baseCode: normalizedEvent.baseCode,
-          eventType: normalizedEvent.eventType,
-          repeated: normalizedEvent.repeated,
+      // Handle search mode before async overlay routing for the same reasons
+      if (keyboardHandler.mode === 'search') {
+        handleSearchKeyboard(normalizedEvent, {
+          exitSearchMode,
+          keyboardExitSearchMode,
+          setSearchQuery,
+          nextMatch,
+          prevMatch,
+          getSearchState,
+          keybindings: config.keybindings().search,
+          vimEnabled: getVimEnabled,
+          getVimMode: getSearchVimMode,
+          setVimMode: setSearchVimMode,
+          getVimHandler: getSearchVimHandler,
         });
-        console.warn(
-          '[kbd] post-route handled=%s overlay=%s',
-          routeResult.handled,
-          routeResult.overlay
-        );
+        return;
+      }
 
-        // If an overlay handled the key, don't process further
-        if (routeResult.handled) {
-          return;
-        }
+      // Route to overlays via KeyboardRouter (handles confirmation, session picker, aggregate view)
+      // Use event.sequence for printable chars (handles shift for uppercase/symbols)
+      // Fall back to event.name for special keys
+      const charCode = normalizedEvent.sequence?.charCodeAt(0) ?? 0;
+      const isPrintableChar =
+        normalizedEvent.sequence?.length === 1 && charCode >= 32 && charCode < 127;
+      const keyToPass = isPrintableChar ? normalizedEvent.sequence! : normalizedEvent.key;
 
-        // First, check if this is a multiplexer command
-        const handled = keyboardHandler.handleKeyDown({
-          key: normalizedEvent.key,
-          ctrl: normalizedEvent.ctrl,
-          shift: normalizedEvent.shift,
-          alt: normalizedEvent.alt,
-          meta: normalizedEvent.meta,
-          eventType: normalizedEvent.eventType,
-          repeated: normalizedEvent.repeated,
+      const routeResult = await routeKeyboardEventSync({
+        key: keyToPass,
+        ctrl: normalizedEvent.ctrl,
+        alt: normalizedEvent.alt,
+        shift: normalizedEvent.shift,
+        sequence: normalizedEvent.sequence,
+        baseCode: normalizedEvent.baseCode,
+        eventType: normalizedEvent.eventType,
+        repeated: normalizedEvent.repeated,
+      });
+
+      // If an overlay handled the key, don't process further
+      if (routeResult.handled) {
+        return;
+      }
+
+      // First, check if this is a multiplexer command
+      const handled = keyboardHandler.handleKeyDown({
+        key: normalizedEvent.key,
+        ctrl: normalizedEvent.ctrl,
+        shift: normalizedEvent.shift,
+        alt: normalizedEvent.alt,
+        meta: normalizedEvent.meta,
+        eventType: normalizedEvent.eventType,
+        repeated: normalizedEvent.repeated,
+      });
+
+      // If not handled by multiplexer and in normal mode, forward to PTY
+      if (!handled && keyboardHandler.mode === 'normal' && !isOverlayActive()) {
+        processNormalModeKey(normalizedEvent, {
+          clearAllSelections,
+          getFocusedEmulator,
+          writeToFocused,
+          onKeyWrite: requestSnapToBottom,
         });
-        console.warn(
-          '[kbd] post-cmd handled=%s mode=%s overlay=%s',
-          handled,
-          keyboardHandler.mode,
-          isOverlayActive()
-        );
-
-        // If not handled by multiplexer and in normal mode, forward to PTY
-        if (!handled && keyboardHandler.mode === 'normal' && !isOverlayActive()) {
-          console.warn('[kbd] -> processNormalModeKey key=%s', normalizedEvent.key);
-          processNormalModeKey(normalizedEvent, {
-            clearAllSelections,
-            getFocusedEmulator,
-            writeToFocused,
-            onKeyWrite: requestSnapToBottom,
-          });
-        }
-      } catch (e) {
-        console.error('[kbd] CRASH in handler:', e);
       }
     },
     { release: true }
