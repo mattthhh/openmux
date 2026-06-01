@@ -205,10 +205,6 @@ export class GhosttyVtTerminal {
     ghostty.symbols.ghostty_terminal_erase_scrollback_tail(this.handle, lines);
   }
 
-  resetScrollbackTailTrim(): void {
-    ghostty.symbols.ghostty_terminal_reset_scrollback_tail_trim(this.handle);
-  }
-
   isRowWrapped(row: number): boolean {
     return ghostty.symbols.ghostty_terminal_is_row_wrapped(this.handle, row);
   }

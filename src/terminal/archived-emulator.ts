@@ -369,37 +369,6 @@ export class ArchivedTerminalEmulator implements ITerminalEmulator, IKittyGraphi
     return this.base.drainResponses?.() ?? [];
   }
 
-  trimScrollback(lines: number): void {
-    if (lines <= 0) return;
-    const archiveLength = this.archive.length;
-    if (archiveLength > 0 && lines > archiveLength) {
-      // Trim everything from the archive first, then the remainder from live.
-      // This handles the pi-full-redraw case where all scrollback (archive +
-      // live) is reflow garbage that should be removed.
-      this.archive.reset();
-      this.invalidatePlacementCache();
-      this.base.trimScrollback?.(lines - archiveLength);
-    } else if (archiveLength > 0 && lines <= archiveLength) {
-      // Only archive lines need trimming.
-      this.archive.dropOldestChunk?.();
-      this.invalidatePlacementCache();
-    } else {
-      // No archive — trim live only.
-      this.base.trimScrollback?.(lines);
-    }
-  }
-
-  eraseScrollbackTail(lines: number): void {
-    if (lines <= 0) return;
-    // Tail trim is virtual — only applies to the live buffer.
-    // The archive's internal ordering is independent.
-    this.base.eraseScrollbackTail?.(lines);
-  }
-
-  resetScrollbackTailTrim(): void {
-    this.base.resetScrollbackTailTrim?.();
-  }
-
   async search(query: string, options?: { limit?: number }): Promise<SearchResult> {
     return searchTerminal(query, options, {
       getScrollbackLength: () => this.getScrollbackLength(),

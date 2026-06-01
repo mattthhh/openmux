@@ -230,9 +230,10 @@ pub fn setPixelSize(ptr: ?*anyopaque, width_px: c_int, height_px: c_int) callcon
 
 pub fn write(ptr: ?*anyopaque, data: [*]const u8, len: usize) callconv(.c) void {
     const wrapper: *TerminalWrapper = @ptrCast(@alignCast(ptr orelse return));
-    // NOTE: scrollback_tail_trim is NOT reset here. It persists across
-    // write() calls so that pi full redraw tail trims survive until the
-    // JS side explicitly resets them via resetScrollbackTailTrim().
+    // Reset virtual tail trim on every write so stale trims don't persist.
+    // If the JS side needs to trim after a specific write (e.g. pi full redraw),
+    // it calls eraseScrollbackTail() after write() returns.
+    wrapper.scrollback_tail_trim = 0;
     wrapper.stream.nextSlice(data[0..len]);
     trimScrollbackLines(wrapper);
 }
@@ -245,18 +246,7 @@ pub fn trimScrollback(ptr: ?*anyopaque, lines: c_uint) callconv(.c) void {
 /// Virtually trim the newest N scrollback lines by hiding them from
 /// getScrollbackLength / getScrollbackLine reads. Does NOT physically
 /// remove pages (which would violate PageList serial-number invariants).
-/// The trim persists across write() calls and must be explicitly cleared
-/// by resetScrollbackTailTrim() when the JS side determines it is safe.
 pub fn eraseScrollbackTail(ptr: ?*anyopaque, lines: c_uint) callconv(.c) void {
     const wrapper: *TerminalWrapper = @ptrCast(@alignCast(ptr orelse return));
     wrapper.scrollback_tail_trim += @as(usize, @intCast(lines));
-}
-
-/// Reset the virtual tail trim to zero.
-/// Called by the JS side when the pi full redraw cycle is complete and the
-/// trimmed lines have been superseded by new content (e.g., the user has
-/// scrolled or the next pi redraw's growth detection has run).
-pub fn resetScrollbackTailTrim(ptr: ?*anyopaque) callconv(.c) void {
-    const wrapper: *TerminalWrapper = @ptrCast(@alignCast(ptr orelse return));
-    wrapper.scrollback_tail_trim = 0;
 }

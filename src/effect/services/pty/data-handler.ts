@@ -416,18 +416,8 @@ export function createDataHandler(options: DataHandlerOptions) {
 
     const config = getPriorityConfig(getPriority());
     const piRedraw = state.piFullRedrawPending;
-    // Before a pi full redraw, reset any lingering virtual tail trim so we
-    // get an accurate pre-write scrollback measurement. The previous trim
-    // was from a prior redraw cycle; its hidden lines have been superseded
-    // by the new frame about to be written.
-    if (piRedraw && typeof session.emulator.resetScrollbackTailTrim === 'function') {
-      session.emulator.resetScrollbackTailTrim();
-    }
     // Snapshot scrollback length before writing a pi full redraw so we can
-    // detect and hide any LF-triggered scrollback growth (duplicate lines
-    // that pi pushed into scrollback). getScrollbackLength() already
-    // subtracts any active tail trim, so preWriteScrollback reflects the
-    // "visible" scrollback length.
+    // detect and undo any LF-triggered scrollback growth.
     const preWriteScrollback = piRedraw ? session.emulator.getScrollbackLength() : 0;
     const start = now();
     let batch = '';
@@ -435,16 +425,12 @@ export function createDataHandler(options: DataHandlerOptions) {
     let segmentsProcessed = 0;
     let wrote = false;
 
-    const suppressClear = shouldSuppressClearScreen(session) && !piRedraw;
-
     if (force) {
       while (state.pendingSegments.length > 0) {
         let segment = state.pendingSegments.shift() ?? '';
         if (segment.length === 0) continue;
-        // Suppress ALL clear sequences during resize suppression window,
-        // but NOT for pi full redraw segments — they've already been
-        // normalized and their CSI J is the non-scrolling erase-to-end-of-screen.
-        if (suppressClear) {
+        // Suppress ALL clear sequences during resize suppression window
+        if (shouldSuppressClearScreen(session)) {
           segment = segment
             .replace(SCROLLBACK_CLEAR_REGEX, '')
             .replace(SCROLLBACK_CLEAR_C1_REGEX, '');
@@ -489,10 +475,8 @@ export function createDataHandler(options: DataHandlerOptions) {
 
       if (batch.length > 0) {
         // Suppress ALL clear sequences during resize suppression window (both CSI 2 J and CSI 3 J)
-        // Shells send these during SIGWINCH handling - dropping them preserves reflowed content.
-        // Skip suppression for pi full redraw batches — they've already been normalized
-        // and their CSI J is the non-scrolling erase-to-end-of-screen.
-        if (suppressClear) {
+        // Shells send these during SIGWINCH handling - dropping them preserves reflowed content
+        if (shouldSuppressClearScreen(session)) {
           // First suppress CSI 3 J (scrollback clear) to prevent resetScrollbackState()
           batch = batch.replace(SCROLLBACK_CLEAR_REGEX, '').replace(SCROLLBACK_CLEAR_C1_REGEX, '');
           // Then suppress CSI 2 J (screen clear)
@@ -531,24 +515,13 @@ export function createDataHandler(options: DataHandlerOptions) {
       // scheduleNotify calls should use setTimeout(0) to yield to the event
       // loop, preventing microtask chain starvation under sustained output.
       isFirstDrainInBurst = false;
-      // Don't let the archiver capture duplicate content during a pi-redraw.
-      // The pi redraw replaces the viewport in-place; any scrollback lines
-      // it pushes are duplicates that eraseScrollbackTail will hide. Archiving
-      // them would create duplicate entries in the user's scroll history.
-      if (!piRedraw) {
-        session.scrollbackArchiver?.schedule();
-      }
+      session.scrollbackArchiver?.schedule();
     }
 
-    // After writing a pi full redraw, detect and hide any scrollback lines
-    // that the redraw pushed into the tail. The normalized pi prefix
-    // (CSI H + CSI J) is non-scrolling, so it should not produce any growth.
-    // However, LF-triggered scrolls from cursor-positioned output and
-    // resize reflow can push duplicate lines into scrollback. We hide only
-    // the growth delta (post - pre) from the tail, preserving the user's
-    // pre-pi history (curl output, shell prompts, etc.) and pi's unique
-    // earlier content. The virtual tail trim persists across write() calls
-    // and is reset at the start of the next pi redraw cycle.
+    // After writing a pi full redraw, check if any scrollback grew from
+    // LF-triggered scrolls and virtually trim the duplicate tail lines.
+    // With cursor-positioned frames (like OpenTUI), there should be zero
+    // growth. This is a safety net for edge cases.
     if (piRedraw && wrote && !session.emulator.isDisposed) {
       const postWriteScrollback = session.emulator.getScrollbackLength();
       const growth = postWriteScrollback - preWriteScrollback;
