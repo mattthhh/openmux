@@ -131,10 +131,6 @@ describe('scroll state: real code integration', () => {
         viewOffset: viewOffset,
         time,
       });
-      // Clear scrollToBottom flag when applying non-zero offset
-      if (updateScrollState.viewportOffset > 0) {
-        scrollHandlers.clearScrollToBottomRequested(ptyId);
-      }
     }
 
     if (!animating) {
@@ -545,9 +541,6 @@ describe('scroll state: real code integration', () => {
     await drain();
     expect(viewOffset).toBe(50);
 
-    // Manually clear flag since the test's subscriber simulation doesn't do it
-    scrollHandlers.clearScrollToBottomRequested(PTY_ID);
-
     // Simulate a rogue subscriber firing with viewportOffset=0
     // (e.g., stale async clobber, focus change with zeroed session state, etc.)
     const rogueUpdate: TerminalScrollState = {
@@ -579,19 +572,15 @@ describe('scroll state: real code integration', () => {
     // viewOffset should still be 50, not 0
     expect(viewOffset).toBe(50);
 
-    // Now user explicitly scrolls to bottom (keypress)
+    // Now user explicitly scrolls to bottom
     scrollHandlers.handleScrollToBottom(PTY_ID);
-    await drain();
     expect(viewOffset).toBe(0);
     expect(scrollHandlers.wasScrollToBottomRequested(PTY_ID)).toBe(true);
 
-    // Output fires subscriber with adjusted offset (user is at bottom, then
-    // output grows, viewportOffset becomes > 0 from getCurrentScrollState)
-    session.scrollbackLength += 100;
-    subscriberFires(PTY_ID);
-    // The subscriber writes the adjusted offset and clears the flag
-    // (simulated by our manual clear below since subscriberFires doesn't auto-clear)
-    scrollHandlers.clearScrollToBottomRequested(PTY_ID);
+    // User scrolls up again, clearing the flag
+    scrollHandlers.scrollTerminal(PTY_ID, 10);
+    await drain();
+    expect(viewOffset).toBe(10);
     expect(scrollHandlers.wasScrollToBottomRequested(PTY_ID)).toBe(false);
   });
 });
