@@ -526,7 +526,12 @@ export function createDataHandler(options: DataHandlerOptions) {
       // scheduleNotify calls should use setTimeout(0) to yield to the event
       // loop, preventing microtask chain starvation under sustained output.
       isFirstDrainInBurst = false;
-      session.scrollbackArchiver?.schedule();
+      // Don't let the archiver capture reflow garbage during a pi-redraw.
+      // Any scrollback present is from a prior resize-down's reflow, not
+      // legitimate content overflow. The trim below will remove it all.
+      if (!piRedraw) {
+        session.scrollbackArchiver?.schedule();
+      }
     }
 
     // After writing a pi full redraw, trim ALL scrollback from the head.

@@ -245,7 +245,9 @@ describe('createDataHandler pi redraw integration', () => {
     expect(getScrollbackArchiverResetCount()).toBe(0);
   });
 
-  it('still schedules scrollback archiving for the normalized redraw', async () => {
+  it('does not schedule scrollback archiver during pi full redraw', async () => {
+    // The archiver must not capture reflow garbage from a pi-redraw.
+    // Any scrollback present is resize-down reflow, not legitimate overflow.
     const { session, getScrollbackScheduleCount } = createMockSession();
     const { handleData } = createDataHandler({
       copyToClipboard: async () => true,
@@ -257,7 +259,7 @@ describe('createDataHandler pi redraw integration', () => {
     handleData('\x1b[?2026h\x1b[2J\x1b[H\x1b[3Jhello\x1b[?2026l');
     await waitForDrain();
 
-    expect(getScrollbackScheduleCount()).toBe(1);
+    expect(getScrollbackScheduleCount()).toBe(0);
   });
 
   it('preserves tall full redraw frames without scrollback duplication', async () => {
