@@ -97,7 +97,6 @@ export function createScrollHandlers(
     setScrollOffsetSync(ptyId, clampedOffset);
   };
 
-  /** Programmatic scroll-to-bottom (not auto-called on keypress). */
   const handleScrollToBottom = (ptyId: string): void => {
     animator.setTarget(ptyId, 0, Number.MAX_SAFE_INTEGER);
     animator.snapToTarget(ptyId);
@@ -108,6 +107,12 @@ export function createScrollHandlers(
       cached.isAtBottom = true;
     }
     requestScrollAnimRender(ptyId, 0);
+    console.error(
+      `[scroll] handleScrollToBottom ptyId=${ptyId} len=${cached?.scrollbackLength ?? '?'}`
+    );
+    // Sync notifySubscribers immediately — the async scrollToBottomBridge
+    // fires later and clobbers session.viewportOffset after the user has
+    // scrolled back up, causing a snap-to-bottom race.
     setScrollOffsetSync(ptyId, 0);
   };
 
