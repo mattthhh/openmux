@@ -2,6 +2,93 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.137](https://github.com/monotykamary/openmux/compare/v0.3.136...v0.3.137) (2026-06-01)
+
+
+### Features
+
+* **scroll:** add keypress snap-to-bottom via subscriber flag ([f8bd633](https://github.com/monotykamary/openmux/commit/f8bd6334370ff3596c7a3805f9a095759d745b11))
+* **terminal:** erlang-inspired priority scheduler for PTY drain and rendering ([ae9627a](https://github.com/monotykamary/openmux/commit/ae9627aed939c60dc9db4218c22996a6e12ac500))
+
+
+### Bug Fixes
+
+* **kbd:** add keypress routing trace logs ([88d2df9](https://github.com/monotykamary/openmux/commit/88d2df9ca23e1eea1205c10821b6d93c6aa53e05))
+* **perf:** use data-gap heuristic for adaptive drain interval ([b8c70e5](https://github.com/monotykamary/openmux/commit/b8c70e5b99358d5ce192e99a87097f3d9c493267))
+* **pty:** batch focused PTY data and drain via microtask ([e632d7e](https://github.com/monotykamary/openmux/commit/e632d7ec64aa33452b0c82d014d94ebc945f651d))
+* **pty:** eliminate background render pulse and O(n²) raw buffer ([47587bf](https://github.com/monotykamary/openmux/commit/47587bf2dfe0f18f443ff6cdabf76ec4d537e21a))
+* **pty:** make write non-blocking to prevent event loop stall under heavy output ([e207d96](https://github.com/monotykamary/openmux/commit/e207d96755ffb191f8a86cb91a74ff265f05d2d1))
+* **pty:** re-pause background read loop after pulse drain ([e730921](https://github.com/monotykamary/openmux/commit/e730921b7fff41504475d68b982ed5b728939ccc))
+* **pty:** sync scroll offsets, update gating, and focus render ([c366ea7](https://github.com/monotykamary/openmux/commit/c366ea7101491a687564b67671451906bb09427b))
+* **pty:** synchronous writes for all interactive paths, raw drain for background pulse ([e4bef08](https://github.com/monotykamary/openmux/commit/e4bef08e43065472e93a4b223f76ed5acb639ce4))
+* **scroll:** accept server viewportOffset on first subscriber callback ([3e1a921](https://github.com/monotykamary/openmux/commit/3e1a92198195adf3a115a979d237f1e2332c7670))
+* **scroll:** add aggregate pane scrollbar click diagnostic ([1eae0ec](https://github.com/monotykamary/openmux/commit/1eae0ec9a0b572d739d54f23b84fd12d8296522b))
+* **scroll:** add defensive tracing for unexpected snap-to-bottom transitions ([4b20ebc](https://github.com/monotykamary/openmux/commit/4b20ebc784b42b86ad862c0d76706ec19d8b4a92))
+* **scroll:** add scroll lock to suppress subscriber delta after user scroll ([ba718e6](https://github.com/monotykamary/openmux/commit/ba718e61897c46a3f4ca22ff15d3753b2f1dc995))
+* **scroll:** add scrollbar click handler to TerminalView inner box ([9e27c7c](https://github.com/monotykamary/openmux/commit/9e27c7c4ecc414ef081618d450aa590769d5fc8c))
+* **scroll:** add targeted diagnostic for scrollbar click routing ([748b018](https://github.com/monotykamary/openmux/commit/748b0187262a85f5a1733942905ae340c284634f))
+* **scroll:** add targeted diagnostics for keypress-to-bottom ([f023b22](https://github.com/monotykamary/openmux/commit/f023b2298f7d957333206983c698922376339177))
+* **scroll:** add targeted diagnostics for scrollbar click routing ([423465e](https://github.com/monotykamary/openmux/commit/423465e3bce83396ec8ead9a38d2ffb397cd0022))
+* **scroll:** apply single-writer rule to shim client viewportOffset ([f467d8f](https://github.com/monotykamary/openmux/commit/f467d8f289e54f6a34d0c4bcd88401042ba95d86))
+* **scrollbar:** use viewState instead of cache for scrollbar click guard ([ba7e268](https://github.com/monotykamary/openmux/commit/ba7e268fc33b78a47f2302d0fb2cb58356327bf3))
+* **scroll:** clear scrollToBottom flag in subscriber, not scrollTerminal ([c72dc42](https://github.com/monotykamary/openmux/commit/c72dc425dc9a96306164dcd86bd7eb1aaa0d9182))
+* **scroll:** don't adjust viewportOffset for negative scrollbackDelta ([e1ed36f](https://github.com/monotykamary/openmux/commit/e1ed36f4a16f351bf3d1e15ea6ed253d18c69f72))
+* **scroll:** eliminate notifySubscribers from animation chase loop ([805fc02](https://github.com/monotykamary/openmux/commit/805fc026579e7ce0fb97781673071fb2d249dd6c))
+* **scroll:** ignore stale animator target when inactive in scrollTerminal ([33038f4](https://github.com/monotykamary/openmux/commit/33038f465c5f3c580771dba7c3d63097675c2d30))
+* **scroll:** initialize animator currentOffset on scrollbar clicks ([bdf4ed7](https://github.com/monotykamary/openmux/commit/bdf4ed7ef8e6f5b81a1c70d2a4e987e038a93dda))
+* **scroll:** interleave setTimeout with queueMicrotask to prevent I/O starvation ([e39ab5d](https://github.com/monotykamary/openmux/commit/e39ab5d4096fb9e7b2892d7992833429310b4646))
+* **scroll:** keep animator active during scrollbar drags ([ea45763](https://github.com/monotykamary/openmux/commit/ea4576385b8201ffb141fdf3e6020e1b840c57ac))
+* **scroll:** keep isAtBottom in sync when writing viewportOffset ([1044c17](https://github.com/monotykamary/openmux/commit/1044c17622e072c85a1593e15a7ba7eceddfe6da))
+* **scroll:** mutate scroll state cache in-place in usePtySubscription ([8ef1b59](https://github.com/monotykamary/openmux/commit/8ef1b59e7a130f258fed284bfd4d3ea91e80528b))
+* **scroll:** reconcile subscriber with cache-check guard, remove delta-only complexity ([dba6048](https://github.com/monotykamary/openmux/commit/dba60485dca94cbaec95a9ade2c5b924a8bcc6a9))
+* **scroll:** register scrollAnimRender synchronously at effect start ([75388fb](https://github.com/monotykamary/openmux/commit/75388fbf69b59da2291cddabde249609ca07fe35))
+* **scroll:** reject stale viewportOffset=0 from subscriber unless user scrollToBottom ([a2e410d](https://github.com/monotykamary/openmux/commit/a2e410d0db21aa43a7fc12c34d861ce837d21459))
+* **scroll:** remove async scrollToBottomBridge causing late snap-to-bottom ([f77ccdc](https://github.com/monotykamary/openmux/commit/f77ccdc201dd6ea7baaa1752b4abb2984e89f4bc))
+* **scroll:** remove cache-based external adjustment from onAnimate ([467c0a1](https://github.com/monotykamary/openmux/commit/467c0a154f2482dfb531c0bbae97d2a4175fceb3))
+* **scroll:** remove cache-based external detection from onAnimate, add explicit keypress snap ([5b31b92](https://github.com/monotykamary/openmux/commit/5b31b921baa30a4936e45011592b1d84fd970dfe))
+* **scroll:** remove false-positive snap-to-bottom from onAnimate ([a8a773b](https://github.com/monotykamary/openmux/commit/a8a773b9b5ac4753a091c2d4b647a4db7b975fbf))
+* **scroll:** remove keypress auto-snap, enforce single-writer pattern ([a0a85f5](https://github.com/monotykamary/openmux/commit/a0a85f5e8ea810fffbff51248a879ee9d83c441d))
+* **scroll:** remove keypress auto-snap, not delta adjustment ([8db2866](https://github.com/monotykamary/openmux/commit/8db2866fe5a5ba0d303ff7af09c0aed4ad19923a))
+* **scroll:** remove redundant auto-scroll in async write path and fix test simulation ([a4744a7](https://github.com/monotykamary/openmux/commit/a4744a748b2097c3f83cdc5cc54d79540dc1e677))
+* **scroll:** remove sliding-window regex match from scrollback-clear detection ([1b0c816](https://github.com/monotykamary/openmux/commit/1b0c8163a55aad986ad5446c00e9f76ab3b0d1d3))
+* **scroll:** remove stale async scrollState cache updates from usePtySubscription ([8ee3fec](https://github.com/monotykamary/openmux/commit/8ee3fec40c433e44e8843e0cdbd01d10b4398d0a))
+* **scroll:** remove subscriber-level snap-to-bottom during streaming output ([7f7e57a](https://github.com/monotykamary/openmux/commit/7f7e57aa323578e7b5438be72e7c9e42f4b53eb4))
+* **scroll:** replace delta-only rule with cache-reconciled server trust ([13bc47a](https://github.com/monotykamary/openmux/commit/13bc47acab34fb1657b35294e905bc7d37bccdd8))
+* **scroll:** restore original onAnimate logic with in-place cache mutation ([c52d76f](https://github.com/monotykamary/openmux/commit/c52d76f2dded15886871c4bc9fe80170b8dd6cdb))
+* **scroll:** revert delta-only rule, restore shimRejectZero guard ([33e17e1](https://github.com/monotykamary/openmux/commit/33e17e1424baa616b315e81d18c96193782199cb))
+* **scroll:** single-writer architecture for viewportOffset ([c2685ed](https://github.com/monotykamary/openmux/commit/c2685ed50c16b84eaa8178abbb14a348ab45b933))
+* **scroll:** single-writer rule for viewportOffset across all three stores ([98c9c33](https://github.com/monotykamary/openmux/commit/98c9c33fec564a85abce2ce4e56ae9abd6df4472))
+* **scroll:** skip viewportOffset in subscriber when animator is active ([b5b265d](https://github.com/monotykamary/openmux/commit/b5b265d99df4f816706fb0591e953fe13de7faa8))
+* **scroll:** sync ptyCaches.scrollStates from unified-subscription callback ([4a4e808](https://github.com/monotykamary/openmux/commit/4a4e808b7bddb25296655b504297267a1822c260))
+* **scroll:** sync viewState.viewportOffset from cache on divergence ([fb745da](https://github.com/monotykamary/openmux/commit/fb745da9c6ba4fd3c537673b9ed28b83d96be9e0))
+* **scroll:** trace all viewportOffset→0 transition paths ([663f692](https://github.com/monotykamary/openmux/commit/663f69278d44bcc4e03cb91de6bc62a2f697f505))
+* **scroll:** trace resetScrollbackState calls for snap-to-bottom diagnosis ([2a325f2](https://github.com/monotykamary/openmux/commit/2a325f257614ad54dedf4378ed3c2d72cf48beaa))
+* **scroll:** update cache immediately after trackpad scroll ([16da9dc](https://github.com/monotykamary/openmux/commit/16da9dc7d6ec7017681e1dd1a2494fc2c4895523))
+* **scroll:** wire snap-to-bottom into aggregate preview key forward ([19b517b](https://github.com/monotykamary/openmux/commit/19b517bac670c42d2e7ce9a6311c95a6ae1a464c))
+* **scroll:** write viewState synchronously on every animator tick ([904c1dc](https://github.com/monotykamary/openmux/commit/904c1dc79f3c83ca903b5298606cddc6f8a69697))
+* **shim:** preserve client viewportOffset across server updates ([123e52d](https://github.com/monotykamary/openmux/commit/123e52dac1cadc4b2d4d4677bc069cab2671b2f4))
+* **shim:** reject stale viewportOffset=0 from server notifications ([ab544e7](https://github.com/monotykamary/openmux/commit/ab544e75747b8ac6c55fb7d7df8b5dd47984ceb5))
+* **terminal:** microtask scheduling for focused PTY updates and scroll animation ([1bd991f](https://github.com/monotykamary/openmux/commit/1bd991f52370931beac15456dc0b2f4edd1019ac))
+* **test:** re-export real pty-bridge functions in effect-bridge mock ([5c71875](https://github.com/monotykamary/openmux/commit/5c71875339819241b35c13fe43e5364061b2bdef))
+
+
+### Performance
+
+* **pty:** add 4ms yield between read batches and pause background-hidden reads ([2b2ff47](https://github.com/monotykamary/openmux/commit/2b2ff472c1b38284f73be443a6430ab1e4a1ede2))
+* **pty:** pause read loop for background-visible PTYs, drain incrementally ([1c8257a](https://github.com/monotykamary/openmux/commit/1c8257a274742d2d477e34a73e98a8bbf867f776))
+* **pty:** raw-buffer all background PTY data, skip VT parsing entirely ([3544518](https://github.com/monotykamary/openmux/commit/35445184296628d4aa5f779fc9f7a3fd3dea602f))
+* **pty:** throttle native read loop for background PTYs ([cbf6523](https://github.com/monotykamary/openmux/commit/cbf652320a3b19b187d2b9efb2b167b6bb9d52e9))
+* **pty:** wake read loop immediately on focus change ([2c83ead](https://github.com/monotykamary/openmux/commit/2c83ead59621c7effab1b8e0a116972ea297df7c))
+* **terminal:** add adaptive drain interval - immediate on first data, 50ms during sustained output ([81e3d9d](https://github.com/monotykamary/openmux/commit/81e3d9d9fbe948e558975dfe068d5a9cec741581))
+* **terminal:** increase drain interval to 16ms and batch size to 64KB for I/O yield ([efd7dcd](https://github.com/monotykamary/openmux/commit/efd7dcd1d333f1d8e7c94012c8a7c7b978d2d635))
+* **terminal:** rate-limit emulator notifications to 60fps and add drain I/O yield ([c0c198c](https://github.com/monotykamary/openmux/commit/c0c198c27d592cfc398d22874534ad2988efed63))
+* **terminal:** skip input processing for background PTYs, buffer raw data ([384aaa4](https://github.com/monotykamary/openmux/commit/384aaa48383583d6e685bcb4c65296603f5524a5))
+
+
+### Tests
+
+* **scroll:** add handleSetScrollOffset after scrollTerminal integration test ([d2962d5](https://github.com/monotykamary/openmux/commit/d2962d543c284a61635a72116fa93c603594ca56))
+
 ### [0.3.136](https://github.com/monotykamary/openmux/compare/v0.3.135...v0.3.136) (2026-05-31)
 
 
