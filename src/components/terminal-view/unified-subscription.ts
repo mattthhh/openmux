@@ -303,6 +303,24 @@ export function setupUnifiedSubscription(deps: UnifiedSubscriptionDeps): void {
                 // getScrollState in scrollTerminal for starting new animations).
                 terminal.setScrollStateCache(ptyId, update.scrollState);
 
+                // Sync viewState.viewportOffset from the cache when they diverge.
+                // The absolute-value writers (handleScrollToBottom, handleSetScrollOffset,
+                // onAnimate) write viewportOffset to the cache directly. They also
+                // call requestScrollAnimRender to write to viewState — but that
+                // depends on the scrollAnimRenderRegistry, which may not have an
+                // entry yet (e.g., during mount) or may have been unregistered
+                // during a ptyId change. When viewState goes stale, the delta-only
+                // rule above won't fix it because delta is 0 or viewportOffset is
+                // already 0. Sync from the cache (which was written by the absolute-
+                // value writer) to recover.
+                if (existingScroll) {
+                  const cached = terminal.getScrollState(ptyId);
+                  if (cached && cached.viewportOffset !== existingScroll.viewportOffset) {
+                    existingScroll.viewportOffset = cached.viewportOffset;
+                    existingScroll.isAtBottom = cached.viewportOffset === 0;
+                  }
+                }
+
                 // When scrollback grows while the user is scrolled up,
                 // getCurrentScrollState adjusts session.scrollState.viewportOffset
                 // When scrollback grows while the user is scrolled up,
