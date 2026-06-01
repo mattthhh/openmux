@@ -69,6 +69,7 @@ export class GhosttyVTEmulatorCore {
   private _writeDirty = false;
   private _notifyScheduled = false;
   private _notifyTimer: ReturnType<typeof setTimeout> | null = null;
+  private _microtaskCycle = 0;
 
   private scrollbackCache = new ScrollbackCache(1000);
   private scrollbackSnapshotDirty = true;
@@ -475,17 +476,11 @@ export class GhosttyVTEmulatorCore {
   private scheduleDeferredNotify(): void {
     if (this._notifyScheduled) return;
     this._notifyScheduled = true;
-    // For the focused PTY, use queueMicrotask for near-immediate notification.
-    // setTimeout(0) defers to I/O which can delay the update by hundreds of ms
-    // under load, causing stale renders and laggy scrolling.
-    // For background PTYs, setTimeout(0) is fine — it yields to I/O and
-    // coalesces heavy output before the 1fps pulse reads the state.
-    //
-    // Microtasks run before the next macrotask (before I/O, before timers),
-    // so the update+render completes before any new I/O events arrive.
-    // Coalescing still works via _writeDirty/_notifyScheduled flags.
+    // For the focused PTY, use queueMicrotask for near-immediate notification,
+    // but interleave with setTimeout(0) every 5 cycles to yield to I/O
+    // so mouse events (scrollbar clicks) aren't starved during heavy stdout.
     if (this.updatesEnabled) {
-      queueMicrotask(() => {
+      const cb = () => {
         if (this._disposed) return;
         this._notifyScheduled = false;
         if (this._writeDirty) {
@@ -495,7 +490,12 @@ export class GhosttyVTEmulatorCore {
             callback();
           }
         }
-      });
+      };
+      if (this._microtaskCycle++ % 5 === 0) {
+        this._notifyTimer = setTimeout(cb, 0);
+      } else {
+        queueMicrotask(cb);
+      }
     } else {
       this._notifyTimer = setTimeout(() => {
         this._notifyTimer = null;
@@ -520,6 +520,7 @@ export class GhosttyVTEmulatorCore {
   private cancelDeferredNotify(): void {
     this._writeDirty = false;
     this._notifyScheduled = false;
+    this._microtaskCycle = 0;
     if (this._notifyTimer !== null) {
       clearTimeout(this._notifyTimer);
       this._notifyTimer = null;

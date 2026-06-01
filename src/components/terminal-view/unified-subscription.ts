@@ -32,7 +32,6 @@ export interface UnifiedSubscriptionDeps {
     setScrollStateCache: (ptyId: string, state: TerminalScrollState) => void;
     adjustAnimationOffset: (ptyId: string, delta: number) => void;
     isAnimating: (ptyId: string) => boolean;
-    isScrollLocked: (ptyId: string) => boolean;
   };
   renderer: { requestRender: () => void };
   viewState: TerminalViewState;
@@ -273,7 +272,6 @@ export function setupUnifiedSubscription(deps: UnifiedSubscriptionDeps): void {
                 // scrollbackLength, isAtBottom, isAtScrollbackLimit are metadata
                 // that don't affect viewport position and are safe to set directly.
                 const animating = terminal.isAnimating(ptyId);
-                const scrollLocked = terminal.isScrollLocked(ptyId);
                 const existingScroll = viewState.scrollState;
                 if (existingScroll) {
                   // viewportOffset single-writer rule:
@@ -293,7 +291,7 @@ export function setupUnifiedSubscription(deps: UnifiedSubscriptionDeps): void {
                   //   1. handleScrollToBottom (keypress) → sets 0
                   //   2. handleSetScrollOffset (scrollbar/copy-mode) → sets absolute
                   //   3. requestScrollAnimRender callback (animator ticks) → sets absolute
-                  if (!animating && !scrollLocked) {
+                  if (!animating) {
                     if (viewState.lastScrollbackLength !== null) {
                       // Subsequent updates: adjust by scrollback growth delta only.
                       const scrollbackDelta =
