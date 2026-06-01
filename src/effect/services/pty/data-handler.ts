@@ -67,7 +67,6 @@ const FOCUS_TRACKING_DISABLE_C1 = '\x9b?1004l';
 const FOCUS_IN_SEQUENCE = '\x1b[I';
 const FOCUS_OUT_SEQUENCE = '\x1b[O';
 const FOCUS_TRACKING_PROBE_LEN = 16;
-const SCROLLBACK_CLEAR_PROBE_LEN = 128;
 const SCROLLBACK_CLEAR_REGEX = /\x1b\[([0-9;]*)J/g;
 const SCROLLBACK_CLEAR_C1_REGEX = /\x9b([0-9;]*)J/g;
 
@@ -276,7 +275,6 @@ export function createDataHandler(options: DataHandlerOptions) {
   };
   let kittyProbeBuffer = '';
   let focusProbeBuffer = '';
-  let scrollbackClearBuffer = '';
 
   const analyzeKitty = (data: string): { hasKittyApc: boolean; hasKittyQuery: boolean } => {
     if (data.length === 0) return { hasKittyApc: false, hasKittyQuery: false };
@@ -337,15 +335,18 @@ export function createDataHandler(options: DataHandlerOptions) {
 
   const shouldClearScrollback = (data: string): boolean => {
     if (data.length === 0) return false;
-    let combined = scrollbackClearBuffer + data;
-    if (combined.length > 2048) {
-      combined = combined.slice(-2048);
-    }
-    scrollbackClearBuffer = combined.slice(-SCROLLBACK_CLEAR_PROBE_LEN);
-
+    // Only check the current segment, not a cross-segment sliding window.
+    // The sliding window was meant to catch escape sequences split across
+    // PTY write boundaries, but its persistence across segments caused
+    // false positives when binary output (find, cat on binaries, etc.)
+    // passes \x1b, [, 3, and J bytes within the 128-byte probe window.
+    // If a legitimate \x1b[3J is split across segments, the missing
+    // preemptive detection is harmless — getCurrentScrollState adjusts
+    // viewportOffset correctly based on the actual scrollbackLength delta
+    // when the emulator processes the sequence and fires onUpdate.
     return (
-      hasScrollbackEraseSequence(combined, SCROLLBACK_CLEAR_REGEX) ||
-      hasScrollbackEraseSequence(combined, SCROLLBACK_CLEAR_C1_REGEX)
+      hasScrollbackEraseSequence(data, SCROLLBACK_CLEAR_REGEX) ||
+      hasScrollbackEraseSequence(data, SCROLLBACK_CLEAR_C1_REGEX)
     );
   };
 
