@@ -105,7 +105,7 @@ export interface TerminalContextValue {
   scrollTerminal: (ptyId: string, delta: number) => void;
   /** Set absolute scroll offset for a PTY */
   setScrollOffset: (ptyId: string, offset: number) => void;
-  /** Scroll terminal to bottom (live content) */
+  /** Programmatic scroll-to-bottom (not auto-called on keypress). */
   scrollToBottom: (ptyId: string) => void;
   /** Adjust the scroll animator's offset when scrollback grows (e.g., new output) */
   adjustAnimationOffset: (ptyId: string, delta: number) => void;
@@ -520,27 +520,7 @@ export function TerminalProvider(props: TerminalProviderProps) {
     adjustAnimationOffset: scrollHandlers.adjustAnimationOffset,
     isAnimating: scrollHandlers.isAnimating,
     setScrollStateCache: (ptyId: string, state: TerminalScrollState) => {
-      const existing = ptyCaches.scrollStates.get(ptyId);
-      const animating = scrollHandlers.isAnimating(ptyId);
-      if (existing) {
-        // Same single-writer rule as viewState: never set viewportOffset
-        // from the absolute value. Only adjust by scrollback growth delta,
-        // matching the subscriber's logic in unified-subscription.ts.
-        if (!animating) {
-          const scrollbackDelta = state.scrollbackLength - existing.scrollbackLength;
-          if (scrollbackDelta > 0 && existing.viewportOffset > 0) {
-            existing.viewportOffset += scrollbackDelta;
-          }
-        }
-        existing.scrollbackLength = state.scrollbackLength;
-        if (existing.viewportOffset > existing.scrollbackLength) {
-          existing.viewportOffset = existing.scrollbackLength;
-        }
-        existing.isAtBottom = existing.viewportOffset === 0;
-        existing.isAtScrollbackLimit = state.isAtScrollbackLimit;
-      } else {
-        ptyCaches.scrollStates.set(ptyId, { ...state });
-      }
+      ptyCaches.scrollStates.set(ptyId, { ...state });
     },
     getEmulatorSync: cacheAccessors.getEmulatorSync,
     getFocusedEmulator: cacheAccessors.getFocusedEmulator,

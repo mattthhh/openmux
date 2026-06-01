@@ -384,11 +384,6 @@ export async function setScrollOffset(ptyId: string, offset: number): Promise<vo
   }
 }
 
-/** Scroll to bottom for a PTY */
-export async function scrollToBottom(ptyId: string): Promise<void> {
-  await setScrollOffset(ptyId, 0);
-}
-
 /** Subscribe to unified updates for a PTY */
 export async function subscribeUnifiedToPty(
   ptyId: string,

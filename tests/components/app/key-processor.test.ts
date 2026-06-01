@@ -15,7 +15,6 @@ describe('processNormalModeKey', () => {
   const getFocusedEmulator = vi.fn(() => emulator);
   const writeToFocused = vi.fn();
   const clearAllSelections = vi.fn();
-  const scrollToBottom = vi.fn();
 
   beforeAll(async () => {
     ({ processNormalModeKey } = await import('../../../src/components/app/key-processor'));
@@ -31,7 +30,7 @@ describe('processNormalModeKey', () => {
 
     processNormalModeKey(
       { key: 'a', sequence: 'a', eventType: 'press' },
-      { clearAllSelections, getFocusedEmulator, writeToFocused, scrollToBottom }
+      { clearAllSelections, getFocusedEmulator, writeToFocused }
     );
 
     expect(clearAllSelections).toHaveBeenCalledTimes(1);
@@ -47,7 +46,7 @@ describe('processNormalModeKey', () => {
 
     processNormalModeKey(
       { key: 'a', sequence: 'a', eventType: 'release' },
-      { clearAllSelections, getFocusedEmulator, writeToFocused, scrollToBottom }
+      { clearAllSelections, getFocusedEmulator, writeToFocused }
     );
 
     expect(clearAllSelections).not.toHaveBeenCalled();

@@ -255,10 +255,6 @@ function AppContent() {
     clearAllSelections,
     getFocusedEmulator,
     writeToFocused,
-    scrollToBottom: () => {
-      const focusedPtyId = getFocusedPtyId(layout.activeWorkspace);
-      if (focusedPtyId) terminal.scrollToBottom(focusedPtyId);
-    },
     isOverlayActive: () => sessionState.showSessionPicker || session.showTemplateOverlay,
     handleCopyModeKey: appActions.handleCopyModeKey,
   });

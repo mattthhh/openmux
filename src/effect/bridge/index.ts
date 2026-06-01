@@ -34,7 +34,6 @@ export {
   capturePty,
   getScrollbackLines,
   setScrollOffset,
-  scrollToBottom,
   subscribeUnifiedToPty,
   getEmulator,
   getEmulatorSync,

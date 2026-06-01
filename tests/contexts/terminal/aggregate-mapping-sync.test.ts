@@ -57,7 +57,6 @@ vi.mock('../../../src/effect/bridge', () => {
     capturePty: vi.fn(),
     getScrollbackLines: vi.fn(),
     setScrollOffset: vi.fn(),
-    scrollToBottom: vi.fn(),
     subscribeUnifiedToPty: vi.fn().mockResolvedValue(() => {}),
     getEmulator: vi.fn().mockResolvedValue(null),
     getEmulatorSync: vi.fn().mockReturnValue(null),
