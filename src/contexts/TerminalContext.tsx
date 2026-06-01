@@ -115,6 +115,8 @@ export interface TerminalContextValue {
   adjustAnimationOffset: (ptyId: string, delta: number) => void;
   /** Check if scroll animation is active for a PTY */
   isAnimating: (ptyId: string) => boolean;
+  /** Check if a scroll lock is held (suppresses subscriber delta after user scroll) */
+  isScrollLocked: (ptyId: string) => boolean;
   /** Update ptyCaches.scrollStates synchronously from unified-subscription */
   setScrollStateCache: (ptyId: string, state: TerminalScrollState) => void;
   /** Get cached emulator synchronously (for selection text extraction) */
@@ -191,6 +193,19 @@ export function TerminalProvider(props: TerminalProviderProps) {
 
   // Create scroll handlers (extracted for reduced file size)
   const scrollHandlers = createScrollHandlers(getScrollState);
+
+  // Scroll lock: suppress subscriber delta adjustments after user-initiated
+  // scrollbar clicks/drags so stdout doesn't immediately fight the new position.
+  const scrollLockTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  const isScrollLocked = (ptyId: string) => scrollLockTimers.has(ptyId);
+  const acquireScrollLock = (ptyId: string) => {
+    const existing = scrollLockTimers.get(ptyId);
+    if (existing) clearTimeout(existing);
+    scrollLockTimers.set(
+      ptyId,
+      setTimeout(() => scrollLockTimers.delete(ptyId), 200)
+    );
+  };
 
   // Create PTY lifecycle handlers (extracted for reduced file size)
   const ptyLifecycleHandlers = createPtyLifecycleHandlers({
@@ -519,19 +534,24 @@ export function TerminalProvider(props: TerminalProviderProps) {
     isAlternateScreen: cacheAccessors.isAlternateScreen,
     getScrollState: scrollHandlers.handleGetScrollState,
     scrollTerminal: scrollHandlers.scrollTerminal,
-    setScrollOffset: scrollHandlers.handleSetScrollOffset,
+    setScrollOffset: (ptyId: string, offset: number) => {
+      acquireScrollLock(ptyId);
+      scrollHandlers.handleSetScrollOffset(ptyId, offset);
+    },
     scrollToBottom: scrollHandlers.handleScrollToBottom,
     requestSnapToBottom: scrollHandlers.handleScrollToBottom,
     adjustAnimationOffset: scrollHandlers.adjustAnimationOffset,
     isAnimating: scrollHandlers.isAnimating,
+    isScrollLocked,
     setScrollStateCache: (ptyId: string, state: TerminalScrollState) => {
       const existing = ptyCaches.scrollStates.get(ptyId);
       const animating = scrollHandlers.isAnimating(ptyId);
+      const scrollLocked = isScrollLocked(ptyId);
       if (existing) {
         // Same single-writer rule as viewState: never set viewportOffset
         // from the absolute value. Only adjust by scrollback growth delta,
         // matching the subscriber's logic in unified-subscription.ts.
-        if (!animating) {
+        if (!animating && !scrollLocked) {
           const scrollbackDelta = state.scrollbackLength - existing.scrollbackLength;
           if (scrollbackDelta > 0 && existing.viewportOffset > 0) {
             existing.viewportOffset += scrollbackDelta;
