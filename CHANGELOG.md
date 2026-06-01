@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.138](https://github.com/monotykamary/openmux/compare/v0.3.137...v0.3.138) (2026-06-01)
+
+
+### Bug Fixes
+
+* **pty:** break microtask chain starvation under heavy output ([8981a52](https://github.com/monotykamary/openmux/commit/8981a522be5034166c650638e51a55ca2c0f5400))
+
 ### [0.3.137](https://github.com/monotykamary/openmux/compare/v0.3.136...v0.3.137) (2026-06-01)
 
 
