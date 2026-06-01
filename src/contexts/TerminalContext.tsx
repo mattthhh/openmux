@@ -523,19 +523,19 @@ export function TerminalProvider(props: TerminalProviderProps) {
       const existing = ptyCaches.scrollStates.get(ptyId);
       const animating = scrollHandlers.isAnimating(ptyId);
       if (existing) {
-        // Same single-writer rule as viewState: never set viewportOffset
-        // from the absolute value. Only adjust by scrollback growth delta,
-        // matching the subscriber's logic in unified-subscription.ts.
+        // Same reconciliation as the subscriber: trust the server unless
+        // it says 0 while the cache has the user's scroll position (>0).
+        // handleScrollToBottom mutates the cache to 0 before the subscriber
+        // runs, so server=0 + cache=0 is intentional scroll-to-bottom.
         if (!animating) {
-          const scrollbackDelta = state.scrollbackLength - existing.scrollbackLength;
-          if (scrollbackDelta > 0 && existing.viewportOffset > 0) {
-            existing.viewportOffset += scrollbackDelta;
+          const serverOffset = state.viewportOffset;
+          if (serverOffset === 0 && existing.viewportOffset > 0) {
+            // Server says 0 but cache says >0 — preserve scroll position.
+          } else {
+            existing.viewportOffset = serverOffset;
           }
         }
         existing.scrollbackLength = state.scrollbackLength;
-        if (existing.viewportOffset > existing.scrollbackLength) {
-          existing.viewportOffset = existing.scrollbackLength;
-        }
         existing.isAtBottom = existing.viewportOffset === 0;
         existing.isAtScrollbackLimit = state.isAtScrollbackLimit;
       } else {
