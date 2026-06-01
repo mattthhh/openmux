@@ -241,7 +241,18 @@ export function setupUnifiedSubscription(deps: UnifiedSubscriptionDeps): void {
                 const existingScroll = viewState.scrollState;
                 if (existingScroll) {
                   if (!animating) {
+                    const prevOffset = existingScroll.viewportOffset;
                     existingScroll.viewportOffset = update.scrollState.viewportOffset;
+                    if (existingScroll.viewportOffset === 0 && prevOffset > 0) {
+                      const trace = new Error('SUBSCRIBER-SNAP-TRACE').stack ?? '';
+                      const frameLines = trace.split('\n').slice(1, 6).join('\n  ');
+                      console.warn(
+                        `[scroll-snap] subscriber: viewportOffset ${prevOffset} → 0` +
+                          ` | update.scrollState.viewportOffset=${update.scrollState.viewportOffset}` +
+                          ` | sessionDelta=?` +
+                          `\n  ${frameLines}`
+                      );
+                    }
                   }
                   existingScroll.scrollbackLength = update.scrollState.scrollbackLength;
                   existingScroll.isAtBottom = update.scrollState.isAtBottom;
@@ -323,7 +334,16 @@ export function setupUnifiedSubscription(deps: UnifiedSubscriptionDeps): void {
             if (!mounted) return;
             const ss = viewState.scrollState;
             if (ss && ss.viewportOffset !== offset) {
+              const prevOffset = ss.viewportOffset;
               ss.viewportOffset = offset;
+              if (offset === 0 && prevOffset > 0) {
+                const trace = new Error('ANIMRENDER-SNAP-TRACE').stack ?? '';
+                const frameLines = trace.split('\n').slice(1, 6).join('\n  ');
+                console.warn(
+                  `[scroll-snap] animRender viewState: viewportOffset ${prevOffset} → 0` +
+                    `\n  ${frameLines}`
+                );
+              }
             }
             requestRenderFrame();
           });
