@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.140](https://github.com/monotykamary/openmux/compare/v0.3.139...v0.3.140) (2026-06-01)
+
+
+### Features
+
+* move shimmer animation to native colorMatrix post-processing ([04eeda7](https://github.com/monotykamary/openmux/commit/04eeda7f6585f3a6e5d3b8a8b240396a682b06af))
+
+
+### Bug Fixes
+
+* **pty:** remove eraseScrollbackTail from pi redraw path ([3ff0974](https://github.com/monotykamary/openmux/commit/3ff0974200ed0f988f8d484f5754b01d042b1be5))
+* **terminal:** persistent scrollback tail trim for pi full redraws ([6715fa6](https://github.com/monotykamary/openmux/commit/6715fa643ea2e674e767fcca6fe1a0182dd88218))
+
+
+### Refactoring
+
+* remove dead code from shimmer migration and lint:dead flags ([a789778](https://github.com/monotykamary/openmux/commit/a789778ac2bbe78005dfd5af2e3cef29d443f60c))
+
 ### [0.3.139](https://github.com/monotykamary/openmux/compare/v0.3.138...v0.3.139) (2026-06-01)
 
 
