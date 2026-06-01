@@ -534,4 +534,47 @@ describe('scroll state: real code integration', () => {
     await drain();
     expect(viewOffset).toBe(180);
   });
+
+  test('scrollbar click after trackpad scroll survives subsequent output', async () => {
+    // Simulates: active PTY, user trackpad-scrolls up, then clicks scrollbar
+    // Scenario: ptyscroll-state.failing.webm (the user's bug)
+
+    // 1. Trackpad scroll up 5 lines
+    scrollHandlers.scrollTerminal(PTY_ID, 5);
+    await drain();
+    expect(viewOffset).toBe(5);
+    expect(cache.viewportOffset).toBe(5);
+
+    // 2. User clicks scrollbar to jump to offset 200
+    scrollHandlers.handleSetScrollOffset(PTY_ID, 200);
+
+    // After the click, viewState and cache should show 200 immediately
+    expect(viewOffset).toBe(200);
+    expect(cache.viewportOffset).toBe(200);
+
+    // 3. Heavy output arrives (scrollback grows)
+    session.scrollbackLength += 300;
+    subscriberFires(PTY_ID);
+
+    // viewOffset should be 200 + 300 = 500, NOT 5 or 0
+    expect(viewOffset).toBe(500);
+    expect(viewOffset).not.toBe(0);
+    expect(viewOffset).not.toBe(5);
+    expect(cache.viewportOffset).toBe(500);
+
+    // 4. More output
+    session.scrollbackLength += 200;
+    subscriberFires(PTY_ID);
+    expect(viewOffset).toBe(700);
+
+    // 5. User clicks scrollbar again to position 100
+    scrollHandlers.handleSetScrollOffset(PTY_ID, 100);
+    expect(viewOffset).toBe(100);
+    expect(cache.viewportOffset).toBe(100);
+
+    // 6. More output arrives
+    session.scrollbackLength += 100;
+    subscriberFires(PTY_ID);
+    expect(viewOffset).toBe(200); // 100 + 100
+  });
 });
