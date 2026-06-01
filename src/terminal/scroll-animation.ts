@@ -242,13 +242,19 @@ export class ScrollAnimator {
   private ensureLoop(): void {
     if (this.loopScheduled) return;
     this.loopScheduled = true;
-    queueMicrotask(() => {
+    // setTimeout(0) paces each tick as a separate macrotask, guaranteeing
+    // the render microtask from the previous tick drains before the next
+    // tick runs. This prevents frame drops under concurrent activity
+    // (drain cycles, subscriber callbacks) where a pure queueMicrotask
+    // loop can run multiple ticks before a single render fires, causing
+    // visible 24-36 line jumps at speed:12.
+    setTimeout(() => {
       this.loopScheduled = false;
       this.tick();
       if (this.activePtyIds.size > 0) {
         this.ensureLoop();
       }
-    });
+    }, 0);
   }
 
   /** Stop the animation loop */

@@ -110,7 +110,15 @@ export function setupUnifiedSubscription(deps: UnifiedSubscriptionDeps): void {
             ss.viewportOffset = offset;
             ss.isAtBottom = offset === 0;
           }
-          requestRenderFrame();
+          // Synchronous render: the animator ticks are paced by setTimeout(0),
+          // so each tick runs in its own macrotask. We must increment the
+          // SolidJS version synchronously here to guarantee every tick's
+          // viewport position is visible to the template before the next tick
+          // runs. The coalescing requestRenderFrame() can skip renders when
+          // other microtasks (drain, subscriber callbacks) interleave between
+          // the requestRenderFrame() call and the deferred microtask render,
+          // causing multiple ticks to update viewState before one render fires.
+          renderSync();
         });
 
         /**

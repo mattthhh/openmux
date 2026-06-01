@@ -141,12 +141,17 @@ describe('scroll state: real code integration', () => {
     cache.isAtScrollbackLimit = updateScrollState.isAtScrollbackLimit;
   }
 
-  // Drain pending microtasks
+  // Drain pending microtasks and macrotask-based animation ticks.
+  // The animator uses setTimeout(0) pacing, so each tick runs in a
+  // separate macrotask. 50 cycles covers the worst case in these tests
+  // (~27 ticks for speed:12 at offset 300 with easing convergence).
   async function drain() {
-    for (let i = 0; i < 20; i++) {
-      await new Promise<void>((r) => queueMicrotask(() => r()));
+    for (let cycle = 0; cycle < 50; cycle++) {
+      for (let i = 0; i < 5; i++) {
+        await new Promise<void>((r) => queueMicrotask(() => r()));
+      }
+      await new Promise<void>((r) => setTimeout(r, 0));
     }
-    await new Promise<void>((r) => setTimeout(r, 0));
   }
 
   // handleScrollToBottom WITHOUT calling scrollToBottomBridge
