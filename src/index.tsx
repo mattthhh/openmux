@@ -39,6 +39,8 @@ async function runShimIfRequested(): Promise<boolean> {
 
 async function initializeAndRender(): Promise<StartupError | void> {
   const { initializeServices } = await import('./effect/services');
+  const { idleDiag } = await import('./core/idle-diag');
+  idleDiag.init();
   const { setServices } = await import('./effect/bridge/services-instance');
   const services = await initializeServices();
   if (services instanceof Error) {

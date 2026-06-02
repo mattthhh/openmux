@@ -27,6 +27,7 @@ import { fetchScrollbackLine } from './scrollback';
 import { getCursorSnapshot } from './cursor';
 import { prepareEmulatorUpdate } from './emulator-updates';
 import { deferNextTick } from '../../core/scheduling';
+import { idleDiag } from '../../core/idle-diag';
 import { HOT_SCROLLBACK_LIMIT } from '../scrollback-config';
 import {
   applyColorRemapToRow,
@@ -126,6 +127,7 @@ export class GhosttyVTEmulatorCore {
 
   write(data: string | Uint8Array): void {
     if (this._disposed) return;
+    idleDiag.recordWrite();
 
     const text = typeof data === 'string' ? data : this.decoder.decode(data);
     if (text.length === 0) return;
@@ -502,6 +504,7 @@ export class GhosttyVTEmulatorCore {
    * _notifyScheduled prevents duplicate scheduling.
    */
   private scheduleDeferredNotify(): void {
+    idleDiag.recordScheduleDeferredNotify();
     if (this._notifyScheduled) return;
     this._notifyScheduled = true;
 
@@ -587,6 +590,7 @@ export class GhosttyVTEmulatorCore {
    * getDirtyUpdate with stale state, force-kitty-drain).
    */
   private flushDeferredNotify(): void {
+    idleDiag.recordFlushDeferredNotify();
     if (!this._writeDirty) return;
     this._writeDirty = false;
     this.prepareUpdate(false);

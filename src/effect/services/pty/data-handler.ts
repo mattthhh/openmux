@@ -5,6 +5,7 @@
 import type { SyncModeParser } from '../../../terminal/sync-mode-parser';
 import type { InternalPtySession } from './types';
 import { deferMacrotask } from '../../../core/scheduling';
+import { idleDiag } from '../../../core/idle-diag';
 import {
   getPriorityConfig,
   resolvePtyPriority,
@@ -381,6 +382,7 @@ export function createDataHandler(options: DataHandlerOptions) {
   };
 
   const drainPending = (drainOptions?: { force?: boolean }) => {
+    idleDiag.recordDrain();
     lastDrainTime = now();
     session.pendingNotify = false;
 
@@ -541,6 +543,7 @@ export function createDataHandler(options: DataHandlerOptions) {
   // This replaces the previous adaptive heuristic — the priority system
   // is the single source of truth for scheduling decisions.
   const scheduleNotify = () => {
+    idleDiag.recordScheduleNotify();
     if (!session.pendingNotify) {
       const priority = getPriority();
       if (priority === 'background-hidden') return;
@@ -636,6 +639,7 @@ export function createDataHandler(options: DataHandlerOptions) {
 
   // The data handler function
   const handleData = (data: string) => {
+    idleDiag.recordHandleData();
     const priority = getPriority();
 
     // background (visible or hidden): skip all processing, buffer raw data.

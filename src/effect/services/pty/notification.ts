@@ -5,6 +5,7 @@
 import type { TerminalScrollState, UnifiedTerminalUpdate } from '../../../core/types';
 import type { InternalPtySession } from './types';
 import { HOT_SCROLLBACK_LIMIT } from '../../../terminal/scrollback-config';
+import { idleDiag } from '../../../core/idle-diag';
 
 /**
  * Get current scroll state from a session.
@@ -55,6 +56,7 @@ function buildUnifiedUpdate(session: InternalPtySession): UnifiedTerminalUpdate 
 
 /** Notify unified subscribers after terminal content changes. */
 export function notifySubscribers(session: InternalPtySession): void {
+  idleDiag.recordNotifySubscribers();
   if (session.unifiedSubscribers.size === 0) return;
   const update = buildUnifiedUpdate(session);
   for (const callback of session.unifiedSubscribers) {
