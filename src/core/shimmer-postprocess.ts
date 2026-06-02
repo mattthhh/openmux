@@ -53,21 +53,15 @@ export function applyShimmerPostProcess(buffer: OptimizedBuffer, _deltaTime: num
   if (positions.size === 0) return;
 
   const shimmerCells: number[] = [];
-  // No glow cells — glow is handled via bold text in PtyTreeRow,
-  // not via native colorMatrix (bold weight ≠ color gain)
 
   const bandHalfWidth = DEFAULT_CONFIG.bandHalfWidth;
   const maxBlend = DEFAULT_CONFIG.maxBlend;
 
   for (const [ptyId, pos] of positions) {
-    // Skip PTYs with post-shimmer glow — glow is rendered as bold text
-    // in PtyTreeRow, not via native colorMatrix
     if (hasPostShimmerGlow(ptyId)) continue;
 
-    // Check active shimmer
     if (!hasActiveShimmer(ptyId, now)) continue;
 
-    // Get the sweep position from shimmer state
     const sweepPos = getShimmerSweepPosition(ptyId, pos.labelLength, now);
     if (sweepPos === null) continue;
 
@@ -82,7 +76,6 @@ export function applyShimmerPostProcess(buffer: OptimizedBuffer, _deltaTime: num
     }
   }
 
-  // Apply shimmer sweep (darken FG toward black)
   if (shimmerCells.length > 0) {
     const cellMask = new Float32Array(shimmerCells);
     buffer.colorMatrix(ZERO_MATRIX, cellMask, 1, TargetChannel.FG);
