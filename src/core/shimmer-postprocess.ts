@@ -11,6 +11,11 @@
  *   for all cells that need shimmer adjustment
  * - buffer.colorMatrix() applies the transform natively in one call
  *
+ * EXPIRATION: All shimmer states are checked every frame, even those
+ * without registered positions (off-screen rows, collapsed sessions).
+ * Without this, orphaned shimmer states would never expire, keeping
+ * the renderer live at 30fps indefinitely.
+ *
  * Shimmer effect: darkens FG text as the sweep band passes over it,
  * creating the "codex-style" dark shimmer. This is achieved with a
  * zero matrix that maps colors to black, with cellMask attenuation
@@ -27,16 +32,11 @@ import {
   hasPostShimmerGlow,
   getShimmerSweepPosition,
   shimmerIntensity,
+  shimmerStates,
   DEFAULT_CONFIG,
 } from './shimmer';
 import { getAllShimmerRowPositions } from './shimmer-registry';
 
-/**
- * Zero matrix: maps all colors to zero (black).
- * With cellMask attenuation, lerps FG toward black:
- *   output = lerp(original, black, attenuation)
- * This creates the dark shimmer band sweeping across the label.
- */
 const ZERO_MATRIX = new Float32Array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
 
 /**
@@ -48,8 +48,18 @@ const ZERO_MATRIX = new Float32Array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
  */
 export function applyShimmerPostProcess(buffer: OptimizedBuffer, _deltaTime: number): void {
   const now = Date.now();
-  const positions = getAllShimmerRowPositions();
 
+  // Expire ALL shimmer states, even those without registered positions.
+  // Without this, shimmer states for off-screen or collapsed rows never
+  // get checked by hasActiveShimmer and persist forever, keeping the
+  // renderer running at 30fps with no visible effect.
+  if (shimmerStates.size > 0) {
+    for (const ptyId of shimmerStates.keys()) {
+      hasActiveShimmer(ptyId, now);
+    }
+  }
+
+  const positions = getAllShimmerRowPositions();
   if (positions.size === 0) return;
 
   const shimmerCells: number[] = [];
