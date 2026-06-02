@@ -309,7 +309,9 @@ async function handlePaneCapture(
 export async function startControlServer(deps: ControlServerDeps): Promise<ControlServer> {
   await fs.mkdir(CONTROL_SOCKET_DIR, { recursive: true });
   await fs.unlink(CONTROL_SOCKET_PATH).catch((e) => {
-    console.warn('[control] Failed to unlink control socket:', e);
+    if ((e as NodeJS.ErrnoException).code !== 'ENOENT') {
+      console.warn('[control] Failed to unlink control socket:', e);
+    }
   });
 
   const server = net.createServer((socket) => {
@@ -394,7 +396,9 @@ export async function startControlServer(deps: ControlServerDeps): Promise<Contr
     close: async () => {
       await new Promise<void>((resolve) => server.close(() => resolve()));
       await fs.unlink(CONTROL_SOCKET_PATH).catch((e) => {
-        console.warn('[control] Failed to unlink control socket on close:', e);
+        if ((e as NodeJS.ErrnoException).code !== 'ENOENT') {
+          console.warn('[control] Failed to unlink control socket on close:', e);
+        }
       });
     },
   };
