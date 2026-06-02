@@ -2,12 +2,16 @@
  * Wires the shimmer post-processor to the renderer lifecycle.
  *
  * When the aggregate view is shown, registers applyShimmerPostProcess
- * as a post-process function and marks the renderer as "live" so frames
- * continue while any shimmer is animating. When the view is hidden,
- * the post-processor and live status are removed.
+ * as a post-process function. While shimmer is active, drives rendering
+ * with a targeted setTimeout chain that calls requestRender() — one frame
+ * at a time at ~60fps. When no shimmer is active, no renders are scheduled.
  *
- * Shimmer animation becomes fully native: the sweep is applied via
- * colorMatrix + cellMask with zero SolidJS reactive overhead.
+ * This avoids requestLive() which starts the full 30fps render loop
+ * (SolidJS reconciliation + native output on every frame) even when only
+ * the post-process overlay is changing. requestRender() does a single
+ * frame with minimal reconciliation overhead since no SolidJS signals
+ * have changed — only the post-process colorMatrix is applied to the
+ * already-rendered buffer.
  */
 
 import { createEffect, onCleanup } from 'solid-js';
@@ -16,9 +20,12 @@ import { applyShimmerPostProcess } from '../../../core/shimmer-postprocess';
 import { shimmerStates, subscribeToShimmerStateChange } from '../../../core/shimmer';
 import { clearShimmerRowPositions } from '../../../core/shimmer-registry';
 
+/** Target frame time for shimmer animation (~60fps). */
+const SHIMMER_FRAME_MS = 16;
+
 export function useShimmerPostProcess(renderer: CliRenderer, isActive: () => boolean): void {
   let registered = false;
-  let liveRetained = false;
+  let animationTimer: ReturnType<typeof setTimeout> | null = null;
 
   const postProcessFn = applyShimmerPostProcess;
 
@@ -35,16 +42,34 @@ export function useShimmerPostProcess(renderer: CliRenderer, isActive: () => boo
     registered = false;
   }
 
-  function retainLive(): void {
-    if (liveRetained) return;
-    renderer.requestLive();
-    liveRetained = true;
+  function startAnimation(): void {
+    if (animationTimer) return;
+    // Drive shimmer with a setTimeout chain that calls requestRender().
+    // Each call schedules exactly one frame. The post-process function
+    // applies the shimmer sweep to the existing buffer. Since no SolidJS
+    // signals change between frames, reconciliation is a no-op — only the
+    // native rendering + post-process runs.
+    //
+    // Using setTimeout instead of requestLive() avoids the 30fps render
+    // loop which does full SolidJS reconciliation + frame callbacks on
+    // every frame. requestRender() does a single frame and stops.
+    const tick = () => {
+      if (!isActive() || shimmerStates.size === 0) {
+        animationTimer = null;
+        return;
+      }
+      renderer.requestRender();
+      animationTimer = setTimeout(tick, SHIMMER_FRAME_MS);
+    };
+    // Start immediately — the first shimmer frame should appear ASAP.
+    tick();
   }
 
-  function releaseLive(): void {
-    if (!liveRetained) return;
-    renderer.dropLive();
-    liveRetained = false;
+  function stopAnimation(): void {
+    if (animationTimer) {
+      clearTimeout(animationTimer);
+      animationTimer = null;
+    }
   }
 
   // Register/unregister based on aggregate view visibility
@@ -53,21 +78,21 @@ export function useShimmerPostProcess(renderer: CliRenderer, isActive: () => boo
       register();
     } else {
       unregister();
-      releaseLive();
+      stopAnimation();
     }
   });
 
-  // Keep renderer live while any shimmer is active
+  // Start/stop animation based on shimmer state
   const updateLiveState = (): void => {
     if (!isActive()) return;
     if (shimmerStates.size > 0) {
-      retainLive();
+      startAnimation();
     } else {
-      releaseLive();
+      stopAnimation();
     }
   };
 
-  // Subscribe to shimmer state changes to update live status
+  // Subscribe to shimmer state changes to update animation
   const unsubscribe = subscribeToShimmerStateChange(updateLiveState);
 
   // Also run on effect re-evaluation
@@ -79,7 +104,7 @@ export function useShimmerPostProcess(renderer: CliRenderer, isActive: () => boo
 
   onCleanup(() => {
     unregister();
-    releaseLive();
+    stopAnimation();
     unsubscribe();
   });
 }
