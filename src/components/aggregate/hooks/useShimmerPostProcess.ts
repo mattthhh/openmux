@@ -3,25 +3,28 @@
  *
  * When the aggregate view is shown, registers applyShimmerPostProcess
  * as a post-process function. While shimmer is active, drives rendering
- * with a targeted setTimeout chain that calls requestRender() — one frame
- * at a time at ~60fps. When no shimmer is active, no renders are scheduled.
+ * with a targeted timer that only requests frames when the shimmer sweep
+ * crosses a character boundary — the only times the visual output actually
+ * changes. Between crossings, the buffer is unchanged and no render is needed.
  *
- * This avoids requestLive() which starts the full 30fps render loop
- * (SolidJS reconciliation + native output on every frame) even when only
- * the post-process overlay is changing. requestRender() does a single
- * frame with minimal reconciliation overhead since no SolidJS signals
- * have changed — only the post-process colorMatrix is applied to the
- * already-rendered buffer.
+ * This keeps CPU usage proportional to the actual visual change rate:
+ * ~16 frames per 2.5s sweep for a 40-char label instead of 75 frames
+ * at 30fps. At idle (no shimmer), zero renders are scheduled.
  */
 
 import { createEffect, onCleanup } from 'solid-js';
 import type { CliRenderer } from '@opentui/core';
 import { applyShimmerPostProcess } from '../../../core/shimmer-postprocess';
-import { shimmerStates, subscribeToShimmerStateChange } from '../../../core/shimmer';
-import { clearShimmerRowPositions } from '../../../core/shimmer-registry';
-
-/** Target frame time for shimmer animation (~60fps). */
-const SHIMMER_FRAME_MS = 16;
+import {
+  shimmerStates,
+  subscribeToShimmerStateChange,
+  getShimmerSweepPosition,
+  DEFAULT_CONFIG,
+} from '../../../core/shimmer';
+import {
+  clearShimmerRowPositions,
+  getAllShimmerRowPositions,
+} from '../../../core/shimmer-registry';
 
 export function useShimmerPostProcess(renderer: CliRenderer, isActive: () => boolean): void {
   let registered = false;
@@ -42,27 +45,52 @@ export function useShimmerPostProcess(renderer: CliRenderer, isActive: () => boo
     registered = false;
   }
 
+  /**
+   * Calculate the time until the shimmer sweep crosses the next character
+   * boundary for any active shimmer. Returns the minimum delay across all
+   * active shimmer states, or null if no shimmer is active.
+   *
+   * For a sweep moving at (labelLength / sweepDuration) characters per ms,
+   * the time to cross one character is (sweepDuration / labelLength) ms.
+   * We use the minimum across all active shimmers to ensure the fastest
+   * one gets serviced.
+   */
+  function getTimeToNextBoundary(): number | null {
+    const positions = getAllShimmerRowPositions();
+    if (positions.size === 0 || shimmerStates.size === 0) return null;
+
+    let minDelay = Infinity;
+
+    for (const [ptyId, pos] of positions) {
+      const state = shimmerStates.get(ptyId);
+      if (!state) continue;
+
+      const labelLength = pos.labelLength;
+      if (labelLength <= 0) continue;
+
+      // Time per character crossing for this shimmer
+      const msPerChar = state.sweepDuration / labelLength;
+
+      // How far into the current character cell is the sweep?
+      const sweepPos = getShimmerSweepPosition(ptyId, labelLength);
+      if (sweepPos === null) continue;
+
+      // Fractional position within the current character
+      const fractional = sweepPos % 1;
+      // Time until the sweep reaches the next integer position
+      const delay = (1 - fractional) * msPerChar;
+
+      if (delay < minDelay) {
+        minDelay = delay;
+      }
+    }
+
+    return minDelay === Infinity ? null : Math.max(minDelay, 1);
+  }
+
   function startAnimation(): void {
     if (animationTimer) return;
-    // Drive shimmer with a setTimeout chain that calls requestRender().
-    // Each call schedules exactly one frame. The post-process function
-    // applies the shimmer sweep to the existing buffer. Since no SolidJS
-    // signals change between frames, reconciliation is a no-op — only the
-    // native rendering + post-process runs.
-    //
-    // Using setTimeout instead of requestLive() avoids the 30fps render
-    // loop which does full SolidJS reconciliation + frame callbacks on
-    // every frame. requestRender() does a single frame and stops.
-    const tick = () => {
-      if (!isActive() || shimmerStates.size === 0) {
-        animationTimer = null;
-        return;
-      }
-      renderer.requestRender();
-      animationTimer = setTimeout(tick, SHIMMER_FRAME_MS);
-    };
-    // Start immediately — the first shimmer frame should appear ASAP.
-    tick();
+    scheduleNextFrame();
   }
 
   function stopAnimation(): void {
@@ -70,6 +98,27 @@ export function useShimmerPostProcess(renderer: CliRenderer, isActive: () => boo
       clearTimeout(animationTimer);
       animationTimer = null;
     }
+  }
+
+  function scheduleNextFrame(): void {
+    // Request an immediate first frame so shimmer appears without delay
+    renderer.requestRender();
+
+    // Then schedule subsequent frames at character-boundary crossings
+    const delay = getTimeToNextBoundary();
+    if (delay === null) {
+      animationTimer = null;
+      return;
+    }
+    animationTimer = setTimeout(tick, delay);
+  }
+
+  function tick(): void {
+    if (!isActive() || shimmerStates.size === 0) {
+      animationTimer = null;
+      return;
+    }
+    scheduleNextFrame();
   }
 
   // Register/unregister based on aggregate view visibility
