@@ -24,7 +24,7 @@ import {
   suppressPtyShimmer,
   unsuppressPtyShimmer,
 } from '../../core/shimmer';
-import { registerShimmerRow, unregisterShimmerRow } from '../../core/shimmer-registry';
+import { registerShimmerRow, unregisterShimmerRow, hexToRgb } from '../../core/shimmer-registry';
 import { useShimmerStateVersion } from './hooks/useShimmerRenderTime';
 import { getDirectoryName } from './utils';
 
@@ -404,10 +404,14 @@ export function PtyTreeRow(props: PtyTreeRowProps) {
   const labelRenderAfter = function (this: Renderable) {
     const lbl = displayLabel();
     if (lbl.length === 0) return;
+    const fg = baseFgColor();
     registerShimmerRow(props.pty.ptyId, {
       y: this.screenY,
       labelStartX: this.screenX,
       labelLength: lbl.length,
+      labelText: lbl,
+      fgColor: hexToRgb(fg),
+      bgColor: hexToRgb(props.shimmerTargetColor),
     });
   };
 
