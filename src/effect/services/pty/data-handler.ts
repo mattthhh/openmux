@@ -508,9 +508,7 @@ export function createDataHandler(options: DataHandlerOptions) {
     }
 
     if (wrote) {
-      // Data was written to the emulator — we're in a burst. Subsequent
-      // scheduleNotify calls should use setTimeout(0) to yield to the event
-      // loop, preventing microtask chain starvation under sustained output.
+      // Data was written to the emulator — schedule scroller archiver.
       isFirstDrainInBurst = false;
       session.scrollbackArchiver?.schedule();
     }
@@ -527,22 +525,13 @@ export function createDataHandler(options: DataHandlerOptions) {
     if (state.pendingSegments.length > 0) {
       scheduleNotify();
     } else {
-      // Burst ended — reset so the next data arrival uses queueMicrotask
-      // for fast first-drain response.
+      // Burst ended
       isFirstDrainInBurst = true;
     }
   };
 
-  // Tracks whether this is the first schedule after an idle period.
-  // First drain uses queueMicrotask for fast response; subsequent
-  // drains within a burst use setTimeout(0) to yield to the event loop,
-  // preventing the microtask chain from starving user input and focus
-  // changes under sustained heavy output (find / -ls).
-  //
-  // The flag is reset to false inside drainPending after data is actually
-  // written to the emulator (not just buffered by sync mode). This ensures
-  // that if a drain runs but produces no output (sync mode still buffering),
-  // the next schedule still uses queueMicrotask for fast response.
+  // Tracks whether data was written to the emulator during the current
+  // drain cycle. Used by drainPending to schedule scrollback archiver.
   let isFirstDrainInBurst = true;
 
   // Priority-aware scheduling: the drain interval is determined by
@@ -557,35 +546,28 @@ export function createDataHandler(options: DataHandlerOptions) {
       if (priority === 'background-hidden') return;
       session.pendingNotify = true;
 
-      // For the focused PTY, use a hybrid scheduling strategy:
-      // - First drain after idle: queueMicrotask (fast response to new data)
-      // - Subsequent drains within a burst: setTimeout(0) (yields to event loop)
+      // For the focused PTY, use setImmediate for all drain scheduling.
+      // setImmediate runs before setTimeout(0) I/O callbacks in Bun,
+      // giving microtask-like latency without starving the macrotask queue.
       //
-      // Under sustained heavy output (find / -ls), a purely microtask-based
-      // scheduleNotify creates a self-perpetuating chain: drainPending processes
-      // some data, then calls scheduleNotify again, which queues another
-      // queueMicrotask, which processes more data, and so on. This chain
-      // never yields to the macrotask queue, starving user input (keyboard,
-      // mouse), SolidJS effect propagation (focus changes), and the new
-      // focused PTY's read loop wake-up.
+      // The old queueMicrotask/setTimeout hybrid had two problems:
+      // 1. queueMicrotask never yields, creating self-perpetuating chains
+      //    under heavy output that starve user input and focus changes.
+      // 2. The isFirstDrainInBurst flag never resets when the shell sends
+      //    even occasional output (OSC 7 on precmd, cursor reports), so
+      //    every drain permanently uses setTimeout(0), adding 0-4ms of
+      //    unnecessary latency per cycle and competing with scroll animation.
       //
-      // setTimeout(0) yields between drain cycles, allowing the event loop
-      // to process I/O callbacks, timers, and UI events. The ~0-4ms delay
-      // per yield is invisible to the user but critical for responsiveness.
+      // setImmediate solves both: it yields to I/O and macrotasks between
+      // drain cycles (no starvation), but runs before setTimeout(0) callbacks
+      // (lower latency). This means scroll animation ticks (also setImmediate)
+      // get fair scheduling alongside drain cycles.
       if (priority === 'focused') {
-        if (isFirstDrainInBurst) {
-          queueMicrotask(() => {
-            if (session.pendingNotify) {
-              drainPending();
-            }
-          });
-        } else {
-          setTimeout(() => {
-            if (session.pendingNotify) {
-              drainPending();
-            }
-          }, 0);
-        }
+        setImmediate(() => {
+          if (session.pendingNotify) {
+            drainPending();
+          }
+        });
         return;
       }
 

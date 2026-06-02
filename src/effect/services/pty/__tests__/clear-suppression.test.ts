@@ -154,7 +154,13 @@ async function waitForDrain() {
 
 async function flushFakeTimers() {
   vi.runAllTimers();
-  await Promise.resolve();
+  // Yield through macrotask cycles to allow setImmediate callbacks to drain.
+  // The data handler uses setImmediate for focused PTY scheduling, and
+  // vi.useFakeTimers() does not mock setImmediate in Bun's test runner.
+  for (let cycle = 0; cycle < 50; cycle++) {
+    await new Promise<void>((r) => setImmediate(r));
+  }
+  vi.runAllTimers();
   await Promise.resolve();
 }
 
@@ -293,23 +299,19 @@ describe('createDataHandler pi redraw integration', () => {
     });
 
     handleData('\x1b[?2026h\x1b[2J\x1b[H\x1b[3Jhello');
-    // Flush microtask drain
-    await Promise.resolve();
-    await Promise.resolve();
+    // Flush setImmediate drain
+    await new Promise<void>((r) => setImmediate(r));
     handleData(' world');
-    // Flush microtask drain
-    await Promise.resolve();
-    await Promise.resolve();
+    // Flush setImmediate drain
+    await new Promise<void>((r) => setImmediate(r));
     // 0ms total on fake timers — sync timeout (100ms) has not fired
     expect(emulatorWrites).toEqual([]);
 
     handleData('\x1b[?2026l');
-    // Flush microtask drain only — don't run all timers
-    // (runAllTimers would fire the sync timeout out of order)
-    await Promise.resolve();
-    await Promise.resolve();
-    await Promise.resolve();
-    await Promise.resolve();
+    // Flush setImmediate drain and microtasks
+    for (let i = 0; i < 5; i++) {
+      await new Promise<void>((r) => setImmediate(r));
+    }
 
     expect(emulatorWrites).toEqual(['\x1b[H\x1b[Jhello world']);
   });
@@ -327,7 +329,9 @@ describe('createDataHandler pi redraw integration', () => {
 
     handleData('\x1b[?2026h\x1b[2J\x1b[H\x1b[3Jhello');
     vi.advanceTimersByTime(200);
-    await Promise.resolve();
+    for (let i = 0; i < 5; i++) {
+      await new Promise<void>((r) => setImmediate(r));
+    }
 
     expect(emulatorWrites).toEqual([]);
 

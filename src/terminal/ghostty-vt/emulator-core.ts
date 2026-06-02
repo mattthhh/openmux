@@ -68,7 +68,8 @@ export class GhosttyVTEmulatorCore {
   // conversion work under heavy output (e.g. bun test --parallel).
   private _writeDirty = false;
   private _notifyScheduled = false;
-  private _notifyTimer: ReturnType<typeof setTimeout> | null = null;
+  private _notifyTimer: ReturnType<typeof setTimeout> | ReturnType<typeof setImmediate> | null =
+    null;
   // Tracks whether this is the first notification after an idle period.
   // First notification uses queueMicrotask for fast response; subsequent
   // notifications use setTimeout(0) to yield to the event loop, preventing
@@ -503,22 +504,27 @@ export class GhosttyVTEmulatorCore {
   private scheduleDeferredNotify(): void {
     if (this._notifyScheduled) return;
     this._notifyScheduled = true;
-    // For the focused PTY (updatesEnabled), use hybrid scheduling:
-    // first notification uses queueMicrotask for near-immediate response,
-    // subsequent notifications use setTimeout(0) to yield to the event loop.
-    // For background PTYs, setTimeout(0) is fine — it yields to I/O and
-    // coalesces heavy output before the 1fps pulse reads the state.
+
     const notifyCallback = () => {
       if (this._disposed) return;
       this._notifyScheduled = false;
       if (this._writeDirty) {
         this.flushDeferredNotify();
+        // After flushing, check if more writes arrived during prepareUpdate.
+        // If so, we're still in a burst — schedule another notification
+        // via setImmediate to yield briefly while keeping low latency.
+        // If not, the burst is over and _notifyIsFirstInBurst will be
+        // reset by the next scheduleDeferredNotify call via
+        // resetBurstFlagIfNeeded().
+        if (this._writeDirty) {
+          this.scheduleDeferredNotify();
+        }
       } else if (this.pendingUpdate) {
         for (const callback of this.updateCallbacks) {
           callback();
         }
       } else {
-        // Burst ended — reset so next write uses queueMicrotask for fast response
+        // Burst ended — reset so next write uses setImmediate for fast response
         this._notifyIsFirstInBurst = true;
       }
     };
@@ -526,14 +532,28 @@ export class GhosttyVTEmulatorCore {
     if (this.updatesEnabled) {
       if (this._notifyIsFirstInBurst) {
         this._notifyIsFirstInBurst = false;
-        queueMicrotask(notifyCallback);
-      } else {
-        this._notifyTimer = setTimeout(() => {
+        // setImmediate runs before setTimeout(0) I/O callbacks in Bun,
+        // giving microtask-like latency without starving the macrotask
+        // queue. This is the sweet spot: fast enough for responsive
+        // scrolling, yields enough for I/O and user input.
+        this._notifyTimer = setImmediate(() => {
           this._notifyTimer = null;
           notifyCallback();
-        }, 0);
+        });
+      } else {
+        // Subsequent notifications within a burst: also use setImmediate.
+        // The old setTimeout(0) was unnecessary — setImmediate already
+        // yields, and its higher scheduling priority means scroll
+        // animation ticks (also setImmediate) don't get starved by
+        // I/O callbacks that run before setTimeout(0).
+        this._notifyTimer = setImmediate(() => {
+          this._notifyTimer = null;
+          notifyCallback();
+        });
       }
     } else {
+      // Background PTYs: setTimeout(0) is fine — coalesces heavy output
+      // before the 1fps pulse reads the state.
       this._notifyTimer = setTimeout(() => {
         this._notifyTimer = null;
         notifyCallback();
@@ -551,7 +571,11 @@ export class GhosttyVTEmulatorCore {
     this._notifyScheduled = false;
     this._notifyIsFirstInBurst = true;
     if (this._notifyTimer !== null) {
-      clearTimeout(this._notifyTimer);
+      // The timer may be from setImmediate (focused) or setTimeout (background).
+      // Clear both — the wrong type is a no-op, and the orphaned timer
+      // will see _notifyScheduled is false when it fires.
+      clearImmediate(this._notifyTimer as ReturnType<typeof setImmediate>);
+      clearTimeout(this._notifyTimer as ReturnType<typeof setTimeout>);
       this._notifyTimer = null;
     }
   }

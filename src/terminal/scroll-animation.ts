@@ -242,19 +242,28 @@ export class ScrollAnimator {
   private ensureLoop(): void {
     if (this.loopScheduled) return;
     this.loopScheduled = true;
-    // setTimeout(0) paces each tick as a separate macrotask, guaranteeing
-    // the render microtask from the previous tick drains before the next
-    // tick runs. This prevents frame drops under concurrent activity
-    // (drain cycles, subscriber callbacks) where a pure queueMicrotask
-    // loop can run multiple ticks before a single render fires, causing
-    // visible 24-36 line jumps at speed:12.
-    setTimeout(() => {
+    // setImmediate runs before setTimeout(0) I/O callbacks in Bun,
+    // giving each animation tick higher scheduling priority than
+    // drain/notification cycles. This prevents frame drops caused
+    // by macrotask contention where setTimeout(0) callbacks from the
+    // data pipeline (emulator notifications, drain cycles, background
+    // pulse re-pauses) run before scroll animation ticks.
+    //
+    // The old setTimeout(0) pacing had 24-36 line jumps under concurrent
+    // activity because multiple setTimeout(0) sources (drain + notify +
+    // animator + re-pause) competed FIFO — a drain cycle could delay a
+    // scroll tick by 4-16ms.
+    //
+    // setImmediate still yields between ticks (no microtask starvation),
+    // but its higher priority ensures smooth scroll animation even when
+    // the PTY data pipeline is active.
+    setImmediate(() => {
       this.loopScheduled = false;
       this.tick();
       if (this.activePtyIds.size > 0) {
         this.ensureLoop();
       }
-    }, 0);
+    });
   }
 
   /** Stop the animation loop */

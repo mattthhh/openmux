@@ -110,7 +110,7 @@ export function setupUnifiedSubscription(deps: UnifiedSubscriptionDeps): void {
             ss.viewportOffset = offset;
             ss.isAtBottom = offset === 0;
           }
-          // Synchronous render: the animator ticks are paced by setTimeout(0),
+          // Synchronous render: the animator ticks are paced by setImmediate,
           // so each tick runs in its own macrotask. We must increment the
           // SolidJS version synchronously here to guarantee every tick's
           // viewport position is visible to the template before the next tick
@@ -153,14 +153,14 @@ export function setupUnifiedSubscription(deps: UnifiedSubscriptionDeps): void {
           //    per-chunk overhead events per second that crowd out the
           //    focused pane's drain/render microtasks.
           //
-          // The setTimeout(0) for re-pausing runs after the read loop's
+          // The setImmediate for re-pausing runs after the read loop's
           // current drain completes (it's async and yields between batches),
           // so the wake actually happens before we pause again.
           wakeReadLoopOnce(ptyId, 'background-visible');
-          setTimeout(() => {
+          setImmediate(() => {
             if (!mounted || isFocused()) return;
             applyPtyReadThrottle(ptyId, 'background-visible');
-          }, 0);
+          });
 
           // Skip the emulator drain when there's no pending data — no write()
           // has been called since the last pulse, so drainRawToEmulator would

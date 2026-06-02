@@ -77,12 +77,24 @@ function createSession() {
 /** Helper to flush all pending timers and microtasks */
 async function flushTimers() {
   vi.runAllTimers();
+  // Yield through multiple macrotask cycles to allow setImmediate callbacks
+  // to drain. The data handler uses setImmediate for focused PTY scheduling,
+  // and vi.useFakeTimers() does not mock setImmediate in Bun's test runner.
+  // Use setImmediate to yield (it runs before setTimeout(0) and isn't faked).
+  for (let cycle = 0; cycle < 50; cycle++) {
+    await new Promise<void>((r) => setImmediate(r));
+  }
+  vi.runAllTimers();
   await Promise.resolve();
 }
 
 /** Helper to advance timers by ms and flush */
 async function advanceTime(ms: number) {
   vi.advanceTimersByTime(ms);
+  for (let i = 0; i < 10; i++) {
+    await new Promise<void>((r) => setImmediate(r));
+  }
+  vi.advanceTimersByTime(0);
   await Promise.resolve();
 }
 
