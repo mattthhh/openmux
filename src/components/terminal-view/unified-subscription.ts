@@ -10,7 +10,6 @@ import {
   unregisterScrollAnimRender,
 } from '../../effect/bridge';
 import { getKittyGraphicsRenderer } from '../../terminal/kitty-graphics';
-import { idleDiag } from '../../core/idle-diag';
 import * as errore from 'errore';
 import { TerminalSubscriptionError } from '../../effect/errors';
 import {
@@ -72,7 +71,6 @@ export function setupUnifiedSubscription(deps: UnifiedSubscriptionDeps): void {
         const requestRenderFrame = () => {
           if (!renderRequested && mounted) {
             renderRequested = true;
-            idleDiag.recordRequestRender();
             // Use queueMicrotask for frame batching with tighter timing than setTimeout(0).
             // Multiple PTY updates within the same event loop tick are coalesced
             // (renderRequested flag prevents duplicate scheduling), while microtasks
