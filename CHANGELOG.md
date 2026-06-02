@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.143](https://github.com/monotykamary/openmux/compare/v0.3.142...v0.3.143) (2026-06-02)
+
+
+### Bug Fixes
+
+* **shimmer:** expire orphaned shimmer states that have no registered positions ([ac26bbe](https://github.com/monotykamary/openmux/commit/ac26bbe2829909ad741fbb885055b95ee86357f6))
+
+
+### Performance
+
+* **shimmer:** remove requestLive, use direct SGR writes + setTimeout chain ([e90d334](https://github.com/monotykamary/openmux/commit/e90d334d866111274ce66c6dc8e7520f221e7912))
+* **shimmer:** render only at character-boundary crossings ([3f96332](https://github.com/monotykamary/openmux/commit/3f9633258156cdc007380917ec3631a9575f6768))
+* **shimmer:** replace requestLive 30fps loop with dynamic setTimeout chain ([4925a41](https://github.com/monotykamary/openmux/commit/4925a4143d25ae0e1c74b71cd6755471e7127d3c))
+* **shimmer:** revert to requestLive for smooth animation ([b80a870](https://github.com/monotykamary/openmux/commit/b80a870ed5a2d85234c45848d3f819be7c8a133f))
+* **shimmer:** write SGR sequences directly to terminal instead of buffer colorMatrix ([a13f820](https://github.com/monotykamary/openmux/commit/a13f820df198381bdfea11ef768342a23723df7f))
+* **terminal:** replace queueMicrotask/setTimeout hybrid with setImmediate, remove cell pool ([d348ec3](https://github.com/monotykamary/openmux/commit/d348ec3c766ba9dfba6346eea98cc20cf2b5630d))
+
 ### [0.3.142](https://github.com/monotykamary/openmux/compare/v0.3.141...v0.3.142) (2026-06-02)
 
 
