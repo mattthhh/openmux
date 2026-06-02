@@ -22,6 +22,12 @@ import { PaneContainer } from './components';
 import { getFocusedPtyId } from './core/workspace-utils';
 import { resolveAggregatePreviewPtyId } from './components/aggregate/utils';
 import { onShimDetached } from './effect/bridge';
+import { idleDiag as idleDiagRef } from './core/idle-diag';
+
+function registerIdleDiagRenderer(renderer: unknown): void {
+  idleDiagRef.registerRenderer(renderer as Parameters<typeof idleDiagRef.registerRenderer>[0]);
+}
+
 import { createPaneResizeHandlers, createPasteHandler } from './components/app';
 import { readFromClipboard } from './effect/bridge';
 import { setClipboardPasteHandler } from './terminal/focused-pty-registry';
@@ -68,6 +74,7 @@ function AppContent() {
   const keyboardState = useKeyboard();
   const { exitSearchMode: keyboardExitSearchMode } = keyboardState;
   const renderer = useRenderer();
+  registerIdleDiagRenderer(renderer);
   const overlays = useOverlays();
 
   const getCellMetrics = createCellMetricsGetter(
