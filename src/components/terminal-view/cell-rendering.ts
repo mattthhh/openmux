@@ -302,13 +302,9 @@ export function renderRow(
       continue;
     }
 
-    // If previous cell was wide (width=2), this is a spacer cell
-    // Use drawChar with codepoint 0 to mark as continuation without overwriting the wide char
-    // IMPORTANT: Use BLACK for fg (spacers are invisible), only use sentinel for bg.
-    // Never pass DEFAULT_BG_SENTINEL as fg — it would leak into \x1b[38;2;...m.
-    if (prevCellWasWide && prevCellBg) {
-      flushRun();
-      buffer.drawChar(0, x + offsetX, rowIndex + offsetY, BLACK, prevCellBg, 0);
+    // If previous cell was wide (width=2), drawText already wrote the
+    // continuation cell at this position automatically. Skip it entirely.
+    if (prevCellWasWide) {
       prevCellWasWide = false;
       prevCellBg = null;
       continue;
@@ -317,13 +313,14 @@ export function renderRow(
     const { fg, bg, attributes } = getCellColors(cell, x, absoluteY, rowIndex, options, deps);
     const char = cell.char || ' ';
 
-    // Wide characters (width=2) cannot be batched into runs because drawText
-    // would place a spacer via the width calculation, but the next iteration
-    // also needs to handle the spacer explicitly via drawChar(0,...). Instead,
-    // flush the run and render wide chars individually with setCell.
+    // Wide characters MUST use drawText (not setCell) for correct rendering.
+    // drawText allocates a grapheme pool entry, packs the char with width info
+    // (CHAR_FLAG_GRAPHEME), and writes continuation cells after the wide char.
+    // setCell/drawChar write raw codepoints, which the diff engine treats as
+    // single-width, causing subsequent text to shift.
     if (cell.width === 2) {
       flushRun();
-      buffer.setCell(x + offsetX, rowIndex + offsetY, char, fg, bg, attributes);
+      buffer.drawText(char, x + offsetX, rowIndex + offsetY, fg, bg, attributes);
       prevCellWasWide = true;
       prevCellBg = bg;
       continue;
@@ -396,38 +393,19 @@ export function renderRowDirect(
   const bgArr = b.bg;
   const attrArr = b.attributes;
 
-  // Wide-char tracking: after a cell with width===2, the next cell is
-  // a spacer/continuation that must be written as codepoint 0 (not a
-  // space) so the renderer treats it as part of the wide glyph.
-  let prevCellWasWide = false;
-  let prevCellBgR = 0;
-  let prevCellBgG = 0;
-  let prevCellBgB = 0;
-  let prevCellIsDefaultBg = false;
+  // After drawText writes a wide character, its set() method also writes
+  // continuation (spacer) cells automatically. skipNextCell tracks this.
+  let skipNextCell = false;
 
   for (let x = 0; x < cols; x++) {
     const cell = row[x];
     const cellOffset = rowOffset + x;
 
-    // If the previous cell was wide (width===2), this cell is a
-    // continuation/spacer. Write codepoint 0 with the wide char's bg
-    // so the renderer treats it as invisible (part of the wide glyph).
-    // This matches renderRow's buffer.drawChar(0, ...) FFI call.
-    if (prevCellWasWide) {
-      charArr[cellOffset] = 0; // continuation codepoint
-      fgArr[cellOffset * 4] = 0;
-      fgArr[cellOffset * 4 + 1] = 0;
-      fgArr[cellOffset * 4 + 2] = 0;
-      fgArr[cellOffset * 4 + 3] = 255; // opaque fg (matches FFI drawChar)
-      const spBgR = prevCellIsDefaultBg ? 13 : prevCellBgR;
-      const spBgG = prevCellIsDefaultBg ? 17 : prevCellBgG;
-      const spBgB = prevCellIsDefaultBg ? 23 : prevCellBgB;
-      bgArr[cellOffset * 4] = spBgR;
-      bgArr[cellOffset * 4 + 1] = spBgG;
-      bgArr[cellOffset * 4 + 2] = spBgB;
-      bgArr[cellOffset * 4 + 3] = 255;
-      attrArr[cellOffset] = 0;
-      prevCellWasWide = false;
+    // If the previous cell was wide (width===2), drawText already
+    // wrote the continuation cell at this position (via its set() path
+    // which emits packContinuation cells). Skip it — nothing to write.
+    if (skipNextCell) {
+      skipNextCell = false;
       continue;
     }
 
@@ -475,6 +453,105 @@ export function renderRowDirect(
     if (cell.bold) attributes |= ATTR_BOLD;
     if (cell.italic) attributes |= ATTR_ITALIC;
     if (cell.underline) attributes |= ATTR_UNDERLINE;
+
+    // Non-ASCII or wide characters MUST use drawText (FFI) for correct
+    // rendering. The native diff engine reads the char[] and needs
+    // grapheme-encoded values (packGraphemeStart/packContinuation) for
+    // anything beyond simple ASCII. Raw codepoints cause the diff
+    // engine to output a SPACE for spacers (codepoint 0) and treat
+    // wide characters as single-width, shifting all subsequent text.
+    const isNonAscii = charCode > 126 || charCode < 32;
+    if (isNonAscii || cell.width === 2) {
+      // Compute final colors (same logic as below but before the FFI call)
+      if (!noOverlays) {
+        if (cell.dim) {
+          fgR = Math.floor(fgR * 0.5);
+          fgG = Math.floor(fgG * 0.5);
+          fgB = Math.floor(fgB * 0.5);
+        }
+        if (cell.inverse) {
+          const tmpR = fgR;
+          fgR = bgR;
+          bgR = tmpR;
+          const tmpG = fgG;
+          fgG = bgG;
+          bgG = tmpG;
+          const tmpB = fgB;
+          fgB = bgB;
+          bgB = tmpB;
+        }
+        if (isDefaultBg) {
+          bgR = 13;
+          bgG = 17;
+          bgB = 23;
+        }
+        const isVirtualCursor =
+          !!options.copyCursor &&
+          options.copyCursor.absY === absoluteY &&
+          options.copyCursor.x === x;
+        const isRealCursor =
+          !options.copyModeActive &&
+          options.isAtBottom &&
+          options.isFocused &&
+          options.cursorVisible &&
+          options.cursorY === rowIndex &&
+          options.cursorX === x;
+        if (isVirtualCursor) {
+          [fgR, fgG, fgB] = rgba8(options.copyCursorFg);
+          [bgR, bgG, bgB] = rgba8(options.copyCursorBg);
+        } else if (isRealCursor) {
+          bgR = 255;
+          bgG = 255;
+          bgB = 255;
+        } else {
+          const isSelected =
+            options.hasSelection && deps.isCellSelected(options.ptyId, x, absoluteY);
+          const isCopySelected =
+            options.hasCopySelection && deps.isCopySelected?.(options.ptyId, x, absoluteY);
+          if (isCopySelected) {
+            [fgR, fgG, fgB] = rgba8(options.copySelectionFg);
+            [bgR, bgG, bgB] = rgba8(options.copySelectionBg);
+          } else if (isSelected) {
+            [fgR, fgG, fgB] = rgba8(SELECTION_FG);
+            [bgR, bgG, bgB] = rgba8(SELECTION_BG);
+          } else if (options.hasSearch) {
+            const isMatch = options.searchSnapshot
+              ? options.searchSnapshot.isMatch(x, absoluteY)
+              : deps.isSearchMatch(options.ptyId, x, absoluteY);
+            const isCurrent = options.searchSnapshot
+              ? options.searchSnapshot.isCurrent(x, absoluteY)
+              : deps.isCurrentMatch(options.ptyId, x, absoluteY);
+            if (isCurrent) {
+              [fgR, fgG, fgB] = rgba8(SEARCH_CURRENT_FG);
+              [bgR, bgG, bgB] = rgba8(SEARCH_CURRENT_BG);
+            } else if (isMatch) {
+              [fgR, fgG, fgB] = rgba8(SEARCH_MATCH_FG);
+              [bgR, bgG, bgB] = rgba8(SEARCH_MATCH_BG);
+            }
+          }
+        }
+        if (cell.strikethrough) attributes |= ATTR_STRIKETHROUGH;
+      } else if (isDefaultBg) {
+        bgR = 13;
+        bgG = 17;
+        bgB = 23;
+      }
+      const fgRGBA = getCachedRGBA(fgR, fgG, fgB);
+      const bgRGBA = getCachedRGBA(bgR, bgG, bgB);
+      buffer.drawText(
+        cell.char || ' ',
+        x + offsetX,
+        rowIndex + offsetY,
+        fgRGBA,
+        bgRGBA,
+        attributes
+      );
+      if (cell.width === 2) {
+        // drawText's set() writes the continuation cell at x+1 automatically.
+        skipNextCell = true;
+      }
+      continue;
+    }
 
     if (noOverlays) {
       // Default background sentinel: RGB(13,17,23)
@@ -557,7 +634,7 @@ export function renderRowDirect(
       if (cell.strikethrough) attributes |= ATTR_STRIKETHROUGH;
     }
 
-    // Write directly to typed arrays
+    // ASCII cell: write directly to typed arrays (fast path).
     charArr[cellOffset] = charCode;
     const off = cellOffset * 4;
     fgArr[off] = fgR;
@@ -569,14 +646,5 @@ export function renderRowDirect(
     bgArr[off + 2] = bgB;
     bgArr[off + 3] = 255;
     attrArr[cellOffset] = attributes;
-
-    // Track wide chars for spacer handling on next iteration
-    if (cell.width === 2) {
-      prevCellWasWide = true;
-      prevCellBgR = bgR;
-      prevCellBgG = bgG;
-      prevCellBgB = bgB;
-      prevCellIsDefaultBg = isDefaultBg;
-    }
   }
 }
