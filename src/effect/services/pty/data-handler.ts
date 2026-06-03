@@ -587,6 +587,14 @@ export function createDataHandler(options: DataHandlerOptions) {
       // Data was written to the emulator — schedule scroller archiver.
       isFirstDrainInBurst = false;
       session.scrollbackArchiver?.schedule();
+
+      // Flush pending emulator notification synchronously. The emulator's
+      // write() defers prepareUpdate + notifySubscribers via setImmediate
+      // for coalescing (multiple writes in one tick = one update). But we've
+      // just finished draining ALL pending segments, so there won't be more
+      // writes in this tick. Flush now to eliminate a setImmediate cycle
+      // (~4-8ms) between drain completion and subscriber notification.
+      session.emulator.flushPendingNotify?.();
     }
 
     if (piRedraw && wrote) {
@@ -622,22 +630,13 @@ export function createDataHandler(options: DataHandlerOptions) {
       if (priority === 'background-hidden') return;
       session.pendingNotify = true;
 
-      // For the focused PTY, use setImmediate for all drain scheduling.
+      // For the focused PTY, use setImmediate for drain scheduling.
       // setImmediate runs before setTimeout(0) I/O callbacks in Bun,
       // giving microtask-like latency without starving the macrotask queue.
       //
-      // The old queueMicrotask/setTimeout hybrid had two problems:
-      // 1. queueMicrotask never yields, creating self-perpetuating chains
-      //    under heavy output that starve user input and focus changes.
-      // 2. The isFirstDrainInBurst flag never resets when the shell sends
-      //    even occasional output (OSC 7 on precmd, cursor reports), so
-      //    every drain permanently uses setTimeout(0), adding 0-4ms of
-      //    unnecessary latency per cycle and competing with scroll animation.
-      //
-      // setImmediate solves both: it yields to I/O and macrotasks between
-      // drain cycles (no starvation), but runs before setTimeout(0) callbacks
-      // (lower latency). This means scroll animation ticks (also setImmediate)
-      // get fair scheduling alongside drain cycles.
+      // Frame skipping in replayRawBufferFull handles backpressure:
+      // when multiple sync-mode frames accumulate in the raw buffer,
+      // only the last frame is processed through the VT parser.
       if (priority === 'focused') {
         setImmediate(() => {
           if (session.pendingNotify) {

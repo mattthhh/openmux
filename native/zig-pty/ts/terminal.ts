@@ -389,11 +389,28 @@ export class Terminal implements IPty {
 
   private async _drainAvailableData(): Promise<void> {
     let chunksSinceYield = 0;
+    // Batch accumulator: collect decoded chunks and fire a single onData
+    // at the end of the drain cycle (or on yield). This reduces JS-side
+    // event loop pressure from per-chunk EventEmitter dispatch + handleData
+    // + rawBufferAppend + scheduleNotify calls. Under heavy output (golden
+    // star at 30fps = ~3 chunks/frame × 30 = 90 EventEmitter fires/sec),
+    // batching cuts this to ~30 fires/sec with 1/3 the per-notification overhead.
+    const batchedChunks: string[] = [];
+    let batchedLength = 0;
+
+    const flushBatch = () => {
+      if (batchedChunks.length === 0) return;
+      const data = batchedChunks.length === 1 ? batchedChunks[0] : batchedChunks.join('');
+      batchedChunks.length = 0;
+      batchedLength = 0;
+      this._onData.fire(data);
+    };
 
     while (this._readLoop && !this._closing && !this._pollingFallback) {
       // If paused (background-hidden), sleep until woken.
       // Data accumulates in the kernel's PTY buffer.
       if (this._readThrottleMs < 0) {
+        flushBatch();
         await this._throttleSleep();
         continue;
       }
@@ -407,12 +424,14 @@ export class Terminal implements IPty {
       if (n > 0) {
         const data = this._decoder.decode(this._readBuffer.subarray(0, n), { stream: true });
         if (data.length > 0) {
-          this._onData.fire(data);
+          batchedChunks.push(data);
+          batchedLength += data.length;
         }
 
         chunksSinceYield += 1;
         if (chunksSinceYield >= DRAIN_YIELD_INTERVAL) {
           chunksSinceYield = 0;
+          flushBatch();
           await this._throttleSleep();
         }
         continue;
@@ -430,6 +449,9 @@ export class Terminal implements IPty {
 
       break;
     }
+
+    // Flush any remaining batched data after the drain loop exits.
+    flushBatch();
 
     // Check for foreground process changes after draining data
     this._checkForegroundProcessChange();

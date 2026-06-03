@@ -97,7 +97,7 @@ async function initializeAndRender(): Promise<StartupError | void> {
       ? true
       : useThreadEnv === '0' || useThreadEnv === 'false'
         ? false
-        : !hostCaps.kittyGraphics;
+        : true;
 
   const interceptingStdin = createPasteInterceptingStdin(process.stdin, {
     onPasteTriggered: () => {
