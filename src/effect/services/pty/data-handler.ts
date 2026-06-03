@@ -67,6 +67,10 @@ const FOCUS_TRACKING_DISABLE_C1 = '\x9b?1004l';
 const FOCUS_IN_SEQUENCE = '\x1b[I';
 const FOCUS_OUT_SEQUENCE = '\x1b[O';
 const FOCUS_TRACKING_PROBE_LEN = 16;
+const SYNC_SET = '\x1b[?2026h';
+const SYNC_RESET = '\x1b[?2026l';
+const SYNC_SET_C1 = '\x9b?2026h';
+const SYNC_RESET_C1 = '\x9b?2026l';
 const SCROLLBACK_CLEAR_REGEX = /\x1b\[([0-9;]*)J/g;
 const SCROLLBACK_CLEAR_C1_REGEX = /\x9b([0-9;]*)J/g;
 
@@ -134,6 +138,78 @@ function shouldSuppressClearScreen(session: InternalPtySession): boolean {
   if (session.lastResizeTime === 0) return false;
   const elapsed = Date.now() - session.lastResizeTime;
   return elapsed < CLEAR_SUPPRESSION_WINDOW_MS;
+}
+
+/** Count non-overlapping occurrences of a substring. */
+function countOccurrences(text: string, substr: string): number {
+  let count = 0;
+  let pos = 0;
+  while ((pos = text.indexOf(substr, pos)) !== -1) {
+    count++;
+    pos += substr.length;
+  }
+  return count;
+}
+
+/**
+ * Strip all complete sync-mode frames from a string, keeping only
+ * the non-sync data (query responses, partial output) between frames.
+ * Used by replayRawBufferFull to skip intermediate animation frames
+ * while preserving non-sync data that must be processed.
+ */
+function stripSyncFrames(text: string): string {
+  let result = '';
+  let pos = 0;
+  while (pos < text.length) {
+    // Find next sync-set (7-bit or C1)
+    const idx7 = text.indexOf(SYNC_SET, pos);
+    const idx8 = text.indexOf(SYNC_SET_C1, pos);
+    let syncIdx: number;
+    let syncLen: number;
+    if (idx7 !== -1 && idx8 !== -1) {
+      syncIdx = Math.min(idx7, idx8);
+      syncLen = idx7 < idx8 ? SYNC_SET.length : SYNC_SET_C1.length;
+    } else if (idx7 !== -1) {
+      syncIdx = idx7;
+      syncLen = SYNC_SET.length;
+    } else if (idx8 !== -1) {
+      syncIdx = idx8;
+      syncLen = SYNC_SET_C1.length;
+    } else {
+      // No more sync frames — emit the rest
+      result += text.slice(pos);
+      break;
+    }
+
+    // Emit non-sync data before this sync frame
+    if (syncIdx > pos) {
+      result += text.slice(pos, syncIdx);
+    }
+
+    // Find matching sync-reset (either 7-bit or C1, independent of the set format)
+    const afterSync = text.slice(syncIdx + syncLen);
+    const resetIdx7 = afterSync.indexOf(SYNC_RESET);
+    const resetIdx8 = afterSync.indexOf(SYNC_RESET_C1);
+    const resetOffset =
+      resetIdx7 !== -1 && resetIdx8 !== -1
+        ? Math.min(resetIdx7, resetIdx8)
+        : resetIdx7 !== -1
+          ? resetIdx7
+          : resetIdx8;
+
+    if (resetOffset !== -1) {
+      // Skip the entire sync frame (set + content + reset)
+      // Use the actual length of the reset sequence found
+      const resetLen = resetOffset === resetIdx7 ? SYNC_RESET.length : SYNC_RESET_C1.length;
+      pos = syncIdx + syncLen + resetOffset + resetLen;
+    } else {
+      // Incomplete sync frame — emit sync-set and everything after
+      // (the sync parser will handle the buffering)
+      result += text.slice(syncIdx);
+      break;
+    }
+  }
+  return result;
 }
 
 /**
@@ -631,6 +707,83 @@ export function createDataHandler(options: DataHandlerOptions) {
     if (state.rawBufferLength === 0) return;
     const raw = rawBufferJoin();
     rawBufferClear();
+
+    // Frame skip optimization: when the raw buffer contains multiple
+    // complete sync-mode frames (\x1b[?2026h...\x1b[?2026l), skip all
+    // but the last one. Each sync-mode frame from an opentui app is a
+    // complete screen redraw — intermediate frames are completely
+    // overwritten by subsequent frames. Processing them through the
+    // VT parser is wasted CPU (~5-10ms per frame for 253KB of truecolor
+    // ANSI). This cuts the drain time from O(n frames) to O(1 frame)
+    // for animation backpressure scenarios.
+    //
+    // Algorithm: find the last sync-set (\x1b[?2026h) that has a
+    // matching sync-reset (\x1b[?2026l) after it. Everything before
+    // that sync-set can be skipped (with the exception of any non-sync
+    // data like query responses, which must still be processed).
+    let syncStartIdx = -1;
+
+    // Search from the end for the last complete sync frame
+    let searchFrom = raw.length;
+    while (searchFrom > 0) {
+      const idx7 = raw.lastIndexOf(SYNC_SET, searchFrom);
+      const idx8 = raw.lastIndexOf(SYNC_SET_C1, searchFrom);
+      const idx = Math.max(idx7, idx8);
+      if (idx === -1) break;
+
+      // Check if this sync-set has a matching sync-reset after it
+      const afterSync = raw.slice(idx);
+      const resetIdx7 = afterSync.indexOf(SYNC_RESET);
+      const resetIdx8 = afterSync.indexOf(SYNC_RESET_C1);
+      const resetOffset =
+        resetIdx7 !== -1 && resetIdx8 !== -1
+          ? Math.min(resetIdx7, resetIdx8)
+          : resetIdx7 !== -1
+            ? resetIdx7
+            : resetIdx8;
+
+      if (resetOffset !== -1) {
+        // Found a complete sync frame starting at idx
+        syncStartIdx = idx;
+        break;
+      }
+
+      // This sync-set has no matching reset — continue searching earlier
+      searchFrom = idx - 1;
+    }
+
+    if (syncStartIdx > 0) {
+      // Count skipped frames for tracing
+      const beforeSyncStart = raw.slice(0, syncStartIdx);
+      const skippedCount =
+        countOccurrences(beforeSyncStart, SYNC_SET) +
+        countOccurrences(beforeSyncStart, SYNC_SET_C1);
+
+      if (skippedCount > 0) {
+        tracePtyEvent('pty-frame-skip', {
+          ptyId: session.id,
+          skippedFrames: skippedCount,
+          rawLength: raw.length,
+          keptLength: raw.length - syncStartIdx,
+        });
+      }
+
+      // Process any data before the last frame that is NOT inside a sync
+      // boundary. Non-sync data (query responses, partial output) must be
+      // processed for correctness. Sync-mode frames before the last one
+      // are dropped.
+      //
+      // Strategy: strip all complete sync-mode frames from the prefix.
+      // Any remaining data is non-sync and must be processed.
+      const stripped = stripSyncFrames(beforeSyncStart);
+      if (stripped.length > 0) {
+        processChunk(stripped);
+      }
+      // Process the last complete frame
+      processChunk(raw.slice(syncStartIdx));
+      return;
+    }
+
     processChunk(raw);
   };
 
