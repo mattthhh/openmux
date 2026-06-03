@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.147](https://github.com/monotykamary/openmux/compare/v0.3.146...v0.3.147) (2026-06-03)
+
+
+### Bug Fixes
+
+* **aggregate:** prevent PTY session misattribution during rapid j/k navigation ([0c5a732](https://github.com/monotykamary/openmux/commit/0c5a7323d6dd10d5ed7988d025650764e5198e41))
+
 ### [0.3.146](https://github.com/monotykamary/openmux/compare/v0.3.145...v0.3.146) (2026-06-03)
 
 
