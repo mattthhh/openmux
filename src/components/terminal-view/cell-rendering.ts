@@ -396,6 +396,19 @@ export function renderRowDirect(
   const bgArr = b.bg;
   const attrArr = b.attributes;
 
+  // Track first cell's data to commit via FFI after the typed array
+  // writes. The native renderer's diff uses internal change tracking
+  // that is only updated by FFI calls (setCell, drawChar, drawText).
+  // Typed array writes bypass this tracking, so the diff may skip
+  // rows that were only modified via typed arrays. Writing the first
+  // cell of each row via drawChar ensures the diff recognizes the
+  // row as changed and checks all cells in it. Cost: one FFI call
+  // per row (~0.003ms).
+  let firstCellCodepoint = 32;
+  let firstCellFg: RGBA = fallbackFg;
+  let firstCellBg: RGBA = fallbackBg;
+  let firstCellAttrs = 0;
+
   // Wide-char tracking: after a cell with width===2, the next cell is
   // a spacer/continuation that must be written as codepoint 0 (not a
   // space) so the renderer treats it as part of the wide glyph.
@@ -428,6 +441,12 @@ export function renderRowDirect(
       bgArr[cellOffset * 4 + 3] = 255;
       attrArr[cellOffset] = 0;
       prevCellWasWide = false;
+      if (x === 0) {
+        firstCellCodepoint = 0;
+        firstCellFg = BLACK;
+        firstCellBg = getCachedRGBA(spBgR, spBgG, spBgB);
+        firstCellAttrs = 0;
+      }
       continue;
     }
 
@@ -445,6 +464,12 @@ export function renderRowDirect(
       bgArr[cellOffset * 4 + 2] = bB;
       bgArr[cellOffset * 4 + 3] = 255;
       attrArr[cellOffset] = 0;
+      if (x === 0) {
+        firstCellCodepoint = 32;
+        firstCellFg = fallbackFg;
+        firstCellBg = fallbackBg;
+        firstCellAttrs = 0;
+      }
       continue;
     }
 
@@ -578,5 +603,27 @@ export function renderRowDirect(
       prevCellBgB = bgB;
       prevCellIsDefaultBg = isDefaultBg;
     }
+
+    // Capture first cell data for FFI commit
+    if (x === 0) {
+      firstCellCodepoint = charCode;
+      firstCellAttrs = attributes;
+      firstCellFg = getCachedRGBA(fgR, fgG, fgB);
+      firstCellBg = getCachedRGBA(bgR, bgG, bgB);
+    }
   }
+
+  // Commit the first cell of this row via FFI. The native renderer's
+  // diff uses internal change tracking that is only updated by FFI
+  // calls — typed array writes bypass this tracking. Writing the first
+  // cell via drawChar ensures the diff recognizes the row as changed
+  // and checks all cells in it. Cost: one FFI call per row (~0.003ms).
+  buffer.drawChar(
+    firstCellCodepoint,
+    offsetX,
+    rowIndex + offsetY,
+    firstCellFg,
+    firstCellBg,
+    firstCellAttrs
+  );
 }
