@@ -79,7 +79,8 @@ export function SessionTreeNode(props: SessionTreeNodeProps) {
   const displayName = () => {
     const name = sessionLabel();
     if (name.length <= availableNameWidth()) return name;
-    return name.slice(0, availableNameWidth() - 1) + '…';
+    if (availableNameWidth() <= 3) return '.'.repeat(availableNameWidth());
+    return name.slice(0, availableNameWidth() - 3) + '...';
   };
 
   const handleMouseDown = (event: { preventDefault: () => void; button?: number }) => {
