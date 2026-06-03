@@ -5,7 +5,7 @@ import { getKittyGraphicsRenderer } from '../../terminal/kitty-graphics';
 import type { SelectionRange } from '../../core/coordinates';
 import type { SearchMatch } from '../../contexts/search/types';
 import {
-  renderRow,
+  renderRowDirect,
   renderScrollbar,
   renderScrollDepth,
   fetchRowsForRendering,
@@ -243,7 +243,7 @@ export function createTerminalRenderer(params: {
 
     for (let y = 0; y < rows; y++) {
       const row = rowCache[y];
-      renderRow(
+      renderRowDirect(
         buffer,
         row,
         y,

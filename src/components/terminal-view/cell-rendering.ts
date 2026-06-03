@@ -347,3 +347,197 @@ export function renderRow(
   // Flush any remaining run
   flushRun();
 }
+
+/**
+ * Render a row of terminal cells by writing directly to the OptimizedBuffer's
+ * typed arrays. This bypasses FFI (setCell/drawText/drawChar) entirely,
+ * reducing per-cell cost from ~5μs (FFI + live renderer overhead) to ~30ns
+ * (typed array write). For a 145×51 grid with no run coalescence (e.g.
+ * truecolor gradients), this cuts draw time from ~35ms to ~1ms.
+ *
+ * The native renderer's diff pass reads the same typed arrays after
+ * renderAfter returns, so changes are picked up automatically.
+ */
+export function renderRowDirect(
+  buffer: OptimizedBuffer,
+  row: TerminalCell[] | null,
+  rowIndex: number,
+  cols: number,
+  offsetX: number,
+  offsetY: number,
+  options: CellRenderingOptions,
+  deps: CellRenderingDeps,
+  fallbackFg: RGBA,
+  fallbackBg: RGBA
+): void {
+  const { scrollbackLength, viewportOffset } = options;
+  const absoluteY = scrollbackLength - viewportOffset + rowIndex;
+
+  // Helper: extract 0-255 RGB from an RGBA object (which stores 0-1 floats)
+  const rgba8 = (c: RGBA): [number, number, number] => [
+    (c as unknown as { r: number }).r * 255,
+    (c as unknown as { g: number }).g * 255,
+    (c as unknown as { b: number }).b * 255,
+  ];
+
+  const b = buffer.buffers;
+  const rowOffset = (rowIndex + offsetY) * buffer.width + offsetX;
+
+  if (!row) {
+    // Null row: fill with fallback colors. Still use drawText for the single
+    // FFI call since null rows are rare and drawText is fast for uniform rows.
+    buffer.drawText(' '.repeat(cols), offsetX, rowIndex + offsetY, fallbackFg, fallbackBg, 0);
+    return;
+  }
+
+  // Write cells directly to typed arrays
+  const charArr = b.char;
+  const fgArr = b.fg;
+  const bgArr = b.bg;
+  const attrArr = b.attributes;
+  const bufWidth = buffer.width;
+
+  for (let x = 0; x < cols; x++) {
+    const cell = row[x];
+    const cellOffset = rowOffset + x;
+
+    if (!cell) {
+      // No cell data — use fallback
+      charArr[cellOffset] = 32; // space
+      const [fR, fG, fB] = rgba8(fallbackFg);
+      fgArr[cellOffset * 4] = fR;
+      fgArr[cellOffset * 4 + 1] = fG;
+      fgArr[cellOffset * 4 + 2] = fB;
+      fgArr[cellOffset * 4 + 3] = 255;
+      const [bR, bG, bB] = rgba8(fallbackBg);
+      bgArr[cellOffset * 4] = bR;
+      bgArr[cellOffset * 4 + 1] = bG;
+      bgArr[cellOffset * 4 + 2] = bB;
+      bgArr[cellOffset * 4 + 3] = 255;
+      attrArr[cellOffset] = 0;
+      continue;
+    }
+
+    // Get cell colors using the same logic as getCellColors, but write
+    // the raw RGB values directly instead of creating RGBA objects
+    let fgR = cell.fg.r,
+      fgG = cell.fg.g,
+      fgB = cell.fg.b;
+    let bgR = cell.bg.r,
+      bgG = cell.bg.g,
+      bgB = cell.bg.b;
+    const isDefaultBg = !cell.inverse && !!cell.defaultBg;
+
+    // Fast path: no overlays, no special styling
+    const noOverlays =
+      !options.hasSelection &&
+      !options.hasSearch &&
+      !options.hasCopySelection &&
+      !options.copyModeActive &&
+      !(options.isAtBottom && options.isFocused && options.cursorVisible) &&
+      !options.copyCursor &&
+      !cell.dim &&
+      !cell.inverse &&
+      !cell.strikethrough;
+
+    let charCode = cell.char ? cell.char.codePointAt(0)! : 32;
+    let attributes = 0;
+    if (cell.bold) attributes |= ATTR_BOLD;
+    if (cell.italic) attributes |= ATTR_ITALIC;
+    if (cell.underline) attributes |= ATTR_UNDERLINE;
+
+    if (noOverlays) {
+      // Default background sentinel: RGB(13,17,23)
+      if (isDefaultBg) {
+        bgR = 13;
+        bgG = 17;
+        bgB = 23;
+      }
+    } else {
+      // Slow path: same logic as getCellColors
+      if (cell.dim) {
+        fgR = Math.floor(fgR * 0.5);
+        fgG = Math.floor(fgG * 0.5);
+        fgB = Math.floor(fgB * 0.5);
+      }
+      if (cell.inverse) {
+        const tmpR = fgR;
+        fgR = bgR;
+        bgR = tmpR;
+        const tmpG = fgG;
+        fgG = bgG;
+        bgG = tmpG;
+        const tmpB = fgB;
+        bgB = bgB;
+        bgB = tmpB;
+      }
+      if (isDefaultBg) {
+        bgR = 13;
+        bgG = 17;
+        bgB = 23;
+      }
+
+      // Check overlays
+      const isVirtualCursor =
+        !!options.copyCursor && options.copyCursor.absY === absoluteY && options.copyCursor.x === x;
+      const isRealCursor =
+        !options.copyModeActive &&
+        options.isAtBottom &&
+        options.isFocused &&
+        options.cursorVisible &&
+        options.cursorY === rowIndex &&
+        options.cursorX === x;
+
+      if (isVirtualCursor) {
+        [fgR, fgG, fgB] = rgba8(options.copyCursorFg);
+        [bgR, bgG, bgB] = rgba8(options.copyCursorBg);
+      } else if (isRealCursor) {
+        // Inverted cursor: fg = cell's bg, bg = white
+        // fgR/G/B already has the cell's bg (after inverse)
+        bgR = 255;
+        bgG = 255;
+        bgB = 255;
+      } else {
+        const isSelected = options.hasSelection && deps.isCellSelected(options.ptyId, x, absoluteY);
+        const isCopySelected =
+          options.hasCopySelection && deps.isCopySelected?.(options.ptyId, x, absoluteY);
+        if (isCopySelected) {
+          [fgR, fgG, fgB] = rgba8(options.copySelectionFg);
+          [bgR, bgG, bgB] = rgba8(options.copySelectionBg);
+        } else if (isSelected) {
+          [fgR, fgG, fgB] = rgba8(SELECTION_FG);
+          [bgR, bgG, bgB] = rgba8(SELECTION_BG);
+        } else if (options.hasSearch) {
+          const isMatch = options.searchSnapshot
+            ? options.searchSnapshot.isMatch(x, absoluteY)
+            : deps.isSearchMatch(options.ptyId, x, absoluteY);
+          const isCurrent = options.searchSnapshot
+            ? options.searchSnapshot.isCurrent(x, absoluteY)
+            : deps.isCurrentMatch(options.ptyId, x, absoluteY);
+          if (isCurrent) {
+            [fgR, fgG, fgB] = rgba8(SEARCH_CURRENT_FG);
+            [bgR, bgG, bgB] = rgba8(SEARCH_CURRENT_BG);
+          } else if (isMatch) {
+            [fgR, fgG, fgB] = rgba8(SEARCH_MATCH_FG);
+            [bgR, bgG, bgB] = rgba8(SEARCH_MATCH_BG);
+          }
+        }
+      }
+
+      if (cell.strikethrough) attributes |= ATTR_STRIKETHROUGH;
+    }
+
+    // Write directly to typed arrays
+    charArr[cellOffset] = charCode;
+    const fgOff = cellOffset * 4;
+    fgArr[fgOff] = fgR;
+    fgArr[fgOff + 1] = fgG;
+    fgArr[fgOff + 2] = fgB;
+    fgArr[fgOff + 3] = 255;
+    bgArr[fgOff] = bgR;
+    bgArr[fgOff + 1] = bgG;
+    bgArr[fgOff + 2] = bgB;
+    bgArr[fgOff + 3] = 255;
+    attrArr[cellOffset] = attributes;
+  }
+}

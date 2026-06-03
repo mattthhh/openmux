@@ -1,6 +1,7 @@
 export {
   getCellColors,
   renderRow,
+  renderRowDirect,
   DEFAULT_BG_SENTINEL,
   type CellRenderingDeps,
   type CellRenderingOptions,
