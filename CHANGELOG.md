@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.146](https://github.com/monotykamary/openmux/compare/v0.3.145...v0.3.146) (2026-06-03)
+
+
+### Features
+
+* **terminal:** add scrollback skip map to hide stale pi redraw content ([d0aae28](https://github.com/monotykamary/openmux/commit/d0aae280f9dc42f796a949c16a37eafa058d0781))
+
+
+### Bug Fixes
+
+* **aggregate:** eliminate shimmer stdout race with threaded renderer ([d95eef3](https://github.com/monotykamary/openmux/commit/d95eef3eb40adba03e47f0104efde0b0f1ccb37a))
+* **aggregate:** replace ellipsis with ASCII dots and pad rows to fill width ([c351b8c](https://github.com/monotykamary/openmux/commit/c351b8cd16338d7dba787eaab5b09eb4c0ef0135))
+* record pi-redraw skip range before flushing subscriber notification ([ee9eafa](https://github.com/monotykamary/openmux/commit/ee9eafac0930a200fecbc0d7b8b2b41e087b7833))
+* **terminal:** write continuation cell encoding for wide-char spacers ([706dcf9](https://github.com/monotykamary/openmux/commit/706dcf9ba22766f36c5d41b880f85be8f0536e27))
+
 ### [0.3.145](https://github.com/monotykamary/openmux/compare/v0.3.144...v0.3.145) (2026-06-03)
 
 
