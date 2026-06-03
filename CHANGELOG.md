@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.148](https://github.com/monotykamary/openmux/compare/v0.3.147...v0.3.148) (2026-06-03)
+
+
+### Bug Fixes
+
+* read scrollback length from emulator at render time ([dbbcf5e](https://github.com/monotykamary/openmux/commit/dbbcf5e68249515c487643b4b0e5016ccf23d972))
+
 ### [0.3.147](https://github.com/monotykamary/openmux/compare/v0.3.146...v0.3.147) (2026-06-03)
 
 
