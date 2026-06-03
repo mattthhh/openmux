@@ -376,22 +376,18 @@ export function PtyTreeRow(props: PtyTreeRowProps) {
     const maxWidth = labelMaxWidth();
     if (maxWidth <= 0) return '';
     if (text.length <= maxWidth) return text;
-    if (maxWidth <= 3) return '.'.repeat(maxWidth);
-    return text.slice(0, maxWidth - 3) + '...';
+    if (maxWidth === 1) return '…';
+    return text.slice(0, maxWidth - 1) + '…';
   });
 
-  // Padding to right-align the git metadata at the edge with a small gap.
-  // When there's no metadata, pad with spaces to fill the full row width
-  // so stale cells from a previous frame are overwritten during fast scrolling.
+  // Padding to right-align the git metadata at the edge with a small gap
+  // Formula: available space - label length - metadata length = padding before metadata
   const padding = createMemo(() => {
     const metaLen = thisMetaWidth();
-    const labelLen = displayLabel().length;
-    if (metaLen === 0) {
-      // No metadata: pad to fill the entire remaining width
-      const padLen = Math.max(0, availableWidth() - labelLen);
-      return ' '.repeat(padLen);
-    }
+    // If no metadata for this row, no padding needed
+    if (metaLen === 0) return '';
     // Calculate padding to right-align metadata (with rightGutter already accounted in availableWidth)
+    const labelLen = displayLabel().length;
     const padLen = Math.max(0, availableWidth() - labelLen - metaLen);
     return ' '.repeat(padLen);
   });

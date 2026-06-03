@@ -484,7 +484,7 @@ function PtyRow(props: PtyRowProps) {
   const truncatedLabel = () => {
     const text = label();
     const width = props.maxWidth - 4;
-    if (text.length > width) return text.slice(0, Math.max(0, width - 3)) + '...';
+    if (text.length > width) return text.slice(0, Math.max(0, width - 1)) + '…';
     return text.padEnd(width);
   };
 

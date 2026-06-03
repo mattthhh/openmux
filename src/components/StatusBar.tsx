@@ -34,7 +34,7 @@ export function StatusBar(props: StatusBarProps) {
     const sessionName = sessionState.activeSession?.name ?? 'default';
     const maxSessionNameLen = 15;
     return sessionName.length > maxSessionNameLen
-      ? sessionName.slice(0, maxSessionNameLen - 3) + '...'
+      ? sessionName.slice(0, maxSessionNameLen - 1) + '…'
       : sessionName;
   };
 

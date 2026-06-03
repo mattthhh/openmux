@@ -433,7 +433,7 @@ function SessionRow(props: SessionRowProps) {
   const truncatedName = () => {
     const name = displayName();
     const width = nameWidth();
-    return name.length > width ? name.slice(0, width - 3) + '...' : name.padEnd(width);
+    return name.length > width ? name.slice(0, width - 1) + '…' : name.padEnd(width);
   };
 
   // Summary info
