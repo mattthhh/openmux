@@ -16,6 +16,7 @@ import {
 import { resolveThemeColor } from './theme-color';
 import type { TerminalViewProps } from './types';
 import type { TerminalViewState } from './view-state';
+import { flushPtyData } from '../../effect/bridge';
 
 interface SelectionDeps {
   isCellSelected: (ptyId: string, row: number, col: number) => boolean;
@@ -61,14 +62,37 @@ export function createTerminalRenderer(params: {
 }) {
   const { props, viewState, selection, copyMode, search, theme, kittyPaneKey } = params;
 
+  let _perfCount = 0;
+  let _perfAccum = 0;
+  let _perfLastLog = 0;
   return (buffer: OptimizedBuffer) => {
+    const _perfT0 = performance.now();
+
+    // Flush any pending PTY data + emulator updates synchronously before rendering.
+    // This eliminates the setImmediate scheduling latency (~0-4ms per hop) in the
+    // data pipeline: handleData → setImmediate(drainPending) → emulator.write() →
+    // setImmediate(flushDeferredNotify). By flushing both the PTY data drain and
+    // the emulator notification in the render callback, we collapse 2-3 async
+    // hops into 0, saving 4-12ms per frame for animated content.
+    //
+    // Without this, the render callback sees stale cell state because the
+    // deferred notifications haven't fired yet. The deferred paths still run
+    // as fallbacks (they'll be no-ops since the state is already flushed).
+    const ptyId = props.ptyId;
+    if (ptyId) {
+      flushPtyData(ptyId);
+    }
+    const em = viewState.emulator;
+    if (em?.flushPendingNotify) {
+      em.flushPendingNotify();
+    }
+
     const state = viewState.terminalState;
     const width = props.width;
     const height = props.height;
     const offsetX = props.offsetX ?? 0;
     const offsetY = props.offsetY ?? 0;
     const isFocused = props.isFocused;
-    const ptyId = props.ptyId;
     const emulator = viewState.emulator;
     const kittyRenderer = getKittyGraphicsRenderer();
 
@@ -322,5 +346,19 @@ export function createTerminalRenderer(params: {
       isAlternateScreen: state.alternateScreen,
       layer: props.kittyLayer ?? 'base',
     });
+
+    const _perfDt = performance.now() - _perfT0;
+    _perfCount++;
+    _perfAccum += _perfDt;
+    const _perfNow = performance.now();
+    if (_perfNow - _perfLastLog >= 2000) {
+      const _fps = _perfCount / ((_perfNow - _perfLastLog) / 1000);
+      console.log(
+        `[render-perf] avg=${(_perfAccum / _perfCount).toFixed(2)}ms fps=${_fps.toFixed(1)} calls=${_perfCount} rows=${rows} cols=${cols}`
+      );
+      _perfCount = 0;
+      _perfAccum = 0;
+      _perfLastLog = _perfNow;
+    }
   };
 }

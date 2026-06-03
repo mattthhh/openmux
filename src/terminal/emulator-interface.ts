@@ -162,6 +162,9 @@ export interface ITerminalEmulator {
    */
   hasPendingData?(): boolean;
 
+  /** Flush pending write notification synchronously (eliminates scheduling latency). */
+  flushPendingNotify?(): void;
+
   /**
    * Force a refresh of cached state and notify subscribers.
    * Used after operations that change terminal dimensions but may have been

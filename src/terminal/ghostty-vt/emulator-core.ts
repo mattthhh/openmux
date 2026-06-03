@@ -404,6 +404,17 @@ export class GhosttyVTEmulatorCore {
     return this.needsFullRefresh;
   }
 
+  /** Flush any pending write notification immediately (synchronous).
+   * Called from the render path to ensure the latest cell state is
+   * available before rendering, eliminating the setImmediate scheduling
+   * latency (~0-4ms) between emulator.write() and prepareUpdate().
+   * Safe to call when no writes are pending — returns immediately. */
+  flushPendingNotify(): void {
+    if (!this._writeDirty || !this.updatesEnabled) return;
+    this.cancelDeferredNotify();
+    this.flushDeferredNotify();
+  }
+
   setUpdateEnabled(enabled: boolean): void {
     if (this.updatesEnabled === enabled) return;
     this.updatesEnabled = enabled;
