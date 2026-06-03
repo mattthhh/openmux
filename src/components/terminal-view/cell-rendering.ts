@@ -302,21 +302,13 @@ export function renderRow(
       continue;
     }
 
-    // If previous cell was wide (width=2), write a continuation cell
-    // with CHAR_FLAG_CONTINUATION encoding (0xC0000000 | left_extent<<26)
-    // so the native diff engine skips it entirely. Codepoint 0 causes
-    // the diff engine to emit a visible SPACE, shifting subsequent text.
+    // If previous cell was wide (width=2), this is a spacer cell
+    // Use drawChar with codepoint 0 to mark as continuation without overwriting the wide char
+    // IMPORTANT: Use BLACK for fg (spacers are invisible), only use sentinel for bg.
+    // Never pass DEFAULT_BG_SENTINEL as fg — it would leak into \x1b[38;2;...m.
     if (prevCellWasWide && prevCellBg) {
       flushRun();
-      // 0xC0000000 | (1 << 26) = continuation cell with left_extent=1
-      buffer.drawChar(
-        0xc0000000 | (1 << 26),
-        x + offsetX,
-        rowIndex + offsetY,
-        BLACK,
-        prevCellBg,
-        0
-      );
+      buffer.drawChar(0, x + offsetX, rowIndex + offsetY, BLACK, prevCellBg, 0);
       prevCellWasWide = false;
       prevCellBg = null;
       continue;
@@ -404,19 +396,9 @@ export function renderRowDirect(
   const bgArr = b.bg;
   const attrArr = b.attributes;
 
-  // Grapheme char encoding constants (matches Zig's grapheme.zig).
-  // Bits 31-30 == 0b11 → CHAR_FLAG_CONTINUATION: diff engine skips these
-  // cells entirely (no output), which is correct for wide-char spacers.
-  // Bits 29-28: right extent, Bits 27-26: left extent (u2 each).
-  // For a 2-wide char's spacer at x+1: left=1 (1 cell from start), right=0.
-  const CHAR_FLAG_CONTINUATION = 0xc000_0000;
-  const CHAR_EXT_LEFT_SHIFT = 26;
-  // const CHAR_EXT_RIGHT_SHIFT = 28; // not needed yet
-
   // Wide-char tracking: after a cell with width===2, the next cell is
-  // a continuation/spacer written with CHAR_FLAG_CONTINUATION encoding
-  // so the native diff engine skips it (no SPACE output). Codepoint 0
-  // would cause the diff engine to emit a visible SPACE, shifting text.
+  // a spacer/continuation that must be written as codepoint 0 (not a
+  // space) so the renderer treats it as part of the wide glyph.
   let prevCellWasWide = false;
   let prevCellBgR = 0;
   let prevCellBgG = 0;
@@ -428,16 +410,15 @@ export function renderRowDirect(
     const cellOffset = rowOffset + x;
 
     // If the previous cell was wide (width===2), this cell is a
-    // continuation/spacer. Write CHAR_FLAG_CONTINUATION with left_extent=1
-    // so the native diff engine skips it entirely (no output). The old
-    // codepoint 0 caused the diff engine to emit a visible SPACE, which
-    // shifted all subsequent text by one column per wide character.
+    // continuation/spacer. Write codepoint 0 with the wide char's bg
+    // so the renderer treats it as invisible (part of the wide glyph).
+    // This matches renderRow's buffer.drawChar(0, ...) FFI call.
     if (prevCellWasWide) {
-      charArr[cellOffset] = CHAR_FLAG_CONTINUATION | (1 << CHAR_EXT_LEFT_SHIFT);
+      charArr[cellOffset] = 0; // continuation codepoint
       fgArr[cellOffset * 4] = 0;
       fgArr[cellOffset * 4 + 1] = 0;
       fgArr[cellOffset * 4 + 2] = 0;
-      fgArr[cellOffset * 4 + 3] = 255;
+      fgArr[cellOffset * 4 + 3] = 255; // opaque fg (matches FFI drawChar)
       const spBgR = prevCellIsDefaultBg ? 13 : prevCellBgR;
       const spBgG = prevCellIsDefaultBg ? 17 : prevCellBgG;
       const spBgB = prevCellIsDefaultBg ? 23 : prevCellBgB;
