@@ -71,6 +71,9 @@ export class TerminalQueryPassthrough {
   private readonly pendingLimit = 8192;
   private kittyPartialBuffer = '';
   private readonly kittyPartialLimit = resolveKittyPartialLimit();
+  /** Whether the current input contains C1 APC (0x9f) bytes.
+   *  Set once per process() call to avoid redundant C1 scans. */
+  private hasC1Apc = false;
 
   constructor() {}
 
@@ -178,6 +181,11 @@ export class TerminalQueryPassthrough {
     if (input.length === 0) {
       return '';
     }
+
+    // Check once whether input contains C1 APC bytes (0x9f).
+    // This avoids scanning for \x9fG in findKittyStart on every
+    // iteration when the input only uses the 2-byte ESC form.
+    this.hasC1Apc = input.includes(APC_C1);
 
     let output = '';
     let cursor = 0;
@@ -321,19 +329,29 @@ export class TerminalQueryPassthrough {
 
   private findKittyStart(input: string, from: number): number {
     const escIndex = input.indexOf(KITTY_APC_PREFIX, from);
-    const c1Index = input.indexOf(KITTY_APC_C1_PREFIX, from);
-    if (escIndex === -1) return c1Index;
-    if (c1Index === -1) return escIndex;
-    return Math.min(escIndex, c1Index);
+    // APC C1 form (\x9fG) is extremely rare — virtually all terminals
+    // use the 2-byte ESC form (\x1b_G). Only scan for C1 if the
+    // input actually contains the \x9f byte, which we check once
+    // per process() call via hasC1Apc.
+    if (this.hasC1Apc) {
+      const c1Index = input.indexOf(KITTY_APC_C1_PREFIX, from);
+      if (escIndex === -1) return c1Index;
+      if (c1Index === -1) return escIndex;
+      return Math.min(escIndex, c1Index);
+    }
+    return escIndex;
   }
 
   private findKittyEnd(input: string, from: number): number {
     const escIndex = input.indexOf(`${ESC}\\`, from);
-    const stIndex = input.indexOf(ST_C1, from);
-    if (escIndex === -1 && stIndex === -1) return -1;
-    if (escIndex === -1) return stIndex + 1;
-    if (stIndex === -1) return escIndex + 2;
-    return Math.min(escIndex + 2, stIndex + 1);
+    if (this.hasC1Apc) {
+      const stIndex = input.indexOf(ST_C1, from);
+      if (escIndex === -1 && stIndex === -1) return -1;
+      if (escIndex === -1) return stIndex + 1;
+      if (stIndex === -1) return escIndex + 2;
+      return Math.min(escIndex + 2, stIndex + 1);
+    }
+    return escIndex === -1 ? -1 : escIndex + 2;
   }
 
   private filterKittySequence(sequence: string): string {

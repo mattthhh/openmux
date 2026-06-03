@@ -43,14 +43,20 @@ export class KittyTransmitBroker {
    * This creates "stubbed" images that track placement without
    * storing actual pixel data in the emulator.
    *
-   * Useful for:
-   * - Testing graphics protocol handling without image storage
-   * - Reducing memory usage when images aren't actually rendered
-   * - Debugging protocol sequences
+   * CRITICAL for performance: without stubbing, the native VT
+   * parser processes the full base64 payload character-by-character,
+   * which takes 20-30ms per 1.5MB frame — making 60FPS Kitty apps
+   * (like OpenTUI's golden star / texture loading demos) impossible.
+   * With stubbing, the emulator only sees ~100 bytes of control params.
+   *
+   * The broker still enqueues the full sequence for the host terminal,
+   * so the image is still displayed — the emulator just doesn't need
+   * the pixel data since rendering is delegated to KittyGraphicsRenderer.
    *
    * Controlled by OPENMUX_KITTY_EMULATOR_STUB environment variable.
+   * Default: enabled (stub all Kitty transmit data to the emulator).
    */
-  private stubEmulator = false;
+  private stubEmulator = true;
   /**
    * Whether to stub shared memory (medium='s') transmissions.
    *
@@ -78,7 +84,7 @@ export class KittyTransmitBroker {
 
   constructor() {
     const stubEnv = (process.env.OPENMUX_KITTY_EMULATOR_STUB ?? '').toLowerCase();
-    this.stubEmulator = stubEnv === '1' || stubEnv === 'true';
+    this.stubEmulator = !(stubEnv === '0' || stubEnv === 'false');
     const stubSharedEnv = (process.env.OPENMUX_KITTY_STUB_SHARED_MEMORY ?? '').toLowerCase();
     this.stubSharedMemory = !(stubSharedEnv === '0' || stubSharedEnv === 'false');
   }

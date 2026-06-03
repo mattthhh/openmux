@@ -66,6 +66,37 @@ export function parseParams(control: string): Map<string, string> {
   if (!control) return params;
   let start = 0;
   while (start < control.length) {
+    // The Kitty 's' parameter uses 's=WIDTH,HEIGHT' where the comma
+    // is PART OF the value, not a key-value separator. When we see 's=...'
+    // we need to consume everything up to the next key=value pair.
+    if (control[start] === 's' && control[start + 1] === '=') {
+      const eqPos = start + 1;
+      // Find the next key=value pair: look for ',KEY=' pattern
+      let end = control.length;
+      let searchFrom = eqPos + 1;
+      while (searchFrom < control.length) {
+        const nextComma = control.indexOf(',', searchFrom);
+        if (nextComma === -1) break;
+        // Check if what follows the comma is 'KEY=' pattern
+        const afterComma = control.slice(nextComma + 1);
+        const nextEqInAfter = afterComma.indexOf('=');
+        if (nextEqInAfter !== -1 && nextEqInAfter < 4) {
+          // Looks like a key=value pair — the text between comma and '='
+          // is a short alphabetic key
+          const potentialKey = afterComma.slice(0, nextEqInAfter);
+          if (/^[a-zA-Z]$/.test(potentialKey)) {
+            end = nextComma;
+            break;
+          }
+        }
+        searchFrom = nextComma + 1;
+      }
+      const value = control.slice(eqPos + 1, end);
+      params.set('s', value);
+      start = end + 1;
+      continue;
+    }
+
     let end = control.indexOf(',', start);
     if (end === -1) end = control.length;
     if (end > start) {
@@ -95,12 +126,29 @@ export function parseTransmitParams(parsed: KittySequence): TransmitParams | nul
   const resolvedAction = action ?? (hasTransmitFields ? 't' : null);
   if (resolvedAction !== 't' && resolvedAction !== 'T') return null;
 
+  const rawSize = params.get('s');
+  const rawHeight = params.get('v');
+  let width: string | undefined;
+  let height: string | undefined;
+  if (rawSize) {
+    const commaIdx = rawSize.indexOf(',');
+    if (commaIdx !== -1) {
+      width = rawSize.slice(0, commaIdx);
+      height = rawHeight ?? rawSize.slice(commaIdx + 1);
+    } else {
+      width = rawSize;
+      height = rawHeight;
+    }
+  } else if (rawHeight) {
+    height = rawHeight;
+  }
+
   return {
     action: resolvedAction,
     format: params.get('f'),
     medium: params.get('t'),
-    width: params.get('s'),
-    height: params.get('v'),
+    width,
+    height,
     compression: params.get('o'),
     size: params.get('S'),
     offset: params.get('O'),

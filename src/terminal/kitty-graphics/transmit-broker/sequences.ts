@@ -117,7 +117,15 @@ export function buildEmulatorSequence(
 ): { emuSequence: string | null; dropEmulator: boolean } {
   const format = params.format ?? '';
   const isPng = format === '100';
-  const allowNonPngStub = forceStub;
+  const hasDimensions = !!(params.width && params.height);
+  // Allow stubbing non-PNG formats when the broker has dimensions from
+  // the control params (s=W,H) or when forceStub is set (shared memory).
+  // This is critical for performance: without it, raw pixel data (f=24/f=32)
+  // passes through to the native VT parser, which has to process the
+  // entire base64 payload character-by-character (23ms+ for 1.5MB frames).
+  // The broker has already enqueued the full sequence for the host terminal,
+  // so the emulator only needs the stub to track image metadata.
+  const allowNonPngStub = forceStub || hasDimensions;
 
   const medium = params.medium ?? 'd';
   if (medium !== 'd' && medium !== 'f' && medium !== 't' && medium !== 's') {
@@ -129,6 +137,15 @@ export function buildEmulatorSequence(
   }
 
   const controlParams = new Map(parsed.params);
+  // The 's' parameter in Kitty protocol is 's=WIDTH,HEIGHT'. We need to
+  // also set 'v=HEIGHT' (rows) so the emulator knows the full dimensions.
+  const rawSize = controlParams.get('s');
+  if (rawSize && !controlParams.get('v')) {
+    const commaIdx = rawSize.indexOf(',');
+    if (commaIdx !== -1) {
+      controlParams.set('v', rawSize.slice(commaIdx + 1));
+    }
+  }
   if (!controlParams.get('s') || !controlParams.get('v')) {
     if (medium === 's') {
       controlParams.set('s', '1');
