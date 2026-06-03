@@ -62,6 +62,18 @@ export class ArchivedTerminalEmulator implements ITerminalEmulator, IKittyGraphi
     this._skipMap = skipMap;
   }
 
+  /** Flush pending write notification through to the base emulator.
+   *
+   * The renderer calls this after flushPtyData to ensure the JS-side
+   * terminal state (cells, cursor) reflects the data just written to the
+   * native VT parser. Without this delegation the write updates the native
+   * state but the JS cachedState stays stale until the next setImmediate
+   * tick — causing a one-frame flash of the old content (e.g. stale spinner
+   * characters). */
+  flushPendingNotify(): void {
+    this.base.flushPendingNotify?.();
+  }
+
   get cols(): number {
     return this.base.cols;
   }

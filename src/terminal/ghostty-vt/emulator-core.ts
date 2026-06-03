@@ -411,8 +411,15 @@ export class GhosttyVTEmulatorCore {
    * Safe to call when no writes are pending — returns immediately. */
   flushPendingNotify(): void {
     if (!this._writeDirty || !this.updatesEnabled) return;
-    this.cancelDeferredNotify();
+    // Flush BEFORE cancelling. cancelDeferredNotify sets _writeDirty = false
+    // and clears the scheduled timer, but flushDeferredNotify checks
+    // _writeDirty and returns immediately if false — so cancelling first
+    // silently discards the pending update and leaves cachedState stale.
+    // Flushing first prepares the update and notifies subscribers; then
+    // cancelling cleans up the deferred timer (which is now orphaned since
+    // _notifyScheduled was already consumed by the flush).
     this.flushDeferredNotify();
+    this.cancelDeferredNotify();
   }
 
   setUpdateEnabled(enabled: boolean): void {
