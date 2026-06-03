@@ -175,7 +175,7 @@ export function getCellColors(
     fgG = bgG;
     bgG = tmpG;
     const tmpB = fgB;
-    bgB = bgB;
+    fgB = bgB;
     bgB = tmpB;
   }
 
@@ -395,11 +395,57 @@ export function renderRowDirect(
   const fgArr = b.fg;
   const bgArr = b.bg;
   const attrArr = b.attributes;
-  const bufWidth = buffer.width;
+
+  // Track first cell's data to commit via FFI after the typed array
+  // writes. Typed array writes bypass the native renderer's internal
+  // change tracking, so the diff may skip cells that were only modified
+  // via typed arrays. Writing the first cell of each row via FFI
+  // ensures the diff recognizes the row as changed and checks all
+  // cells in it.
+  let firstCellCodepoint = 32;
+  let firstCellFg: RGBA = fallbackFg;
+  let firstCellBg: RGBA = fallbackBg;
+  let firstCellAttrs = 0;
+  // Wide-char tracking: after a cell with width===2, the next cell is
+  // a spacer/continuation that must be written as codepoint 0 (not a
+  // space) so the renderer treats it as part of the wide glyph.
+  let prevCellWasWide = false;
+  let prevCellBgR = 0;
+  let prevCellBgG = 0;
+  let prevCellBgB = 0;
+  let prevCellIsDefaultBg = false;
 
   for (let x = 0; x < cols; x++) {
     const cell = row[x];
     const cellOffset = rowOffset + x;
+
+    // If the previous cell was wide (width===2), this cell is a
+    // continuation/spacer. Write codepoint 0 with the wide char's bg
+    // so the renderer treats it as invisible (part of the wide glyph).
+    // This matches renderRow's buffer.drawChar(0, ...) FFI call.
+    if (prevCellWasWide) {
+      charArr[cellOffset] = 0; // continuation codepoint
+      fgArr[cellOffset * 4] = 0;
+      fgArr[cellOffset * 4 + 1] = 0;
+      fgArr[cellOffset * 4 + 2] = 0;
+      fgArr[cellOffset * 4 + 3] = 255; // opaque fg (matches FFI drawChar)
+      const spBgR = prevCellIsDefaultBg ? 13 : prevCellBgR;
+      const spBgG = prevCellIsDefaultBg ? 17 : prevCellBgG;
+      const spBgB = prevCellIsDefaultBg ? 23 : prevCellBgB;
+      bgArr[cellOffset * 4] = spBgR;
+      bgArr[cellOffset * 4 + 1] = spBgG;
+      bgArr[cellOffset * 4 + 2] = spBgB;
+      bgArr[cellOffset * 4 + 3] = 255;
+      attrArr[cellOffset] = 0;
+      prevCellWasWide = false;
+      if (x === 0) {
+        firstCellCodepoint = 0;
+        firstCellFg = BLACK;
+        firstCellBg = getCachedRGBA(spBgR, spBgG, spBgB);
+        firstCellAttrs = 0;
+      }
+      continue;
+    }
 
     if (!cell) {
       // No cell data — use fallback
@@ -415,6 +461,12 @@ export function renderRowDirect(
       bgArr[cellOffset * 4 + 2] = bB;
       bgArr[cellOffset * 4 + 3] = 255;
       attrArr[cellOffset] = 0;
+      if (x === 0) {
+        firstCellCodepoint = 32;
+        firstCellFg = fallbackFg;
+        firstCellBg = fallbackBg;
+        firstCellAttrs = 0;
+      }
       continue;
     }
 
@@ -468,7 +520,7 @@ export function renderRowDirect(
         fgG = bgG;
         bgG = tmpG;
         const tmpB = fgB;
-        bgB = bgB;
+        fgB = bgB;
         bgB = tmpB;
       }
       if (isDefaultBg) {
@@ -529,15 +581,46 @@ export function renderRowDirect(
 
     // Write directly to typed arrays
     charArr[cellOffset] = charCode;
-    const fgOff = cellOffset * 4;
-    fgArr[fgOff] = fgR;
-    fgArr[fgOff + 1] = fgG;
-    fgArr[fgOff + 2] = fgB;
-    fgArr[fgOff + 3] = 255;
-    bgArr[fgOff] = bgR;
-    bgArr[fgOff + 1] = bgG;
-    bgArr[fgOff + 2] = bgB;
-    bgArr[fgOff + 3] = 255;
+    const off = cellOffset * 4;
+    fgArr[off] = fgR;
+    fgArr[off + 1] = fgG;
+    fgArr[off + 2] = fgB;
+    fgArr[off + 3] = 255;
+    bgArr[off] = bgR;
+    bgArr[off + 1] = bgG;
+    bgArr[off + 2] = bgB;
+    bgArr[off + 3] = 255;
     attrArr[cellOffset] = attributes;
+
+    // Track wide chars for spacer handling on next iteration
+    if (cell.width === 2) {
+      prevCellWasWide = true;
+      prevCellBgR = bgR;
+      prevCellBgG = bgG;
+      prevCellBgB = bgB;
+      prevCellIsDefaultBg = isDefaultBg;
+    }
+
+    // Capture first cell data for FFI commit
+    if (x === 0) {
+      firstCellCodepoint = charCode;
+      firstCellAttrs = attributes;
+      firstCellFg = getCachedRGBA(fgR, fgG, fgB);
+      firstCellBg = getCachedRGBA(bgR, bgG, bgB);
+    }
   }
+
+  // Commit the first cell of this row via FFI. The native renderer's
+  // diff may use internal change tracking that is only updated by FFI
+  // calls — typed array writes bypass this tracking. Writing the first
+  // cell via drawChar ensures the diff recognizes the row as changed
+  // and checks all cells in it. Cost: one FFI call per row (~0.003ms).
+  buffer.drawChar(
+    firstCellCodepoint,
+    offsetX,
+    rowIndex + offsetY,
+    firstCellFg,
+    firstCellBg,
+    firstCellAttrs
+  );
 }
