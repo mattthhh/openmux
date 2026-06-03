@@ -175,12 +175,17 @@ export function createPtyLifecycleHandlers(deps: PtyLifecycleDeps) {
 
   /**
    * Create a new PTY session for a pane
+   * @param sessionId - Explicit session ID to attribute this PTY to.
+   *   When provided, overrides getActiveSessionIdForShim() to prevent
+   *   the session-switch race where a deferred macrotask reads a stale
+   *   global after an AUTOSWITCH to a different session has fired.
    */
   const createPTY = async (
     paneId: string,
     cols: number,
     rows: number,
-    cwd?: string
+    cwd?: string,
+    sessionId?: string
   ): Promise<string> => {
     const metrics = getCellMetrics?.() ?? null;
     const pixelWidth = metrics ? cols * metrics.cellWidth : undefined;
@@ -197,23 +202,28 @@ export function createPtyLifecycleHandlers(deps: PtyLifecycleDeps) {
     // Track the mapping immediately
     ptyToPaneMap.set(ptyId, paneId);
 
-    const sessionId = getActiveSessionIdForShim();
-    if (sessionId) {
-      const mapping = sessionPtyMap.get(sessionId) ?? new Map<string, string>();
+    // Use explicit sessionId when provided to prevent the session-switch race:
+    // when PTY creation is deferred via macrotask, getActiveSessionIdForShim()
+    // may return a different session than the one that owned the pane at schedule
+    // time. The caller captures the session ID synchronously before deferral.
+    const effectiveSessionId = sessionId ?? getActiveSessionIdForShim();
+    if (effectiveSessionId) {
+      const mapping = sessionPtyMap.get(effectiveSessionId) ?? new Map<string, string>();
       mapping.set(paneId, ptyId);
-      sessionPtyMap.set(sessionId, mapping);
-      ptyToSessionMap.set(ptyId, { sessionId, paneId });
+      sessionPtyMap.set(effectiveSessionId, mapping);
+      ptyToSessionMap.set(ptyId, { sessionId: effectiveSessionId, paneId });
 
       // Synchronously update the aggregate-local session→PTY mapping so that
       // resolveAggregatePtyOwnership can find this PTY via getAggregateSessionForPty
       // BEFORE the lifecycle stream callback (handlePtyCreated) runs.
       // Without this, the lifecycle event races ahead of the shim registration
       // and the PTY gets attributed to the wrong session via the activeSessionId fallback.
-      const aggregateMapping = aggregateSessionMappings.get(sessionId) ?? new Map<string, string>();
+      const aggregateMapping =
+        aggregateSessionMappings.get(effectiveSessionId) ?? new Map<string, string>();
       aggregateMapping.set(paneId, ptyId);
-      aggregateSessionMappings.set(sessionId, aggregateMapping);
+      aggregateSessionMappings.set(effectiveSessionId, aggregateMapping);
 
-      registerPtyPane(sessionId, paneId, ptyId).catch((e) => {
+      registerPtyPane(effectiveSessionId, paneId, ptyId).catch((e) => {
         console.warn(`[pty-lifecycle] Failed to register PTY pane ${paneId} -> ${ptyId}:`, e);
       });
     }
@@ -281,13 +291,19 @@ export function createPtyLifecycleHandlers(deps: PtyLifecycleDeps) {
    * This creates the PTY first, then creates the pane with PTY already attached.
    * @param cwd - Optional working directory for the PTY
    * @param title - Optional title for the pane
+   * @param options - Callbacks for created event
+   * @param sessionId - Explicit session ID to attribute this PTY to.
+   *   When provided, overrides getActiveSessionIdForShim() to prevent
+   *   the session-switch race where a deferred macrotask reads a stale
+   *   global after an AUTOSWITCH to a different session has fired.
    */
   const createPaneWithPTY = async (
     cwd?: string,
     title?: string,
     options?: {
       onCreated?: (created: { paneId: string; ptyId: string }) => void;
-    }
+    },
+    sessionId?: string
   ): Promise<{ paneId: string; ptyId: string } | null> => {
     // Get estimated dimensions for the new pane
     const { cols, rows } = getNewPaneDimensions();
@@ -327,23 +343,28 @@ export function createPtyLifecycleHandlers(deps: PtyLifecycleDeps) {
     const exitUnsub = exitUnsubResult;
     unsubscribeFns.set(ptyId, exitUnsub);
 
-    const sessionId = getActiveSessionIdForShim();
-    if (sessionId) {
-      const mapping = sessionPtyMap.get(sessionId) ?? new Map<string, string>();
+    // Use explicit sessionId when provided to prevent the session-switch race:
+    // when PTY creation is deferred via macrotask, getActiveSessionIdForShim()
+    // may return a different session than the one that owned the pane at schedule
+    // time. The caller captures the session ID synchronously before deferral.
+    const effectiveSessionId = sessionId ?? getActiveSessionIdForShim();
+    if (effectiveSessionId) {
+      const mapping = sessionPtyMap.get(effectiveSessionId) ?? new Map<string, string>();
       mapping.set(paneId, ptyId);
-      sessionPtyMap.set(sessionId, mapping);
-      ptyToSessionMap.set(ptyId, { sessionId, paneId });
+      sessionPtyMap.set(effectiveSessionId, mapping);
+      ptyToSessionMap.set(ptyId, { sessionId: effectiveSessionId, paneId });
 
       // Synchronously update the aggregate-local session→PTY mapping so that
       // resolveAggregatePtyOwnership can find this PTY via getAggregateSessionForPty
       // BEFORE the lifecycle stream callback (handlePtyCreated) runs.
       // Without this, the lifecycle event races ahead of the shim registration
       // and the PTY gets attributed to the wrong session via the activeSessionId fallback.
-      const aggregateMapping = aggregateSessionMappings.get(sessionId) ?? new Map<string, string>();
+      const aggregateMapping =
+        aggregateSessionMappings.get(effectiveSessionId) ?? new Map<string, string>();
       aggregateMapping.set(paneId, ptyId);
-      aggregateSessionMappings.set(sessionId, aggregateMapping);
+      aggregateSessionMappings.set(effectiveSessionId, aggregateMapping);
 
-      registerPtyPane(sessionId, paneId, ptyId).catch((e) => {
+      registerPtyPane(effectiveSessionId, paneId, ptyId).catch((e) => {
         console.warn(`[pty-lifecycle] Failed to register PTY pane ${paneId} -> ${ptyId}:`, e);
       });
     }

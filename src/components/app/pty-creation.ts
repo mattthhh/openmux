@@ -6,6 +6,7 @@ import { createEffect, createMemo, createSignal, on } from 'solid-js';
 import {
   getSessionCwd as getSessionCwdFromCoordinator,
   getSessionCommand as getSessionCommandFromCoordinator,
+  getActiveSessionIdForShim,
   isPtyCreated,
   markPtyCreated,
 } from '../../effect/bridge';
@@ -20,7 +21,13 @@ type LayoutAccess = {
 
 type TerminalAccess = {
   isInitialized: boolean;
-  createPTY: (paneId: string, cols: number, rows: number, cwd?: string) => Promise<string | Error>;
+  createPTY: (
+    paneId: string,
+    cols: number,
+    rows: number,
+    cwd?: string,
+    sessionId?: string
+  ) => Promise<string | Error>;
   writeToPTY: (ptyId: string, data: string) => void;
   getFocusedCwd: () => Promise<string | null>;
 };
@@ -122,7 +129,18 @@ export function usePtyCreation(params: {
         if (!isSessionInit) return;
         if (isSwitching) return;
 
-        const createPtyForPane = async (pane: (typeof panes)[number]) => {
+        // Capture the active session ID SYNCHRONOUSLY before deferring any
+        // macrotasks. This prevents the session-switch race where:
+        // 1. Session switch to B completes (switching=false), this effect fires
+        // 2. PTY creation is deferred via deferMacrotask
+        // 3. AUTOSWITCH fires for session C (e.g. via rapid j/k in aggregate view)
+        // 4. setActiveSessionIdForShim(C) is called in onSessionLoad
+        // 5. Deferred macrotask runs — without the captured value, createPTY
+        //    reads the clobbered global and attributes the PTY to session C
+        //    instead of session B.
+        const capturedSessionId = getActiveSessionIdForShim();
+
+        const createPtyForPane = async (pane: (typeof panes)[number], sessionId: string | null) => {
           try {
             // SYNC check: verify PTY wasn't created in a previous session/effect run
             const alreadyCreated = isPtyCreated(pane.id);
@@ -157,7 +175,7 @@ export function usePtyCreation(params: {
 
             // Fire-and-forget PTY creation - don't await to avoid blocking
             params.terminal
-              .createPTY(pane.id, cols, rows, cwd)
+              .createPTY(pane.id, cols, rows, cwd, sessionId ?? undefined)
               .then((result) => {
                 if (result instanceof Error) {
                   console.error(`PTY creation failed for ${pane.id}:`, result.message);
@@ -194,7 +212,7 @@ export function usePtyCreation(params: {
 
           // Defer to next macrotask - allows animations to continue
           deferMacrotask(() => {
-            createPtyForPane(pane).then((success) => {
+            createPtyForPane(pane, capturedSessionId).then((success) => {
               if (!success) {
                 setTimeout(() => setPtyRetryCounter((c) => c + 1), 100);
               }

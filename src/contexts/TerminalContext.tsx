@@ -46,14 +46,21 @@ import { defaultRegistry as shimPtyRegistry } from '../shim/client/state';
 
 export interface TerminalContextValue {
   /** Create a new PTY session for a pane */
-  createPTY: (paneId: string, cols: number, rows: number, cwd?: string) => Promise<string>;
+  createPTY: (
+    paneId: string,
+    cols: number,
+    rows: number,
+    cwd?: string,
+    sessionId?: string
+  ) => Promise<string>;
   /** Create a new pane with PTY in single render (no stutter) */
   createPaneWithPTY: (
     cwd?: string,
     title?: string,
     options?: {
       onCreated?: (created: { paneId: string; ptyId: string }) => void;
-    }
+    },
+    sessionId?: string
   ) => Promise<{ paneId: string; ptyId: string } | null>;
   /** Destroy a PTY session. Set skipPaneClose=true if pane is already closed. */
   destroyPTY: (ptyId: string, options?: { skipPaneClose?: boolean }) => void;

@@ -528,15 +528,20 @@ export function AggregateStateManager() {
 
     switchWorkspace(targetWorkspaceId);
     setLayoutMode('stacked');
-    const createdPane = await createPaneWithPTY(targetCwd, 'shell', {
-      onCreated: (created) => {
-        aggregate.upsertPendingPaneCreation({
-          ...pendingInsertion,
-          pendingPtyId: created.ptyId,
-          pendingPaneId: created.paneId,
-        });
+    const createdPane = await createPaneWithPTY(
+      targetCwd,
+      'shell',
+      {
+        onCreated: (created) => {
+          aggregate.upsertPendingPaneCreation({
+            ...pendingInsertion,
+            pendingPtyId: created.ptyId,
+            pendingPaneId: created.paneId,
+          });
+        },
       },
-    });
+      targetSessionId
+    );
     if (!createdPane) {
       aggregate.removePendingPaneCreation(pendingInsertionId);
       console.error('Failed to create pane in aggregate view');
@@ -636,15 +641,20 @@ export function AggregateStateManager() {
 
     switchWorkspace(targetWorkspaceId);
     setLayoutMode('stacked');
-    const createdPane = await createPaneWithPTY(targetCwd, 'shell', {
-      onCreated: (created) => {
-        aggregate.upsertPendingPaneCreation({
-          ...pendingInsertion,
-          pendingPtyId: created.ptyId,
-          pendingPaneId: created.paneId,
-        });
+    const createdPane = await createPaneWithPTY(
+      targetCwd,
+      'shell',
+      {
+        onCreated: (created) => {
+          aggregate.upsertPendingPaneCreation({
+            ...pendingInsertion,
+            pendingPtyId: created.ptyId,
+            pendingPaneId: created.paneId,
+          });
+        },
       },
-    });
+      targetSessionId
+    );
     if (!createdPane) {
       aggregate.removePendingPaneCreation(pendingInsertionId);
       console.error('Failed to create pane in aggregate view');
@@ -737,15 +747,20 @@ export function AggregateStateManager() {
 
     switchWorkspace(targetWorkspaceId);
     setLayoutMode('stacked');
-    const createdPane = await createPaneWithPTY(targetCwd, 'shell', {
-      onCreated: (created) => {
-        aggregate.upsertPendingPaneCreation({
-          ...pendingInsertion,
-          pendingPtyId: created.ptyId,
-          pendingPaneId: created.paneId,
-        });
+    const createdPane = await createPaneWithPTY(
+      targetCwd,
+      'shell',
+      {
+        onCreated: (created) => {
+          aggregate.upsertPendingPaneCreation({
+            ...pendingInsertion,
+            pendingPtyId: created.ptyId,
+            pendingPaneId: created.paneId,
+          });
+        },
       },
-    });
+      targetSessionId
+    );
 
     if (!createdPane) {
       aggregate.removePendingPaneCreation(pendingInsertionId);
