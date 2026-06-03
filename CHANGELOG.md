@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.149](https://github.com/monotykamary/openmux/compare/v0.3.148...v0.3.149) (2026-06-03)
+
+
+### Bug Fixes
+
+* **terminal:** restore per-row FFI commit in renderRowDirect to fix stale rendering ([3bd070f](https://github.com/monotykamary/openmux/commit/3bd070f0c497eb6ceda44bf2de04ff2836475366))
+
 ### [0.3.148](https://github.com/monotykamary/openmux/compare/v0.3.147...v0.3.148) (2026-06-03)
 
 
