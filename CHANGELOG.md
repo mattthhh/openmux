@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.151](https://github.com/monotykamary/openmux/compare/v0.3.150...v0.3.151) (2026-06-03)
+
+
+### Bug Fixes
+
+* **aggregate:** resolve stale PTY name and process in sidebar for non-active sessions ([5b13c42](https://github.com/monotykamary/openmux/commit/5b13c42e97b718828f17f349d5f2109a89d3574a))
+* normalize pi full-redraw frames without CSI 3J ([ff0cb8f](https://github.com/monotykamary/openmux/commit/ff0cb8fe3eca640944ab20a68debd197684818e5))
+
 ### [0.3.150](https://github.com/monotykamary/openmux/compare/v0.3.149...v0.3.150) (2026-06-03)
 
 
