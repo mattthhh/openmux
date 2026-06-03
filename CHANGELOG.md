@@ -2,6 +2,31 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.145](https://github.com/monotykamary/openmux/compare/v0.3.144...v0.3.145) (2026-06-03)
+
+
+### Features
+
+* **diff-opener:** replace last commit with commits not pushed ([3213949](https://github.com/monotykamary/openmux/commit/3213949ebef7318241f55e9516ac42c7682f439f))
+
+
+### Bug Fixes
+
+* **terminal:** commit first cell per row via FFI to fix stale characters ([1d3b629](https://github.com/monotykamary/openmux/commit/1d3b629a11b4d948a9a7783ffaa197b7d429e3da))
+* **terminal:** use drawText for non-ASCII and wide chars in renderRowDirect ([bbd407f](https://github.com/monotykamary/openmux/commit/bbd407fb569140f6b32cdb024b25a177713e7bd2))
+
+
+### Refactoring
+
+* **terminal:** remove FFI commit from renderRowDirect ([4bad172](https://github.com/monotykamary/openmux/commit/4bad172caf7e29a77257ea4e592fa631aec2d6a8))
+
+
+### Performance
+
+* **pty:** skip intermediate sync-mode frames during animation backpressure ([a34c4d4](https://github.com/monotykamary/openmux/commit/a34c4d4d4910c2b78082b45261e5660e429dab6d))
+* **render:** enable threaded renderer and batch PTY data to fix animation FPS ([d883b68](https://github.com/monotykamary/openmux/commit/d883b68a6c70e2457e264a284903652926554f24))
+* **terminal:** synchronous flush in render callback to eliminate scheduling latency ([5777b55](https://github.com/monotykamary/openmux/commit/5777b55ff255bc5c2831226ec93ca271cc97fbc8))
+
 ### [0.3.144](https://github.com/monotykamary/openmux/compare/v0.3.143...v0.3.144) (2026-06-03)
 
 
