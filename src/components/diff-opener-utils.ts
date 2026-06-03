@@ -26,7 +26,7 @@ function computeScore(entry: DiffTarget, terms: string[]): number {
   // Boost built-in targets
   if (entry.type === 'unstaged') score += 10;
   if (entry.type === 'staged') score += 8;
-  if (entry.type === 'lastCommit') score += 5;
+  if (entry.type === 'unpushed') score += 5;
 
   return score;
 }

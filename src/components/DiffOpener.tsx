@@ -438,7 +438,7 @@ function DiffRow(props: DiffRowProps) {
   const icon =
     props.target.type === 'branch'
       ? BRANCH_ICON
-      : props.target.type === 'lastCommit'
+      : props.target.type === 'unpushed'
         ? COMMIT_ICON
         : DIFF_ICON;
   const label = props.target.label;

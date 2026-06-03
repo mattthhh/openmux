@@ -6,14 +6,14 @@ export class DiffDiscoveryError extends errore.createTaggedError({
   message: 'Diff discovery failed: $reason',
 }) {}
 
-export type DiffTargetType = 'unstaged' | 'staged' | 'lastCommit' | 'branch';
+export type DiffTargetType = 'unstaged' | 'staged' | 'unpushed' | 'branch';
 
 export interface DiffTarget {
   /** Display label */
   label: string;
   /** The type of diff target */
   type: DiffTargetType;
-  /** Arguments to git diff (empty string for unstaged, "--cached" for staged, branch name for branch) */
+  /** Arguments to git diff (empty string for unstaged, "--cached" for staged, "@{u}...HEAD" for unpushed, branch name for branch) */
   diffArgs: string;
   /** Optional file count hint */
   fileCount?: number;
@@ -74,10 +74,10 @@ export async function discoverDiffTargets(rootDir: string): Promise<DiffTarget[]
   const targets: DiffTarget[] = [];
 
   // Fire all independent queries in parallel
-  const [unstagedResult, stagedResult, lastCommitResult, branches] = await Promise.all([
+  const [unstagedResult, stagedResult, unpushedResult, branches] = await Promise.all([
     getChangedFileCount(rootDir, ''),
     getChangedFileCount(rootDir, '--cached'),
-    getChangedFileCount(rootDir, 'HEAD~1'),
+    getChangedFileCount(rootDir, '@{u}...HEAD'),
     getLocalBranches(rootDir),
   ]);
 
@@ -98,10 +98,10 @@ export async function discoverDiffTargets(rootDir: string): Promise<DiffTarget[]
   });
 
   targets.push({
-    label: 'Last commit',
-    type: 'lastCommit',
-    diffArgs: 'HEAD~1',
-    fileCount: lastCommitResult,
+    label: 'Commits not pushed',
+    type: 'unpushed',
+    diffArgs: '@{u}...HEAD',
+    fileCount: unpushedResult,
     isSeparator: false,
   });
 
