@@ -306,6 +306,20 @@ export function PtyTreeRow(props: PtyTreeRowProps) {
     setGlowActive(false);
   });
 
+  // Track previous ptyId for cleanup when the component is recycled
+  // by <For> (index-based reconciliation). Without this, switching
+  // session groups fast would leak stale shimmer registrations from
+  // the old ptyId at positions now occupied by different rows.
+  let prevPtyId = props.pty.ptyId;
+  createEffect(() => {
+    const currentPtyId = props.pty.ptyId;
+    if (currentPtyId !== prevPtyId) {
+      unregisterShimmerRow(prevPtyId);
+      unsuppressPtyShimmer(prevPtyId);
+      prevPtyId = currentPtyId;
+    }
+  });
+
   // Cleanup: ensure shimmer suppression, glow debounce, and registry are removed on unmount
   onCleanup(() => {
     unsuppressPtyShimmer(props.pty.ptyId);

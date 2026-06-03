@@ -1,27 +1,21 @@
 /**
- * Direct-to-terminal shimmer renderer.
+ * Shimmer post-processor using OpenTUI's postProcessFn pipeline.
  *
- * Writes SGR escape sequences directly to the terminal output to apply
- * the shimmer color darkening effect. Bypasses the OpenTUI render
- * pipeline entirely during animation — no root.render(), no
- * colorMatrix, no renderNative() on shimmer frames.
+ * Applies shimmer color darkening by modifying the render buffer's
+ * cell FG colors during the post-process step, which runs AFTER
+ * SolidJS writes to the buffer and BEFORE the native diff engine
+ * reads it. This avoids the race condition between direct
+ * process.stdout.write() and the native renderer's threaded stdout
+ * output (useThread=true).
  *
  * Architecture:
- * - setTimeout chain writes SGR sequences at ~30fps for the sweep
- * - After any OpenTUI render (frame event), re-applies shimmer
- *   since the render overwrites our SGRs with original colors
- * - Uses requestLive()/dropLive() only as a render timing signal
- *   so the frame event fires at 30fps for re-application after renders
- * - When all shimmer expires, releases live, stops timer, zero CPU
- *
- * CPU profile (aggregate view at idle with shimmer active):
- * - Before: ~37% (root.render() + colorMatrix + renderNative at 30fps)
- * - After:  ~2% (10 SGR sequences + cursor moves per frame)
- *
- * The buffer always contains original, unshimmered colors. Since
- * root.render() writes the same content every frame when nothing
- * else changed, renderNative() diffs against an identical buffer
- * and nearly always skips output — making those frames very cheap.
+ * - setTimeout chain calls requestRender() at ~30fps
+ * - On each render cycle, PtyTreeRow's renderAfter registers
+ *   shimmer row positions in the shimmer-registry
+ * - This postProcessFn reads those positions and modifies FG
+ *   colors in the buffer before the native diff runs
+ * - The diff engine writes the modified colors as normal ANSI
+ * - No direct stdout writes, no threading races
  */
 
 import { createEffect, onCleanup } from 'solid-js';
@@ -44,58 +38,10 @@ import {
 /** Target frame interval for shimmer animation (~30fps). */
 const SHIMMER_FRAME_MS = 33;
 
-/** Build SGR escape sequences that darken shimmer cells toward the background. */
-function buildShimmerOutput(
-  positions: ReadonlyMap<string, ShimmerRowPosition>,
-  now: number
-): string {
-  const bandHalfWidth = DEFAULT_CONFIG.bandHalfWidth;
-  const maxBlend = DEFAULT_CONFIG.maxBlend;
-  const parts: string[] = [];
-
-  for (const [ptyId, pos] of positions) {
-    if (hasPostShimmerGlow(ptyId)) continue;
-    if (!hasActiveShimmer(ptyId, now)) continue;
-
-    const sweepPos = getShimmerSweepPosition(ptyId, pos.labelLength, now);
-    if (sweepPos === null) continue;
-
-    const fg = pos.fgColor;
-    const bg = pos.bgColor;
-
-    for (let i = 0; i < pos.labelLength; i++) {
-      const distance = Math.abs(i - sweepPos);
-      const intensity = shimmerIntensity(distance, bandHalfWidth);
-      if (intensity <= 0) continue;
-
-      const attenuation = intensity * maxBlend;
-      const r = Math.round(fg.r + (bg.r - fg.r) * attenuation);
-      const g = Math.round(fg.g + (bg.g - fg.g) * attenuation);
-      const b = Math.round(fg.b + (bg.b - fg.b) * attenuation);
-
-      const x = pos.labelStartX + i;
-      const y = pos.y;
-      // Cursor move + set color + re-write character
-      parts.push(`\x1b[${y + 1};${x + 1}H\x1b[38;2;${r};${g};${b}m`);
-      if (i < pos.labelText.length) {
-        parts.push(pos.labelText[i]);
-      }
-    }
-  }
-
-  if (parts.length > 0) {
-    // Reset SGR + restore cursor position
-    parts.push('\x1b[0m\x1b[u');
-    return '\x1b[s' + parts.join('');
-  }
-  return '';
-}
-
 export function useShimmerPostProcess(_renderer: CliRenderer, isActive: () => boolean): void {
   let animationTimer: ReturnType<typeof setTimeout> | null = null;
-  let frameListener: (() => void) | null = null;
 
-  function writeShimmerFrame(): void {
+  function requestShimmerFrame(): void {
     if (!isActive() || shimmerStates.size === 0) return;
 
     const now = Date.now();
@@ -110,13 +56,9 @@ export function useShimmerPostProcess(_renderer: CliRenderer, isActive: () => bo
       return;
     }
 
-    const positions = getAllShimmerRowPositions();
-    if (positions.size === 0) return;
-
-    const output = buildShimmerOutput(positions, now);
-    if (output) {
-      process.stdout.write(output);
-    }
+    // Request a render cycle. The postProcessFn will apply shimmer
+    // to the buffer before the native diff engine reads it.
+    _renderer.requestRender();
   }
 
   function startAnimation(): void {
@@ -127,7 +69,7 @@ export function useShimmerPostProcess(_renderer: CliRenderer, isActive: () => bo
         animationTimer = null;
         return;
       }
-      writeShimmerFrame();
+      requestShimmerFrame();
       animationTimer = setTimeout(tick, SHIMMER_FRAME_MS);
     };
     tick();
@@ -140,24 +82,73 @@ export function useShimmerPostProcess(_renderer: CliRenderer, isActive: () => bo
     }
   }
 
-  // After each OpenTUI render, re-apply shimmer since the render
-  // overwrites our direct SGR sequences with buffer content.
-  function onFrame(): void {
+  // Post-process function: modifies FG colors in the render buffer
+  // for cells that should shimmer. Runs after SolidJS writes (and
+  // renderAfter registers positions) but before the diff engine.
+  function applyShimmer(_buffer: unknown, _deltaTime: number): void {
     if (!isActive() || shimmerStates.size === 0) return;
-    writeShimmerFrame();
+
+    const now = Date.now();
+    const positions = getAllShimmerRowPositions();
+    if (positions.size === 0) return;
+
+    const buffer = _buffer as {
+      buffers?: {
+        fg: Uint16Array;
+      };
+      width?: number;
+    };
+
+    const bufs = buffer.buffers;
+    const bufWidth = buffer.width;
+    if (!bufs || !bufWidth) return;
+
+    const fgArr = bufs.fg;
+    const bandHalfWidth = DEFAULT_CONFIG.bandHalfWidth;
+    const maxBlend = DEFAULT_CONFIG.maxBlend;
+
+    for (const [ptyId, pos] of positions) {
+      if (hasPostShimmerGlow(ptyId)) continue;
+      if (!hasActiveShimmer(ptyId, now)) continue;
+
+      const sweepPos = getShimmerSweepPosition(ptyId, pos.labelLength, now);
+      if (sweepPos === null) continue;
+
+      const fg = pos.fgColor;
+      const bg = pos.bgColor;
+
+      for (let i = 0; i < pos.labelLength; i++) {
+        const distance = Math.abs(i - sweepPos);
+        const intensity = shimmerIntensity(distance, bandHalfWidth);
+        if (intensity <= 0) continue;
+
+        const attenuation = intensity * maxBlend;
+        const r = Math.round(fg.r + (bg.r - fg.r) * attenuation);
+        const g = Math.round(fg.g + (bg.g - fg.g) * attenuation);
+        const b = Math.round(fg.b + (bg.b - fg.b) * attenuation);
+
+        const x = pos.labelStartX + i;
+        const y = pos.y;
+        const cellIndex = y * bufWidth + x;
+        const off = cellIndex * 4;
+
+        // Write RGB values, preserving the metadata byte (high byte).
+        // Packed format: [R | meta_byte_0<<8, G | meta_byte_1<<8, ...]
+        fgArr[off] = (fgArr[off] & 0xff00) | r;
+        fgArr[off + 1] = (fgArr[off + 1] & 0xff00) | g;
+        fgArr[off + 2] = (fgArr[off + 2] & 0xff00) | b;
+        // Alpha and meta bytes unchanged
+      }
+    }
   }
 
+  // Register with OpenTUI's post-process pipeline
+  (_renderer as any).addPostProcessFn(applyShimmer);
+
   createEffect(() => {
-    if (isActive()) {
-      frameListener = onFrame;
-      _renderer.on('frame', frameListener);
-    } else {
+    if (!isActive()) {
       clearShimmerRowPositions();
       stopAnimation();
-      if (frameListener) {
-        _renderer.off('frame', frameListener);
-        frameListener = null;
-      }
     }
   });
 
@@ -181,10 +172,7 @@ export function useShimmerPostProcess(_renderer: CliRenderer, isActive: () => bo
   onCleanup(() => {
     clearShimmerRowPositions();
     stopAnimation();
-    if (frameListener) {
-      _renderer.off('frame', frameListener);
-      frameListener = null;
-    }
+    (_renderer as any).removePostProcessFn(applyShimmer);
     unsubscribe();
   });
 }
