@@ -592,20 +592,12 @@ export function createDataHandler(options: DataHandlerOptions) {
       }
     }
 
-    if (wrote) {
-      // Data was written to the emulator — schedule scroller archiver.
-      isFirstDrainInBurst = false;
-      session.scrollbackArchiver?.schedule();
-
-      // Flush pending emulator notification synchronously. The emulator's
-      // write() defers prepareUpdate + notifySubscribers via setImmediate
-      // for coalescing (multiple writes in one tick = one update). But we've
-      // just finished draining ALL pending segments, so there won't be more
-      // writes in this tick. Flush now to eliminate a setImmediate cycle
-      // (~4-8ms) between drain completion and subscriber notification.
-      session.emulator.flushPendingNotify?.();
-    }
-
+    // Record the skip range BEFORE flushing the notification so that
+    // getCurrentScrollState() sees the updated skip map. Without this
+    // ordering the subscriber caches a stale (unfiltered) scrollbackLength
+    // computed before the pi-redraw skip range was applied — which causes
+    // the UI to display the full unfiltered scrollback history until the
+    // next setImmediate tick corrects it.
     if (piRedraw && wrote) {
       state.piFullRedrawPending = false;
       // Pi full redraw: ghostty's scrollClear pushes the NEW frame's top rows
@@ -626,6 +618,24 @@ export function createDataHandler(options: DataHandlerOptions) {
           newLines: postPiRedrawRawScrollback - prePiRedrawRawScrollback,
         });
       }
+    }
+
+    if (wrote) {
+      // Data was written to the emulator — schedule scroller archiver.
+      isFirstDrainInBurst = false;
+      session.scrollbackArchiver?.schedule();
+
+      // Flush pending emulator notification synchronously. The emulator's
+      // write() defers prepareUpdate + notifySubscribers via setImmediate
+      // for coalescing (multiple writes in one tick = one update). But we've
+      // just finished draining ALL pending segments, so there won't be more
+      // writes in this tick. Flush now to eliminate a setImmediate cycle
+      // (~4-8ms) between drain completion and subscriber notification.
+      //
+      // IMPORTANT: this must run AFTER the skip-range recording above so
+      // that getCurrentScrollState() computes the effective scrollback length
+      // with the skip map already updated.
+      session.emulator.flushPendingNotify?.();
     }
 
     if (segmentsProcessed > 0) {
