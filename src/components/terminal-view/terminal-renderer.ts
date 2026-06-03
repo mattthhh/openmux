@@ -109,7 +109,18 @@ export function createTerminalRenderer(params: {
     }
 
     const desiredViewportOffset = viewState.scrollState.viewportOffset;
-    const desiredScrollbackLength = viewState.scrollState.scrollbackLength;
+    // Read scrollback length directly from the emulator instead of the
+    // viewState cache. The cache is updated asynchronously via setImmediate
+    // subscriber notifications — there's a gap between the data handler
+    // recording skip ranges (which change the effective length) and the
+    // subscriber delivering the updated length to viewState. During this
+    // gap the cached value is stale (raw, unfiltered), causing row
+    // calculations (absoluteY = scrollbackLength - viewportOffset + y) to
+    // map to wrong lines — the "split" where Elapsed detaches from its
+    // spinner. The emulator's getScrollbackLength() applies the skip map
+    // in real-time and is always authoritative.
+    const desiredScrollbackLength =
+      emulator?.getScrollbackLength?.() ?? viewState.scrollState.scrollbackLength;
 
     const rows = Math.min(state.rows, height);
     const cols = Math.min(state.cols, width);
