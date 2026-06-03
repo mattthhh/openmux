@@ -193,8 +193,23 @@ describe('normalizePiFullRedrawSegment', () => {
     expect(normalizePiFullRedrawSegment(input, 10)).toBe(input);
   });
 
-  it('preserves non-pi clear sequences', () => {
+  it('normalizes CSI 2J + CSI H without CSI 3J', () => {
     const input = '\x1b[2J\x1b[Hhello';
+    expect(normalizePiFullRedrawSegment(input, 10)).toBe('\x1b[H\x1b[Jhello');
+  });
+
+  it('normalizes CSI 2J + CSI 1;1H without CSI 3J', () => {
+    const input = '\x1b[2J\x1b[1;1Hhello';
+    expect(normalizePiFullRedrawSegment(input, 10)).toBe('\x1b[H\x1b[Jhello');
+  });
+
+  it('normalizes C1 CSI 2J + CSI H without CSI 3J', () => {
+    const input = '\x9b2J\x9bHhello';
+    expect(normalizePiFullRedrawSegment(input, 10)).toBe('\x1b[H\x1b[Jhello');
+  });
+
+  it('returns input unchanged for non-clear segments', () => {
+    const input = 'just some text\x1b[0m';
     expect(normalizePiFullRedrawSegment(input, 10)).toBe(input);
   });
 });

@@ -83,10 +83,13 @@ const CLEAR_SCREEN_C1_REGEX = /\x9b2J/g;
 // CSI ? 2026 h/l. Normalize the post-sync payload instead of looking for sync markers.
 const CURSOR_HOME_SEQUENCE = '\x1b[H';
 const ERASE_TO_END_OF_SCREEN = '\x1b[J';
+// CSI 3J (scrollback clear) is optional — most pi full-redraw frames use
+// CSI 2J + CSI H without CSI 3J. Both forms need normalization to prevent
+// ghostty's scrollClear from pushing old screen content into scrollback.
 const PI_FULL_REDRAW_PREFIX_REGEX =
-  /^(?:\x1b\[2J|\x9b2J)(?:\x1b\[(?:H|1;1H)|\x9b(?:H|1;1H))(?:\x1b\[3J|\x9b3J)/;
+  /^(?:\x1b\[2J|\x9b2J)(?:\x1b\[(?:H|1;1H)|\x9b(?:H|1;1H))(?:\x1b\[3J|\x9b3J)?/;
 const RAW_PI_SYNC_FULL_REDRAW_START_REGEX =
-  /\x1b\[\?2026h(?:\x1b\[2J|\x9b2J)(?:\x1b\[(?:H|1;1H)|\x9b(?:H|1;1H))(?:\x1b\[3J|\x9b3J)/;
+  /\x1b\[\?2026h(?:\x1b\[2J|\x9b2J)(?:\x1b\[(?:H|1;1H)|\x9b(?:H|1;1H))(?:\x1b\[3J|\x9b3J)?/;
 const PI_SYNC_TIMEOUT_MS = 750;
 
 /** PTY interface with optional foreground process name access */
@@ -933,7 +936,12 @@ export function createDataHandler(options: DataHandlerOptions) {
       if (segment.length > 0) {
         state.pendingSegments.push(segment);
         segmentsAdded += 1;
-        if (isPiRedraw) {
+        // Only set piFullRedrawPending when the original frame included CSI 3J.
+        // Frames with CSI 3J would have cleared scrollback — since we prevented
+        // that via normalization, the skip range must hide stale content instead.
+        // Frames without CSI 3J are just viewport overwrites; existing scrollback
+        // stays valid and doesn't need hiding.
+        if (isPiRedraw && /(?:\x1b\[3J|\x9b3J)/.test(rawSegment)) {
           state.piFullRedrawPending = true;
         }
       }
