@@ -14,6 +14,9 @@ export function searchTerminal(
     getScrollbackLine: (offset: number) => TerminalCell[] | null;
     getTerminalState: () => TerminalState;
     createEmptyRow: (cols: number) => TerminalCell[];
+    /** Optional mapping from raw scrollback offset to effective offset.
+     *  Returns null if the raw offset is inside a skip range (invisible). */
+    rawToEffective?: (rawOffset: number) => number | null;
   }
 ): SearchResult {
   const limit = options?.limit ?? 500;
@@ -27,6 +30,10 @@ export function searchTerminal(
   const lowerQuery = query.toLowerCase();
   const scrollbackLength = source.getScrollbackLength();
 
+  // When a rawToEffective mapping is provided, search iterates in effective
+  // offset space (via getScrollbackLine which translates internally) and
+  // produces lineIndex values in effective space. When no mapping is provided,
+  // lineIndex is in raw space (backward compatible).
   for (let offset = 0; offset < scrollbackLength; offset++) {
     if (matches.length >= limit) {
       hasMore = true;

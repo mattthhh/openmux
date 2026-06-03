@@ -429,6 +429,7 @@ export function createDataHandler(options: DataHandlerOptions) {
   const resetScrollbackState = () => {
     session.scrollbackArchive.reset();
     session.scrollbackArchiver?.reset();
+    session.scrollbackSkipMap.clear();
     session.scrollState.viewportOffset = 0;
     session.scrollState.lastScrollbackLength = 0;
     session.scrollState.lastIsAtBottom = true;
@@ -492,6 +493,14 @@ export function createDataHandler(options: DataHandlerOptions) {
 
     const config = getPriorityConfig(getPriority());
     const piRedraw = state.piFullRedrawPending;
+    // Capture scrollback length before writing a pi full-redraw segment.
+    // Everything before this offset is stale (previous pi frames at old widths)
+    // and should be hidden — only the new frame's push (after this offset) is kept.
+    let prePiRedrawRawScrollback = 0;
+    if (piRedraw) {
+      prePiRedrawRawScrollback =
+        session.liveEmulator.getScrollbackLength() + session.scrollbackArchive.length;
+    }
     const start = now();
     let batch = '';
     let batchLen = 0;
@@ -599,6 +608,24 @@ export function createDataHandler(options: DataHandlerOptions) {
 
     if (piRedraw && wrote) {
       state.piFullRedrawPending = false;
+      // Pi full redraw: ghostty's scrollClear pushes the NEW frame's top rows
+      // into scrollback as \\r\\n advances past the bottom. The pushed rows are
+      // the latest content at the current terminal width. All previous
+      // scrollback (at older widths from prior pi frames) is now stale —
+      // the same conversation text but wrapped differently. Hide the old
+      // and keep the new.
+      const postPiRedrawRawScrollback =
+        session.liveEmulator.getScrollbackLength() + session.scrollbackArchive.length;
+      if (prePiRedrawRawScrollback > 0) {
+        session.scrollbackSkipMap.skipRange(0, prePiRedrawRawScrollback);
+        tracePtyEvent('pi-redraw-stale-skip', {
+          ptyId: session.id,
+          staleStart: 0,
+          staleEnd: prePiRedrawRawScrollback,
+          staleLines: prePiRedrawRawScrollback,
+          newLines: postPiRedrawRawScrollback - prePiRedrawRawScrollback,
+        });
+      }
     }
 
     if (segmentsProcessed > 0) {

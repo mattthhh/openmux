@@ -41,6 +41,7 @@ import { prepareShellIntegration } from './shell-integration';
 import { ScrollbackArchive } from '../../../terminal/scrollback-archive';
 import type { ScrollbackArchiveManager } from '../../../terminal/scrollback-archive';
 import { ScrollbackArchiver } from './scrollback-archiver';
+import { ScrollbackSkipMap } from '../../../terminal/scrollback-skip-map';
 import { getConfigDir } from '../../../core/user-config';
 
 const DEFAULT_CELL_WIDTH = 8;
@@ -108,6 +109,10 @@ export async function createSession(
   const liveEmulator = emulatorResult;
   liveEmulator.setUpdateEnabled?.(false);
 
+  // Create the skip map early — it's shared between the archive (onDropChunk
+  // callback), the session, and the archived emulator.
+  const scrollbackSkipMap = new ScrollbackSkipMap();
+
   const scrollbackRoot =
     deps.scrollbackArchiveRoot ??
     process.env.OPENMUX_SCROLLBACK_ARCHIVE_DIR ??
@@ -115,6 +120,13 @@ export async function createSession(
   const scrollbackArchive = new ScrollbackArchive({
     rootDir: path.join(scrollbackRoot, String(id)),
     manager: deps.scrollbackArchiveManager,
+    onDropChunk: (linesRemoved: number) => {
+      // When the archive drops the oldest chunk, skip ranges within
+      // those lines are no longer valid (the data is gone), and all
+      // remaining ranges shift down by the chunk's line count.
+      scrollbackSkipMap.clearRange(0, linesRemoved);
+      scrollbackSkipMap.shiftRanges(linesRemoved, -linesRemoved);
+    },
   });
   const emulator = new ArchivedTerminalEmulator(liveEmulator, scrollbackArchive);
 
@@ -189,7 +201,12 @@ export async function createSession(
     pendingNotify: false,
     scrollState: { viewportOffset: 0, lastScrollbackLength: 0, lastIsAtBottom: true },
     lastResizeTime: 0,
+    scrollbackSkipMap,
   };
+
+  // Wire the skip map into the archived emulator so scrollback reads
+  // translate effective offsets to raw offsets, hiding pi-redraw duplicates.
+  emulator.setSkipMap(scrollbackSkipMap);
 
   session.scrollbackArchiver = new ScrollbackArchiver(session, liveEmulator);
 

@@ -56,6 +56,7 @@ export class ScrollbackArchive {
   private readonly cache: ScrollbackCache;
   private readonly manager?: ScrollbackArchiveManagerLike;
   private readonly placementChunkCache = new Map<number, PlacementCacheEntry>();
+  private readonly onDropChunk?: (linesRemoved: number) => void;
   private chunks: ArchiveChunk[] = [];
   private totalLines = 0;
   private totalBytes = 0;
@@ -70,6 +71,9 @@ export class ScrollbackArchive {
     chunkMaxLines?: number;
     cacheSize?: number;
     manager?: ScrollbackArchiveManagerLike;
+    /** Called when the archive drops the oldest chunk to enforce size limits.
+     *  Receives the linesRemoved count — used to adjust skip map ranges. */
+    onDropChunk?: (linesRemoved: number) => void;
   }) {
     this.rootDir = options.rootDir;
     this.metaPath = path.join(this.rootDir, 'meta.json');
@@ -77,6 +81,7 @@ export class ScrollbackArchive {
     this.chunkMaxLines = options.chunkMaxLines ?? SCROLLBACK_ARCHIVE_CHUNK_MAX_LINES;
     this.cache = new ScrollbackCache(options.cacheSize ?? 4000);
     this.manager = options.manager;
+    this.onDropChunk = options.onDropChunk;
 
     this.ensureDir();
     this.loadMeta();
@@ -236,6 +241,11 @@ export class ScrollbackArchive {
     this.cache.clear();
     this.placementChunkCache.delete(chunk.id);
     this.revision += 1;
+
+    // Notify skip map that the oldest lines have been dropped.
+    // Skip ranges within the dropped chunk are cleared, and remaining
+    // ranges shift down by the chunk's line count.
+    this.onDropChunk?.(chunk.lineCount);
 
     void this.enqueue(async () => {
       await deleteChunkFiles(chunk);
