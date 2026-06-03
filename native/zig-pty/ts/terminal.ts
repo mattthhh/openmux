@@ -412,6 +412,12 @@ export class Terminal implements IPty {
       if (this._readThrottleMs < 0) {
         flushBatch();
         await this._throttleSleep();
+        // Check foreground process changes even while paused.
+        // Without this, non-active session PTYs (which are paused
+        // because no TerminalView renders them) never emit
+        // onForegroundProcessChange events, causing the aggregate
+        // view sidebar to show stale process names indefinitely.
+        this._checkForegroundProcessChange();
         continue;
       }
 

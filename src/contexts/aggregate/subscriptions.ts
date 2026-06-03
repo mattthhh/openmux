@@ -12,6 +12,7 @@ import {
   type PtyMetadataChangeEvent,
 } from '../../effect/bridge/pty-bridge';
 import { removeAggregateSessionMappingForPty } from '../../effect/bridge/aggregate';
+import { getAggregateSessionForPty } from '../../effect/bridge/aggregate/cache/session-pty-cache';
 import { subscribeToGitRepoChanges } from '../../effect/services/pty/helpers';
 
 import type { AggregateViewState, PendingPaneCreation, PtyInfo } from './types';
@@ -373,15 +374,34 @@ export function createMetadataChangeHandler(
     // rapid updates on first load.
     setState(
       produce((s) => {
-        const allIndex = s.allPtysIndex.get(event.ptyId);
-        const matchedIndex = s.matchedPtysIndex.get(event.ptyId);
+        // Primary lookup by real ptyId. For non-active sessions whose PTYs
+        // have a 'saved:' synthetic ptyId (suspended cache miss), fall back
+        // to the session-PTY mapping to find the right entry.
+        let allIndex = s.allPtysIndex.get(event.ptyId);
+        let matchedIndex = s.matchedPtysIndex.get(event.ptyId);
+        let resolvedPtyId: string = event.ptyId;
+
+        if (allIndex === undefined && matchedIndex === undefined) {
+          const mapping = getAggregateSessionForPty(event.ptyId);
+          if (mapping) {
+            const savedPtyId = `saved:${mapping.sessionId}:${mapping.paneId}`;
+            const savedAllIndex = s.allPtysIndex.get(savedPtyId);
+            const savedMatchedIndex = s.matchedPtysIndex.get(savedPtyId);
+            if (savedAllIndex !== undefined || savedMatchedIndex !== undefined) {
+              allIndex = savedAllIndex;
+              matchedIndex = savedMatchedIndex;
+              resolvedPtyId = savedPtyId;
+            }
+          }
+        }
+
         let allChanged = false;
         let matchedChanged = false;
 
         // Replace PtyInfo in allPtys with a new object
         if (allIndex !== undefined && s.allPtys[allIndex]) {
           const pty = s.allPtys[allIndex];
-          if (pty.ptyId === event.ptyId) {
+          if (pty.ptyId === resolvedPtyId) {
             const updates: Partial<PtyInfo> = {};
             if (event.title !== undefined && pty.title !== event.title) {
               updates.title = event.title;
@@ -412,7 +432,7 @@ export function createMetadataChangeHandler(
         // (may be a different object from allPtys due to dedup/merge)
         if (matchedIndex !== undefined && s.matchedPtys[matchedIndex]) {
           const pty = s.matchedPtys[matchedIndex];
-          if (pty.ptyId === event.ptyId) {
+          if (pty.ptyId === resolvedPtyId) {
             const updates: Partial<PtyInfo> = {};
             if (event.title !== undefined && pty.title !== event.title) {
               updates.title = event.title;
@@ -462,7 +482,10 @@ export function createMetadataChangeHandler(
         // index into a different array and accessing matchedPtys with it
         // would read a completely different PTY, causing git metadata
         // cross-contamination.
-        const flatIndex = s.flattenedTreeIndex.get(event.ptyId);
+        // Use resolvedPtyId for flattenedTree lookup — this may be the
+        // real ptyId OR a saved: synthetic one, depending on whether
+        // the suspended cache had data for this PTY.
+        const flatIndex = s.flattenedTreeIndex.get(resolvedPtyId);
         if (
           flatIndex !== undefined &&
           flatIndex < s.flattenedTree.length &&
