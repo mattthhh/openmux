@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.144](https://github.com/monotykamary/openmux/compare/v0.3.143...v0.3.144) (2026-06-03)
+
+
+### Features
+
+* **terminal:** improve OSC stripping, kitty sequence parsing, and query passthrough ([7cdf3fd](https://github.com/monotykamary/openmux/commit/7cdf3fddc2524a04f0065488a3e6051f4ebe54cd))
+
+
+### Performance
+
+* **terminal:** write cells directly to OptimizedBuffer typed arrays, bypass FFI ([f87962e](https://github.com/monotykamary/openmux/commit/f87962eef05dd366e29c1b8d3deac2e9344b6d61))
+
 ### [0.3.143](https://github.com/monotykamary/openmux/compare/v0.3.142...v0.3.143) (2026-06-02)
 
 
