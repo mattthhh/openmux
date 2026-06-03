@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.150](https://github.com/monotykamary/openmux/compare/v0.3.149...v0.3.150) (2026-06-03)
+
+
+### Bug Fixes
+
+* flush pending notify before cancelling deferred timer ([2773720](https://github.com/monotykamary/openmux/commit/2773720b693975bcf65bc2de1293315c37d94180))
+
 ### [0.3.149](https://github.com/monotykamary/openmux/compare/v0.3.148...v0.3.149) (2026-06-03)
 
 
