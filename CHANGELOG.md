@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.153](https://github.com/monotykamary/openmux/compare/v0.3.152...v0.3.153) (2026-06-04)
+
+
+### Features
+
+* add OPENMUX_SCROLLBACK_SKIP_FILTER flag (disabled by default) ([c3bd8ed](https://github.com/monotykamary/openmux/commit/c3bd8ed6fadb26a18c30ac1896eb8ffb6f358a5e))
+
+
+### Bug Fixes
+
+* adjust viewportOffset when skip range shrinks effective scrollback ([63ff28b](https://github.com/monotykamary/openmux/commit/63ff28b724d606f40e73d85013c9c4945cad208d))
+
 ### [0.3.152](https://github.com/monotykamary/openmux/compare/v0.3.151...v0.3.152) (2026-06-04)
 
 
