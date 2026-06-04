@@ -605,26 +605,22 @@ export function createDataHandler(options: DataHandlerOptions) {
     // next setImmediate tick corrects it.
     if (piRedraw && wrote) {
       state.piFullRedrawPending = false;
-      // Pi full redraw: ghostty's scrollClear pushes the NEW frame's top rows
-      // into scrollback as \\r\\n advances past the bottom. The pushed rows are
-      // the latest content at the current terminal width. All previous
-      // scrollback (at older widths from prior pi frames) is now stale —
-      // the same conversation text but wrapped differently. Hide the old
-      // and keep the new.
+      // Conservative skip: only the lines that actually entered scrollback
+      // during this redraw are potentially stale. With our CSI 2J normalization
+      // (CSI H + CSI J replacement), old viewport content stays in the live
+      // cells and is overwritten in-place, so this delta is typically zero or
+      // tiny — just natural scroll from wrapping past the bottom.
       const postPiRedrawRawScrollback =
         session.liveEmulator.getScrollbackLength() + session.scrollbackArchive.length;
-      if (prePiRedrawRawScrollback > 0 && session.skipFilterEnabled) {
+      const delta = postPiRedrawRawScrollback - prePiRedrawRawScrollback;
+      if (delta > 0 && session.skipFilterEnabled) {
         const preSkipEffective = session.scrollbackSkipMap.effectiveLength(
           session.liveEmulator.getScrollbackLength() + session.scrollbackArchive.length
         );
-        session.scrollbackSkipMap.skipRange(0, prePiRedrawRawScrollback);
+        session.scrollbackSkipMap.skipRange(prePiRedrawRawScrollback, postPiRedrawRawScrollback);
         const postSkipEffective = session.scrollbackSkipMap.effectiveLength(
           session.liveEmulator.getScrollbackLength() + session.scrollbackArchive.length
         );
-        // Adjust viewportOffset for the effective-length shrinkage caused by
-        // the skip range. Without this, viewportOffset (in effective units)
-        // exceeds the new effective scrollback length, causing a visible
-        // content jump or stale artifacts in the rendered frame.
         const effectiveDelta = postSkipEffective - preSkipEffective;
         if (effectiveDelta < 0 && session.scrollState.viewportOffset > 0) {
           session.scrollState.viewportOffset = Math.max(
@@ -634,10 +630,10 @@ export function createDataHandler(options: DataHandlerOptions) {
         }
         tracePtyEvent('pi-redraw-stale-skip', {
           ptyId: session.id,
-          staleStart: 0,
-          staleEnd: prePiRedrawRawScrollback,
-          staleLines: prePiRedrawRawScrollback,
-          newLines: postPiRedrawRawScrollback - prePiRedrawRawScrollback,
+          staleStart: prePiRedrawRawScrollback,
+          staleEnd: postPiRedrawRawScrollback,
+          staleLines: delta,
+          newLines: 0,
           viewportAdjustment: effectiveDelta,
         });
       }
