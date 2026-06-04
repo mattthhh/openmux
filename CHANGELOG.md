@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.152](https://github.com/monotykamary/openmux/compare/v0.3.151...v0.3.152) (2026-06-04)
+
+
+### Bug Fixes
+
+* prevent stuck top indicator in sidebar when scrolled near top ([5107f4c](https://github.com/monotykamary/openmux/commit/5107f4caed38d37a4bde2725e983b95ebe15cd90))
+
 ### [0.3.151](https://github.com/monotykamary/openmux/compare/v0.3.150...v0.3.151) (2026-06-03)
 
 
