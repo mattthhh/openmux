@@ -49,8 +49,24 @@ export class ListScrollAnimator {
   /**
    * Scroll the list by a delta (e.g., +1 / -1 for wheel, +5 / -5 for page).
    * The target is moved immediately; the animator chases it per-frame.
+   *
+   * If the delta reverses the chase direction (e.g., scrolling up while
+   * the animator is still chasing a far-down target), the display snaps
+   * to its current animated position first so the reversal feels instant.
    */
   scrollBy(delta: number, maxOffset: number): void {
+    if (this.animator.isAnimating(LIST_KEY) && delta !== 0) {
+      const currentOffset = this.animator.getCurrentOffset(LIST_KEY) ?? this.currentTarget;
+      const chasingDown = this.currentTarget > currentOffset;
+      const reversing = chasingDown ? delta < 0 : delta > 0;
+      if (reversing) {
+        // Snap display to where it currently is, then delta from there
+        this.currentTarget = currentOffset;
+        this.animator.initialize(LIST_KEY, currentOffset);
+        // Apply the onAnimate so the store stays in sync with the snap
+        if (this._onAnimate) this._onAnimate(currentOffset);
+      }
+    }
     this.currentTarget = Math.max(0, Math.min(maxOffset, this.currentTarget + delta));
     this.animator.setTarget(LIST_KEY, this.currentTarget, maxOffset);
   }
