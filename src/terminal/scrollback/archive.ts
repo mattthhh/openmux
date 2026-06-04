@@ -121,9 +121,11 @@ export class ScrollbackArchive {
   /**
    * Resets the archive, deleting all data.
    * This operation is async and returns immediately while cleanup runs in background.
+   * Removes the entire archive directory (including meta.json) rather than
+   * deleting individual chunk files — cheaper I/O and prevents directory leakage.
    */
   reset(): void {
-    const chunksToDelete = this.chunks;
+    const dirToRemove = this.rootDir;
     this.generation += 1;
     this.chunks = [];
     this.totalLines = 0;
@@ -134,10 +136,10 @@ export class ScrollbackArchive {
     this.revision += 1;
 
     void this.enqueue(async () => {
-      for (const chunk of chunksToDelete) {
-        await deleteChunkFiles(chunk);
-      }
-      await this.saveMeta();
+      const { default: fsp } = await import('node:fs/promises');
+      await fsp.rm(dirToRemove, { recursive: true, force: true }).catch(() => {
+        // Directory may already be gone or inaccessible — best-effort cleanup.
+      });
     });
   }
 

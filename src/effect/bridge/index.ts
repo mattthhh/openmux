@@ -66,6 +66,7 @@ export {
   subscribeToCwdChanges,
   subscribeToMetadataChanges,
   getPtyTitle,
+  gcStaleScrollbackDirectories,
   type PtyLifecycleEvent,
   type PtyTitleChangeEvent,
   type PtyActivityEvent,

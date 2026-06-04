@@ -667,3 +667,18 @@ export async function getPtyTitle(ptyId: string): Promise<string> {
   }
   return emulator.getTitle();
 }
+
+/**
+ * Garbage-collect stale scrollback archive directories from previous runs.
+ * Safe to call at startup. Only removes directories whose PTY IDs are not
+ * currently alive. Runs in batches to avoid I/O burst.
+ * @returns Number of directories removed
+ */
+export async function gcStaleScrollbackDirectories(): Promise<number> {
+  const pty = getPtyService() as unknown as Record<string, unknown>;
+  const gc = pty.gcStaleScrollbackDirectories;
+  if (typeof gc === 'function') {
+    return (gc as () => Promise<number>)();
+  }
+  return 0;
+}

@@ -43,14 +43,34 @@ export function createPtyService(config: PtyServiceConfig, _fs?: unknown): PtySe
   const lifecycleRegistry = createSubscriptionRegistry<LifecycleEvent>();
   const globalTitleRegistry = createSubscriptionRegistry<PtyTitleChangeEvent>();
   const globalActivityRegistry = createSubscriptionRegistry<ActivityEvent>();
+
+  // Per-PTY activity debounce: fire at most once per ACTIVITY_DEBOUNCE_MS per PTY.
+  // Without this, every data chunk from every PTY calls notifySync(), which
+  // synchronously walks all subscribers. Under heavy output (find / -ls, builds),
+  // that's thousands of synchronous subscriber iterations per second per PTY.
+  // The subscribers (aggregate view shimmer, activity-based refresh) only need
+  // to know THAT a PTY was recently active — not on every individual chunk.
+  const ACTIVITY_DEBOUNCE_MS = 200;
+  const activityDebounceTimers = new Map<PtyId, ReturnType<typeof setTimeout>>();
+  const activityDebounced = (ptyId: PtyId) => {
+    if (activityDebounceTimers.has(ptyId)) return;
+    globalActivityRegistry.notifySync({ ptyId });
+    activityDebounceTimers.set(
+      ptyId,
+      setTimeout(() => {
+        activityDebounceTimers.delete(ptyId);
+      }, ACTIVITY_DEBOUNCE_MS)
+    );
+  };
   const globalForegroundProcessChangeRegistry =
     createSubscriptionRegistry<ForegroundProcessChangeEvent>();
   const globalCwdChangeRegistry = createSubscriptionRegistry<CwdChangeEvent>();
-  const scrollbackArchiveManager = new ScrollbackArchiveManager(
-    SCROLLBACK_ARCHIVE_MAX_BYTES_GLOBAL
-  );
   const scrollbackArchiveRoot =
     process.env.OPENMUX_SCROLLBACK_ARCHIVE_DIR ?? path.join(getConfigDir(), 'scrollback');
+  const scrollbackArchiveManager = new ScrollbackArchiveManager(
+    SCROLLBACK_ARCHIVE_MAX_BYTES_GLOBAL,
+    scrollbackArchiveRoot
+  );
 
   const operations = createOperations({
     sessions: state,
@@ -58,6 +78,11 @@ export function createPtyService(config: PtyServiceConfig, _fs?: unknown): PtySe
   });
 
   const handleExit = (ptyId: PtyId, _exitCode: number) => {
+    const timer = activityDebounceTimers.get(ptyId);
+    if (timer) {
+      clearTimeout(timer);
+      activityDebounceTimers.delete(ptyId);
+    }
     void operations.destroy(ptyId);
   };
 
@@ -78,7 +103,7 @@ export function createPtyService(config: PtyServiceConfig, _fs?: unknown): PtySe
         scrollbackArchiveRoot,
         onLifecycleEvent: (event) => lifecycleRegistry.notify(event),
         onTitleChange: (ptyId, title) => globalTitleRegistry.notifySync({ ptyId, title }),
-        onActivity: (ptyId) => globalActivityRegistry.notifySync({ ptyId }),
+        onActivity: activityDebounced,
         onForegroundProcessChange: (ptyId, processName) =>
           globalForegroundProcessChangeRegistry.notifySync({ ptyId, processName }),
         onCwdChange: (ptyId, cwd) => globalCwdChangeRegistry.notifySync({ ptyId, cwd }),
@@ -124,8 +149,23 @@ export function createPtyService(config: PtyServiceConfig, _fs?: unknown): PtySe
   }
 
   function dispose(): void {
+    // Clean up activity debounce timers
+    for (const timer of activityDebounceTimers.values()) {
+      clearTimeout(timer);
+    }
+    activityDebounceTimers.clear();
     void operations.destroyAll();
     disposeGitHelpers();
+  }
+
+  /**
+   * Garbage-collect stale scrollback archive directories from previous runs.
+   * Safe to call at startup — only removes directories whose PTY IDs are
+   * not in the current live set. Runs in batches to avoid I/O burst.
+   */
+  async function gcStaleScrollbackDirectories(): Promise<number> {
+    const activePtyIds = new Set(state.keys());
+    return scrollbackArchiveManager.gcStaleDirectories(activePtyIds);
   }
 
   return {

@@ -35,8 +35,12 @@ import {
   clearShimmerRowPositions,
 } from '../../../core/shimmer-registry';
 
-/** Target frame interval for shimmer animation (~30fps). */
-const SHIMMER_FRAME_MS = 33;
+/** Target frame interval for shimmer animation (~10fps).
+ *  Shimmer is a slow color sweep — 10fps is visually smooth while using
+ *  3× less CPU than 30fps. Each frame iterates all shimmer row positions
+ *  and modifies the render buffer, so reducing the rate directly reduces
+ *  main-thread load proportional to the number of active shimmer rows. */
+const SHIMMER_FRAME_MS = 100;
 
 export function useShimmerPostProcess(_renderer: CliRenderer, isActive: () => boolean): void {
   let animationTimer: ReturnType<typeof setTimeout> | null = null;
