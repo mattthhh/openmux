@@ -282,7 +282,8 @@ export async function createSession(
     incrementalDrain();
   });
 
-  // Raw drain for the 1fps background pulse (bypasses processChunk pipeline).
+  // Raw drain for the 1fps background pulse (now routes through processChunk
+  // for CSI 2J normalization before reaching the emulator).
   registerRawDrain(id, () => {
     drainRawToEmulator();
   });

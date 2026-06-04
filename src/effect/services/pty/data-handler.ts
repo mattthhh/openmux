@@ -936,6 +936,11 @@ export function createDataHandler(options: DataHandlerOptions) {
    * Capped at 64KB per call to avoid blocking the event loop with a
    * massive native VT parse. The raw buffer retains what's left for
    * subsequent pulses or for replayRawBufferFull on focus switch.
+   *
+   * Routes through processChunk so that CSI 2J normalization runs before
+   * the data reaches the emulator. Without this, un-normalized CSI 2J
+   * triggers ghostty's scrollClear heuristic (pushes viewport to
+   * scrollback at a prompt), producing duplicate scrollback content.
    */
   const drainRawToEmulator = () => {
     if (rawBufferIsEmpty()) return;
@@ -945,9 +950,8 @@ export function createDataHandler(options: DataHandlerOptions) {
     if (state.rawBufferLength <= MAX_RAW_DRAIN) {
       const raw = rawBufferJoin();
       rawBufferClear();
-      if (!session.emulator.isDisposed) {
-        session.emulator.write(raw);
-      }
+      processChunk(raw);
+      drainPending({ force: true });
       return;
     }
 
@@ -964,9 +968,8 @@ export function createDataHandler(options: DataHandlerOptions) {
     const chunk = raw.slice(0, end);
     state.rawChunks = [raw.slice(end)];
     state.rawBufferLength -= end;
-    if (!session.emulator.isDisposed) {
-      session.emulator.write(chunk);
-    }
+    processChunk(chunk);
+    drainPending({ force: true });
   };
 
   // Cleanup function to clear any pending timeouts

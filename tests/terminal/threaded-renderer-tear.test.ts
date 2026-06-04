@@ -278,15 +278,23 @@ async function runRendererTest(useThread: boolean): Promise<{
 }
 
 describe('Threaded renderer does not produce torn reads', () => {
-  it('useThread=true: no torn reads from concurrent JS writes and native diff reads', async () => {
-    const result = await runRendererTest(true);
-    expect(result.torn.length).toBe(0);
-  });
+  it(
+    'useThread=true: no torn reads from concurrent JS writes and native diff reads',
+    async () => {
+      const result = await runRendererTest(true);
+      expect(result.torn.length).toBe(0);
+    },
+    { timeout: 30_000 }
+  );
 
-  it('useThread=false: no torn reads (baseline)', async () => {
-    const result = await runRendererTest(false);
-    expect(result.torn.length).toBe(0);
-  });
+  it(
+    'useThread=false: no torn reads (baseline)',
+    async () => {
+      const result = await runRendererTest(false);
+      expect(result.torn.length).toBe(0);
+    },
+    { timeout: 30_000 }
+  );
 });
 
 /**

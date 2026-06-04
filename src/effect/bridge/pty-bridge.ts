@@ -498,7 +498,7 @@ export function unregisterRawDrain(ptyId: string): void {
   rawDrainRegistry.delete(ptyId);
 }
 
-/** Drain raw buffer directly to emulator (bypasses processChunk pipeline). */
+/** Drain raw buffer to emulator via processChunk (normalizes CSI 2J). */
 export function drainRawToEmulator(ptyId: string): void {
   const drain = rawDrainRegistry.get(ptyId);
   if (drain) drain();
