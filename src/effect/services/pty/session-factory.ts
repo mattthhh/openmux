@@ -113,6 +113,14 @@ export async function createSession(
   // callback), the session, and the archived emulator.
   const scrollbackSkipMap = new ScrollbackSkipMap();
 
+  // Allow disabling the scrollback skip filter via env for A/B testing.
+  // When disabled, the skip map stays empty — no ranges are recorded
+  // and all scrollback offsets are identity (raw == effective).
+  const skipFilterEnabled =
+    (process.env.OPENMUX_SCROLLBACK_SKIP_FILTER ?? '0').toLowerCase() === '1' ||
+    (process.env.OPENMUX_SCROLLBACK_SKIP_FILTER ?? '0').toLowerCase() === 'true' ||
+    (process.env.OPENMUX_SCROLLBACK_SKIP_FILTER ?? '0').toLowerCase() === 'on';
+
   const scrollbackRoot =
     deps.scrollbackArchiveRoot ??
     process.env.OPENMUX_SCROLLBACK_ARCHIVE_DIR ??
@@ -202,11 +210,15 @@ export async function createSession(
     scrollState: { viewportOffset: 0, lastScrollbackLength: 0, lastIsAtBottom: true },
     lastResizeTime: 0,
     scrollbackSkipMap,
+    skipFilterEnabled,
   };
 
   // Wire the skip map into the archived emulator so scrollback reads
   // translate effective offsets to raw offsets, hiding pi-redraw duplicates.
-  emulator.setSkipMap(scrollbackSkipMap);
+  // When the filter is disabled the map stays empty — all offsets are identity.
+  if (skipFilterEnabled) {
+    emulator.setSkipMap(scrollbackSkipMap);
+  }
 
   session.scrollbackArchiver = new ScrollbackArchiver(session, liveEmulator);
 

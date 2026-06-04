@@ -137,6 +137,7 @@ function createMockSession() {
     },
     lastResizeTime: 0,
     scrollbackSkipMap: new ScrollbackSkipMap(),
+    skipFilterEnabled: true,
   } as unknown as InternalPtySession;
 
   return {
@@ -449,6 +450,7 @@ describe('createDataHandler pi redraw integration', () => {
       },
       lastResizeTime: 0,
       scrollbackSkipMap: skipMap,
+      skipFilterEnabled: true,
     } as unknown as InternalPtySession;
 
     const { handleData } = createDataHandler({

@@ -432,7 +432,9 @@ export function createDataHandler(options: DataHandlerOptions) {
   const resetScrollbackState = () => {
     session.scrollbackArchive.reset();
     session.scrollbackArchiver?.reset();
-    session.scrollbackSkipMap.clear();
+    if (session.skipFilterEnabled) {
+      session.scrollbackSkipMap.clear();
+    }
     session.scrollState.viewportOffset = 0;
     session.scrollState.lastScrollbackLength = 0;
     session.scrollState.lastIsAtBottom = true;
@@ -611,7 +613,7 @@ export function createDataHandler(options: DataHandlerOptions) {
       // and keep the new.
       const postPiRedrawRawScrollback =
         session.liveEmulator.getScrollbackLength() + session.scrollbackArchive.length;
-      if (prePiRedrawRawScrollback > 0) {
+      if (prePiRedrawRawScrollback > 0 && session.skipFilterEnabled) {
         session.scrollbackSkipMap.skipRange(0, prePiRedrawRawScrollback);
         tracePtyEvent('pi-redraw-stale-skip', {
           ptyId: session.id,
@@ -912,7 +914,7 @@ export function createDataHandler(options: DataHandlerOptions) {
         });
         if (flushed.length > 0) {
           state.pendingSegments.push(flushed);
-          if (state.syncLikelyPiFullRedraw) {
+          if (state.syncLikelyPiFullRedraw && session.skipFilterEnabled) {
             state.piFullRedrawPending = true;
           }
           scheduleNotify();
@@ -941,7 +943,7 @@ export function createDataHandler(options: DataHandlerOptions) {
         // that via normalization, the skip range must hide stale content instead.
         // Frames without CSI 3J are just viewport overwrites; existing scrollback
         // stays valid and doesn't need hiding.
-        if (isPiRedraw && /(?:\x1b\[3J|\x9b3J)/.test(rawSegment)) {
+        if (isPiRedraw && /(?:\x1b\[3J|\x9b3J)/.test(rawSegment) && session.skipFilterEnabled) {
           state.piFullRedrawPending = true;
         }
       }

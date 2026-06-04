@@ -70,4 +70,7 @@ export interface InternalPtySession {
    * offsets (what the UI sees) are translated to raw offsets (what the emulator
    * has) through this map, so duplicate content from pi redraws is invisible. */
   scrollbackSkipMap: ScrollbackSkipMap;
+  /** Whether the scrollback skip filter is active. When false, skipRange()
+   * calls are skipped and the map stays empty (raw == effective offsets). */
+  skipFilterEnabled: boolean;
 }
