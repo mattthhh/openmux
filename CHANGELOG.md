@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.155](https://github.com/monotykamary/openmux/compare/v0.3.154...v0.3.155) (2026-06-04)
+
+
+### Performance
+
+* plain try/catch in subscriptions, batched setImmediate ([9a6d329](https://github.com/monotykamary/openmux/commit/9a6d329f0600edc0a9afd97b1a3f75a9b3654f62))
+
 ### [0.3.154](https://github.com/monotykamary/openmux/compare/v0.3.153...v0.3.154) (2026-06-04)
 
 
