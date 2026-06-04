@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.154](https://github.com/monotykamary/openmux/compare/v0.3.153...v0.3.154) (2026-06-04)
+
+
+### Features
+
+* **aggregate:** migrate sidebar scroll to smooth chase animation ([8caf5e0](https://github.com/monotykamary/openmux/commit/8caf5e0fe3cf7f487e791b2f96c7ac29ed12e07b))
+
+
+### Bug Fixes
+
+* **aggregate:** base scroll on current display position, not target ([127bf70](https://github.com/monotykamary/openmux/commit/127bf705dba5d830d017e807b7e708d7e8dafad6))
+* **aggregate:** clamp animator maxOffset to real viewport range ([18e28c0](https://github.com/monotykamary/openmux/commit/18e28c07bc43ab4a801e13631a0e83835b113c61))
+* **aggregate:** match PTY scroll parity for instant reversal and responsiveness ([41b4c73](https://github.com/monotykamary/openmux/commit/41b4c7368a757dc9cbc72858c815cfecaa9e00fe))
+* **aggregate:** snap on scroll reversal to eliminate chase delay ([c423cbb](https://github.com/monotykamary/openmux/commit/c423cbba88b3dcf566033c5304b925524d9b0ca6))
+* conservative skip map only hides lines that entered scrollback during redraw ([3f7b832](https://github.com/monotykamary/openmux/commit/3f7b832f97d4ac1901b718d1c3ea9d0099636b08))
+
+
+### Performance
+
+* debounce activity notifications, throttle shimmer, gc stale scrollback ([71a9599](https://github.com/monotykamary/openmux/commit/71a9599dd2ffdd9ff1b78c7efb1b3dd6cff43fbd))
+
 ### [0.3.153](https://github.com/monotykamary/openmux/compare/v0.3.152...v0.3.153) (2026-06-04)
 
 
