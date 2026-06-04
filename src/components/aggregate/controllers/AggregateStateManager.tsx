@@ -203,13 +203,21 @@ export function AggregateStateManager() {
     // (and there are multiple unclaimed insertions), the lifecycle
     // handler can't match the insertion and leaves it orphaned.
     // Now that the real PTY is selected and visible in the tree,
-    // remove any pending creation whose PTY has landed in the index.
+    // remove any pending creation whose PTY has landed in allPtys.
+    //
+    // CRITICAL: Use allPtysIndex (not flattenedTreeIndex) to confirm
+    // the real PTY has landed. flattenedTreeIndex includes placeholders
+    // from buildPendingAggregatePtys that share the same ptyId, so
+    // checking it would match a placeholder and remove the pending
+    // creation before the real PTY is in allPtys, causing the row
+    // to disappear.
     const resolvedPtyId = resolution.ptyId;
+    const allPtysIndex = aggregate.state.allPtysIndex;
     const treeIndex = aggregate.state.flattenedTreeIndex;
     if (resolvedPtyId && treeIndex.has(resolvedPtyId)) {
       const pendingCreations = aggregate.state.pendingPaneCreations;
       const orphaned = pendingCreations.filter(
-        (insertion) => insertion.pendingPtyId !== null && treeIndex.has(insertion.pendingPtyId)
+        (insertion) => insertion.pendingPtyId !== null && allPtysIndex.has(insertion.pendingPtyId)
       );
       for (const insertion of orphaned) {
         aggregate.removePendingPaneCreation(insertion.id);

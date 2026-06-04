@@ -9,12 +9,14 @@
  * blocks the autoswitch effect.
  *
  * Fix: Two-pronged approach:
- * 1. handlePtyCreatedImpl yields (setTimeout(0)) before the final
+ * 1. handlePtyCreatedImpl yields (queueMicrotask) before the final
  *    removal check, giving onCreated a chance to fire and set
  *    pendingPtyId so the match succeeds.
  * 2. Fallback cleanup removes any pending creation whose real PTY
- *    has already landed in the flattened tree index (both in
- *    handlePtyCreatedImpl and in the pending pane focus resolution).
+ *    has already landed in allPtysIndex (confirmed by the snapshot)
+ *    — not flattenedTreeIndex, which includes placeholder entries
+ *    from buildPendingAggregatePtys that share the same ptyId and
+ *    would cause false positives.
  */
 
 import { describe, expect, it } from 'bun:test';
@@ -107,32 +109,37 @@ describe('Orphaned pending pane creation cleanup', () => {
     expect(result!.id).toBe('pending-1');
   });
 
-  it('fallback cleanup removes pending creations whose PTY is in the tree index', () => {
+  it('fallback cleanup removes pending creations whose PTY is confirmed in allPtysIndex', () => {
     // Simulates the fallback cleanup that runs after the yield in
     // handlePtyCreatedImpl and in the pending pane focus resolution.
+    //
+    // Uses allPtysIndex (not flattenedTreeIndex) because the latter
+    // includes placeholder entries from buildPendingAggregatePtys
+    // that share the same ptyId — checking flattenedTreeIndex would
+    // match a placeholder and remove the pending creation before the
+    // real PTY has landed in allPtys, causing the row to disappear.
     const state = {
       pendingPaneCreations: [
         createPendingInsertion('pending-1', 'session-b', {
-          pendingPtyId: 'pty-in-tree',
+          pendingPtyId: 'pty-in-allptys',
           pendingPaneId: 'pane-1',
         }),
         createPendingInsertion('pending-2', 'session-b', {
-          pendingPtyId: 'pty-not-yet-in-tree',
+          pendingPtyId: 'pty-not-yet-in-allptys',
           pendingPaneId: 'pane-2',
         }),
       ],
     };
 
-    const flattenedTreeIndex = new Map<string, number>();
-    flattenedTreeIndex.set('pty-in-tree', 3);
-    // pty-not-yet-in-tree is NOT in the index yet
+    const allPtysIndex = new Map<string, number>();
+    allPtysIndex.set('pty-in-allptys', 3);
+    // pty-not-yet-in-allptys is NOT in allPtysIndex yet
 
     // The fallback cleanup: remove any pending creation whose
-    // real PTY has landed in the flattened tree index.
+    // real PTY has landed in allPtysIndex (confirmed by the snapshot).
     removePendingPaneCreations(
       state,
-      (insertion) =>
-        insertion.pendingPtyId !== null && flattenedTreeIndex.has(insertion.pendingPtyId)
+      (insertion) => insertion.pendingPtyId !== null && allPtysIndex.has(insertion.pendingPtyId)
     );
 
     expect(state.pendingPaneCreations).toHaveLength(1);
@@ -153,13 +160,13 @@ describe('Orphaned pending pane creation cleanup', () => {
     const autoswitchBlocked = pendingCreations.length > 0;
     expect(autoswitchBlocked).toBe(true);
 
-    // After the fallback cleanup removes it:
-    const flattenedTreeIndex = new Map<string, number>();
-    flattenedTreeIndex.set('pty-resolved', 0);
+    // After the fallback cleanup removes it (using allPtysIndex, not
+    // flattenedTreeIndex, to avoid false positives from placeholders):
+    const allPtysIndex = new Map<string, number>();
+    allPtysIndex.set('pty-resolved', 0);
 
     const remaining = pendingCreations.filter(
-      (insertion) =>
-        !(insertion.pendingPtyId !== null && flattenedTreeIndex.has(insertion.pendingPtyId))
+      (insertion) => !(insertion.pendingPtyId !== null && allPtysIndex.has(insertion.pendingPtyId))
     );
 
     const autoswitchBlockedAfterCleanup = remaining.length > 0;

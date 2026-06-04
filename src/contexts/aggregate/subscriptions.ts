@@ -232,9 +232,17 @@ export function createLifecycleHandlers(
     // aggregate view until the next full refreshPtys().
     setState(
       produce((s) => {
-        // Only remove pending creations whose real PTY is confirmed in state.
+        // Only remove pending creations whose real PTY is confirmed in allPtys.
         // If the PTY isn't in allPtysIndex yet, the placeholder stays.
-        const ptyIsInState = s.allPtysIndex.has(ptyId) || s.flattenedTreeIndex.has(ptyId);
+        //
+        // CRITICAL: Do NOT check flattenedTreeIndex here — it includes
+        // placeholder entries from buildPendingAggregatePtys that share
+        // the same ptyId as the real PTY. Checking flattenedTreeIndex
+        // causes a false positive when the placeholder is in the tree
+        // but the real PTY hasn't landed in allPtys yet, leading to the
+        // pending creation being removed prematurely and the row
+        // disappearing from the aggregate view.
+        const ptyIsInState = s.allPtysIndex.has(ptyId);
 
         if (ptyIsInState) {
           if (ownership) {
@@ -260,11 +268,15 @@ export function createLifecycleHandlers(
           }
 
           // Fallback: remove any pending creation whose real PTY has landed
-          // in the flattened tree index.
+          // in allPtys (confirmed by the snapshot, not a placeholder).
+          // Use allPtysIndex instead of flattenedTreeIndex — the latter
+          // includes placeholder entries that share the same ptyId, so
+          // it would match the placeholder and remove the pending creation
+          // before the real PTY has landed.
           removePendingPaneCreations(
             s,
             (insertion) =>
-              insertion.pendingPtyId !== null && s.flattenedTreeIndex.has(insertion.pendingPtyId)
+              insertion.pendingPtyId !== null && s.allPtysIndex.has(insertion.pendingPtyId)
           );
 
           // Fallback: remove pending creations whose pendingPtyId
