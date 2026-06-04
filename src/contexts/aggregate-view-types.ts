@@ -228,6 +228,8 @@ export interface AggregateViewUiSlice {
   previewZoomed: boolean;
   /** Scroll offset for the session/PTY list (0 = top) */
   listScrollOffset: number;
+  /** Max visible rows in the list pane (set by layout computation) */
+  listMaxVisibleCards: number;
   /** Whether the PTY picker overlay is shown (inside aggregate view) */
   showPtyPicker: boolean;
   /**
@@ -329,6 +331,7 @@ export function createAggregateViewUiSlice(): AggregateViewUiSlice {
     previewMode: false,
     previewZoomed: false,
     listScrollOffset: 0,
+    listMaxVisibleCards: 0,
     showPtyPicker: false,
     ptyMru: [],
   };
@@ -433,6 +436,8 @@ export interface AggregateViewContextValue {
   scrollListDown: (pageSize?: number) => void;
   /** Scroll the list to a specific offset */
   setListScrollOffset: (offset: number) => void;
+  /** Update the max visible rows for scroll clamping */
+  setListMaxVisibleCards: (max: number) => void;
   /** Clean up the list scroll animator (call on unmount) */
   cleanupListAnimator: () => void;
   /** Add or update a pending aggregate pane insertion request */

@@ -135,6 +135,13 @@ export function AggregateView(props: AggregateViewProps) {
     })
   );
 
+  // Keep the actions aware of the real viewport size so the animator
+  // clamps targets to the visible range instead of the (much larger)
+  // tree length.
+  createEffect(() => {
+    aggregate.setListMaxVisibleCards(layoutDims().maxVisibleCards);
+  });
+
   const listViewport = createMemo(() =>
     calculateAggregateListViewport({
       totalItems: aggregate.state.flattenedTree.length,

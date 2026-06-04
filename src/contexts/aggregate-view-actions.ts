@@ -419,13 +419,28 @@ export function createAggregateViewActions(params: AggregateViewActionsParams) {
     },
   });
 
-  /** Get the max scroll offset for the current tree size */
+  /**
+   * Compute the real max scroll offset from viewport dimensions.
+   * Uses the same logic as clampAggregateListScrollOffset: the target
+   * should never exceed what the viewport can actually display, otherwise
+   * the animator chases through invisible offsets and reversal requires
+   * many events before the target re-enters the visible range.
+   */
   const getListMaxOffset = () => {
-    // Use a generous upper bound; the viewport memo (calculateAggregateListViewport)
-    // clamps to the actual valid range. Avoids storing offsets far beyond
-    // the visual range, which would cause invisible scroll steps on the way
-    // back up.
-    return Math.max(0, state.flattenedTree.length - 1);
+    const totalItems = state.flattenedTree.length;
+    const maxRows = state.listMaxVisibleCards;
+    if (totalItems <= 0 || maxRows <= 0 || totalItems <= maxRows) {
+      return 0;
+    }
+    // At max scroll, the top indicator takes one row, so visible content
+    // rows = maxRows - 1. The last possible start index puts the last item
+    // at the bottom of those content rows.
+    return Math.max(0, totalItems - maxRows + 1);
+  };
+
+  /** Update the layout-provided max visible cards for scroll clamping */
+  const setListMaxVisibleCards = (max: number) => {
+    setState('listMaxVisibleCards', max);
   };
 
   /** Scroll the list up by a specified amount (default: 1 line for smooth animation) */
@@ -659,6 +674,7 @@ export function createAggregateViewActions(params: AggregateViewActionsParams) {
     scrollListUp,
     scrollListDown,
     setListScrollOffset,
+    setListMaxVisibleCards,
     // Animator lifecycle
     cleanupListAnimator: () => listAnimator.cleanup(),
     upsertPendingPaneCreation: upsertAggregatePendingPaneCreation,
