@@ -16,9 +16,9 @@ import { ScrollAnimator } from '../../terminal/scroll-animation';
 const LIST_KEY = 'list';
 
 export interface ListScrollAnimatorConfig {
-  /** Lines per frame when distance > 1. Higher = snappier. Default: 3 */
+  /** Lines per frame when distance > 1. Higher = snappier. Default: 12 */
   speed?: number;
-  /** Easing ratio for settle. Default: 0.5 */
+  /** Easing ratio for settle. Higher = less easing. Default: 0.7 */
   easing?: number;
   /** Called on each animation tick with the new offset */
   onAnimate?: (offset: number) => void;
@@ -26,14 +26,13 @@ export interface ListScrollAnimatorConfig {
 
 export class ListScrollAnimator {
   private animator: ScrollAnimator;
-  private currentTarget = 0;
   private _onAnimate: ((offset: number) => void) | null;
 
   constructor(config?: ListScrollAnimatorConfig) {
     this._onAnimate = config?.onAnimate ?? null;
     this.animator = new ScrollAnimator({
-      speed: config?.speed ?? 3,
-      easing: config?.easing ?? 0.5,
+      speed: config?.speed ?? 12,
+      easing: config?.easing ?? 0.7,
     });
     if (this._onAnimate) {
       this.animator.setOnAnimate((_key, offset) => this._onAnimate!(offset));
@@ -48,27 +47,21 @@ export class ListScrollAnimator {
 
   /**
    * Scroll the list by a delta (e.g., +1 / -1 for wheel, +5 / -5 for page).
-   * The target is moved immediately; the animator chases it per-frame.
    *
-   * If the delta reverses the chase direction (e.g., scrolling up while
-   * the animator is still chasing a far-down target), the display snaps
-   * to its current animated position first so the reversal feels instant.
+   * Mirrors the PTY scroll logic: uses the animator's target as base
+   * only when actively chasing, otherwise uses the current display offset.
+   * This ensures reversal is instant — no chasing through stale targets.
    */
   scrollBy(delta: number, maxOffset: number): void {
-    if (this.animator.isAnimating(LIST_KEY) && delta !== 0) {
-      const currentOffset = this.animator.getCurrentOffset(LIST_KEY) ?? this.currentTarget;
-      const chasingDown = this.currentTarget > currentOffset;
-      const reversing = chasingDown ? delta < 0 : delta > 0;
-      if (reversing) {
-        // Snap display to where it currently is, then delta from there
-        this.currentTarget = currentOffset;
-        this.animator.initialize(LIST_KEY, currentOffset);
-        // Apply the onAnimate so the store stays in sync with the snap
-        if (this._onAnimate) this._onAnimate(currentOffset);
-      }
+    const active = this.animator.isAnimating(LIST_KEY);
+    const animTarget = active ? this.animator.getTargetOffset(LIST_KEY) : undefined;
+    const baseOffset = animTarget ?? this.animator.getCurrentOffset(LIST_KEY) ?? 0;
+    const targetOffset = Math.max(0, Math.min(maxOffset, baseOffset + delta));
+
+    if (animTarget === undefined) {
+      this.animator.initialize(LIST_KEY, baseOffset);
     }
-    this.currentTarget = Math.max(0, Math.min(maxOffset, this.currentTarget + delta));
-    this.animator.setTarget(LIST_KEY, this.currentTarget, maxOffset);
+    this.animator.setTarget(LIST_KEY, targetOffset, maxOffset);
   }
 
   /**
@@ -77,12 +70,10 @@ export class ListScrollAnimator {
    */
   snapTo(offset: number, maxOffset: number): void {
     const clamped = Math.max(0, Math.min(maxOffset, offset));
-    this.currentTarget = clamped;
     this.animator.initialize(LIST_KEY, clamped);
     this.animator.setTarget(LIST_KEY, clamped, maxOffset);
     this.animator.snapToTarget(LIST_KEY);
 
-    // Apply the snapped offset via the callback
     if (this._onAnimate) {
       this._onAnimate(clamped);
     }
@@ -93,18 +84,12 @@ export class ListScrollAnimator {
    * (e.g., when the aggregate view first opens).
    */
   initialize(offset: number): void {
-    this.currentTarget = offset;
     this.animator.initialize(LIST_KEY, offset);
   }
 
   /** Get the current animated offset */
   getCurrentOffset(): number {
-    return this.animator.getCurrentOffset(LIST_KEY) ?? this.currentTarget;
-  }
-
-  /** Get the target offset */
-  getTargetOffset(): number {
-    return this.currentTarget;
+    return this.animator.getCurrentOffset(LIST_KEY) ?? 0;
   }
 
   /** Whether the animator is actively chasing */
@@ -115,6 +100,5 @@ export class ListScrollAnimator {
   /** Clean up on unmount */
   cleanup(): void {
     this.animator.cleanup();
-    this.currentTarget = 0;
   }
 }

@@ -414,8 +414,6 @@ export function createAggregateViewActions(params: AggregateViewActionsParams) {
   // List Scrolling (smooth chase animation)
 
   const listAnimator = new ListScrollAnimator({
-    speed: 3,
-    easing: 0.5,
     onAnimate: (offset: number) => {
       setState('listScrollOffset', offset);
     },
