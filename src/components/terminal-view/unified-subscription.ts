@@ -306,7 +306,7 @@ export function setupUnifiedSubscription(deps: UnifiedSubscriptionDeps): void {
                     if (viewState.lastScrollbackLength !== null) {
                       // Subsequent updates: adjust viewportOffset by scrollback delta.
                       // Positive delta (new content): maintain visual position by pushing
-                      // viewportOffset up. Negative delta (skip range expanded, archiver
+                      // viewportOffset up. Negative delta (archiver
                       // trim): pull viewportOffset back to stay within bounds.
                       const scrollbackDelta =
                         update.scrollState.scrollbackLength - viewState.lastScrollbackLength;

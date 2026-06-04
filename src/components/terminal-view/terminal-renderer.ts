@@ -87,21 +87,6 @@ export function createTerminalRenderer(params: {
       em.flushPendingNotify();
     }
 
-    // Diagnostic: log when effective and raw scrollback diverge (skip map active)
-    if (em && 'base' in em) {
-      const effective = em.getScrollbackLength();
-      const rawBase = (
-        em as unknown as { base: { getScrollbackLength: () => number } }
-      ).base.getScrollbackLength();
-      const archiveLen = (em as unknown as { archive: { length: number } }).archive.length;
-      const raw = rawBase + archiveLen;
-      if (effective !== raw && process.env.OPENMUX_SKIP_DIAG) {
-        process.stderr.write(
-          `[skip-diag] pty=${ptyId} effective=${effective} raw=${raw} viewState.sl=${viewState.scrollState.scrollbackLength} viewState.vo=${viewState.scrollState.viewportOffset} lastSl=${viewState.lastStableScrollbackLength} lastVo=${viewState.lastStableViewportOffset}\n`
-        );
-      }
-    }
-
     const state = viewState.terminalState;
     const width = props.width;
     const height = props.height;
@@ -126,14 +111,12 @@ export function createTerminalRenderer(params: {
     const desiredViewportOffset = viewState.scrollState.viewportOffset;
     // Read scrollback length directly from the emulator instead of the
     // viewState cache. The cache is updated asynchronously via setImmediate
-    // subscriber notifications — there's a gap between the data handler
-    // recording skip ranges (which change the effective length) and the
-    // subscriber delivering the updated length to viewState. During this
-    // gap the cached value is stale (raw, unfiltered), causing row
-    // calculations (absoluteY = scrollbackLength - viewportOffset + y) to
-    // map to wrong lines — the "split" where Elapsed detaches from its
-    // spinner. The emulator's getScrollbackLength() applies the skip map
-    // in real-time and is always authoritative.
+    // subscriber notifications — there's a gap between PTY data arriving
+    // and the subscriber delivering the updated length to viewState. During
+    // this gap the cached value can be stale, causing row calculations
+    // (absoluteY = scrollbackLength - viewportOffset + y) to map to wrong
+    // lines. The emulator's getScrollbackLength() reads the native terminal
+    // state in real-time and is always authoritative.
     const desiredScrollbackLength =
       emulator?.getScrollbackLength?.() ?? viewState.scrollState.scrollbackLength;
 

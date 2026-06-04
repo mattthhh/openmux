@@ -72,7 +72,7 @@ export class ScrollbackArchive {
     cacheSize?: number;
     manager?: ScrollbackArchiveManagerLike;
     /** Called when the archive drops the oldest chunk to enforce size limits.
-     *  Receives the linesRemoved count — used to adjust skip map ranges. */
+     *  Receives the linesRemoved count — used to adjust dependent offset tracking. */
     onDropChunk?: (linesRemoved: number) => void;
   }) {
     this.rootDir = options.rootDir;
@@ -244,9 +244,8 @@ export class ScrollbackArchive {
     this.placementChunkCache.delete(chunk.id);
     this.revision += 1;
 
-    // Notify skip map that the oldest lines have been dropped.
-    // Skip ranges within the dropped chunk are cleared, and remaining
-    // ranges shift down by the chunk's line count.
+    // Notify listeners that the oldest lines have been dropped.
+    // Callers can adjust any offset tracking that referenced these lines.
     this.onDropChunk?.(chunk.lineCount);
 
     void this.enqueue(async () => {
