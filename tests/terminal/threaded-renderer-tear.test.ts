@@ -34,6 +34,11 @@ import {
   RGBA,
   Renderable,
 } from '@opentui/core';
+import { createSyncModeParser } from '../../src/terminal/sync-mode-parser';
+import {
+  createDataHandler,
+  normalizePiFullRedrawSegment,
+} from '../../src/effect/services/pty/data-handler';
 
 const TERMINAL_WIDTH = 80;
 const TERMINAL_HEIGHT = 24;
@@ -281,5 +286,132 @@ describe('Threaded renderer does not produce torn reads', () => {
   it('useThread=false: no torn reads (baseline)', async () => {
     const result = await runRendererTest(false);
     expect(result.torn.length).toBe(0);
+  });
+});
+
+/**
+ * Scrollback contamination: verify that CSI 2J normalization works for
+ * sync-wrapped pi frames, and document the known gap where drainRawToEmulator
+ * bypasses normalization for background panes.
+ *
+ * Ghostty's VT emulator treats CSI 2J (erase display) as a scrollClear at a
+ * shell prompt — it pushes the visible viewport into scrollback. Pi frames
+ * contain CSI 2J as part of their full-redraw cycle. If this passes through
+ * un-normalized, every pi frame pushes a duplicate copy of the screen into
+ * scrollback. Scroll up → ghost/duplicate content.
+ *
+ * The data-handler's normalizePiFullRedrawSegment replaces CSI 2J + CSI H
+ * with CSI H + CSI J (cursor home + erase-to-end), which clears in-place
+ * without triggering scrollClear. This works for all sync-wrapped frames.
+ *
+ * Known gap: drainRawToEmulator writes raw buffered data directly to the
+ * emulator, bypassing processChunk → syncParser → normalizePiFullRedrawSegment.
+ * This is used by the 1fps background pulse for non-focused panes. Background
+ * panes with pi output will have CSI 2J applied un-normalized.
+ */
+function makePiFrame(content: string, with3J = false): string {
+  const suffix = with3J ? '\x1b[3J' : '';
+  return `\x1b[?2026h\x1b[2J\x1b[H${suffix}${content}\x1b[?2026l`;
+}
+
+describe('scrollback contamination: CSI 2J normalization', () => {
+  it('normalizes basic pi frame with CSI 3J', () => {
+    const parser = createSyncModeParser();
+    const { readySegments } = parser.process(makePiFrame('hello', true));
+    expect(readySegments.length).toBe(1);
+
+    const normalized = normalizePiFullRedrawSegment(readySegments[0], 24);
+    expect(normalized.includes('\x1b[2J')).toBe(false);
+    expect(normalized.includes('\x1b[H\x1b[J')).toBe(true);
+  });
+
+  it('normalizes basic pi frame without CSI 3J', () => {
+    const parser = createSyncModeParser();
+    const { readySegments } = parser.process(makePiFrame('hello', false));
+    expect(readySegments.length).toBe(1);
+
+    const normalized = normalizePiFullRedrawSegment(readySegments[0], 24);
+    expect(normalized.includes('\x1b[2J')).toBe(false);
+    expect(normalized.includes('\x1b[H\x1b[J')).toBe(true);
+  });
+
+  it('normalizes large truecolor frame', () => {
+    const content = Array.from({ length: 5 }, (_, y) => {
+      const r = (y * 13) & 0xff;
+      const g = (y * 17) & 0xff;
+      const b = (y * 23) & 0xff;
+      return `\x1b[38;2;${r};${g};${b}m${'X'.repeat(80)}\x1b[0m`;
+    }).join('\r\n');
+    const parser = createSyncModeParser();
+    const { readySegments } = parser.process(makePiFrame(content));
+
+    const normalized = normalizePiFullRedrawSegment(readySegments[0], 24);
+    expect(normalized.includes('\x1b[2J')).toBe(false);
+    expect(normalized.includes('\x1b[H\x1b[J')).toBe(true);
+  });
+
+  it('normalizes frame split across two data chunks', () => {
+    const parser = createSyncModeParser();
+    const fullFrame = makePiFrame('split frame content');
+    const mid = Math.floor(fullFrame.length / 2);
+
+    const { isBuffering: buf1 } = parser.process(fullFrame.slice(0, mid));
+    expect(buf1).toBe(true);
+
+    const { readySegments: segs2 } = parser.process(fullFrame.slice(mid));
+    const normalized = normalizePiFullRedrawSegment(segs2[0], 24);
+    expect(normalized.includes('\x1b[2J')).toBe(false);
+    expect(normalized.includes('\x1b[H\x1b[J')).toBe(true);
+  });
+
+  it('normalizes pi frame after shell prompt in same chunk', () => {
+    const parser = createSyncModeParser();
+    const { readySegments } = parser.process('$ ' + makePiFrame('frame content'));
+    expect(readySegments.length).toBe(2);
+    expect(readySegments[0]).toBe('$ ');
+
+    const normalized = normalizePiFullRedrawSegment(readySegments[1], 24);
+    expect(normalized.includes('\x1b[2J')).toBe(false);
+    expect(normalized.includes('\x1b[H\x1b[J')).toBe(true);
+  });
+
+  it('normalizes pi frame after startup queries', () => {
+    const parser = createSyncModeParser();
+    const { readySegments } = parser.process(
+      '\x1b]10;?\x07\x1b]11;?\x07\x1b[>c' + makePiFrame('first frame')
+    );
+    const last = readySegments[readySegments.length - 1];
+    const normalized = normalizePiFullRedrawSegment(last, 24);
+    expect(normalized.includes('\x1b[2J')).toBe(false);
+    expect(normalized.includes('\x1b[H\x1b[J')).toBe(true);
+  });
+
+  it('does NOT normalize CSI 2J that is NOT at segment start', () => {
+    // The ^-anchored regex cannot match CSI 2J mid-segment.
+    // In practice this shouldn't happen for sync-wrapped pi frames,
+    // but documents the known gap for non-sync output.
+    const input = 'prefix\x1b[2J\x1b[H\x1b[3Jhello';
+    expect(normalizePiFullRedrawSegment(input, 24)).toBe(input);
+  });
+
+  it('normalizes rapid consecutive pi frames', () => {
+    const parser = createSyncModeParser();
+    const { readySegments } = parser.process(
+      makePiFrame('f0') + makePiFrame('f1') + makePiFrame('f2')
+    );
+    for (const seg of readySegments) {
+      const normalized = normalizePiFullRedrawSegment(seg, 24);
+      expect(normalized.includes('\x1b[2J')).toBe(false);
+      expect(normalized.includes('\x1b[H\x1b[J')).toBe(true);
+    }
+  });
+
+  it('normalizes sync timeout flush', () => {
+    const parser = createSyncModeParser();
+    parser.process(makePiFrame('partial').replace('\x1b[?2026l', ''));
+    const flushed = parser.flush();
+    const normalized = normalizePiFullRedrawSegment(flushed, 24);
+    expect(normalized.includes('\x1b[2J')).toBe(false);
+    expect(normalized.includes('\x1b[H\x1b[J')).toBe(true);
   });
 });
