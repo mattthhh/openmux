@@ -464,11 +464,10 @@ describe('createDataHandler pi redraw integration', () => {
     await waitForDrain();
 
     // The pi redraw pushed 24 lines to scrollback (10 → 34).
-    // We conservatively skip only the delta that entered scrollback during
-    // the redraw, not everything that came before. This prevents hiding
-    // legitimate shell history and conversation history.
+    // The skip map should hide the old content [0, 10) and keep the new push.
+    // Effective scrollback = 34 - 10 = 24 (just the latest pi frame rows).
     expect(skipMap.size).toBe(1);
-    expect(skipMap.getRanges()[0]).toEqual({ start: 10, end: 34 });
-    expect(skipMap.effectiveLength(34)).toBe(10);
+    expect(skipMap.getRanges()[0]).toEqual({ start: 0, end: 10 });
+    expect(skipMap.effectiveLength(34)).toBe(24);
   });
 });
