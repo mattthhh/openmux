@@ -1,14 +1,18 @@
 /**
- * Subscription management utilities for PTY service (errore version).
+ * Subscription management utilities for PTY service.
  * Provides subscription tracking with synchronous cleanup support.
  *
  * Uses a mutable Map as the source of truth for subscriptions. This enables:
  * - Synchronous cleanup (required for SolidJS onCleanup)
  * - Synchronous notifications (for non-Effect contexts)
+ *
+ * Performance: notify/notifySync use plain try/catch instead of errore.try().
+ * Subscriber callbacks are trusted internal code — they should not throw, and
+ * when they do, a simple console.warn is sufficient. The errore.try() wrapper
+ * created a closure and (on error) a SubscriptionError object per invocation,
+ * adding overhead even in the happy path to the hottest notification paths
+ * (activity, title, lifecycle events fired on every PTY data chunk).
  */
-
-import * as errore from 'errore';
-import { SubscriptionError } from '../../errors';
 
 /** Branded subscription ID for type safety */
 export type SubscriptionId = string & { readonly _tag: 'SubscriptionId' };
@@ -65,17 +69,10 @@ export function createSubscriptionRegistry<T>(): SubscriptionRegistry<T> {
    */
   const notify = (value: T): void => {
     for (const sub of subscriptions.values()) {
-      const result = errore.try({
-        try: () => sub.callback(value),
-        catch: (cause: unknown) =>
-          new SubscriptionError({
-            operation: 'notify-callback',
-            reason: cause instanceof Error ? cause.message : String(cause),
-            cause,
-          }),
-      });
-      if (result instanceof SubscriptionError) {
-        console.warn('Subscription callback error:', result);
+      try {
+        sub.callback(value);
+      } catch (err) {
+        console.warn('Subscription callback error:', err);
       }
     }
   };
@@ -86,17 +83,10 @@ export function createSubscriptionRegistry<T>(): SubscriptionRegistry<T> {
    */
   const notifySync = (value: T): void => {
     for (const sub of subscriptions.values()) {
-      const result = errore.try({
-        try: () => sub.callback(value),
-        catch: (cause: unknown) =>
-          new SubscriptionError({
-            operation: 'notifySync-callback',
-            reason: cause instanceof Error ? cause.message : String(cause),
-            cause,
-          }),
-      });
-      if (result instanceof SubscriptionError) {
-        console.warn('Subscription callback error:', result);
+      try {
+        sub.callback(value);
+      } catch (err) {
+        console.warn('Subscription callback error:', err);
       }
     }
   };

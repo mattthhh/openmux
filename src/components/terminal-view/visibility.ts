@@ -8,6 +8,34 @@ const visiblePtyCounts = new Map<string, number>();
 const activityPtyCounts = new Map<string, number>();
 
 /**
+ * Batched setImmediate for background PTY re-throttling.
+ *
+ * Without batching, each background PTY's 1fps pulse schedules its own
+ * setImmediate for re-throttling — with N background panes, that's N
+ * macrotask callbacks per tick, each ticking the event loop scheduler.
+ * Coalescing into a single setImmediate reduces event-loop pressure.
+ */
+const pendingReThrottles = new Set<string>();
+let reThrottleImmediate: ReturnType<typeof setImmediate> | null = null;
+
+export const scheduleReThrottle = (ptyId: string): void => {
+  pendingReThrottles.add(ptyId);
+  if (reThrottleImmediate) return;
+  reThrottleImmediate = setImmediate(() => {
+    reThrottleImmediate = null;
+    for (const id of pendingReThrottles) {
+      applyPtyReadThrottle(id, 'background-visible');
+    }
+    pendingReThrottles.clear();
+  });
+};
+
+/** Cancel any pending re-throttle for a PTY (e.g. on focus gain, unmount). */
+export const cancelReThrottle = (ptyId: string): void => {
+  pendingReThrottles.delete(ptyId);
+};
+
+/**
  * Enable/disable emulator updates for a PTY and set read throttle.
  * Only the focused PTY gets full updates. Background-visible PTYs have
  * updates disabled — the 1fps render pulse in unified-subscription.ts

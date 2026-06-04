@@ -5,7 +5,6 @@ import {
   getEmulator,
   drainRawToEmulator,
   wakeReadLoopOnce,
-  applyPtyReadThrottle,
   registerScrollAnimRender,
   unregisterScrollAnimRender,
 } from '../../effect/bridge';
@@ -18,6 +17,8 @@ import {
   registerVisiblePty,
   reevaluateUpdateGate,
   unregisterVisiblePty,
+  scheduleReThrottle,
+  cancelReThrottle,
 } from './visibility';
 import type { TerminalViewState } from './view-state';
 
@@ -153,14 +154,11 @@ export function setupUnifiedSubscription(deps: UnifiedSubscriptionDeps): void {
           //    per-chunk overhead events per second that crowd out the
           //    focused pane's drain/render microtasks.
           //
-          // The setImmediate for re-pausing runs after the read loop's
+          // The batched re-throttle runs after the read loop's
           // current drain completes (it's async and yields between batches),
           // so the wake actually happens before we pause again.
           wakeReadLoopOnce(ptyId, 'background-visible');
-          setImmediate(() => {
-            if (!mounted || isFocused()) return;
-            applyPtyReadThrottle(ptyId, 'background-visible');
-          });
+          scheduleReThrottle(ptyId);
 
           // Skip the emulator drain when there's no pending data — no write()
           // has been called since the last pulse, so drainRawToEmulator would
@@ -449,6 +447,9 @@ export function setupUnifiedSubscription(deps: UnifiedSubscriptionDeps): void {
             // This enables/disables incremental emulator updates appropriately.
             reevaluateUpdateGate(ptyId, em);
             if (focused) {
+              // Cancel any pending background re-throttle — focus gain already
+              // applies the correct throttle via reevaluateUpdateGate above.
+              cancelReThrottle(ptyId);
               // Emulator might have pending writes that were deferred while
               // updates were disabled. Force a refresh to catch up.
               em.refresh?.();
@@ -466,6 +467,7 @@ export function setupUnifiedSubscription(deps: UnifiedSubscriptionDeps): void {
 
         onCleanup(() => {
           mounted = false;
+          cancelReThrottle(ptyId);
           if (backgroundPulseTimer) {
             clearInterval(backgroundPulseTimer);
             backgroundPulseTimer = null;
