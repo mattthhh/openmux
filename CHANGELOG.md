@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.156](https://github.com/monotykamary/openmux/compare/v0.3.155...v0.3.156) (2026-06-04)
+
+
+### Refactoring
+
+* remove ScrollbackSkipMap feature ([ffede9d](https://github.com/monotykamary/openmux/commit/ffede9d0799fe179e8746c257bd10af5873b905f))
+
 ### [0.3.155](https://github.com/monotykamary/openmux/compare/v0.3.154...v0.3.155) (2026-06-04)
 
 
