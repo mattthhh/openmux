@@ -433,6 +433,8 @@ export interface AggregateViewContextValue {
   scrollListDown: (pageSize?: number) => void;
   /** Scroll the list to a specific offset */
   setListScrollOffset: (offset: number) => void;
+  /** Clean up the list scroll animator (call on unmount) */
+  cleanupListAnimator: () => void;
   /** Add or update a pending aggregate pane insertion request */
   upsertPendingPaneCreation: (insertion: PendingPaneCreation) => void;
   /** Remove a specific pending aggregate pane insertion request */

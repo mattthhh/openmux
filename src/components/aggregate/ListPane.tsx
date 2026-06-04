@@ -83,10 +83,12 @@ export const ListPane: Component<ListPaneProps> = (props) => {
         e.preventDefault();
         const direction = e.scroll?.direction;
         if (!direction) return;
+        // 1 line per event — the ListScrollAnimator chase-animates
+        // rapid events into smooth scrolling (same pattern as PTY scroll).
         if (direction === 'up') {
-          ctx.scrollHandlers.onScrollUp(3);
+          ctx.scrollHandlers.onScrollUp(1);
         } else if (direction === 'down') {
-          ctx.scrollHandlers.onScrollDown(3);
+          ctx.scrollHandlers.onScrollDown(1);
         }
       }}
     >

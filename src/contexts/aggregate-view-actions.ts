@@ -3,6 +3,7 @@
  */
 
 import { produce, type SetStoreFunction } from 'solid-js/store';
+import { ListScrollAnimator } from '../components/aggregate/list-scroll-animator';
 import type {
   PtyInfo,
   AggregateViewState,
@@ -99,6 +100,9 @@ export function createAggregateViewActions(params: AggregateViewActionsParams) {
   const openAggregateView = () => {
     const focusedPtyId = params.getFocusedPtyId?.() ?? null;
 
+    // Reset the animator to offset 0 before opening
+    listAnimator.initialize(0);
+
     setState(
       produce((s) => {
         s.showAggregateView = true;
@@ -130,6 +134,8 @@ export function createAggregateViewActions(params: AggregateViewActionsParams) {
   };
 
   const closeAggregateView = () => {
+    listAnimator.cleanup();
+
     setState(
       produce((s) => {
         s.showAggregateView = false;
@@ -405,29 +411,38 @@ export function createAggregateViewActions(params: AggregateViewActionsParams) {
     return null;
   };
 
-  // List Scrolling
+  // List Scrolling (smooth chase animation)
 
-  /** Scroll the list up by a specified amount (default: 3 lines) */
-  const scrollListUp = (amount: number = 3) => {
-    setState('listScrollOffset', (current) => Math.max(0, current - amount));
+  const listAnimator = new ListScrollAnimator({
+    speed: 3,
+    easing: 0.5,
+    onAnimate: (offset: number) => {
+      setState('listScrollOffset', offset);
+    },
+  });
+
+  /** Get the max scroll offset for the current tree size */
+  const getListMaxOffset = () => {
+    // Use a generous upper bound; the viewport memo (calculateAggregateListViewport)
+    // clamps to the actual valid range. Avoids storing offsets far beyond
+    // the visual range, which would cause invisible scroll steps on the way
+    // back up.
+    return Math.max(0, state.flattenedTree.length - 1);
   };
 
-  /** Scroll the list down by a specified amount (default: 3 lines) */
-  const scrollListDown = (amount: number = 3) => {
-    setState('listScrollOffset', (current) => {
-      // Use a generous upper bound; the viewport memo (calculateAggregateListViewport)
-      // clamps to the actual valid range. Avoids storing offsets far beyond
-      // the visual range, which would cause invisible scroll steps on the way
-      // back up.
-      const maxOffset = Math.max(0, state.flattenedTree.length - 1);
-      return Math.min(maxOffset, current + amount);
-    });
+  /** Scroll the list up by a specified amount (default: 1 line for smooth animation) */
+  const scrollListUp = (amount: number = 1) => {
+    listAnimator.scrollBy(-amount, getListMaxOffset());
   };
 
-  /** Set the list scroll offset directly */
+  /** Scroll the list down by a specified amount (default: 1 line for smooth animation) */
+  const scrollListDown = (amount: number = 1) => {
+    listAnimator.scrollBy(amount, getListMaxOffset());
+  };
+
+  /** Set the list scroll offset directly (snaps immediately, no animation) */
   const setListScrollOffset = (offset: number) => {
-    const maxOffset = Math.max(0, state.flattenedTree.length - 1);
-    setState('listScrollOffset', Math.max(0, Math.min(maxOffset, offset)));
+    listAnimator.snapTo(offset, getListMaxOffset());
   };
 
   /** Create a new pane in the currently selected session */
@@ -646,6 +661,8 @@ export function createAggregateViewActions(params: AggregateViewActionsParams) {
     scrollListUp,
     scrollListDown,
     setListScrollOffset,
+    // Animator lifecycle
+    cleanupListAnimator: () => listAnimator.cleanup(),
     upsertPendingPaneCreation: upsertAggregatePendingPaneCreation,
     removePendingPaneCreation,
     clearPendingPaneCreations,

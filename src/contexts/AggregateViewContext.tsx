@@ -318,6 +318,7 @@ export function AggregateViewProvider(props: AggregateViewProviderProps) {
 
   onCleanup(() => {
     cleanupSubscriptions(subscriptions, subscriptionsEpoch);
+    actions.cleanupListAnimator();
   });
 
   const value: AggregateViewContextValue = {

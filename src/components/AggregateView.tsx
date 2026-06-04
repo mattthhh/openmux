@@ -6,7 +6,7 @@
  * dedicated hooks and controllers so the aggregate semantics stay consistent.
  */
 
-import { Show, createEffect, createMemo } from 'solid-js';
+import { Show, createEffect, createMemo, untrack } from 'solid-js';
 import type { MouseEvent as OpentuiMouseEvent } from '@opentui/core';
 import { useRenderer } from '@opentui/solid';
 import { useAggregateView } from '../contexts/AggregateViewContext';
@@ -158,12 +158,12 @@ export function AggregateView(props: AggregateViewProps) {
 
     const nextScrollOffset = getAggregateListScrollOffsetForSelection({
       selectedIndex: aggregate.state.selectedIndex,
-      totalItems: aggregate.state.flattenedTree.length,
+      totalItems: untrack(() => aggregate.state.flattenedTree.length),
       maxRows: layoutDims().maxVisibleCards,
-      scrollOffset: aggregate.state.listScrollOffset,
+      scrollOffset: untrack(() => aggregate.state.listScrollOffset),
     });
 
-    if (nextScrollOffset !== aggregate.state.listScrollOffset) {
+    if (nextScrollOffset !== untrack(() => aggregate.state.listScrollOffset)) {
       aggregate.setListScrollOffset(nextScrollOffset);
     }
 
