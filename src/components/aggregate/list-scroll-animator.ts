@@ -6,9 +6,14 @@
  * viewports. Each scroll event sets the target by 1 line; the animation
  * loop chases it at configurable speed/easing.
  *
- * Navigation-driven selection changes and direct offset setters
- * (setListScrollOffset, open/close) snap immediately — only wheel
- * and page-scroll input is animated.
+ * Unlike the PTY path which uses the animator's target as base for
+ * same-direction scroll accumulation, the sidebar always uses the
+ * current display offset. The sidebar's maxOffset (tree length) is
+ * much larger than the viewport's real scroll range, so the target
+ * can overshoot the display. Starting from the target would then
+ * require many reversal events before the target crosses back into
+ * the visible range. Starting from the displayed position avoids this
+ * entirely — direction changes are instant.
  */
 
 import { ScrollAnimator } from '../../terminal/scroll-animation';
@@ -48,19 +53,15 @@ export class ListScrollAnimator {
   /**
    * Scroll the list by a delta (e.g., +1 / -1 for wheel, +5 / -5 for page).
    *
-   * Mirrors the PTY scroll logic: uses the animator's target as base
-   * only when actively chasing, otherwise uses the current display offset.
-   * This ensures reversal is instant — no chasing through stale targets.
+   * Always uses the current display offset as the base, not the target.
+   * The sidebar's maxOffset (tree length) exceeds the viewport's real
+   * scroll range, so the target can overshoot. Starting from the displayed
+   * position ensures direction changes take effect immediately.
    */
   scrollBy(delta: number, maxOffset: number): void {
-    const active = this.animator.isAnimating(LIST_KEY);
-    const animTarget = active ? this.animator.getTargetOffset(LIST_KEY) : undefined;
-    const baseOffset = animTarget ?? this.animator.getCurrentOffset(LIST_KEY) ?? 0;
-    const targetOffset = Math.max(0, Math.min(maxOffset, baseOffset + delta));
-
-    if (animTarget === undefined) {
-      this.animator.initialize(LIST_KEY, baseOffset);
-    }
+    const currentOffset = this.animator.getCurrentOffset(LIST_KEY) ?? 0;
+    const targetOffset = Math.max(0, Math.min(maxOffset, currentOffset + delta));
+    this.animator.initialize(LIST_KEY, currentOffset);
     this.animator.setTarget(LIST_KEY, targetOffset, maxOffset);
   }
 
