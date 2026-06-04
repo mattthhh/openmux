@@ -23,7 +23,6 @@ import { searchTerminal } from './ghostty-vt/terminal-search';
 import { createEmptyRow } from './ghostty-emulator/cell-converter';
 import type { ScrollbackArchive } from './scrollback-archive';
 import type { ArchivePlacement } from './kitty-graphics/archive-placement';
-import type { ScrollbackSkipMap } from './scrollback-skip-map';
 
 /** Cache entry for archived placements */
 interface PlacementCache {
@@ -49,18 +48,11 @@ export class ArchivedTerminalEmulator implements ITerminalEmulator, IKittyGraphi
   private placementCache: PlacementCache | null = null;
   /** Cache for full archived placement scans used by IDs + placements lookups */
   private archiveSnapshotCache: ArchiveSnapshotCache | null = null;
-  /** Skip map for pi full-redraw duplicate scrollback ranges (optional — set after construction) */
-  private _skipMap: ScrollbackSkipMap | null = null;
 
   constructor(
     private base: ITerminalEmulator,
     private archive: ScrollbackArchive
   ) {}
-
-  /** Attach the skip map from the session. Called after session construction. */
-  setSkipMap(skipMap: ScrollbackSkipMap): void {
-    this._skipMap = skipMap;
-  }
 
   /** Flush pending write notification through to the base emulator.
    *
@@ -109,32 +101,22 @@ export class ArchivedTerminalEmulator implements ITerminalEmulator, IKittyGraphi
   }
 
   getScrollbackLength(): number {
-    const rawLength = this.archive.length + this.base.getScrollbackLength();
-    if (this._skipMap && !this._skipMap.isEmpty) {
-      return this._skipMap.effectiveLength(rawLength);
-    }
-    return rawLength;
+    return this.archive.length + this.base.getScrollbackLength();
   }
 
   getScrollbackLine(offset: number): TerminalCell[] | null {
-    const rawOffset =
-      this._skipMap && !this._skipMap.isEmpty ? this._skipMap.effectiveToRaw(offset) : offset;
     const archiveLength = this.archive.length;
-    if (rawOffset < archiveLength) {
-      return this.archive.getLine(rawOffset);
+    if (offset < archiveLength) {
+      return this.archive.getLine(offset);
     }
-    return this.base.getScrollbackLine(rawOffset - archiveLength);
+    return this.base.getScrollbackLine(offset - archiveLength);
   }
 
   prefetchScrollbackLines?(startOffset: number, count: number): Promise<void> {
-    const rawStart =
-      this._skipMap && !this._skipMap.isEmpty
-        ? this._skipMap.effectiveToRaw(startOffset)
-        : startOffset;
     const archiveLength = this.archive.length;
-    if (rawStart < archiveLength) {
-      const archiveCount = Math.min(count, archiveLength - rawStart);
-      this.archive.prefetchLines(rawStart, archiveCount);
+    if (startOffset < archiveLength) {
+      const archiveCount = Math.min(count, archiveLength - startOffset);
+      this.archive.prefetchLines(startOffset, archiveCount);
     }
     return Promise.resolve();
   }
@@ -281,8 +263,6 @@ export class ArchivedTerminalEmulator implements ITerminalEmulator, IKittyGraphi
   getKittyPlacements(): KittyGraphicsPlacement[] {
     const archiveLength = this.archive.length;
     const kittyBase = this.getKittyBase();
-    const skipMap = this._skipMap;
-    const hasSkipMap = skipMap != null && !skipMap.isEmpty;
 
     // Ghostty placement coordinates from the live emulator are relative to the
     // live scrollback buffer (which excludes archived lines after trim).
@@ -300,44 +280,32 @@ export class ArchivedTerminalEmulator implements ITerminalEmulator, IKittyGraphi
     // Get archived placements (already in wrapped absolute space)
     const archivedPlacements = this.getArchivedPlacements(rawBasePlacements.length);
 
-    // Combine all placements before skip-map translation.
-    let allPlacements: KittyGraphicsPlacement[];
+    // Combine placements.
     if (archivedPlacements.length === 0) {
-      allPlacements = basePlacements;
-    } else if (basePlacements.length === 0) {
-      allPlacements = archivedPlacements;
-    } else {
-      // Merge and deduplicate by (imageId, placementId)
-      const seen = new Set<string>();
-      const merged: KittyGraphicsPlacement[] = [];
-      for (const p of archivedPlacements) {
-        const key = `${p.imageId}:${p.placementId}`;
-        if (!seen.has(key)) {
-          seen.add(key);
-          merged.push(p);
-        }
-      }
-      for (const p of basePlacements) {
-        const key = `${p.imageId}:${p.placementId}`;
-        if (!seen.has(key)) {
-          seen.add(key);
-          merged.push(p);
-        }
-      }
-      allPlacements = merged;
+      return basePlacements;
+    }
+    if (basePlacements.length === 0) {
+      return archivedPlacements;
     }
 
-    // Translate screenY from raw space to effective space through the skip map.
-    // Placements inside skip ranges (pi redraw duplicates) are filtered out.
-    if (!hasSkipMap) return allPlacements;
-
-    return allPlacements
-      .map((p) => {
-        const effectiveY = skipMap.rawToEffective(p.screenY);
-        if (effectiveY === null) return null;
-        return { ...p, screenY: effectiveY };
-      })
-      .filter((p): p is KittyGraphicsPlacement => p !== null);
+    // Merge and deduplicate by (imageId, placementId)
+    const seen = new Set<string>();
+    const merged: KittyGraphicsPlacement[] = [];
+    for (const p of archivedPlacements) {
+      const key = `${p.imageId}:${p.placementId}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        merged.push(p);
+      }
+    }
+    for (const p of basePlacements) {
+      const key = `${p.imageId}:${p.placementId}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        merged.push(p);
+      }
+    }
+    return merged;
   }
 
   /**
@@ -409,16 +377,11 @@ export class ArchivedTerminalEmulator implements ITerminalEmulator, IKittyGraphi
   }
 
   async search(query: string, options?: { limit?: number }): Promise<SearchResult> {
-    const skipMap = this._skipMap;
     return searchTerminal(query, options, {
       getScrollbackLength: () => this.getScrollbackLength(),
       getScrollbackLine: (offset) => this.getScrollbackLine(offset),
       getTerminalState: () => this.getTerminalState(),
       createEmptyRow: (cols) => createEmptyRow(cols, this.getColors()),
-      rawToEffective:
-        skipMap && !skipMap.isEmpty
-          ? (rawOffset: number) => skipMap.rawToEffective(rawOffset)
-          : undefined,
     });
   }
 }

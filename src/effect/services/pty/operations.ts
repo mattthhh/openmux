@@ -150,10 +150,6 @@ export function createOperations(deps: OperationsDeps) {
     session.emulator.resize(cols, rows);
     session.emulator.setPixelSize?.(session.pixelWidth, session.pixelHeight);
 
-    // Resize reflows scrollback — all skip ranges are now at wrong offsets.
-    // Clear them; the next pi full redraw will re-record correct ranges.
-    session.scrollbackSkipMap.clear();
-
     // Record resize timestamp for clear-screen suppression
     session.lastResizeTime = Date.now();
 

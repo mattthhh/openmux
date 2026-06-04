@@ -8,7 +8,7 @@ import type { ITerminalEmulator } from '../../../terminal/emulator-interface';
 import type { TerminalQueryPassthrough } from '../../../terminal/terminal-query-passthrough';
 import type { PtyId } from '../../types';
 import type { ScrollbackArchive } from '../../../terminal/scrollback-archive';
-import type { ScrollbackSkipMap } from '../../../terminal/scrollback-skip-map';
+
 /** Minimal contract for scrollback archiving, breaking the circular dep with scrollback-archiver.ts */
 export interface ScrollbackArchiverLike {
   schedule(): void;
@@ -66,11 +66,4 @@ export interface InternalPtySession {
   };
   /** Timestamp of last resize operation (ms since epoch). Used to suppress destructive clear sequences during resize. */
   lastResizeTime: number;
-  /** Skip map for pi full-redraw duplicate scrollback ranges. Effective-length
-   * offsets (what the UI sees) are translated to raw offsets (what the emulator
-   * has) through this map, so duplicate content from pi redraws is invisible. */
-  scrollbackSkipMap: ScrollbackSkipMap;
-  /** Whether the scrollback skip filter is active. When false, skipRange()
-   * calls are skipped and the map stays empty (raw == effective offsets). */
-  skipFilterEnabled: boolean;
 }

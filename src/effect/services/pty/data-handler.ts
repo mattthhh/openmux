@@ -44,8 +44,6 @@ interface DataHandlerState {
   pendingSegments: string[];
   syncTimeout: ReturnType<typeof setTimeout> | null;
   syncLikelyPiFullRedraw: boolean;
-  /** Set when a pi full-redraw segment is queued; cleared after drain processes it. */
-  piFullRedrawPending: boolean;
   pendingResponses: { fence: number; responses: string[] }[];
   segmentCounter: number;
   processedCounter: number;
@@ -345,7 +343,6 @@ export function createDataHandler(options: DataHandlerOptions) {
     pendingSegments: [],
     syncTimeout: null,
     syncLikelyPiFullRedraw: false,
-    piFullRedrawPending: false,
     pendingResponses: [],
     segmentCounter: 0,
     processedCounter: 0,
@@ -432,9 +429,6 @@ export function createDataHandler(options: DataHandlerOptions) {
   const resetScrollbackState = () => {
     session.scrollbackArchive.reset();
     session.scrollbackArchiver?.reset();
-    if (session.skipFilterEnabled) {
-      session.scrollbackSkipMap.clear();
-    }
     session.scrollState.viewportOffset = 0;
     session.scrollState.lastScrollbackLength = 0;
     session.scrollState.lastIsAtBottom = true;
@@ -497,15 +491,6 @@ export function createDataHandler(options: DataHandlerOptions) {
     }
 
     const config = getPriorityConfig(getPriority());
-    const piRedraw = state.piFullRedrawPending;
-    // Capture scrollback length before writing a pi full-redraw segment.
-    // Everything before this offset is stale (previous pi frames at old widths)
-    // and should be hidden — only the new frame's push (after this offset) is kept.
-    let prePiRedrawRawScrollback = 0;
-    if (piRedraw) {
-      prePiRedrawRawScrollback =
-        session.liveEmulator.getScrollbackLength() + session.scrollbackArchive.length;
-    }
     const start = now();
     let batch = '';
     let batchLen = 0;
@@ -597,52 +582,6 @@ export function createDataHandler(options: DataHandlerOptions) {
       }
     }
 
-    // Record the skip range BEFORE flushing the notification so that
-    // getCurrentScrollState() sees the updated skip map. Without this
-    // ordering the subscriber caches a stale (unfiltered) scrollbackLength
-    // computed before the pi-redraw skip range was applied — which causes
-    // the UI to display the full unfiltered scrollback history until the
-    // next setImmediate tick corrects it.
-    if (piRedraw && wrote) {
-      state.piFullRedrawPending = false;
-      // Pi full redraw: ghostty's scrollClear pushes the NEW frame's top rows
-      // into scrollback as \\r\\n advances past the bottom. The pushed rows are
-      // the latest content at the current terminal width. All previous
-      // scrollback (at older widths from prior pi frames) is now stale —
-      // the same conversation text but wrapped differently. Hide the old
-      // and keep the new.
-      const postPiRedrawRawScrollback =
-        session.liveEmulator.getScrollbackLength() + session.scrollbackArchive.length;
-      if (prePiRedrawRawScrollback > 0 && session.skipFilterEnabled) {
-        const preSkipEffective = session.scrollbackSkipMap.effectiveLength(
-          session.liveEmulator.getScrollbackLength() + session.scrollbackArchive.length
-        );
-        session.scrollbackSkipMap.skipRange(0, prePiRedrawRawScrollback);
-        const postSkipEffective = session.scrollbackSkipMap.effectiveLength(
-          session.liveEmulator.getScrollbackLength() + session.scrollbackArchive.length
-        );
-        // Adjust viewportOffset for the effective-length shrinkage caused by
-        // the skip range. Without this, viewportOffset (in effective units)
-        // exceeds the new effective scrollback length, causing a visible
-        // content jump or stale artifacts in the rendered frame.
-        const effectiveDelta = postSkipEffective - preSkipEffective;
-        if (effectiveDelta < 0 && session.scrollState.viewportOffset > 0) {
-          session.scrollState.viewportOffset = Math.max(
-            0,
-            session.scrollState.viewportOffset + effectiveDelta
-          );
-        }
-        tracePtyEvent('pi-redraw-stale-skip', {
-          ptyId: session.id,
-          staleStart: 0,
-          staleEnd: prePiRedrawRawScrollback,
-          staleLines: prePiRedrawRawScrollback,
-          newLines: postPiRedrawRawScrollback - prePiRedrawRawScrollback,
-          viewportAdjustment: effectiveDelta,
-        });
-      }
-    }
-
     if (wrote) {
       // Data was written to the emulator — schedule scroller archiver.
       isFirstDrainInBurst = false;
@@ -654,10 +593,6 @@ export function createDataHandler(options: DataHandlerOptions) {
       // just finished draining ALL pending segments, so there won't be more
       // writes in this tick. Flush now to eliminate a setImmediate cycle
       // (~4-8ms) between drain completion and subscriber notification.
-      //
-      // IMPORTANT: this must run AFTER the skip-range recording above so
-      // that getCurrentScrollState() computes the effective scrollback length
-      // with the skip map already updated.
       session.emulator.flushPendingNotify?.();
     }
 
@@ -932,9 +867,6 @@ export function createDataHandler(options: DataHandlerOptions) {
         });
         if (flushed.length > 0) {
           state.pendingSegments.push(flushed);
-          if (state.syncLikelyPiFullRedraw && session.skipFilterEnabled) {
-            state.piFullRedrawPending = true;
-          }
           scheduleNotify();
         }
         state.syncTimeout = null;
@@ -956,14 +888,6 @@ export function createDataHandler(options: DataHandlerOptions) {
       if (segment.length > 0) {
         state.pendingSegments.push(segment);
         segmentsAdded += 1;
-        // Only set piFullRedrawPending when the original frame included CSI 3J.
-        // Frames with CSI 3J would have cleared scrollback — since we prevented
-        // that via normalization, the skip range must hide stale content instead.
-        // Frames without CSI 3J are just viewport overwrites; existing scrollback
-        // stays valid and doesn't need hiding.
-        if (isPiRedraw && /(?:\x1b\[3J|\x9b3J)/.test(rawSegment) && session.skipFilterEnabled) {
-          state.piFullRedrawPending = true;
-        }
       }
     }
     if (segmentsAdded > 0) {

@@ -11,7 +11,6 @@ import {
   normalizePiFullRedrawSegment,
   suppressClearScreenSequences,
 } from '../data-handler';
-import { ScrollbackSkipMap } from '../../../../terminal/scrollback-skip-map';
 
 function createMockSession() {
   const emulatorWrites: string[] = [];
@@ -136,8 +135,6 @@ function createMockSession() {
       lastIsAtBottom: true,
     },
     lastResizeTime: 0,
-    scrollbackSkipMap: new ScrollbackSkipMap(),
-    skipFilterEnabled: true,
   } as unknown as InternalPtySession;
 
   return {
@@ -332,142 +329,5 @@ describe('createDataHandler pi redraw integration', () => {
     }
 
     expect(emulatorWrites).toEqual(['\x1b[H\x1b[Jhello world']);
-  });
-
-  it('records duplicate scrollback in skip map after pi full redraw', async () => {
-    let mockScrollbackLength = 10;
-    const localEmulatorWrites: string[] = [];
-    const emulator = {
-      cols: 80,
-      rows: 24,
-      isDisposed: false,
-      write(data: string | Uint8Array) {
-        localEmulatorWrites.push(
-          typeof data === 'string' ? data : Buffer.from(data).toString('utf8')
-        );
-        // Simulate ghostty's scrollClear: writing a normalized pi redraw
-        // pushes N lines into scrollback
-        mockScrollbackLength += 24;
-      },
-      resize() {},
-      reset() {},
-      dispose() {},
-      getScrollbackLength() {
-        return mockScrollbackLength;
-      },
-      getScrollbackLine() {
-        return null;
-      },
-      getDirtyUpdate() {
-        return {} as never;
-      },
-      getTerminalState() {
-        return {} as never;
-      },
-      getCursor() {
-        return { x: 0, y: 0, visible: true };
-      },
-      getCursorKeyMode() {
-        return 'normal' as const;
-      },
-      getKittyKeyboardFlags() {
-        return 0;
-      },
-      isMouseTrackingEnabled() {
-        return false;
-      },
-      isAlternateScreen() {
-        return false;
-      },
-      getMode() {
-        return false;
-      },
-      getColors() {
-        return { foreground: 0, background: 0 } as never;
-      },
-      getTitle() {
-        return '';
-      },
-      onTitleChange() {
-        return () => {};
-      },
-      onUpdate() {
-        return () => {};
-      },
-      onModeChange() {
-        return () => {};
-      },
-      drainResponses() {
-        return [];
-      },
-      search() {
-        return Promise.resolve([] as never);
-      },
-      flushPendingNotify() {},
-    } satisfies Partial<ITerminalEmulator> as ITerminalEmulator;
-
-    const skipMap = new ScrollbackSkipMap();
-    const session = {
-      id: 'test-pty',
-      pty: {
-        write(data: string) {
-          ptyWrites.push(data);
-        },
-        getForegroundProcessName() {
-          return null;
-        },
-      },
-      emulator,
-      liveEmulator: emulator,
-      scrollbackArchive: {
-        length: 0,
-        reset() {},
-      },
-      scrollbackArchiver: {
-        reset() {},
-        schedule() {},
-      },
-      queryPassthrough: {
-        process(data: string) {
-          return data;
-        },
-      },
-      cols: 80,
-      rows: 24,
-      closing: false,
-      unifiedSubscribers: new Set(),
-      exitCallbacks: new Set(),
-      titleSubscribers: new Set(),
-      lastCommand: null,
-      focusTrackingEnabled: false,
-      focusState: false,
-      focusTrackingOwnerProcess: null,
-      pendingNotify: false,
-      scrollState: {
-        viewportOffset: 0,
-        lastScrollbackLength: 10,
-        lastIsAtBottom: true,
-      },
-      lastResizeTime: 0,
-      scrollbackSkipMap: skipMap,
-      skipFilterEnabled: true,
-    } as unknown as InternalPtySession;
-
-    const { handleData } = createDataHandler({
-      copyToClipboard: async () => true,
-      session,
-      syncParser: createSyncModeParser(),
-      getPriority: () => 'focused' as const,
-    });
-
-    handleData('\x1b[?2026h\x1b[2J\x1b[H\x1b[3Jhello\x1b[?2026l');
-    await waitForDrain();
-
-    // The pi redraw pushed 24 lines to scrollback (10 → 34).
-    // The skip map should hide the old content [0, 10) and keep the new push.
-    // Effective scrollback = 34 - 10 = 24 (just the latest pi frame rows).
-    expect(skipMap.size).toBe(1);
-    expect(skipMap.getRanges()[0]).toEqual({ start: 0, end: 10 });
-    expect(skipMap.effectiveLength(34)).toBe(24);
   });
 });

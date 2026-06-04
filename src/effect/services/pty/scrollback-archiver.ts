@@ -1,13 +1,6 @@
 /**
  * Scrollback archiver - spills live scrollback into a disk archive.
  */
-import type { ScrollbackSkipMap } from '../../../terminal/scrollback-skip-map';
-/** Minimal session contract for ScrollbackArchiver, avoiding circular dep with types.ts */
-interface ArchiverSession {
-  id: string;
-  scrollbackArchive: ScrollbackArchive;
-  scrollbackSkipMap: ScrollbackSkipMap;
-}
 import {
   isKittyGraphicsEmulator,
   type ITerminalEmulator,
@@ -29,8 +22,6 @@ export interface DrainScrollbackOverflowOptions {
   hotScrollbackLimit?: number;
   archiveBatchLines?: number;
   maxBatches?: number;
-  /** Skip map to adjust when live scrollback is trimmed from the head. */
-  skipMap?: ScrollbackSkipMap;
 }
 
 export interface DrainScrollbackOverflowResult {
@@ -100,12 +91,6 @@ export async function drainScrollbackOverflow(
     };
     trimmer.trimScrollback?.(lines.length);
   }
-
-  // No skip map adjustment needed: when the archiver trims N lines from
-  // the head of the live buffer and appends them to the archive, the total
-  // raw offset space (archive.length + liveLength) stays the same. Skip
-  // ranges reference raw offsets which are stable across this operation.
-  // (archive grows by N, live shrinks by N, total is unchanged.)
 
   return {
     batches: Math.ceil(lines.length / archiveBatchLines),
@@ -180,7 +165,7 @@ export class ScrollbackArchiver {
   private pending = false;
 
   constructor(
-    private session: ArchiverSession,
+    private session: { id: string; scrollbackArchive: ScrollbackArchive },
     private liveEmulator: ITerminalEmulator
   ) {}
 
@@ -214,7 +199,6 @@ export class ScrollbackArchiver {
         drainScrollbackOverflow({
           scrollbackArchive: this.session.scrollbackArchive,
           liveEmulator: this.liveEmulator,
-          skipMap: this.session.scrollbackSkipMap,
         }),
       catch: (cause: unknown) =>
         new ArchiverError({
