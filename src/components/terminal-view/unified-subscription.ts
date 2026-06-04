@@ -306,11 +306,20 @@ export function setupUnifiedSubscription(deps: UnifiedSubscriptionDeps): void {
                   //   3. requestScrollAnimRender callback (animator ticks) → sets absolute
                   if (!animating && !scrollLocked) {
                     if (viewState.lastScrollbackLength !== null) {
-                      // Subsequent updates: adjust by scrollback growth delta only.
+                      // Subsequent updates: adjust viewportOffset by scrollback delta.
+                      // Positive delta (new content): maintain visual position by pushing
+                      // viewportOffset up. Negative delta (skip range expanded, archiver
+                      // trim): pull viewportOffset back to stay within bounds.
                       const scrollbackDelta =
                         update.scrollState.scrollbackLength - viewState.lastScrollbackLength;
-                      if (scrollbackDelta > 0 && existingScroll.viewportOffset > 0) {
-                        existingScroll.viewportOffset += scrollbackDelta;
+                      if (scrollbackDelta !== 0 && existingScroll.viewportOffset > 0) {
+                        existingScroll.viewportOffset = Math.max(
+                          0,
+                          Math.min(
+                            existingScroll.viewportOffset + scrollbackDelta,
+                            update.scrollState.scrollbackLength
+                          )
+                        );
                       }
                     } else {
                       // First subscriber callback — accept the server's viewportOffset.

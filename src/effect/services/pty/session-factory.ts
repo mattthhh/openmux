@@ -117,9 +117,9 @@ export async function createSession(
   // When disabled, the skip map stays empty — no ranges are recorded
   // and all scrollback offsets are identity (raw == effective).
   const skipFilterEnabled =
-    (process.env.OPENMUX_SCROLLBACK_SKIP_FILTER ?? '0').toLowerCase() === '1' ||
-    (process.env.OPENMUX_SCROLLBACK_SKIP_FILTER ?? '0').toLowerCase() === 'true' ||
-    (process.env.OPENMUX_SCROLLBACK_SKIP_FILTER ?? '0').toLowerCase() === 'on';
+    (process.env.OPENMUX_SCROLLBACK_SKIP_FILTER ?? '1').toLowerCase() === '1' ||
+    (process.env.OPENMUX_SCROLLBACK_SKIP_FILTER ?? '1').toLowerCase() === 'true' ||
+    (process.env.OPENMUX_SCROLLBACK_SKIP_FILTER ?? '1').toLowerCase() === 'on';
 
   const scrollbackRoot =
     deps.scrollbackArchiveRoot ??

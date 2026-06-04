@@ -87,6 +87,21 @@ export function createTerminalRenderer(params: {
       em.flushPendingNotify();
     }
 
+    // Diagnostic: log when effective and raw scrollback diverge (skip map active)
+    if (em && 'base' in em) {
+      const effective = em.getScrollbackLength();
+      const rawBase = (
+        em as unknown as { base: { getScrollbackLength: () => number } }
+      ).base.getScrollbackLength();
+      const archiveLen = (em as unknown as { archive: { length: number } }).archive.length;
+      const raw = rawBase + archiveLen;
+      if (effective !== raw && process.env.OPENMUX_SKIP_DIAG) {
+        process.stderr.write(
+          `[skip-diag] pty=${ptyId} effective=${effective} raw=${raw} viewState.sl=${viewState.scrollState.scrollbackLength} viewState.vo=${viewState.scrollState.viewportOffset} lastSl=${viewState.lastStableScrollbackLength} lastVo=${viewState.lastStableViewportOffset}\n`
+        );
+      }
+    }
+
     const state = viewState.terminalState;
     const width = props.width;
     const height = props.height;

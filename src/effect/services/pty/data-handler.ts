@@ -614,13 +614,31 @@ export function createDataHandler(options: DataHandlerOptions) {
       const postPiRedrawRawScrollback =
         session.liveEmulator.getScrollbackLength() + session.scrollbackArchive.length;
       if (prePiRedrawRawScrollback > 0 && session.skipFilterEnabled) {
+        const preSkipEffective = session.scrollbackSkipMap.effectiveLength(
+          session.liveEmulator.getScrollbackLength() + session.scrollbackArchive.length
+        );
         session.scrollbackSkipMap.skipRange(0, prePiRedrawRawScrollback);
+        const postSkipEffective = session.scrollbackSkipMap.effectiveLength(
+          session.liveEmulator.getScrollbackLength() + session.scrollbackArchive.length
+        );
+        // Adjust viewportOffset for the effective-length shrinkage caused by
+        // the skip range. Without this, viewportOffset (in effective units)
+        // exceeds the new effective scrollback length, causing a visible
+        // content jump or stale artifacts in the rendered frame.
+        const effectiveDelta = postSkipEffective - preSkipEffective;
+        if (effectiveDelta < 0 && session.scrollState.viewportOffset > 0) {
+          session.scrollState.viewportOffset = Math.max(
+            0,
+            session.scrollState.viewportOffset + effectiveDelta
+          );
+        }
         tracePtyEvent('pi-redraw-stale-skip', {
           ptyId: session.id,
           staleStart: 0,
           staleEnd: prePiRedrawRawScrollback,
           staleLines: prePiRedrawRawScrollback,
           newLines: postPiRedrawRawScrollback - prePiRedrawRawScrollback,
+          viewportAdjustment: effectiveDelta,
         });
       }
     }
