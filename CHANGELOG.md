@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.157](https://github.com/monotykamary/openmux/compare/v0.3.156...v0.3.157) (2026-06-04)
+
+
+### Bug Fixes
+
+* prevent PTY rows from disappearing in aggregate view ([12fea18](https://github.com/monotykamary/openmux/commit/12fea18d5d7ef599ef33c8d89db71414a541b0a6))
+
 ### [0.3.156](https://github.com/monotykamary/openmux/compare/v0.3.155...v0.3.156) (2026-06-04)
 
 
