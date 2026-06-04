@@ -415,6 +415,10 @@ export function createAggregateViewActions(params: AggregateViewActionsParams) {
   /** Scroll the list down by a specified amount (default: 3 lines) */
   const scrollListDown = (amount: number = 3) => {
     setState('listScrollOffset', (current) => {
+      // Use a generous upper bound; the viewport memo (calculateAggregateListViewport)
+      // clamps to the actual valid range. Avoids storing offsets far beyond
+      // the visual range, which would cause invisible scroll steps on the way
+      // back up.
       const maxOffset = Math.max(0, state.flattenedTree.length - 1);
       return Math.min(maxOffset, current + amount);
     });

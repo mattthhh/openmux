@@ -101,6 +101,23 @@ export function getAggregateListScrollOffsetForSelection(
   const currentViewport = calculateAggregateListViewport(params);
 
   if (clampedSelectedIndex < currentViewport.start) {
+    // Prefer offset 0 when the selected item is visible there — avoids an
+    // unnecessary top indicator ("▲ 1 more"). Without this, navigating UP to
+    // the first PTY in preview mode (navigateToPrevPty skips session headers)
+    // would set scrollOffset = 1, which creates a self-fulfilling prophecy:
+    // offset > 0 → top indicator takes a row → fewer items fit → offset is
+    // valid. But at offset 0 the item would still be visible with more items
+    // shown and no top indicator.
+    const topViewport = calculateAggregateListViewport({
+      totalItems,
+      maxRows,
+      scrollOffset: 0,
+    });
+    if (clampedSelectedIndex < topViewport.end) {
+      return 0;
+    }
+
+    // Item is past the first page; scroll down to reveal it.
     return clampAggregateListScrollOffset({
       totalItems,
       maxRows,
@@ -109,6 +126,21 @@ export function getAggregateListScrollOffsetForSelection(
   }
 
   if (clampedSelectedIndex < currentViewport.end) {
+    // When the selected item sits exactly at the viewport start and offset 0
+    // would also show it, prefer 0. This avoids a stuck top indicator
+    // (e.g. "\u25b2 1 more") when navigating UP to the first PTY in preview
+    // mode — navigateToPrevPty skips session headers so the user can never
+    // reach index 0 to trigger the offset-0 path through the branch above.
+    if (currentViewport.start > 0 && clampedSelectedIndex === currentViewport.start) {
+      const topViewport = calculateAggregateListViewport({
+        totalItems,
+        maxRows,
+        scrollOffset: 0,
+      });
+      if (clampedSelectedIndex < topViewport.end) {
+        return 0;
+      }
+    }
     return currentViewport.start;
   }
 

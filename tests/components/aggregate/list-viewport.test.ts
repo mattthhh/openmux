@@ -71,7 +71,8 @@ describe('aggregate list viewport', () => {
     expect(viewport.showBottomIndicator).toBe(false);
   });
 
-  it('moves back toward the top without introducing extra upward jumps', () => {
+  it('prefers offset 0 when the selected item is visible at the top, avoiding an unnecessary top indicator', () => {
+    // Selected item at index 1 is visible at offset 0 (no top indicator needed)
     const nextOffsetNearTop = getAggregateListScrollOffsetForSelection({
       selectedIndex: 1,
       totalItems: 20,
@@ -79,7 +80,12 @@ describe('aggregate list viewport', () => {
       scrollOffset: 2,
     });
 
-    expect(nextOffsetNearTop).toBe(1);
+    // Should return 0, not 1 — at offset 0, item 1 is visible and no top
+    // indicator is needed. The old behavior returned 1, which caused a
+    // self-fulfilling prophecy: offset > 0 → top indicator takes a row →
+    // fewer items fit → offset stays non-zero. This made "▲ 1 more" appear
+    // even when the user was effectively at the top.
+    expect(nextOffsetNearTop).toBe(0);
 
     const nextOffsetAtTop = getAggregateListScrollOffsetForSelection({
       selectedIndex: 0,
@@ -104,5 +110,55 @@ describe('aggregate list viewport', () => {
     expect(viewport.showBottomIndicator).toBe(false);
     expect(viewport.hiddenAboveCount).toBe(0);
     expect(viewport.hiddenBelowCount).toBe(0);
+  });
+
+  it('avoids stuck top indicator when navigating up to first PTY (preview mode scenario)', () => {
+    // Simulates: user scrolled down to a lower PTY, then navigates UP
+    // to the first PTY (index 1) in preview mode. navigateToPrevPty skips
+    // the session header at index 0, so the user is stuck at index 1.
+    // The scroll should prefer offset 0 so no top indicator appears.
+    const offsetFromMiddle = getAggregateListScrollOffsetForSelection({
+      selectedIndex: 1,
+      totalItems: 12,
+      maxRows: 5,
+      scrollOffset: 3,
+    });
+
+    // Item 1 IS visible at offset 0 (first page shows items 0-3 plus indicator)
+    // so the function should return 0, not 1.
+    expect(offsetFromMiddle).toBe(0);
+
+    // Even with scrollOffset already at 1, navigating to index 1 should
+    // scroll back to 0 since the item is visible there.
+    const offsetFromOne = getAggregateListScrollOffsetForSelection({
+      selectedIndex: 1,
+      totalItems: 12,
+      maxRows: 5,
+      scrollOffset: 1,
+    });
+
+    expect(offsetFromOne).toBe(0);
+  });
+
+  it('scrolls down when the selected item is not on the first page', () => {
+    // Item 5 is NOT visible at offset 0 (first page shows items 0-3)
+    // so the function must scroll down, producing a top indicator.
+    const offset = getAggregateListScrollOffsetForSelection({
+      selectedIndex: 5,
+      totalItems: 12,
+      maxRows: 5,
+      scrollOffset: 0,
+    });
+
+    expect(offset).toBeGreaterThan(0);
+
+    const viewport = calculateAggregateListViewport({
+      totalItems: 12,
+      maxRows: 5,
+      scrollOffset: offset,
+    });
+
+    expect(viewport.start).toBeLessThanOrEqual(5);
+    expect(viewport.end).toBeGreaterThan(5);
   });
 });
