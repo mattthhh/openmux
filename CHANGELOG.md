@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.160](https://github.com/monotykamary/openmux/compare/v0.3.159...v0.3.160) (2026-06-05)
+
+
+### Bug Fixes
+
+* **terminal:** include CSI 3J in normalizePiFullRedrawSegment to prevent scrollback accumulation ([ce339e1](https://github.com/monotykamary/openmux/commit/ce339e1a2f66ce7ca8844f49cd00561bc3c9224c))
+* **terminal:** replace native isRowDirty with viewport comparison in buildDirtyState ([5dc1286](https://github.com/monotykamary/openmux/commit/5dc1286630340c1db4abbdda659d9d2934fb840a))
+
+
+### Tests
+
+* **terminal:** add direct-FFI dirty-state harness for isRowDirty validation ([29b7cdd](https://github.com/monotykamary/openmux/commit/29b7cdd8d67fdd9f7b84d9abdcdd201c518cd7b0))
+* **terminal:** add full-pipeline and deferred-notify integration harnesses ([5f7d729](https://github.com/monotykamary/openmux/commit/5f7d7290cc81748de9475cf1cba4e100b114b11b))
+
 ### [0.3.159](https://github.com/monotykamary/openmux/compare/v0.3.158...v0.3.159) (2026-06-05)
 
 
