@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.162](https://github.com/monotykamary/openmux/compare/v0.3.161...v0.3.162) (2026-06-05)
+
+
+### Bug Fixes
+
+* **terminal:** enforce native scrollback hard cap to prevent OOM ([954cf83](https://github.com/monotykamary/openmux/commit/954cf8387e78cd610f531fb38cdffced78d3f053))
+
 ### [0.3.161](https://github.com/monotykamary/openmux/compare/v0.3.160...v0.3.161) (2026-06-05)
 
 
