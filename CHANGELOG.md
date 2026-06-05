@@ -2,6 +2,38 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.158](https://github.com/monotykamary/openmux/compare/v0.3.157...v0.3.158) (2026-06-05)
+
+
+### Features
+
+* add autoExit setting to file and diff opener commands ([a6d9f40](https://github.com/monotykamary/openmux/commit/a6d9f40d1a62ef901d9d06fdc3335cd3646f984a))
+
+
+### Bug Fixes
+
+* debounce tree-restructuring actions to prevent click-through ([099d7a4](https://github.com/monotykamary/openmux/commit/099d7a47e596f7299ef0a9438362584dbc48be90))
+* defer tree-restructuring actions to mouseUp ([94a6af9](https://github.com/monotykamary/openmux/commit/94a6af9f78a4f38d942b78d70bbf3d8ad0b1bb6e))
+* don't select HiddenGroupsRow on mouseDown ([260000d](https://github.com/monotykamary/openmux/commit/260000d531ae83f27b8325b6957dc2aca9fb0c10))
+* filter right-click mouseUp in SessionTreeNode ([2e843cc](https://github.com/monotykamary/openmux/commit/2e843cc57f3744ea36410f8f89ce291977e5b3d1))
+* guard autoswitch behind previewMode, remove wasStructuralItem ([ce40f04](https://github.com/monotykamary/openmux/commit/ce40f0437bb928672fc41cabd4c1969fb426abc2))
+* guard HiddenGroupsRow click-through and outer box mouseUp ([c2ae4a8](https://github.com/monotykamary/openmux/commit/c2ae4a83cc2d8d2a7b2965a9f8c976f470038ba0))
+* keep selection near previous position after structural item disappears ([8fcc14b](https://github.com/monotykamary/openmux/commit/8fcc14b4bc58619ca06c8cc429edb8996a529fe9))
+* prevent aggregate view click-through by decoupling preview mode from selection ([24aef4f](https://github.com/monotykamary/openmux/commit/24aef4f5442b662e35b0e444d8ebc2bbe9624b26))
+* prevent aggregate view click-through with stopPropagation and mouseUp deferral ([42303e7](https://github.com/monotykamary/openmux/commit/42303e781d701893b37a28f0c868aea4289a98d9))
+* prevent recomputeTree from selecting PTY after structural item disappears ([386e206](https://github.com/monotykamary/openmux/commit/386e206df83db911b31f1218ec6e2dec90f24b3a))
+* prevent recomputeTree from selecting PTY after structural item disappears ([24f21a3](https://github.com/monotykamary/openmux/commit/24f21a3db9dd29d19f0c387d02af07a79a28d4d2))
+* **pty:** route drainRawToEmulator through processChunk for CSI 2J normalization ([910a974](https://github.com/monotykamary/openmux/commit/910a974f85f42457ac9348c1c9db21967888ce55))
+* replace broken epoch guard with suppressNextMouseUp flag ([5d305d4](https://github.com/monotykamary/openmux/commit/5d305d47afd3aa7fc37f917de04eb627b1255f80))
+* suppress mouseUp actions after mid-click tree restructure ([b6a4047](https://github.com/monotykamary/openmux/commit/b6a40474b06d9c36c9946d7c8201eb4492914106))
+* **terminal:** clamp viewportOffset against real-time scrollback length at render time ([95ba077](https://github.com/monotykamary/openmux/commit/95ba077d07ddb3d6e4d0c01097743850410f1b33))
+
+
+### Tests
+
+* **terminal:** add e2e test proving useThread=true does not produce torn reads ([00a6a35](https://github.com/monotykamary/openmux/commit/00a6a353bbb4f8d5cc19c5ba809b48d78d56a6f2))
+* **terminal:** add scrollback contamination tests for CSI 2J normalization ([b1f4d4b](https://github.com/monotykamary/openmux/commit/b1f4d4b8b6e26d04ac8d5d0829d02152537006fc))
+
 ### [0.3.157](https://github.com/monotykamary/openmux/compare/v0.3.156...v0.3.157) (2026-06-04)
 
 
