@@ -164,7 +164,11 @@ export const ListPane: Component<ListPaneProps> = (props) => {
                             aggregateTheme={colors.theme.ui.aggregate}
                             textColors={textColors}
                             onSelect={() => {
-                              ctx.selectionHandlers.onSelectItem(item.index);
+                              // Intentionally NOT selecting the hidden-groups row.
+                              // It disappears on mouseUp when onAction fires,
+                              // which would force recomputeTree to pick a
+                              // new selection. Keeping the previous selection
+                              // avoids that jump.
                             }}
                             onAction={() => {
                               ctx.selectionHandlers.onShowHiddenSessionGroups();
