@@ -292,9 +292,13 @@ export function AggregateStateManager() {
     }
   });
 
-  // AUTOSWITCH: Automatically switch sessions when navigating to a pane from a different session
+  // AUTOSWITCH: Automatically switch sessions when navigating to a pane from a different session.
+  // Only fires when previewMode is true — this distinguishes intentional PTY selection
+  // (user clicked or navigated to a PTY) from incidental index shifts caused by
+  // recomputeTree (e.g. after showing/hiding session groups).
   createEffect(() => {
     if (!isActive()) return;
+    if (!previewMode()) return;
     if (sessionState.switching) return;
     if (pendingPaneCreations().length > 0) return;
     if (pendingPaneFocus()) return;

@@ -206,55 +206,6 @@ export function recomputeTree(state: AggregateViewState): void {
     }
   }
 
-  // When the previously selected item was not a session or PTY (e.g.
-  // hidden-groups, placeholder), it disappeared from the tree.
-  // Select the nearest session header as a cursor anchor rather than
-  // a PTY — the user's intent was to reveal hidden groups, not to
-  // select a specific PTY. Setting selectedPtyId would trigger the
-  // autoswitch effect, which is the wrong action.
-  const wasStructuralItem =
-    previousSelectedType !== 'session' &&
-    previousSelectedType !== 'pty' &&
-    previousSelectedType !== 'placeholder';
-
-  if (wasStructuralItem) {
-    // The structural item disappeared. Stay near the same position
-    // but prefer session/placeholder over PTY to avoid triggering
-    // autoswitch. Search outward from previousSelectedIndex.
-    const clamped = Math.min(previousSelectedIndex, state.flattenedTree.length - 1);
-    const start = Math.max(0, clamped);
-    for (let distance = 0; distance < state.flattenedTree.length; distance++) {
-      const lower = start - distance;
-      if (lower >= 0) {
-        const item = state.flattenedTree[lower];
-        if (item && item.node.type !== 'spacer' && item.node.type !== 'pty') {
-          state.selectedIndex = lower;
-          state.selectedSessionId = getSessionIdForItem(item);
-          state.selectedPtyId = null;
-          clearPreviewState(state);
-          return;
-        }
-      }
-      const upper = start + distance;
-      if (upper < state.flattenedTree.length && upper !== lower) {
-        const item = state.flattenedTree[upper];
-        if (item && item.node.type !== 'spacer' && item.node.type !== 'pty') {
-          state.selectedIndex = upper;
-          state.selectedSessionId = getSessionIdForItem(item);
-          state.selectedPtyId = null;
-          clearPreviewState(state);
-          return;
-        }
-      }
-    }
-    // No non-PTY items — clear selection
-    state.selectedIndex = 0;
-    state.selectedPtyId = null;
-    state.selectedSessionId = null;
-    clearPreviewState(state);
-    return;
-  }
-
   const clampedIndex = Math.min(state.selectedIndex, state.flattenedTree.length - 1);
   const fallbackIndex = Math.max(0, clampedIndex);
   const fallbackItem = state.flattenedTree[fallbackIndex];
