@@ -21,10 +21,8 @@ export interface PlaceholderRowProps {
   };
   /** Whether this row is selected */
   isSelected?: boolean;
-  /** Selection handler (fires on mouseDown for immediate visual feedback) */
-  onSelect?: () => void;
-  /** Action handler to load the session (fires on mouseUp to avoid click-through) */
-  onAction?: () => void;
+  /** Click handler to load the session */
+  onClick?: () => void;
   /** Optional label (defaults to "...") */
   label?: string;
 }
@@ -41,24 +39,17 @@ export function PlaceholderRow(props: PlaceholderRowProps) {
 
   const label = () => props.label ?? '...';
 
-  const handleMouseDown = (event: OpenTUIMouseEvent) => {
+  const handleClick = (event: OpenTUIMouseEvent) => {
     event.preventDefault();
     event.stopPropagation();
-    props.onSelect?.();
-  };
-
-  const handleMouseUp = (event: OpenTUIMouseEvent) => {
-    event.preventDefault();
-    event.stopPropagation();
-    props.onAction?.();
+    props.onClick?.();
   };
 
   return (
     <box
       style={{ height: 1, width: props.maxWidth, flexDirection: 'row' }}
       backgroundColor={bgColor()}
-      onMouseDown={handleMouseDown}
-      onMouseUp={handleMouseUp}
+      onMouseDown={handleClick}
     >
       {/* Indentation */}
       <text fg={subtleColor()} selectable={false}>

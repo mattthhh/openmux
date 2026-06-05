@@ -23,10 +23,8 @@ export interface HiddenGroupsRowProps {
     muted: string;
     subtle: string;
   };
-  /** Selection handler (fires on mouseDown for immediate visual feedback) */
-  onSelect?: () => void;
-  /** Action handler to reveal hidden groups (fires on mouseUp to avoid click-through) */
-  onAction?: () => void;
+  /** Click handler to reveal hidden groups */
+  onClick?: () => void;
 }
 
 /**
@@ -51,24 +49,17 @@ export function HiddenGroupsRow(props: HiddenGroupsRowProps) {
     return `▸ Show ${props.count} hidden ${groupWord}`;
   };
 
-  const handleMouseDown = (event: OpenTUIMouseEvent) => {
+  const handleClick = (event: OpenTUIMouseEvent) => {
     event.preventDefault();
     event.stopPropagation();
-    props.onSelect?.();
-  };
-
-  const handleMouseUp = (event: OpenTUIMouseEvent) => {
-    event.preventDefault();
-    event.stopPropagation();
-    props.onAction?.();
+    props.onClick?.();
   };
 
   return (
     <box
       style={{ height: 1, width: props.maxWidth, flexDirection: 'row' }}
       backgroundColor={bgColor()}
-      onMouseDown={handleMouseDown}
-      onMouseUp={handleMouseUp}
+      onMouseDown={handleClick}
     >
       <text fg={fgColor()} selectable={false}>
         {label()}

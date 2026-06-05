@@ -30,24 +30,23 @@ export interface ListPaneProps {
   };
 }
 
-// Click-through guard: when a tree-restructuring action fires from a
-// mouseDown handler (e.g. right-click → hideSessionGroup), the tree
-// recomputes synchronously and elements shift. The subsequent mouseUp
-// then hits whatever element now occupies those screen coordinates —
-// which can accidentally toggle or select the wrong row.
-//
-// The flag is set just before any mouseDown-side tree restructure and
-// consumed (checked + cleared) by the next session mouseUp. A safety
-// timeout clears it in case the mouseUp event is lost.
-let suppressSessionMouseUp = false;
-
-const markTreeRestructuredDuringMouseDown = () => {
-  suppressSessionMouseUp = true;
-  // Safety: clear after a short delay in case mouseUp is lost
-  setTimeout(() => {
-    suppressSessionMouseUp = false;
-  }, 100);
-};
+/**
+ * Defer a tree-restructuring action by one tick.
+ *
+ * Root cause of click-through: actions like showHiddenSessionGroups or
+ * hideSessionGroup call setState → produce → recomputeTree synchronously
+ * during mouse event processing. The SolidJS reconciler immediately
+ * creates/destroys renderables, but OpenTUI's hit grid is only updated
+ * on the next render frame. Between the state change and the frame, the
+ * hit grid is stale: mouseUp or drag events hit the wrong element at
+ * the same screen coordinates.
+ *
+ * Deferring the entire state change to the next tick guarantees the
+ * current click cycle (down + drag + up) completes against a stable
+ * hit grid. The tree restructures only after all pending mouse events
+ * have been dispatched.
+ */
+const nextTick = (fn: () => void) => setTimeout(fn, 0);
 
 /**
  * ListPane component - Displays the session/PTY tree list.
@@ -70,14 +69,6 @@ export const ListPane: Component<ListPaneProps> = (props) => {
 
   // Handle mouse up on session (toggle or end drag)
   const handleSessionMouseUp = (sessionId: string, loadState: { status: string }) => {
-    // Suppress the action if the tree restructured between mouseDown and
-    // mouseUp (e.g. due to a right-click context menu hiding a session
-    // group). The mouseUp hit-test found a different element at the same
-    // screen coordinates — it is not the element the user intended to act on.
-    if (suppressSessionMouseUp) {
-      suppressSessionMouseUp = false;
-      return;
-    }
     if (loadState.status === 'loaded') {
       ctx.selectionHandlers.onToggleSession(sessionId);
     }
@@ -104,12 +95,6 @@ export const ListPane: Component<ListPaneProps> = (props) => {
       }}
       onMouseUp={(e: OpenTUIMouseEvent) => {
         e.preventDefault();
-        // Consume any stale click-through from a tree restructure
-        // (e.g. after showHiddenSessionGroups/hideSessionGroup).
-        if (suppressSessionMouseUp) {
-          suppressSessionMouseUp = false;
-          return;
-        }
         ctx.dragHandlers.onCommitDrag();
       }}
       onMouseScroll={(e: OpenTUIMouseEvent) => {
@@ -181,10 +166,7 @@ export const ListPane: Component<ListPaneProps> = (props) => {
                               textColors={textColors}
                               isSelected={isSelected()}
                               label={(node() as Extract<TreeNode, { type: 'placeholder' }>).message}
-                              onSelect={() => {
-                                ctx.selectionHandlers.onSelectItem(item.index);
-                              }}
-                              onAction={() => {
+                              onClick={() => {
                                 ctx.selectionHandlers.onSelectItem(item.index);
                               }}
                             />
@@ -196,14 +178,11 @@ export const ListPane: Component<ListPaneProps> = (props) => {
                             maxWidth={ctx.layout.innerWidth}
                             aggregateTheme={colors.theme.ui.aggregate}
                             textColors={textColors}
-                            onSelect={() => {
+                            onClick={() => {
                               ctx.selectionHandlers.onSelectItem(item.index);
-                            }}
-                            onAction={() => {
-                              // Mark before the action: showing hidden groups
-                              // restructures the tree synchronously.
-                              markTreeRestructuredDuringMouseDown();
-                              ctx.selectionHandlers.onShowHiddenSessionGroups();
+                              // Debounce: restructure on next tick so the
+                              // click cycle completes against a stable hit grid.
+                              nextTick(() => ctx.selectionHandlers.onShowHiddenSessionGroups());
                             }}
                           />
                         </Show>
@@ -259,11 +238,11 @@ export const ListPane: Component<ListPaneProps> = (props) => {
                     }}
                     onContextMenu={() => {
                       const sessionNode = node() as Extract<TreeNode, { type: 'session' }>;
-                      // Mark before the action: hideSessionGroup restructures
-                      // the tree synchronously, so the subsequent mouseUp
-                      // will hit whatever element slid into the old position.
-                      markTreeRestructuredDuringMouseDown();
-                      ctx.selectionHandlers.onHideSessionGroup(sessionNode.session.id);
+                      // Debounce: restructure on next tick so the click
+                      // cycle completes against a stable hit grid.
+                      nextTick(() =>
+                        ctx.selectionHandlers.onHideSessionGroup(sessionNode.session.id)
+                      );
                     }}
                   />
                 </Show>
