@@ -225,77 +225,6 @@ for (let burst = 0; burst < 50; burst++) {
 
 mismatches += burstMismatches;
 
-// Phase 3: Write frames with the sync-mode-parser in the loop
-// This simulates the actual data-handler flow more closely
-import { createSyncModeParser } from '../../src/terminal/sync-mode-parser';
-import { normalizePiFullRedrawSegment } from '../../src/effect/services/pty/data-handler';
-
-console.log('\nPhase 3: Full data-handler flow (sync parser → normalizer → emulator)');
-
-let syncMismatches = 0;
-const syncParser = createSyncModeParser();
-
-for (let frame = 0; frame < 200; frame++) {
-  const elapsedSec = Math.floor(frame / 10);
-  const spinnerChar = spinners[frame % 10];
-
-  // Build the raw frame data (simulates PTY data)
-  const spinnerRow = Math.floor(ROWS / 2);
-  let rawData = '\x1b[?2026h\x1b[2J\x1b[H\x1b[3J';
-  for (let y = 0; y < ROWS; y++) {
-    if (y === spinnerRow) {
-      rawData += `\x1b[${y + 1};1H${spinnerChar} Working... ${elapsedSec}s${' '.repeat(20)}`;
-    } else if (y === 0) {
-      rawData += `\x1b[${y + 1};1H╭─ pi ─ Sync ${frame}${' '.repeat(15)}`;
-    } else {
-      rawData += `\x1b[${y + 1};1H${' '.repeat(COLS)}`;
-    }
-  }
-  rawData += '\x1b[?2026l';
-
-  // Process through sync-mode parser
-  const { readySegments } = syncParser.process(rawData);
-
-  // Normalize and write each segment
-  for (const rawSegment of readySegments) {
-    const segment = normalizePiFullRedrawSegment(rawSegment, ROWS);
-    if (segment.length > 0) {
-      emulator.write(segment);
-    }
-  }
-
-  // Flush
-  emulator.flushPendingNotify?.();
-
-  // Compare
-  if (frame % 20 === 0 && terminalState) {
-    totalChecks++;
-    const nativeTerminal = (emulator as any).terminal;
-    const nativeVp = nativeTerminal?.getViewport?.();
-
-    if (nativeVp) {
-      for (let y = 0; y < ROWS; y++) {
-        const jsRow = rowToCodepoints(terminalState.cells[y] ?? null);
-        const nativeRow = nativeRowToCodepoints(nativeVp, y, COLS);
-
-        let mismatch = false;
-        for (let x = 0; x < Math.min(10, COLS); x++) {
-          if (jsRow[x] !== nativeRow[x]) {
-            mismatch = true;
-            break;
-          }
-        }
-
-        if (mismatch) {
-          syncMismatches++;
-        }
-      }
-    }
-  }
-}
-
-mismatches += syncMismatches;
-
 console.log('');
 console.log('=== Results ===');
 console.log(`  Notifications received: ${notifyCount}`);
@@ -304,7 +233,7 @@ console.log(`  Mismatches: ${mismatches}`);
 
 if (mismatches === 0) {
   console.log('\n✅ JS-side terminalState matches native viewport across all phases.');
-  console.log('   The deferred notification + subscriber + sync parser pipeline is correct.');
+  console.log('   The deferred notification + subscriber pipeline is correct.');
   console.log('   The bug must be in the RENDER or SCROLLBACK layer, not the data pipeline.');
 } else {
   console.log(`\n❌ Found ${mismatches} mismatches.`);

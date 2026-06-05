@@ -159,10 +159,6 @@ export const ghostty = dlopen(libPath, {
     args: [FFIType.pointer, FFIType.i32],
     returns: FFIType.void,
   },
-  ghostty_terminal_erase_scrollback_tail: {
-    args: [FFIType.pointer, FFIType.i32],
-    returns: FFIType.void,
-  },
   ghostty_terminal_is_row_wrapped: {
     args: [FFIType.pointer, FFIType.i32],
     returns: FFIType.bool,
