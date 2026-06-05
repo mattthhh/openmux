@@ -568,8 +568,8 @@ export function AggregateStateManager() {
   // Send the editor command to a newly created PTY
   const writeToEditor = (ptyId: string, filePath: string) => {
     const settings = config.config().fileOpener;
-    const commandParts = buildEditorCommand(settings, filePath);
-    const fullCommand = `${settings.editor} ${commandParts.join(' ')}`;
+    const { args: commandParts, autoExit } = buildEditorCommand(settings, filePath);
+    const fullCommand = `${settings.editor} ${commandParts.join(' ')}${autoExit ? '; exit' : ''}`;
     writeToPTY(ptyId, `${fullCommand}\n`);
   };
 

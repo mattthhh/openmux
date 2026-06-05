@@ -132,6 +132,14 @@ export async function discoverDiffTargets(rootDir: string): Promise<DiffTarget[]
 }
 
 /** Build the diff command string from the configured template and target */
-export function buildDiffCommand(commandTemplate: string, target: DiffTarget): string {
-  return commandTemplate.replace(/\$DIFF_ARGS/g, target.diffArgs);
+export function buildDiffCommand(
+  commandTemplate: string,
+  target: DiffTarget,
+  options?: { autoExit?: boolean }
+): string {
+  let command = commandTemplate.replace(/\$DIFF_ARGS/g, target.diffArgs);
+  if (options?.autoExit) {
+    command += '; exit';
+  }
+  return command;
 }

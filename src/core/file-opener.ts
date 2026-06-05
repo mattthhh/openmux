@@ -152,6 +152,11 @@ export async function openInFileManager(dirPath: string): Promise<void> {
 }
 
 /** Build the editor command arguments to open a specific file */
-export function buildEditorCommand(settings: FileOpenerSettings, filePath: string): string[] {
-  return [...settings.editorArgs, filePath];
+export function buildEditorCommand(
+  settings: FileOpenerSettings,
+  filePath: string,
+  options?: { autoExit?: boolean }
+): { args: string[]; autoExit: boolean } {
+  const args = [...settings.editorArgs, filePath];
+  return { args, autoExit: options?.autoExit ?? settings.autoExit };
 }

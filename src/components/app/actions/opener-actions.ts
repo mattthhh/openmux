@@ -77,8 +77,11 @@ export function createOpenerActions(deps: OpenerActionsDeps): OpenerActions {
 
     // Workspace mode: create pane directly in the active workspace
     const fileOpenerSettings = config.config().fileOpener;
-    const commandParts = buildEditorCommand(fileOpenerSettings, entry.absolutePath);
-    const fullCommand = `${fileOpenerSettings.editor} ${commandParts.join(' ')}`;
+    const { args: commandParts, autoExit } = buildEditorCommand(
+      fileOpenerSettings,
+      entry.absolutePath
+    );
+    const fullCommand = `${fileOpenerSettings.editor} ${commandParts.join(' ')}${autoExit ? '; exit' : ''}`;
     // Use the rootDir (where the file opener was invoked) as CWD,
     // not the directory containing the file
     const cwd = overlays.fileOpenerState.rootDir || process.cwd();
@@ -135,7 +138,7 @@ export function createOpenerActions(deps: OpenerActionsDeps): OpenerActions {
     }
 
     const commandTemplate = useFzf ? settings.fzfCommand : settings.command;
-    const fullCommand = buildDiffCommand(commandTemplate, target);
+    const fullCommand = buildDiffCommand(commandTemplate, target, { autoExit: settings.autoExit });
 
     // In aggregate view, delegate to the state manager which handles
     // pending insertions, autoswitch, and diff command injection

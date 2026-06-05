@@ -48,12 +48,15 @@ export interface FileOpenerSettings {
   editorArgs: string[];
   /** Maximum number of files to discover */
   maxFiles: number;
+  /** When true, appends "; exit" to the editor command so the pane closes after the editor exits */
+  autoExit: boolean;
 }
 
 export const DEFAULT_FILE_OPENER_SETTINGS: FileOpenerSettings = {
   editor: 'nvim',
   editorArgs: [],
   maxFiles: 5000,
+  autoExit: true,
 };
 
 export interface DiffOpenerSettings {
@@ -63,6 +66,8 @@ export interface DiffOpenerSettings {
   fzfCommand: string;
   /** Whether to prefer fzf when available (default: true) */
   preferFzf: boolean;
+  /** When true, appends "; exit" to the diff command so the pane closes after the diff viewer exits */
+  autoExit: boolean;
 }
 
 export const DEFAULT_DIFF_OPENER_SETTINGS: DiffOpenerSettings = {
@@ -70,6 +75,7 @@ export const DEFAULT_DIFF_OPENER_SETTINGS: DiffOpenerSettings = {
   fzfCommand:
     'git diff $DIFF_ARGS --name-only | fzf -m --ansi --layout=reverse --color=preview-fg:#707880 --preview-window=right,75% --preview \'git diff $DIFF_ARGS --color=always -- {-1} | nl -ba -w4 -s" │ "\'',
   preferFzf: true,
+  autoExit: true,
 };
 
 export interface UserConfig {
@@ -297,11 +303,13 @@ function mergeUserConfig(base: UserConfig, overrides?: Partial<UserConfig>): Use
       editor: overrides.fileOpener?.editor ?? base.fileOpener.editor,
       editorArgs: overrides.fileOpener?.editorArgs ?? base.fileOpener.editorArgs,
       maxFiles: overrides.fileOpener?.maxFiles ?? base.fileOpener.maxFiles,
+      autoExit: overrides.fileOpener?.autoExit ?? base.fileOpener.autoExit,
     },
     diffOpener: {
       command: overrides.diffOpener?.command ?? base.diffOpener.command,
       fzfCommand: overrides.diffOpener?.fzfCommand ?? base.diffOpener.fzfCommand,
       preferFzf: overrides.diffOpener?.preferFzf ?? base.diffOpener.preferFzf,
+      autoExit: overrides.diffOpener?.autoExit ?? base.diffOpener.autoExit,
     },
     keybindings: mergeKeybindings(base.keybindings, overrides.keybindings),
   };
