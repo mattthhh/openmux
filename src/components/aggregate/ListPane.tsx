@@ -31,24 +31,6 @@ export interface ListPaneProps {
 }
 
 /**
- * Defer a tree-restructuring action by one tick.
- *
- * Root cause of click-through: actions like showHiddenSessionGroups or
- * hideSessionGroup call setState → produce → recomputeTree synchronously
- * during mouse event processing. The SolidJS reconciler immediately
- * creates/destroys renderables, but OpenTUI's hit grid is only updated
- * on the next render frame. Between the state change and the frame, the
- * hit grid is stale: mouseUp or drag events hit the wrong element at
- * the same screen coordinates.
- *
- * Deferring the entire state change to the next tick guarantees the
- * current click cycle (down + drag + up) completes against a stable
- * hit grid. The tree restructures only after all pending mouse events
- * have been dispatched.
- */
-const nextTick = (fn: () => void) => setTimeout(fn, 0);
-
-/**
  * ListPane component - Displays the session/PTY tree list.
  * Uses ListPaneContext for all state, layout, colors, and handlers.
  */
@@ -180,9 +162,7 @@ export const ListPane: Component<ListPaneProps> = (props) => {
                             textColors={textColors}
                             onClick={() => {
                               ctx.selectionHandlers.onSelectItem(item.index);
-                              // Debounce: restructure on next tick so the
-                              // click cycle completes against a stable hit grid.
-                              nextTick(() => ctx.selectionHandlers.onShowHiddenSessionGroups());
+                              ctx.selectionHandlers.onShowHiddenSessionGroups();
                             }}
                           />
                         </Show>

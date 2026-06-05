@@ -206,6 +206,37 @@ export function recomputeTree(state: AggregateViewState): void {
     }
   }
 
+  // When the previously selected item was not a session or PTY (e.g.
+  // hidden-groups, placeholder), it disappeared from the tree.
+  // Select the nearest session header as a cursor anchor rather than
+  // a PTY — the user's intent was to reveal hidden groups, not to
+  // select a specific PTY. Setting selectedPtyId would trigger the
+  // autoswitch effect, which is the wrong action.
+  const wasStructuralItem =
+    previousSelectedType !== 'session' &&
+    previousSelectedType !== 'pty' &&
+    previousSelectedType !== 'placeholder';
+
+  if (wasStructuralItem) {
+    // Find the nearest session header to anchor the cursor
+    const sessionHeaderIndex = state.flattenedTree.findIndex(
+      (item) => item.node.type === 'session'
+    );
+    if (sessionHeaderIndex !== -1) {
+      state.selectedIndex = sessionHeaderIndex;
+      state.selectedSessionId = getSessionIdForItem(state.flattenedTree[sessionHeaderIndex]);
+      state.selectedPtyId = null;
+      clearPreviewState(state);
+      return;
+    }
+    // No session headers — just clear selection
+    state.selectedIndex = 0;
+    state.selectedPtyId = null;
+    state.selectedSessionId = null;
+    clearPreviewState(state);
+    return;
+  }
+
   const clampedIndex = Math.min(state.selectedIndex, state.flattenedTree.length - 1);
   const fallbackIndex = Math.max(0, clampedIndex);
   const fallbackItem = state.flattenedTree[fallbackIndex];
