@@ -206,6 +206,47 @@ export function recomputeTree(state: AggregateViewState): void {
     }
   }
 
+  // The previously selected item was not a session or PTY
+  // (e.g. hidden-groups, spacer). It disappeared from the tree.
+  // Stay near the same position but avoid landing on a PTY,
+  // which would appear as a click-through to the user.
+  // Search outward from the previous index for the nearest
+  // non-PTY, non-spacer item.
+  if (previousSelectedType !== 'session' && previousSelectedType !== 'pty') {
+    const clamped = Math.min(previousSelectedIndex, state.flattenedTree.length - 1);
+    const start = Math.max(0, clamped);
+    for (let distance = 0; distance < state.flattenedTree.length; distance++) {
+      const lower = start - distance;
+      const upper = start + distance;
+      if (lower >= 0) {
+        const item = state.flattenedTree[lower];
+        if (item && item.node.type !== 'spacer' && item.node.type !== 'pty') {
+          state.selectedIndex = lower;
+          state.selectedSessionId = getSessionIdForItem(item);
+          state.selectedPtyId = null;
+          clearPreviewState(state);
+          return;
+        }
+      }
+      if (upper < state.flattenedTree.length && upper !== lower) {
+        const item = state.flattenedTree[upper];
+        if (item && item.node.type !== 'spacer' && item.node.type !== 'pty') {
+          state.selectedIndex = upper;
+          state.selectedSessionId = getSessionIdForItem(item);
+          state.selectedPtyId = null;
+          clearPreviewState(state);
+          return;
+        }
+      }
+    }
+    // Entire tree is PTYs or spacers — clear selection
+    state.selectedIndex = 0;
+    state.selectedPtyId = null;
+    state.selectedSessionId = null;
+    clearPreviewState(state);
+    return;
+  }
+
   const clampedIndex = Math.min(state.selectedIndex, state.flattenedTree.length - 1);
   const fallbackIndex = Math.max(0, clampedIndex);
   const fallbackItem = state.flattenedTree[fallbackIndex];
