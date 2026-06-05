@@ -97,6 +97,10 @@ export function SessionTreeNode(props: SessionTreeNodeProps) {
   const handleMouseUp = (event: OpenTUIMouseEvent) => {
     event.preventDefault();
     event.stopPropagation();
+    // Only process left-click releases. Right-click mouseUp must not
+    // trigger session toggle (the right-click mouseDown already
+    // handled onContextMenu).
+    if (event.button !== 0) return;
     props.onMouseUp?.();
   };
 

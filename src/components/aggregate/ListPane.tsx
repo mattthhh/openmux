@@ -238,11 +238,7 @@ export const ListPane: Component<ListPaneProps> = (props) => {
                     }}
                     onContextMenu={() => {
                       const sessionNode = node() as Extract<TreeNode, { type: 'session' }>;
-                      // Debounce: restructure on next tick so the click
-                      // cycle completes against a stable hit grid.
-                      nextTick(() =>
-                        ctx.selectionHandlers.onHideSessionGroup(sessionNode.session.id)
-                      );
+                      ctx.selectionHandlers.onHideSessionGroup(sessionNode.session.id);
                     }}
                   />
                 </Show>
