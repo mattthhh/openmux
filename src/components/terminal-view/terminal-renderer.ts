@@ -108,7 +108,6 @@ export function createTerminalRenderer(params: {
       return;
     }
 
-    const desiredViewportOffset = viewState.scrollState.viewportOffset;
     // Read scrollback length directly from the emulator instead of the
     // viewState cache. The cache is updated asynchronously via setImmediate
     // subscriber notifications — there's a gap between PTY data arriving
@@ -119,6 +118,16 @@ export function createTerminalRenderer(params: {
     // state in real-time and is always authoritative.
     const desiredScrollbackLength =
       emulator?.getScrollbackLength?.() ?? viewState.scrollState.scrollbackLength;
+    // Clamp viewportOffset against the real-time scrollback length.
+    // The viewState cache may be stale after archiver trims — the
+    // subscriber's viewportOffset adjustment (negative delta clamping)
+    // runs asynchronously after trimScrollback. Without this clamp,
+    // viewportOffset > scrollbackLength causes absoluteY to go negative
+    // (rows map to non-existent scrollback positions → blank/garbled rows).
+    const desiredViewportOffset = Math.min(
+      viewState.scrollState.viewportOffset,
+      desiredScrollbackLength
+    );
 
     const rows = Math.min(state.rows, height);
     const cols = Math.min(state.cols, width);
