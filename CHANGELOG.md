@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.159](https://github.com/monotykamary/openmux/compare/v0.3.158...v0.3.159) (2026-06-05)
+
+
+### Bug Fixes
+
+* return aggregate view selection to previously-used PTY on close ([e02815c](https://github.com/monotykamary/openmux/commit/e02815c4f52be5b5969c8d3e5449f45566d0d006))
+
 ### [0.3.158](https://github.com/monotykamary/openmux/compare/v0.3.157...v0.3.158) (2026-06-05)
 
 
