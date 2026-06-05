@@ -76,6 +76,15 @@ export function createAggregateViewActions(params: AggregateViewActionsParams) {
     return null;
   };
 
+  /**
+   * Update the selection to the given index.
+   *
+   * Does NOT auto-enter preview mode — that is reserved for explicit user
+   * actions (clicking a PTY row, pressing Enter, opening the aggregate view).
+   * Auto-entering preview mode from tree recomputation or keyboard navigation
+   * caused click-through bugs where the preview pane became interactive
+   * without the user intending it, forwarding mouse events to the PTY.
+   */
   const applySelection = (s: AggregateViewState, index: number) => {
     const targetIndex = findNearestSelectableIndex(s.flattenedTree, index);
     if (targetIndex === null) {
@@ -92,8 +101,6 @@ export function createAggregateViewActions(params: AggregateViewActionsParams) {
     s.selectedSessionId = getSessionIdForItem(item);
     if (s.selectedPtyId === null) {
       clearPreviewState(s);
-    } else {
-      s.previewMode = true;
     }
   };
 
@@ -255,6 +262,12 @@ export function createAggregateViewActions(params: AggregateViewActionsParams) {
       setState(
         produce((s) => {
           applySelection(s, index);
+          // Explicit user action: clicking a PTY row enters preview mode.
+          // This is the intended path — not auto-entered from applySelection
+          // to prevent click-through bugs in the preview pane.
+          if (s.selectedPtyId !== null) {
+            s.previewMode = true;
+          }
         })
       );
     }
