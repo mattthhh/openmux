@@ -313,6 +313,7 @@ export function createLifecycleHandlers(
         removeAggregateSessionMappingForPty(ptyId);
         s.pendingPtyIds.delete(ptyId);
         s.recentlyAddedPtyIds.delete(ptyId);
+        s.ptyMru = s.ptyMru.filter((id) => id !== ptyId);
 
         const index = s.allPtysIndex.get(ptyId);
         if (index === undefined) return;

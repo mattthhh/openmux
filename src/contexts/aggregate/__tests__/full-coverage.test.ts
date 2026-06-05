@@ -85,6 +85,11 @@ const createMockState = (overrides: Partial<AggregateViewState> = {}): Aggregate
   deletedPtyIds: new Set(),
   pendingPaneCreations: [],
   listScrollOffset: 0,
+  ptyMru: [],
+  listMaxVisibleCards: 0,
+  hiddenSessionGroupIds: new Set(),
+  showPtyPicker: false,
+  sessionPaneOrders: new Map(),
   ...overrides,
 });
 
@@ -361,6 +366,126 @@ describe('Full Coverage: Selection Operations', () => {
       expect(state.selectedPtyId).toBeNull();
       expect(state.selectedSessionId).toBe('session-b');
       expect(state.selectedIndex).toBe(3);
+    });
+
+    it('prefers MRU over spatial when closing a newly-created PTY', () => {
+      const pty1 = createMockPty({ ptyId: 'pty-1', sessionId: 'session-a' });
+      const pty2 = createMockPty({ ptyId: 'pty-2', sessionId: 'session-a' });
+      const pty3 = createMockPty({ ptyId: 'pty-3', sessionId: 'session-a' });
+
+      const state = createMockState({
+        flattenedTree: [
+          {
+            node: {
+              type: 'session',
+              session: createMockSession({ id: 'session-a' }),
+              ptyCount: 3,
+              activePtyCount: 3,
+              loadState: { status: 'loaded' },
+              isExpanded: true,
+            },
+            depth: 0,
+            isLast: true,
+            prefix: '',
+            index: 0,
+            parentSessionId: undefined,
+          },
+          {
+            node: { type: 'pty', ptyInfo: pty1, parentSessionId: 'session-a' },
+            depth: 1,
+            isLast: false,
+            prefix: '',
+            index: 1,
+            parentSessionId: 'session-a',
+          },
+          {
+            node: { type: 'pty', ptyInfo: pty2, parentSessionId: 'session-a' },
+            depth: 1,
+            isLast: false,
+            prefix: '',
+            index: 2,
+            parentSessionId: 'session-a',
+          },
+          {
+            node: { type: 'pty', ptyInfo: pty3, parentSessionId: 'session-a' },
+            depth: 1,
+            isLast: true,
+            prefix: '',
+            index: 3,
+            parentSessionId: 'session-a',
+          },
+        ],
+        flattenedTreeIndex: new Map([
+          ['pty-1', 1],
+          ['pty-2', 2],
+          ['pty-3', 3],
+        ]),
+        selectedIndex: 2,
+        selectedPtyId: 'pty-2',
+        // pty-2 was just created and selected; pty-1 was the previous selection
+        ptyMru: ['pty-2', 'pty-1'],
+      });
+
+      // Close the newly-created pty-2
+      selectAfterPtyRemoval(state, 'pty-2');
+
+      // Should return to pty-1 (MRU previous) instead of pty-3 (spatial down)
+      expect(state.selectedPtyId).toBe('pty-1');
+      expect(state.selectedIndex).toBe(1);
+    });
+
+    it('falls back to spatial search when MRU has no valid entries', () => {
+      const pty1 = createMockPty({ ptyId: 'pty-1', sessionId: 'session-a' });
+      const pty2 = createMockPty({ ptyId: 'pty-2', sessionId: 'session-a' });
+
+      const state = createMockState({
+        flattenedTree: [
+          {
+            node: {
+              type: 'session',
+              session: createMockSession({ id: 'session-a' }),
+              ptyCount: 2,
+              activePtyCount: 2,
+              loadState: { status: 'loaded' },
+              isExpanded: true,
+            },
+            depth: 0,
+            isLast: true,
+            prefix: '',
+            index: 0,
+            parentSessionId: undefined,
+          },
+          {
+            node: { type: 'pty', ptyInfo: pty1, parentSessionId: 'session-a' },
+            depth: 1,
+            isLast: false,
+            prefix: '',
+            index: 1,
+            parentSessionId: 'session-a',
+          },
+          {
+            node: { type: 'pty', ptyInfo: pty2, parentSessionId: 'session-a' },
+            depth: 1,
+            isLast: true,
+            prefix: '',
+            index: 2,
+            parentSessionId: 'session-a',
+          },
+        ],
+        flattenedTreeIndex: new Map([
+          ['pty-1', 1],
+          ['pty-2', 2],
+        ]),
+        selectedIndex: 1,
+        selectedPtyId: 'pty-1',
+        ptyMru: ['pty-1', 'deleted-pty'], // deleted-pty not in tree
+      });
+
+      selectAfterPtyRemoval(state, 'pty-1');
+
+      // MRU fallback (deleted-pty) is invalid, so spatial search kicks in
+      expect(state.selectedPtyId).toBe('pty-2');
+      expect(state.selectedIndex).toBe(2);
     });
   });
 });

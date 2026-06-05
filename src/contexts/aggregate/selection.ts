@@ -88,6 +88,28 @@ export function findSessionHeader(
   return null;
 }
 
+/**
+ * Find the first PTY on the MRU stack that is still present in the
+ * flattened tree (i.e. visible/selectable) and is not the removed PTY.
+ * This naturally returns the selection to the previously-used PTY when
+ * a newly-created PTY is closed.
+ */
+function findMruReplacement(
+  state: AggregateViewState,
+  removedPtyId: string
+): { index: number; item: FlattenedTreeItem } | null {
+  const mru = state.ptyMru;
+  if (!mru || mru.length === 0) return null;
+  for (const mruPtyId of mru) {
+    if (mruPtyId === removedPtyId) continue;
+    const flatIndex = state.flattenedTreeIndex.get(mruPtyId);
+    if (flatIndex === undefined) continue;
+    const item = state.flattenedTree[flatIndex];
+    if (item?.node.type === 'pty') return { index: flatIndex, item };
+  }
+  return null;
+}
+
 export function selectAfterPtyRemoval(
   state: AggregateViewState,
   removedPtyId: string
@@ -101,7 +123,11 @@ export function selectAfterPtyRemoval(
   const removedItem = state.flattenedTree[removedIndex];
   const removedSessionId = removedItem?.node.type === 'pty' ? removedItem.parentSessionId : null;
 
+  // Prefer the MRU stack — this returns the selection to the previously-used
+  // PTY when closing a newly-created one, instead of jumping to the nearest
+  // spatial neighbour (which typically moves down).
   const replacement =
+    findMruReplacement(state, removedPtyId) ??
     findNearestSelectable(state.flattenedTree, removedIndex, 'down') ??
     (removedSessionId
       ? findNearestPtyInSessionAbove(state.flattenedTree, removedIndex, removedSessionId)
