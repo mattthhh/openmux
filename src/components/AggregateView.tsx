@@ -252,6 +252,7 @@ export function AggregateView(props: AggregateViewProps) {
                 draggingSessionId: sessionDrag.draggingId(),
                 dragTargetSessionId: sessionDrag.targetId(),
                 isPreviewMode: aggregate.state.previewMode,
+                treeVersion: aggregate.state.treeVersion,
               }}
               selectionHandlers={{
                 onSelectItem: aggregate.setSelectedIndex,
