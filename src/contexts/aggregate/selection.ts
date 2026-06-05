@@ -6,15 +6,6 @@ import type { AggregateViewState, FlattenedTreeItem } from './types';
 import type { SelectionOperationError } from './errors';
 import { findNearestSelectableIndex, getSessionIdForItem } from './tree';
 
-/**
- * Update the selection to the given index.
- *
- * Does NOT auto-enter preview mode — that is reserved for explicit user
- * actions (clicking a PTY row, pressing Enter, opening the aggregate view).
- * Auto-entering preview mode from tree recomputation or PTY removal
- * caused click-through bugs where the preview pane became interactive
- * without the user intending it, forwarding mouse events to the PTY.
- */
 export function applySelection(state: AggregateViewState, index: number): void {
   const targetIndex = findNearestSelectableIndex(state.flattenedTree, index);
 
@@ -33,6 +24,8 @@ export function applySelection(state: AggregateViewState, index: number): void {
 
   if (state.selectedPtyId === null) {
     clearPreviewState(state);
+  } else {
+    state.previewMode = true;
   }
 }
 

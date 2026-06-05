@@ -69,7 +69,6 @@ export const PreviewPane: Component<PreviewPaneProps> = (props) => {
 
   // Handle mouse down - enter preview mode if not already in it
   const handleMouseDown = (e: OpenTUIMouseEvent) => {
-    e.stopPropagation();
     if (!props.isPreviewMode) {
       e.preventDefault();
       props.onEnterPreview();
