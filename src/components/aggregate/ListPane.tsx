@@ -30,6 +30,25 @@ export interface ListPaneProps {
   };
 }
 
+// Click-through guard: when a tree-restructuring action fires from a
+// mouseDown handler (e.g. right-click → hideSessionGroup), the tree
+// recomputes synchronously and elements shift. The subsequent mouseUp
+// then hits whatever element now occupies those screen coordinates —
+// which can accidentally toggle or select the wrong row.
+//
+// The flag is set just before any mouseDown-side tree restructure and
+// consumed (checked + cleared) by the next session mouseUp. A safety
+// timeout clears it in case the mouseUp event is lost.
+let suppressSessionMouseUp = false;
+
+const markTreeRestructuredDuringMouseDown = () => {
+  suppressSessionMouseUp = true;
+  // Safety: clear after a short delay in case mouseUp is lost
+  setTimeout(() => {
+    suppressSessionMouseUp = false;
+  }, 100);
+};
+
 /**
  * ListPane component - Displays the session/PTY tree list.
  * Uses ListPaneContext for all state, layout, colors, and handlers.
@@ -43,34 +62,22 @@ export const ListPane: Component<ListPaneProps> = (props) => {
     return ctx.state.flattenedTree.slice(ctx.viewport.start, ctx.viewport.end);
   });
 
-  // Track the tree version at mouseDown time so we can suppress mouseUp
-  // actions when the tree restructured mid-click (e.g. hiding a session
-  // group on right-click causes the group below it to slide into place,
-  // and the subsequent mouseUp hits the wrong element).
-  let mouseDownTreeVersion: number | null = null;
-
-  const handleMouseDown = () => {
-    mouseDownTreeVersion = ctx.state.treeVersion;
-  };
-
-  /** Returns true if the tree restructured between mouseDown and mouseUp. */
-  const treeRestructuredSinceMouseDown = (): boolean => {
-    if (mouseDownTreeVersion === null) return true;
-    return ctx.state.treeVersion !== mouseDownTreeVersion;
-  };
-
   // Handle mouse down on session (starts drag)
   const handleSessionMouseDown = (sessionId: string, index: number) => {
-    handleMouseDown();
     ctx.selectionHandlers.onSelectItem(index);
     ctx.dragHandlers.onBeginSessionDrag(sessionId);
   };
 
   // Handle mouse up on session (toggle or end drag)
   const handleSessionMouseUp = (sessionId: string, loadState: { status: string }) => {
-    // Suppress the action if the tree restructured between down and up
-    // (e.g. due to a right-click context menu hiding a session group).
-    if (treeRestructuredSinceMouseDown()) return;
+    // Suppress the action if the tree restructured between mouseDown and
+    // mouseUp (e.g. due to a right-click context menu hiding a session
+    // group). The mouseUp hit-test found a different element at the same
+    // screen coordinates — it is not the element the user intended to act on.
+    if (suppressSessionMouseUp) {
+      suppressSessionMouseUp = false;
+      return;
+    }
     if (loadState.status === 'loaded') {
       ctx.selectionHandlers.onToggleSession(sessionId);
     }
@@ -169,11 +176,9 @@ export const ListPane: Component<ListPaneProps> = (props) => {
                               isSelected={isSelected()}
                               label={(node() as Extract<TreeNode, { type: 'placeholder' }>).message}
                               onSelect={() => {
-                                handleMouseDown();
                                 ctx.selectionHandlers.onSelectItem(item.index);
                               }}
                               onAction={() => {
-                                if (treeRestructuredSinceMouseDown()) return;
                                 ctx.selectionHandlers.onSelectItem(item.index);
                               }}
                             />
@@ -186,7 +191,6 @@ export const ListPane: Component<ListPaneProps> = (props) => {
                             aggregateTheme={colors.theme.ui.aggregate}
                             textColors={textColors}
                             onSelect={() => {
-                              handleMouseDown();
                               ctx.selectionHandlers.onSelectItem(item.index);
                             }}
                             onAction={() => {
@@ -207,7 +211,6 @@ export const ListPane: Component<ListPaneProps> = (props) => {
                         shimmerTargetColor={ctx.shimmerTargetColor}
                         textColors={textColors}
                         onClick={() => {
-                          handleMouseDown();
                           const ptyNode = node() as Extract<TreeNode, { type: 'pty' }>;
                           ctx.selectionHandlers.onSelectPty(ptyNode.ptyInfo.ptyId);
                         }}
@@ -247,7 +250,10 @@ export const ListPane: Component<ListPaneProps> = (props) => {
                     }}
                     onContextMenu={() => {
                       const sessionNode = node() as Extract<TreeNode, { type: 'session' }>;
-                      handleMouseDown();
+                      // Mark before the action: hideSessionGroup restructures
+                      // the tree synchronously, so the subsequent mouseUp
+                      // will hit whatever element slid into the old position.
+                      markTreeRestructuredDuringMouseDown();
                       ctx.selectionHandlers.onHideSessionGroup(sessionNode.session.id);
                     }}
                   />

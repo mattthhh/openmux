@@ -74,7 +74,6 @@ function getSessionIdForItem(
 }
 
 export function recomputeTree(state: AggregateViewState): void {
-  state.treeVersion++;
   const previousTree = state.flattenedTree;
   const previousSelectedIndex = state.selectedIndex;
   const previousSelectedItem = previousTree[previousSelectedIndex];

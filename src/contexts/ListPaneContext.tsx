@@ -87,9 +87,6 @@ export interface ListPaneState {
   dragTargetSessionId: string | null;
   /** Whether in preview mode */
   isPreviewMode: boolean;
-  /** Tree version counter — incremented on every recomputeTree call.
-   *  Used to suppress mouseUp actions after mid-click tree restructures. */
-  treeVersion: number;
 }
 
 /** Props passed to ListPane (now minimal) */

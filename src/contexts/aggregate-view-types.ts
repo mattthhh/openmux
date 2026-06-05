@@ -287,10 +287,6 @@ export interface AggregateViewTreeSlice {
    * Multiple create commands can overlap, so lifecycle matching must track each request separately.
    */
   pendingPaneCreations: PendingPaneCreation[];
-  /** Monotonically increasing counter bumped on every recomputeTree call.
-   *  Used to detect tree restructures between mouseDown and mouseUp so that
-   *  mouseUp actions are suppressed when the element under the cursor changed. */
-  treeVersion: number;
 }
 
 /** Loading, metadata hydration, and tombstone bookkeeping state. */
@@ -370,7 +366,6 @@ export function createAggregateViewTreeSlice(): AggregateViewTreeSlice {
     sessionPaneOrderIndex: new Map(),
     manualSessionOrder: [],
     pendingPaneCreations: [],
-    treeVersion: 0,
   };
 }
 
