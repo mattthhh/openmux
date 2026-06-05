@@ -27,7 +27,7 @@ import { fetchScrollbackLine } from './scrollback';
 import { getCursorSnapshot } from './cursor';
 import { prepareEmulatorUpdate } from './emulator-updates';
 import { deferNextTick } from '../../core/scheduling';
-import { HOT_SCROLLBACK_LIMIT } from '../scrollback-config';
+import { HOT_SCROLLBACK_LIMIT, SCROLLBACK_HARD_LIMIT } from '../scrollback-config';
 import {
   applyColorRemapToRow,
   buildColorRemap,
@@ -88,7 +88,7 @@ export class GhosttyVTEmulatorCore {
 
     const palette = this.colors.palette.slice(0, 16);
     this.terminal = new GhosttyVtTerminal(cols, rows, {
-      scrollbackLimit: 0,
+      scrollbackLimit: SCROLLBACK_HARD_LIMIT,
       fgColor: this.colors.foreground,
       bgColor: this.colors.background,
       palette,
