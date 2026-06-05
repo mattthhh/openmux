@@ -104,6 +104,12 @@ export const ListPane: Component<ListPaneProps> = (props) => {
       }}
       onMouseUp={(e: OpenTUIMouseEvent) => {
         e.preventDefault();
+        // Consume any stale click-through from a tree restructure
+        // (e.g. after showHiddenSessionGroups/hideSessionGroup).
+        if (suppressSessionMouseUp) {
+          suppressSessionMouseUp = false;
+          return;
+        }
         ctx.dragHandlers.onCommitDrag();
       }}
       onMouseScroll={(e: OpenTUIMouseEvent) => {
@@ -194,6 +200,9 @@ export const ListPane: Component<ListPaneProps> = (props) => {
                               ctx.selectionHandlers.onSelectItem(item.index);
                             }}
                             onAction={() => {
+                              // Mark before the action: showing hidden groups
+                              // restructures the tree synchronously.
+                              markTreeRestructuredDuringMouseDown();
                               ctx.selectionHandlers.onShowHiddenSessionGroups();
                             }}
                           />
