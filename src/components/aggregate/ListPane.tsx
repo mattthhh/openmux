@@ -148,7 +148,10 @@ export const ListPane: Component<ListPaneProps> = (props) => {
                               textColors={textColors}
                               isSelected={isSelected()}
                               label={(node() as Extract<TreeNode, { type: 'placeholder' }>).message}
-                              onClick={() => {
+                              onSelect={() => {
+                                ctx.selectionHandlers.onSelectItem(item.index);
+                              }}
+                              onAction={() => {
                                 ctx.selectionHandlers.onSelectItem(item.index);
                               }}
                             />
@@ -160,8 +163,10 @@ export const ListPane: Component<ListPaneProps> = (props) => {
                             maxWidth={ctx.layout.innerWidth}
                             aggregateTheme={colors.theme.ui.aggregate}
                             textColors={textColors}
-                            onClick={() => {
+                            onSelect={() => {
                               ctx.selectionHandlers.onSelectItem(item.index);
+                            }}
+                            onAction={() => {
                               ctx.selectionHandlers.onShowHiddenSessionGroups();
                             }}
                           />
