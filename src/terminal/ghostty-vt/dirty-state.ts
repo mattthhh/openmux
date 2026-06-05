@@ -6,6 +6,34 @@ import type { GhosttyVtTerminal } from './terminal';
 
 type Cursor = { x: number; y: number; visible: boolean };
 
+/** Quick equality check for two TerminalCell rows. Returns true if identical. */
+function rowCellsEqual(a: TerminalCell[] | undefined, b: TerminalCell[]): boolean {
+  if (!a || a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    const ac = a[i];
+    const bc = b[i];
+    if (
+      ac.char !== bc.char ||
+      ac.fg.r !== bc.fg.r ||
+      ac.fg.g !== bc.fg.g ||
+      ac.fg.b !== bc.fg.b ||
+      ac.bg.r !== bc.bg.r ||
+      ac.bg.g !== bc.bg.g ||
+      ac.bg.b !== bc.bg.b ||
+      ac.defaultBg !== bc.defaultBg ||
+      ac.bold !== bc.bold ||
+      ac.italic !== bc.italic ||
+      ac.underline !== bc.underline ||
+      ac.strikethrough !== bc.strikethrough ||
+      ac.inverse !== bc.inverse ||
+      ac.width !== bc.width
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
 export function buildDirtyState({
   terminal,
   viewport,
@@ -62,10 +90,25 @@ export function buildDirtyState({
     };
     cachedState = fullState;
   } else if (viewport) {
+    // Always convert all rows from the viewport, not just rows where
+    // isRowDirty returns true. The native RenderState's dirty tracking
+    // can miss rows (e.g., after scrollback reflow, resize, or internal
+    // state machine transitions), causing permanent stale content in
+    // cachedState that only a forceFull (resize) would fix. Converting
+    // all rows guarantees cachedState stays in sync with the terminal.
+    // The overhead is minimal: one convertLine per row (~0.02ms per row)
+    // versus the isRowDirty FFI call it replaces (~0.001ms per row),
+    // so the total cost is ~0.5ms for a 24-row terminal at 30fps.
     for (let y = 0; y < rows; y++) {
-      if (!terminal.isRowDirty(y)) continue;
       const offset = y * cols;
-      dirtyRows.set(y, convertLine(viewport, offset, cols, cols, colors));
+      const converted = convertLine(viewport, offset, cols, cols, colors);
+      // Skip rows that haven't changed since the last update. This
+      // avoids unnecessary subscriber work (SolidJS re-renders) for
+      // unchanged rows while still catching rows that isRowDirty missed.
+      if (cachedState && rowCellsEqual(cachedState.cells[y], converted)) {
+        continue;
+      }
+      dirtyRows.set(y, converted);
     }
 
     if (cachedState) {
