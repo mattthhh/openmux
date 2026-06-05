@@ -3,6 +3,7 @@
  * Single line indicating more content available on demand
  */
 
+import type { MouseEvent as OpenTUIMouseEvent } from '@opentui/core';
 import type { AggregateTheme } from '../../core/types';
 
 export interface PlaceholderRowProps {
@@ -20,8 +21,10 @@ export interface PlaceholderRowProps {
   };
   /** Whether this row is selected */
   isSelected?: boolean;
-  /** Click handler to load the session */
-  onClick?: () => void;
+  /** Selection handler (fires on mouseDown for immediate visual feedback) */
+  onSelect?: () => void;
+  /** Action handler to load the session (fires on mouseUp to avoid click-through) */
+  onAction?: () => void;
   /** Optional label (defaults to "...") */
   label?: string;
 }
@@ -38,16 +41,24 @@ export function PlaceholderRow(props: PlaceholderRowProps) {
 
   const label = () => props.label ?? '...';
 
-  const handleClick = (event: { preventDefault: () => void }) => {
+  const handleMouseDown = (event: OpenTUIMouseEvent) => {
     event.preventDefault();
-    props.onClick?.();
+    event.stopPropagation();
+    props.onSelect?.();
+  };
+
+  const handleMouseUp = (event: OpenTUIMouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    props.onAction?.();
   };
 
   return (
     <box
       style={{ height: 1, width: props.maxWidth, flexDirection: 'row' }}
       backgroundColor={bgColor()}
-      onMouseDown={handleClick}
+      onMouseDown={handleMouseDown}
+      onMouseUp={handleMouseUp}
     >
       {/* Indentation */}
       <text fg={subtleColor()} selectable={false}>

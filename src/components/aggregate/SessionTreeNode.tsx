@@ -3,6 +3,7 @@
  * Clean header without tree glyphs - sessions stand independently
  */
 
+import type { MouseEvent as OpenTUIMouseEvent } from '@opentui/core';
 import type { AggregateTheme } from '../../core/types';
 
 export interface SessionTreeNodeProps {
@@ -82,8 +83,9 @@ export function SessionTreeNode(props: SessionTreeNodeProps) {
     return name.slice(0, availableNameWidth() - 1) + '…';
   };
 
-  const handleMouseDown = (event: { preventDefault: () => void; button?: number }) => {
+  const handleMouseDown = (event: OpenTUIMouseEvent) => {
     event.preventDefault();
+    event.stopPropagation();
     // Right-click (button 2) triggers context menu
     if (event.button === 2) {
       props.onContextMenu?.();
@@ -92,8 +94,9 @@ export function SessionTreeNode(props: SessionTreeNodeProps) {
     props.onMouseDown?.();
   };
 
-  const handleMouseUp = (event: { preventDefault: () => void }) => {
+  const handleMouseUp = (event: OpenTUIMouseEvent) => {
     event.preventDefault();
+    event.stopPropagation();
     props.onMouseUp?.();
   };
 

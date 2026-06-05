@@ -5,6 +5,7 @@
  * Clicking it reveals all hidden session groups.
  */
 
+import type { MouseEvent as OpenTUIMouseEvent } from '@opentui/core';
 import type { AggregateTheme } from '../../core/types';
 
 export interface HiddenGroupsRowProps {
@@ -22,8 +23,10 @@ export interface HiddenGroupsRowProps {
     muted: string;
     subtle: string;
   };
-  /** Click handler to reveal hidden groups */
-  onClick?: () => void;
+  /** Selection handler (fires on mouseDown for immediate visual feedback) */
+  onSelect?: () => void;
+  /** Action handler to reveal hidden groups (fires on mouseUp to avoid click-through) */
+  onAction?: () => void;
 }
 
 /**
@@ -48,16 +51,24 @@ export function HiddenGroupsRow(props: HiddenGroupsRowProps) {
     return `▸ Show ${props.count} hidden ${groupWord}`;
   };
 
-  const handleClick = (event: { preventDefault: () => void }) => {
+  const handleMouseDown = (event: OpenTUIMouseEvent) => {
     event.preventDefault();
-    props.onClick?.();
+    event.stopPropagation();
+    props.onSelect?.();
+  };
+
+  const handleMouseUp = (event: OpenTUIMouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    props.onAction?.();
   };
 
   return (
     <box
       style={{ height: 1, width: props.maxWidth, flexDirection: 'row' }}
       backgroundColor={bgColor()}
-      onMouseDown={handleClick}
+      onMouseDown={handleMouseDown}
+      onMouseUp={handleMouseUp}
     >
       <text fg={fgColor()} selectable={false}>
         {label()}

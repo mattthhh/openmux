@@ -14,7 +14,7 @@
  */
 
 import { createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
-import type { Renderable } from '@opentui/core';
+import type { Renderable, MouseEvent as OpenTUIMouseEvent } from '@opentui/core';
 import type { PtyInfo } from '../../contexts/aggregate-view-types';
 import type { AggregateTheme } from '../../core/types';
 import {
@@ -406,8 +406,9 @@ export function PtyTreeRow(props: PtyTreeRowProps) {
     return ' '.repeat(padLen);
   });
 
-  const handleClick = (event: { preventDefault: () => void }) => {
+  const handleClick = (event: OpenTUIMouseEvent) => {
     event.preventDefault();
+    event.stopPropagation();
     props.onClick?.();
   };
 
