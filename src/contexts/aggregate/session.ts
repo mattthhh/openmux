@@ -218,18 +218,36 @@ export function recomputeTree(state: AggregateViewState): void {
     previousSelectedType !== 'placeholder';
 
   if (wasStructuralItem) {
-    // Find the nearest session header to anchor the cursor
-    const sessionHeaderIndex = state.flattenedTree.findIndex(
-      (item) => item.node.type === 'session'
-    );
-    if (sessionHeaderIndex !== -1) {
-      state.selectedIndex = sessionHeaderIndex;
-      state.selectedSessionId = getSessionIdForItem(state.flattenedTree[sessionHeaderIndex]);
-      state.selectedPtyId = null;
-      clearPreviewState(state);
-      return;
+    // The structural item disappeared. Stay near the same position
+    // but prefer session/placeholder over PTY to avoid triggering
+    // autoswitch. Search outward from previousSelectedIndex.
+    const clamped = Math.min(previousSelectedIndex, state.flattenedTree.length - 1);
+    const start = Math.max(0, clamped);
+    for (let distance = 0; distance < state.flattenedTree.length; distance++) {
+      const lower = start - distance;
+      if (lower >= 0) {
+        const item = state.flattenedTree[lower];
+        if (item && item.node.type !== 'spacer' && item.node.type !== 'pty') {
+          state.selectedIndex = lower;
+          state.selectedSessionId = getSessionIdForItem(item);
+          state.selectedPtyId = null;
+          clearPreviewState(state);
+          return;
+        }
+      }
+      const upper = start + distance;
+      if (upper < state.flattenedTree.length && upper !== lower) {
+        const item = state.flattenedTree[upper];
+        if (item && item.node.type !== 'spacer' && item.node.type !== 'pty') {
+          state.selectedIndex = upper;
+          state.selectedSessionId = getSessionIdForItem(item);
+          state.selectedPtyId = null;
+          clearPreviewState(state);
+          return;
+        }
+      }
     }
-    // No session headers — just clear selection
+    // No non-PTY items — clear selection
     state.selectedIndex = 0;
     state.selectedPtyId = null;
     state.selectedSessionId = null;
