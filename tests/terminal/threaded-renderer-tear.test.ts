@@ -308,9 +308,11 @@ describe('Threaded renderer does not produce torn reads', () => {
  * un-normalized, every pi frame pushes a duplicate copy of the screen into
  * scrollback. Scroll up → ghost/duplicate content.
  *
- * The data-handler's normalizePiFullRedrawSegment replaces CSI 2J + CSI H
- * with CSI H + CSI J (cursor home + erase-to-end), which clears in-place
- * without triggering scrollClear. This works for all sync-wrapped frames.
+ * The data-handler's normalizePiFullRedrawSegment replaces CSI 2J + CSI H +
+ * (optional) CSI 3J with CSI H + CSI J + CSI 3J (cursor home, erase-to-end,
+ * clear scrollback). The replacement clears in-place without triggering
+ * scrollClear while also resetting accumulated scrollback to keep the
+ * emulator's scroll position in sync with pi's viewportTop tracking.
  *
  * Known gap: drainRawToEmulator writes raw buffered data directly to the
  * emulator, bypassing processChunk → syncParser → normalizePiFullRedrawSegment.
@@ -330,7 +332,7 @@ describe('scrollback contamination: CSI 2J normalization', () => {
 
     const normalized = normalizePiFullRedrawSegment(readySegments[0], 24);
     expect(normalized.includes('\x1b[2J')).toBe(false);
-    expect(normalized.includes('\x1b[H\x1b[J')).toBe(true);
+    expect(normalized.includes('\x1b[H\x1b[J\x1b[3J')).toBe(true);
   });
 
   it('normalizes basic pi frame without CSI 3J', () => {
@@ -340,7 +342,7 @@ describe('scrollback contamination: CSI 2J normalization', () => {
 
     const normalized = normalizePiFullRedrawSegment(readySegments[0], 24);
     expect(normalized.includes('\x1b[2J')).toBe(false);
-    expect(normalized.includes('\x1b[H\x1b[J')).toBe(true);
+    expect(normalized.includes('\x1b[H\x1b[J\x1b[3J')).toBe(true);
   });
 
   it('normalizes large truecolor frame', () => {
@@ -355,7 +357,7 @@ describe('scrollback contamination: CSI 2J normalization', () => {
 
     const normalized = normalizePiFullRedrawSegment(readySegments[0], 24);
     expect(normalized.includes('\x1b[2J')).toBe(false);
-    expect(normalized.includes('\x1b[H\x1b[J')).toBe(true);
+    expect(normalized.includes('\x1b[H\x1b[J\x1b[3J')).toBe(true);
   });
 
   it('normalizes frame split across two data chunks', () => {
@@ -369,7 +371,7 @@ describe('scrollback contamination: CSI 2J normalization', () => {
     const { readySegments: segs2 } = parser.process(fullFrame.slice(mid));
     const normalized = normalizePiFullRedrawSegment(segs2[0], 24);
     expect(normalized.includes('\x1b[2J')).toBe(false);
-    expect(normalized.includes('\x1b[H\x1b[J')).toBe(true);
+    expect(normalized.includes('\x1b[H\x1b[J\x1b[3J')).toBe(true);
   });
 
   it('normalizes pi frame after shell prompt in same chunk', () => {
@@ -380,7 +382,7 @@ describe('scrollback contamination: CSI 2J normalization', () => {
 
     const normalized = normalizePiFullRedrawSegment(readySegments[1], 24);
     expect(normalized.includes('\x1b[2J')).toBe(false);
-    expect(normalized.includes('\x1b[H\x1b[J')).toBe(true);
+    expect(normalized.includes('\x1b[H\x1b[J\x1b[3J')).toBe(true);
   });
 
   it('normalizes pi frame after startup queries', () => {
@@ -391,7 +393,7 @@ describe('scrollback contamination: CSI 2J normalization', () => {
     const last = readySegments[readySegments.length - 1];
     const normalized = normalizePiFullRedrawSegment(last, 24);
     expect(normalized.includes('\x1b[2J')).toBe(false);
-    expect(normalized.includes('\x1b[H\x1b[J')).toBe(true);
+    expect(normalized.includes('\x1b[H\x1b[J\x1b[3J')).toBe(true);
   });
 
   it('does NOT normalize CSI 2J that is NOT at segment start', () => {
@@ -410,7 +412,7 @@ describe('scrollback contamination: CSI 2J normalization', () => {
     for (const seg of readySegments) {
       const normalized = normalizePiFullRedrawSegment(seg, 24);
       expect(normalized.includes('\x1b[2J')).toBe(false);
-      expect(normalized.includes('\x1b[H\x1b[J')).toBe(true);
+      expect(normalized.includes('\x1b[H\x1b[J\x1b[3J')).toBe(true);
     }
   });
 
@@ -420,6 +422,6 @@ describe('scrollback contamination: CSI 2J normalization', () => {
     const flushed = parser.flush();
     const normalized = normalizePiFullRedrawSegment(flushed, 24);
     expect(normalized.includes('\x1b[2J')).toBe(false);
-    expect(normalized.includes('\x1b[H\x1b[J')).toBe(true);
+    expect(normalized.includes('\x1b[H\x1b[J\x1b[3J')).toBe(true);
   });
 });

@@ -169,21 +169,21 @@ afterEach(() => {
 });
 
 describe('normalizePiFullRedrawSegment', () => {
-  it('replaces CSI 2J + CSI 3J with CSI H + CSI J (non-scrolling clear)', () => {
+  it('replaces CSI 2J + CSI 3J with CSI H + CSI J + CSI 3J (non-scrolling clear + scrollback reset)', () => {
     const input = '\x1b[2J\x1b[H\x1b[3Jhello';
-    expect(normalizePiFullRedrawSegment(input, 10)).toBe('\x1b[H\x1b[Jhello');
+    expect(normalizePiFullRedrawSegment(input, 10)).toBe('\x1b[H\x1b[J\x1b[3Jhello');
   });
 
-  it('preserves tall pi full redraw frames after non-scrolling clear', () => {
+  it('preserves tall pi full redraw frames after non-scrolling clear + scrollback reset', () => {
     const input = '\x1b[2J\x1b[H\x1b[3Jline 1\r\nline 2\r\nline 3\r\nline 4';
     expect(normalizePiFullRedrawSegment(input, 2)).toBe(
-      '\x1b[H\x1b[Jline 1\r\nline 2\r\nline 3\r\nline 4'
+      '\x1b[H\x1b[J\x1b[3Jline 1\r\nline 2\r\nline 3\r\nline 4'
     );
   });
 
   it('supports 1;1H and C1 variants', () => {
     const input = '\x9b2J\x9b1;1H\x9b3Jhello';
-    expect(normalizePiFullRedrawSegment(input, 10)).toBe('\x1b[H\x1b[Jhello');
+    expect(normalizePiFullRedrawSegment(input, 10)).toBe('\x1b[H\x1b[J\x1b[3Jhello');
   });
 
   it('only rewrites the destructive prefix at the start of the segment', () => {
@@ -193,17 +193,17 @@ describe('normalizePiFullRedrawSegment', () => {
 
   it('normalizes CSI 2J + CSI H without CSI 3J', () => {
     const input = '\x1b[2J\x1b[Hhello';
-    expect(normalizePiFullRedrawSegment(input, 10)).toBe('\x1b[H\x1b[Jhello');
+    expect(normalizePiFullRedrawSegment(input, 10)).toBe('\x1b[H\x1b[J\x1b[3Jhello');
   });
 
   it('normalizes CSI 2J + CSI 1;1H without CSI 3J', () => {
     const input = '\x1b[2J\x1b[1;1Hhello';
-    expect(normalizePiFullRedrawSegment(input, 10)).toBe('\x1b[H\x1b[Jhello');
+    expect(normalizePiFullRedrawSegment(input, 10)).toBe('\x1b[H\x1b[J\x1b[3Jhello');
   });
 
   it('normalizes C1 CSI 2J + CSI H without CSI 3J', () => {
     const input = '\x9b2J\x9bHhello';
-    expect(normalizePiFullRedrawSegment(input, 10)).toBe('\x1b[H\x1b[Jhello');
+    expect(normalizePiFullRedrawSegment(input, 10)).toBe('\x1b[H\x1b[J\x1b[3Jhello');
   });
 
   it('returns input unchanged for non-clear segments', () => {
@@ -251,9 +251,11 @@ describe('createDataHandler pi redraw integration', () => {
     handleData('\x1b[?2026h\x1b[2J\x1b[H\x1b[3Jhello\x1b[?2026l');
     await waitForDrain();
 
-    expect(emulatorWrites).toEqual(['\x1b[H\x1b[Jhello']);
-    expect(getScrollbackArchiveResetCount()).toBe(0);
-    expect(getScrollbackArchiverResetCount()).toBe(0);
+    expect(emulatorWrites).toEqual(['\x1b[H\x1b[J\x1b[3Jhello']);
+    // CSI 3J in the normalized output triggers a scrollback archive reset,
+    // which is correct — the archive must be discarded when scrollback is cleared.
+    expect(getScrollbackArchiveResetCount()).toBe(1);
+    expect(getScrollbackArchiverResetCount()).toBe(1);
   });
 
   it('still schedules scrollback archiving for the normalized redraw', async () => {
@@ -284,7 +286,7 @@ describe('createDataHandler pi redraw integration', () => {
     handleData('\x1b[?2026h\x1b[2J\x1b[H\x1b[3Jline 1\r\nline 2\r\nline 3\r\nline 4\x1b[?2026l');
     await waitForDrain();
 
-    expect(emulatorWrites).toEqual(['\x1b[H\x1b[Jline 1\r\nline 2\r\nline 3\r\nline 4']);
+    expect(emulatorWrites).toEqual(['\x1b[H\x1b[J\x1b[3Jline 1\r\nline 2\r\nline 3\r\nline 4']);
   });
 
   it('leaves normal synchronized output untouched', async () => {
@@ -328,6 +330,6 @@ describe('createDataHandler pi redraw integration', () => {
       await new Promise<void>((r) => setImmediate(r));
     }
 
-    expect(emulatorWrites).toEqual(['\x1b[H\x1b[Jhello world']);
+    expect(emulatorWrites).toEqual(['\x1b[H\x1b[J\x1b[3Jhello world']);
   });
 });

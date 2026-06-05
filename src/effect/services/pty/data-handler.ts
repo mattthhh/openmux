@@ -81,6 +81,7 @@ const CLEAR_SCREEN_C1_REGEX = /\x9b2J/g;
 // CSI ? 2026 h/l. Normalize the post-sync payload instead of looking for sync markers.
 const CURSOR_HOME_SEQUENCE = '\x1b[H';
 const ERASE_TO_END_OF_SCREEN = '\x1b[J';
+const CLEAR_SCROLLBACK = '\x1b[3J';
 // CSI 3J (scrollback clear) is optional — most pi full-redraw frames use
 // CSI 2J + CSI H without CSI 3J. Both forms need normalization to prevent
 // ghostty's scrollClear from pushing old screen content into scrollback.
@@ -229,9 +230,18 @@ function stripSyncFrames(text: string): string {
  * linefeed-based scrolling. The original CSI 2J is replaced with CSI H + CSI J (cursor
  * home then erase-to-end-of-screen): this blanks every visible cell in-place without
  * triggering ghostty's scrollClear heuristic or pushing anything into scrollback.
- * CSI 3J (erase scrollback) is dropped — without the scrollClear push there is no
- * duplicated scrollback content to purge, and clearing it would destroy the user's
- * genuine scrollback history on every full redraw.
+ *
+ * CSI 3J (clear scrollback) is INCLUDED in the replacement. Without it, scrollback
+ * accumulates across full-redraw frames because the normalization strips CSI 3J from
+ * pi's original prefix. Pi's differential rendering uses relative cursor positioning
+ * that depends on its internal viewportTop matching the emulator's actual scroll
+ * position. Accumulated scrollback causes these to diverge, resulting in permanent
+ * row-position artifacts (content written to wrong rows by differential renders).
+ *
+ * Including CSI 3J keeps both the anti-scrollClear benefit and the scrollback-reset
+ * guarantee, at the cost of clearing the user's scrollback history on each full
+ * redraw. This matches pi's original intent (CSI 3J was there to clear scrollback)
+ * while avoiding the scrollClear push.
  *
  * Sync-mode-parser's atomic delivery guarantees no intermediate stale state is
  * rendered, so there is no flicker.
@@ -242,8 +252,16 @@ export function normalizePiFullRedrawSegment(segment: string, _terminalRows: num
   const match = segment.match(PI_FULL_REDRAW_PREFIX_REGEX);
   if (!match) return segment;
 
+  // Include CSI 3J (clear scrollback) in the replacement so that
+  // accumulated scrollback is reset on each full redraw. Without this,
+  // scrollback accumulates across frames because the normalization strips
+  // the CSI 3J from pi's original CSI 2J + CSI H + CSI 3J prefix.
+  // Accumulated scrollback causes pi's viewportTop tracking (used for
+  // differential rendering's relative cursor positioning) to diverge
+  // from the emulator's actual scroll position, leading to permanent
+  // row-position artifacts during bash tool calls.
   const frame = segment.slice(match[0].length);
-  return `${CURSOR_HOME_SEQUENCE}${ERASE_TO_END_OF_SCREEN}${frame}`;
+  return `${CURSOR_HOME_SEQUENCE}${ERASE_TO_END_OF_SCREEN}${CLEAR_SCROLLBACK}${frame}`;
 }
 
 /**
