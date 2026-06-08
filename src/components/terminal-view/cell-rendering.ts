@@ -18,6 +18,9 @@ import { RGBA as RGBAClass } from '@opentui/core';
  * It's dark enough to be invisible but distinct enough in the SGR stream.
  */
 export const DEFAULT_BG_SENTINEL = RGBAClass.fromInts(13, 17, 23);
+export const SENTINEL_BG_R = 13;
+export const SENTINEL_BG_G = 17;
+export const SENTINEL_BG_B = 23;
 import type { TerminalCell } from '../../core/types';
 import {
   WHITE,
@@ -34,6 +37,34 @@ import {
   SEARCH_CURRENT_BG,
   SEARCH_CURRENT_FG,
 } from '../../terminal/rendering';
+
+// Pre-extracted RGB8 values for constant overlay colors.
+// Avoids per-cell rgba8() calls (float getter × 255 round-trip) in the render hot path.
+/** Extract [r, g, b] as 0-255 integers from an RGBA object, skipping alpha. */
+const rgb8 = (c: RGBA): [number, number, number] => {
+  const [r, g, b] = c.toInts();
+  return [r, g, b];
+};
+
+const SELECTION_FG_RGB = rgb8(SELECTION_FG);
+const SELECTION_BG_RGB = rgb8(SELECTION_BG);
+const SEARCH_MATCH_FG_RGB = rgb8(SEARCH_MATCH_FG);
+const SEARCH_MATCH_BG_RGB = rgb8(SEARCH_MATCH_BG);
+const SEARCH_CURRENT_FG_RGB = rgb8(SEARCH_CURRENT_FG);
+const SEARCH_CURRENT_BG_RGB = rgb8(SEARCH_CURRENT_BG);
+
+const WHITE_RGB = rgb8(WHITE);
+
+export {
+  SELECTION_FG_RGB,
+  SELECTION_BG_RGB,
+  SEARCH_MATCH_FG_RGB,
+  SEARCH_MATCH_BG_RGB,
+  SEARCH_CURRENT_FG_RGB,
+  SEARCH_CURRENT_BG_RGB,
+  WHITE_RGB,
+  rgb8,
+};
 
 export interface CellRenderingDeps {
   isCellSelected: (ptyId: string, x: number, y: number) => boolean;
@@ -373,12 +404,15 @@ export function renderRowDirect(
   const { scrollbackLength, viewportOffset } = options;
   const absoluteY = scrollbackLength - viewportOffset + rowIndex;
 
-  // Helper: extract 0-255 RGB from an RGBA object (which stores 0-1 floats)
-  const rgba8 = (c: RGBA): [number, number, number] => [
-    (c as unknown as { r: number }).r * 255,
-    (c as unknown as { g: number }).g * 255,
-    (c as unknown as { b: number }).b * 255,
-  ];
+  // Pre-extract RGB8 values from per-frame overlay RGBA objects.
+  // Uses toInts() which reads directly from the internal Uint16Array buffer
+  // instead of the float getter round-trip (buffer[n] & 255) / 255 * 255.
+  const copyCursorFgRGB = rgb8(options.copyCursorFg);
+  const copyCursorBgRGB = rgb8(options.copyCursorBg);
+  const copySelectionFgRGB = rgb8(options.copySelectionFg);
+  const copySelectionBgRGB = rgb8(options.copySelectionBg);
+  const fallbackFgRGB = rgb8(fallbackFg);
+  const fallbackBgRGB = rgb8(fallbackBg);
 
   const b = buffer.buffers;
   const rowOffset = (rowIndex + offsetY) * buffer.width + offsetX;
@@ -453,15 +487,13 @@ export function renderRowDirect(
     if (!cell) {
       // No cell data — use fallback
       charArr[cellOffset] = 32; // space
-      const [fR, fG, fB] = rgba8(fallbackFg);
-      fgArr[cellOffset * 4] = fR;
-      fgArr[cellOffset * 4 + 1] = fG;
-      fgArr[cellOffset * 4 + 2] = fB;
+      fgArr[cellOffset * 4] = fallbackFgRGB[0];
+      fgArr[cellOffset * 4 + 1] = fallbackFgRGB[1];
+      fgArr[cellOffset * 4 + 2] = fallbackFgRGB[2];
       fgArr[cellOffset * 4 + 3] = 255;
-      const [bR, bG, bB] = rgba8(fallbackBg);
-      bgArr[cellOffset * 4] = bR;
-      bgArr[cellOffset * 4 + 1] = bG;
-      bgArr[cellOffset * 4 + 2] = bB;
+      bgArr[cellOffset * 4] = fallbackBgRGB[0];
+      bgArr[cellOffset * 4 + 1] = fallbackBgRGB[1];
+      bgArr[cellOffset * 4 + 2] = fallbackBgRGB[2];
       bgArr[cellOffset * 4 + 3] = 255;
       attrArr[cellOffset] = 0;
       if (x === 0) {
@@ -544,24 +576,36 @@ export function renderRowDirect(
         options.cursorX === x;
 
       if (isVirtualCursor) {
-        [fgR, fgG, fgB] = rgba8(options.copyCursorFg);
-        [bgR, bgG, bgB] = rgba8(options.copyCursorBg);
+        fgR = copyCursorFgRGB[0];
+        fgG = copyCursorFgRGB[1];
+        fgB = copyCursorFgRGB[2];
+        bgR = copyCursorBgRGB[0];
+        bgG = copyCursorBgRGB[1];
+        bgB = copyCursorBgRGB[2];
       } else if (isRealCursor) {
         // Inverted cursor: fg = cell's bg, bg = white
         // fgR/G/B already has the cell's bg (after inverse)
-        bgR = 255;
-        bgG = 255;
-        bgB = 255;
+        bgR = WHITE_RGB[0];
+        bgG = WHITE_RGB[1];
+        bgB = WHITE_RGB[2];
       } else {
         const isSelected = options.hasSelection && deps.isCellSelected(options.ptyId, x, absoluteY);
         const isCopySelected =
           options.hasCopySelection && deps.isCopySelected?.(options.ptyId, x, absoluteY);
         if (isCopySelected) {
-          [fgR, fgG, fgB] = rgba8(options.copySelectionFg);
-          [bgR, bgG, bgB] = rgba8(options.copySelectionBg);
+          fgR = copySelectionFgRGB[0];
+          fgG = copySelectionFgRGB[1];
+          fgB = copySelectionFgRGB[2];
+          bgR = copySelectionBgRGB[0];
+          bgG = copySelectionBgRGB[1];
+          bgB = copySelectionBgRGB[2];
         } else if (isSelected) {
-          [fgR, fgG, fgB] = rgba8(SELECTION_FG);
-          [bgR, bgG, bgB] = rgba8(SELECTION_BG);
+          fgR = SELECTION_FG_RGB[0];
+          fgG = SELECTION_FG_RGB[1];
+          fgB = SELECTION_FG_RGB[2];
+          bgR = SELECTION_BG_RGB[0];
+          bgG = SELECTION_BG_RGB[1];
+          bgB = SELECTION_BG_RGB[2];
         } else if (options.hasSearch) {
           const isMatch = options.searchSnapshot
             ? options.searchSnapshot.isMatch(x, absoluteY)
@@ -570,11 +614,19 @@ export function renderRowDirect(
             ? options.searchSnapshot.isCurrent(x, absoluteY)
             : deps.isCurrentMatch(options.ptyId, x, absoluteY);
           if (isCurrent) {
-            [fgR, fgG, fgB] = rgba8(SEARCH_CURRENT_FG);
-            [bgR, bgG, bgB] = rgba8(SEARCH_CURRENT_BG);
+            fgR = SEARCH_CURRENT_FG_RGB[0];
+            fgG = SEARCH_CURRENT_FG_RGB[1];
+            fgB = SEARCH_CURRENT_FG_RGB[2];
+            bgR = SEARCH_CURRENT_BG_RGB[0];
+            bgG = SEARCH_CURRENT_BG_RGB[1];
+            bgB = SEARCH_CURRENT_BG_RGB[2];
           } else if (isMatch) {
-            [fgR, fgG, fgB] = rgba8(SEARCH_MATCH_FG);
-            [bgR, bgG, bgB] = rgba8(SEARCH_MATCH_BG);
+            fgR = SEARCH_MATCH_FG_RGB[0];
+            fgG = SEARCH_MATCH_FG_RGB[1];
+            fgB = SEARCH_MATCH_FG_RGB[2];
+            bgR = SEARCH_MATCH_BG_RGB[0];
+            bgG = SEARCH_MATCH_BG_RGB[1];
+            bgB = SEARCH_MATCH_BG_RGB[2];
           }
         }
       }

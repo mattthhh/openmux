@@ -124,6 +124,11 @@ export class GhosttyVTEmulatorCore {
     return this._disposed;
   }
 
+  /** Access the native terminal's cell pool for zero-allocation rendering. */
+  getCellPool(): import('./types').GhosttyCell[] {
+    return this.terminal.getCellPool();
+  }
+
   write(data: string | Uint8Array): void {
     if (this._disposed) return;
 
@@ -399,15 +404,105 @@ export class GhosttyVTEmulatorCore {
    * Safe to call when no writes are pending — returns immediately. */
   flushPendingNotify(): void {
     if (!this._writeDirty || !this.updatesEnabled) return;
-    // Flush BEFORE cancelling. cancelDeferredNotify sets _writeDirty = false
-    // and clears the scheduled timer, but flushDeferredNotify checks
-    // _writeDirty and returns immediately if false — so cancelling first
-    // silently discards the pending update and leaves cachedState stale.
-    // Flushing first prepares the update and notifies subscribers; then
-    // cancelling cleans up the deferred timer (which is now orphaned since
-    // _notifyScheduled was already consumed by the flush).
     this.flushDeferredNotify();
     this.cancelDeferredNotify();
+  }
+
+  /** Lightweight flush: update native terminal state and notify subscribers
+   * WITHOUT converting cells to TerminalCell format. When the render path
+   * reads cell data directly from the native cell pool (GhosttyCell[]), the
+   * expensive cell conversion in prepareUpdate → buildDirtyState → convertLine
+   * is unnecessary — it allocates ~7,400+ TerminalCell objects and ~14,800+
+   * fg/bg sub-objects per frame that are immediately discarded. This method
+   * instead calls terminal.update() + markClean() to advance the native state,
+   * then updates cursor/modes/scrollback metadata cheaply, and notifies
+   * subscribers so viewState.terminalState stays current.
+   *
+   * The full prepareUpdate + convertLine path still runs later when the
+   * deferred notification fires — it's a no-op since _writeDirty is already
+   * cleared. SEARCH/SELECTION operations that read TerminalCell data will
+   * get it from the eventual prepareUpdate or from getTerminalState(). */
+  flushPendingNotifySkipCells(): void {
+    if (!this._writeDirty || !this.updatesEnabled) return;
+    this._writeDirty = false;
+    this.cancelDeferredNotify();
+
+    // Advance native state: parse any buffered VT data and compute dirty flags.
+    // This updates the internal terminal state machine, viewport, cursor, etc.
+    this.terminal.update();
+    this.terminal.markClean();
+
+    // Update cursor directly from native — avoids convertLine overhead.
+    const cursor = this.terminal.getCursor();
+    const scrollbackLength = this.terminal.getScrollbackLength();
+    const isAtScrollbackLimit = scrollbackLength >= SCROLLBACK_LIMIT;
+
+    // Update modes cheaply
+    const prevModes = this.modes;
+    const newModes = getModes(this.terminal);
+    this.modes = newModes;
+
+    // Update scroll state
+    this.scrollState = {
+      ...this.scrollState,
+      scrollbackLength,
+    };
+    this.scrollbackSnapshotDirty = false;
+
+    // Update cachedState cursor + modes without rebuilding cells.
+    // This ensures viewState.terminalState.cursor reflects the latest position
+    // even though we skipped cell conversion. The cells array stays as-is.
+    if (this.cachedState) {
+      this.cachedState.cursor = {
+        x: cursor.x,
+        y: cursor.y,
+        visible: cursor.visible,
+        style: 'block',
+      };
+      this.cachedState.alternateScreen = newModes.alternateScreen;
+      this.cachedState.mouseTracking = newModes.mouseTracking;
+      this.cachedState.cursorKeyMode = newModes.cursorKeyMode;
+    }
+
+    // Create a lightweight pending update with just cursor/scroll changes.
+    // The subscriber will apply these to viewState.terminalState without
+    // needing the full dirtyRows map (which would require convertLine).
+    this.pendingUpdate = {
+      dirtyRows: new Map(),
+      cursor: { x: cursor.x, y: cursor.y, visible: cursor.visible, style: 'block' as const },
+      scrollState: {
+        viewportOffset: 0,
+        scrollbackLength,
+        isAtBottom: true,
+        isAtScrollbackLimit,
+      },
+      cols: this._cols,
+      rows: this._rows,
+      isFull: false,
+      fullState: undefined,
+      alternateScreen: newModes.alternateScreen,
+      mouseTracking: newModes.mouseTracking,
+      cursorKeyMode: newModes.cursorKeyMode,
+      kittyKeyboardFlags: this.terminal.getKittyKeyboardFlags(),
+      inBandResize: newModes.inBandResize,
+    };
+
+    // Notify subscribers so viewState updates cursor position, scroll state, etc.
+    for (const callback of this.updateCallbacks) {
+      callback();
+    }
+
+    // Fire mode change callback if modes changed
+    if (
+      prevModes.mouseTracking !== newModes.mouseTracking ||
+      prevModes.cursorKeyMode !== newModes.cursorKeyMode ||
+      prevModes.alternateScreen !== newModes.alternateScreen ||
+      prevModes.inBandResize !== newModes.inBandResize
+    ) {
+      for (const callback of this.modeChangeCallbacks) {
+        callback(newModes, prevModes);
+      }
+    }
   }
 
   setUpdateEnabled(enabled: boolean): void {

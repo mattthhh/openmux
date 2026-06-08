@@ -89,6 +89,11 @@ export class GhosttyVtTerminal {
     return this._rows;
   }
 
+  /** Access the pooled cell array (updated by getViewport()/parseCellsIntoPool). */
+  getCellPool(): GhosttyCell[] {
+    return this.cellPool;
+  }
+
   write(data: string | Uint8Array): void {
     const bytes = typeof data === 'string' ? this.encoder.encode(data) : data;
     if (bytes.length === 0) return;
