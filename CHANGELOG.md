@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.164](https://github.com/monotykamary/openmux/compare/v0.3.163...v0.3.164) (2026-06-08)
+
+
+### Performance
+
+* eliminate render-path GC pressure with direct GhosttyCell→buffer pipeline ([e4ba02d](https://github.com/monotykamary/openmux/commit/e4ba02dff0d35f8de40d0769437e69988bce6ac7))
+
 ### [0.3.163](https://github.com/monotykamary/openmux/compare/v0.3.162...v0.3.163) (2026-06-05)
 
 ### [0.3.162](https://github.com/monotykamary/openmux/compare/v0.3.161...v0.3.162) (2026-06-05)
