@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.165](https://github.com/monotykamary/openmux/compare/v0.3.164...v0.3.165) (2026-06-12)
+
+
+### Bug Fixes
+
+* **terminal:** add reactive signal mirror to focused-pty-registry ([54a7d76](https://github.com/monotykamary/openmux/commit/54a7d769c9dc04ab393c2e95bcf2a09820b06a95))
+
 ### [0.3.164](https://github.com/monotykamary/openmux/compare/v0.3.163...v0.3.164) (2026-06-08)
 
 
