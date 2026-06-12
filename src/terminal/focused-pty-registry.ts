@@ -15,6 +15,8 @@
  * is always complete (no chunking issues).
  */
 
+import { createSignal } from 'solid-js';
+
 /**
  * Clipboard paste handler function type.
  * Called when paste is triggered (paste start marker detected in stdin).
@@ -30,6 +32,12 @@ type ClipboardPasteHandler = (ptyId: string) => void;
 type CopyModeExitCallback = () => void;
 
 let focusedPtyId: string | null = null;
+// Signal mirror of focusedPtyId so reactive scopes can re-run when the
+// registry changes. The registry is written from a SolidJS effect
+// (setupFocusedPtyRegistry) that has no ordering guarantee relative to
+// other effects reading it via getFocusedPtyId() — consumers that gate
+// behavior on the focused PTY must track this signal to converge.
+const [focusedPtyIdSignal, setFocusedPtyIdSignal] = createSignal<string | null>(null);
 let clipboardPasteHandler: ClipboardPasteHandler | null = null;
 let copyModeExitCallback: CopyModeExitCallback | null = null;
 let readThrottleCallback:
@@ -50,6 +58,7 @@ export function setFocusedPty(ptyId: string | null): void {
   if (ptyId === focusedPtyId) return;
   const previous = focusedPtyId;
   focusedPtyId = ptyId;
+  setFocusedPtyIdSignal(ptyId);
   // Synchronously update read throttles so the new focused PTY reads data
   // immediately and the old PTY stops contending for event loop time.
   // The SolidJS effect in unified-subscription.ts also calls
@@ -103,9 +112,19 @@ export function getFocusedPtyId(): string | null {
   return focusedPtyId;
 }
 
+/**
+ * Reactive accessor for the focused PTY ID. Reading this inside a SolidJS
+ * tracking scope subscribes it to focus changes — use this (not
+ * getFocusedPtyId) in effects that must re-evaluate when focus moves.
+ */
+export function observeFocusedPtyId(): string | null {
+  return focusedPtyIdSignal();
+}
+
 /** Reset the focused PTY registry (for testing). */
 export function resetFocusedPtyRegistry(): void {
   focusedPtyId = null;
+  setFocusedPtyIdSignal(null);
   clipboardPasteHandler = null;
   copyModeExitCallback = null;
   readThrottleCallback = null;

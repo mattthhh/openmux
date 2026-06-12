@@ -10,6 +10,8 @@ import {
   setCopyModeExitCallback,
   triggerClipboardPaste,
   getFocusedPtyId,
+  observeFocusedPtyId,
+  resetFocusedPtyRegistry,
 } from '../focused-pty-registry';
 
 describe('focused-pty-registry', () => {
@@ -29,6 +31,30 @@ describe('focused-pty-registry', () => {
     it('clears the focused PTY ID with null', () => {
       setFocusedPty('pty-1');
       setFocusedPty(null);
+      expect(getFocusedPtyId()).toBeNull();
+    });
+  });
+
+  describe('observeFocusedPtyId', () => {
+    // Note: bun:test resolves solid-js to its server build, where
+    // createEffect is a no-op — the reactive re-run behavior can't be
+    // exercised here. These tests verify the signal stays in lockstep
+    // with the plain registry value.
+    it('mirrors setFocusedPty', () => {
+      expect(observeFocusedPtyId()).toBeNull();
+
+      setFocusedPty('pty-1');
+      expect(observeFocusedPtyId()).toBe('pty-1');
+      expect(observeFocusedPtyId()).toBe(getFocusedPtyId());
+
+      setFocusedPty(null);
+      expect(observeFocusedPtyId()).toBeNull();
+    });
+
+    it('resets with resetFocusedPtyRegistry', () => {
+      setFocusedPty('pty-1');
+      resetFocusedPtyRegistry();
+      expect(observeFocusedPtyId()).toBeNull();
       expect(getFocusedPtyId()).toBeNull();
     });
   });

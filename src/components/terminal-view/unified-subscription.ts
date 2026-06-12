@@ -9,6 +9,7 @@ import {
   unregisterScrollAnimRender,
 } from '../../effect/bridge';
 import { getKittyGraphicsRenderer } from '../../terminal/kitty-graphics';
+import { getFocusedPtyId, observeFocusedPtyId } from '../../terminal/focused-pty-registry';
 import * as errore from 'errore';
 import { TerminalSubscriptionError } from '../../effect/errors';
 import {
@@ -430,7 +431,13 @@ export function setupUnifiedSubscription(deps: UnifiedSubscriptionDeps): void {
           const startBackgroundPulse = () => {
             if (backgroundPulseTimer) return;
             backgroundPulseTimer = setInterval(() => {
-              if (!mounted || isFocused()) return;
+              if (!mounted) return;
+              // Skip the pulse only when this pane is focused per BOTH the
+              // prop and the registry. If they disagree (transient desync
+              // between the focus effects), the emulator's incremental
+              // updates are gated off — pulse so the pane degrades to 1fps
+              // instead of freezing entirely.
+              if (isFocused() && getFocusedPtyId() === ptyId) return;
               triggerBackgroundPulse();
             }, BACKGROUND_PULSE_INTERVAL_MS);
           };
@@ -442,11 +449,21 @@ export function setupUnifiedSubscription(deps: UnifiedSubscriptionDeps): void {
           // When a pane loses focus, updates are disabled (1fps pulse takes over).
           createEffect(() => {
             const focused = isFocused();
+            // Track the focused-PTY registry too. The registry is written by a
+            // sibling effect (setupFocusedPtyRegistry) with no ordering
+            // guarantee relative to this one. If this effect runs first on a
+            // focus change, reevaluateUpdateGate reads the stale registry and
+            // disables updates for the pane that just gained focus — and
+            // without this dependency nothing would ever re-evaluate the
+            // gate, leaving the focused pane permanently frozen (it's also
+            // skipped by the 1fps background pulse). Tracking the registry
+            // makes the gate converge regardless of effect ordering.
+            const registryFocusedPtyId = observeFocusedPtyId();
             if (!mounted || !em) return;
             // Re-evaluate the visibility/update gate based on current focus state.
             // This enables/disables incremental emulator updates appropriately.
             reevaluateUpdateGate(ptyId, em);
-            if (focused) {
+            if (focused && registryFocusedPtyId === ptyId) {
               // Cancel any pending background re-throttle — focus gain already
               // applies the correct throttle via reevaluateUpdateGate above.
               cancelReThrottle(ptyId);
