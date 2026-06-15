@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.167](https://github.com/monotykamary/openmux/compare/v0.3.166...v0.3.167) (2026-06-15)
+
+
+### Bug Fixes
+
+* fall back to stdin paste data when clipboard is unavailable ([0466c5a](https://github.com/monotykamary/openmux/commit/0466c5ad8b48db74746e4f3b20adc78baf0a4425)), closes [#24](https://github.com/monotykamary/openmux/issues/24)
+
 ### [0.3.166](https://github.com/monotykamary/openmux/compare/v0.3.165...v0.3.166) (2026-06-15)
 
 
