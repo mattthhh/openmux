@@ -39,7 +39,7 @@
     "release:first": "standard-version --first-release",
     "publish:npm": "./scripts/publish.sh",
     "lfg": "bun release && git push --follow-tags && bun publish:npm",
-    "postinstall": "simple-git-hooks"
+    "prepare": "simple-git-hooks"
   },
   "simple-git-hooks": {
     "pre-commit": "bunx lint-staged",
