@@ -16,7 +16,7 @@ export type AppEffectsDeps = Omit<OverlayClipDeps, 'commandPaletteCommands'> & {
   renderer: CliRenderer;
   pasteHandler: { handleBracketedPaste: (event: PasteEvent) => void };
   setUpdateLabel: (label: string | null) => void;
-  setClipboardPasteHandler: (handler: (ptyId: string) => void) => void;
+  setClipboardPasteHandler: (handler: (ptyId: string) => Promise<boolean> | boolean) => void;
   setCopyModeExitCallback: (callback: (() => void) | null) => void;
   readFromClipboard: () => Promise<string | null>;
   writeToPTY: (ptyId: string, data: string) => void | Promise<void>;

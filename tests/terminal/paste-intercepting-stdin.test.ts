@@ -22,7 +22,7 @@ describe('createPasteInterceptingStdin', () => {
       Object.assign(realStdin, { fd: 0 });
 
       const passthrough = createPasteInterceptingStdin(realStdin, {
-        onPasteTriggered: () => {},
+        onPasteTriggered: () => true,
       });
 
       // Call setRawMode on the passthrough - should preserve binding
@@ -38,7 +38,7 @@ describe('createPasteInterceptingStdin', () => {
       realStdin.isTTY = false;
 
       const passthrough = createPasteInterceptingStdin(realStdin, {
-        onPasteTriggered: () => {},
+        onPasteTriggered: () => true,
       });
 
       expect(passthrough.isTTY).toBe(false);
@@ -50,7 +50,7 @@ describe('createPasteInterceptingStdin', () => {
       realStdin.isTTY = false;
 
       const passthrough = createPasteInterceptingStdin(realStdin, {
-        onPasteTriggered: () => {},
+        onPasteTriggered: () => true,
       });
 
       expect(passthrough.setRawMode).toBeUndefined();
@@ -63,7 +63,7 @@ describe('createPasteInterceptingStdin', () => {
       Object.assign(realStdin, { fd: 0 });
 
       const passthrough = createPasteInterceptingStdin(realStdin, {
-        onPasteTriggered: () => {},
+        onPasteTriggered: () => true,
       });
 
       // Should not throw when accessing undefined setRawMode
@@ -81,22 +81,23 @@ describe('createPasteInterceptingStdin', () => {
       const passthrough = createPasteInterceptingStdin(realStdin, {
         onPasteTriggered: () => {
           pasteTriggered = true;
+          return true;
         },
       });
 
-      // Write paste start sequence
-      realStdin.write(Buffer.from('\x1b[200~'));
+      // Write a complete paste sequence (start + content + end)
+      realStdin.write(Buffer.from('\x1b[200~hello\x1b[201~'));
 
       expect(pasteTriggered).toBe(true);
     });
 
-    it('should swallow paste data until end sequence', () => {
+    it('should swallow paste data when clipboard succeeds', () => {
       const realStdin = new PassThrough() as NodeJS.ReadStream & TtyProperties;
       realStdin.setRawMode = () => true;
       const chunks: Buffer[] = [];
 
       const passthrough = createPasteInterceptingStdin(realStdin, {
-        onPasteTriggered: () => {},
+        onPasteTriggered: () => true,
       });
 
       passthrough.on('data', (chunk: Buffer) => chunks.push(chunk));
@@ -104,8 +105,50 @@ describe('createPasteInterceptingStdin', () => {
       // Write paste start + content + end
       realStdin.write(Buffer.from('\x1b[200~swallowed data\x1b[201~'));
 
-      // Only the end sequence should pass through (indicating paste ended)
-      expect(chunks.length).toBeGreaterThanOrEqual(0); // May be empty or just control sequences
+      // Clipboard succeeded — paste data should be swallowed
+      expect(chunks.length).toBe(0);
+    });
+
+    it('should fall back to stdin data when clipboard fails', () => {
+      const realStdin = new PassThrough() as NodeJS.ReadStream & TtyProperties;
+      realStdin.setRawMode = () => true;
+      const chunks: Buffer[] = [];
+
+      const passthrough = createPasteInterceptingStdin(realStdin, {
+        onPasteTriggered: () => false,
+      });
+
+      passthrough.on('data', (chunk: Buffer) => chunks.push(chunk));
+
+      // Write paste start + content + end
+      realStdin.write(Buffer.from('\x1b[200~pasted text\x1b[201~'));
+
+      // Clipboard failed — stdin data should be passed through
+      const combined = Buffer.concat(chunks);
+      expect(combined.toString()).toContain('pasted text');
+      expect(combined.toString()).toContain('\x1b[200~');
+      expect(combined.toString()).toContain('\x1b[201~');
+    });
+
+    it('should fall back to stdin data on async clipboard failure', async () => {
+      const realStdin = new PassThrough() as NodeJS.ReadStream & TtyProperties;
+      realStdin.setRawMode = () => true;
+      const chunks: Buffer[] = [];
+
+      const passthrough = createPasteInterceptingStdin(realStdin, {
+        onPasteTriggered: () => Promise.resolve(false),
+      });
+
+      passthrough.on('data', (chunk: Buffer) => chunks.push(chunk));
+
+      // Write paste start + content + end
+      realStdin.write(Buffer.from('\x1b[200~async paste\x1b[201~'));
+
+      // Wait for the async handler to resolve
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      const combined = Buffer.concat(chunks);
+      expect(combined.toString()).toContain('async paste');
     });
   });
 });

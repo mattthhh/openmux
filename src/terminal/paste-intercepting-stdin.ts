@@ -1,18 +1,17 @@
 /**
- * Paste-Intercepting Stdin Wrapper (Clipboard Passthrough)
+ * Paste-Intercepting Stdin Wrapper (Clipboard Passthrough with Fallback)
  *
  * Intercepts bracketed paste sequences at the raw Buffer level and triggers
- * a clipboard read instead of using the unreliable stdin paste data.
- *
- * The key insight: stdin paste data arrives in unpredictable chunks that are
- * impossible to reliably reconstruct. Instead, we use the paste start marker
- * as a TRIGGER to read from the system clipboard (which is always complete).
+ * a clipboard read. If the clipboard read fails (e.g. SSH sessions where
+ * the server clipboard is empty), falls back to the buffered stdin paste
+ * data so paste still works over remote connections.
  *
  * Flow:
  * 1. Detect paste start marker (\x1b[200~)
- * 2. Trigger clipboard read via onPasteTriggered callback
- * 3. Swallow all stdin paste data until paste end marker
- * 4. Resume normal passthrough after paste end
+ * 2. Buffer all stdin data between start and end markers
+ * 3. Trigger clipboard read via onPasteTriggered callback
+ * 4. If clipboard succeeds (callback returns true): discard buffered data
+ * 5. If clipboard fails (callback returns false): push buffered data through
  */
 
 import { PassThrough } from 'stream';
@@ -112,9 +111,10 @@ export interface PasteInterceptorConfig {
   /**
    * Called when paste start marker is detected.
    * Implementation should read from system clipboard and write to PTY.
-   * The stdin paste data is swallowed - do NOT rely on it.
+   * Return true if clipboard read succeeded (stdin data will be discarded).
+   * Return false if clipboard read failed (stdin data will be used as fallback).
    */
-  onPasteTriggered: () => void;
+  onPasteTriggered: () => Promise<boolean> | boolean;
 }
 
 /**
@@ -148,8 +148,59 @@ export function createPasteInterceptingStdin(
   const passthrough = new PassThrough();
 
   let isPasting = false;
+  let pasteBuffer: Buffer[] = []; // Buffer stdin paste data for fallback
   let pendingBuffer: Buffer | null = null; // Buffer for partial sequences at chunk boundaries
   let pendingControlBuffer: Buffer | null = null;
+  let pendingPasteEnd: Buffer | null = null; // Data after paste end, held until clipboard resolves
+
+  /**
+   * Called when clipboard read fails — push buffered stdin paste data
+   * through to the passthrough stream so remote/SSH paste still works.
+   */
+  function fallbackToStdinData(): void {
+    const content = Buffer.concat([PASTE_START, ...pasteBuffer, PASTE_END]);
+    pasteBuffer = [];
+    passthrough.push(content);
+    releasePendingAfterEnd();
+  }
+
+  /**
+   * Release any data that arrived after the paste end marker.
+   * Called after paste resolution (clipboard success or fallback).
+   */
+  function releasePendingAfterEnd(): void {
+    if (pendingPasteEnd) {
+      const afterEnd = pendingPasteEnd;
+      pendingPasteEnd = null;
+      handleRawData(afterEnd);
+    }
+  }
+
+  /**
+   * Resolve a paste event: try clipboard first, fall back to stdin data.
+   */
+  function resolvePaste(): void {
+    const result = config.onPasteTriggered();
+    if (result instanceof Promise) {
+      result
+        .then((succeeded) => {
+          if (!succeeded) {
+            fallbackToStdinData();
+          } else {
+            pasteBuffer = [];
+            releasePendingAfterEnd();
+          }
+        })
+        .catch(() => fallbackToStdinData());
+    } else {
+      if (!result) {
+        fallbackToStdinData();
+      } else {
+        pasteBuffer = [];
+        releasePendingAfterEnd();
+      }
+    }
+  }
 
   // Handle raw stdin data before any encoding is applied
   const handleRawData = (chunk: Buffer | string): void => {
@@ -184,44 +235,46 @@ export function createPasteInterceptingStdin(
       }
 
       isPasting = true;
-
-      // TRIGGER CLIPBOARD READ - don't buffer stdin data!
-      config.onPasteTriggered();
+      pasteBuffer = [];
 
       // Check if paste end is in same chunk
       const afterStart = data.subarray(startIdx + PASTE_START.length);
       const endIdx = afterStart.indexOf(PASTE_END);
 
       if (endIdx !== -1) {
-        // Paste end in same chunk
+        // Paste end in same chunk — buffer the content
+        pasteBuffer.push(afterStart.subarray(0, endIdx));
         isPasting = false;
 
-        // Pass through anything after paste end to OpenTUI
+        // Anything after paste end needs to be held until clipboard resolves
         const afterEnd = afterStart.subarray(endIdx + PASTE_END.length);
-        if (afterEnd.length > 0) {
-          // Recursively process in case there's another paste
-          handleRawData(afterEnd);
-        }
+        pendingPasteEnd = afterEnd.length > 0 ? afterEnd : null;
+
+        // Trigger clipboard read; fall back to buffered data if it fails
+        resolvePaste();
       }
-      // Swallow stdin paste data - we read from clipboard instead
+      // If paste end not in same chunk, keep buffering on subsequent calls
       return;
     }
 
     if (isPasting) {
-      // We're in the middle of a paste - swallow data, check for end marker
+      // We're in the middle of a paste - buffer data, check for end marker
       const endIdx = data.indexOf(PASTE_END);
       if (endIdx !== -1) {
-        // Found end of paste
+        // Found end of paste — buffer the final chunk
+        pasteBuffer.push(data.subarray(0, endIdx));
         isPasting = false;
 
-        // Pass through anything after paste end to OpenTUI
+        // Anything after paste end needs to be held until clipboard resolves
         const afterEnd = data.subarray(endIdx + PASTE_END.length);
-        if (afterEnd.length > 0) {
-          // Recursively process in case there's another paste or normal input
-          handleRawData(afterEnd);
-        }
+        pendingPasteEnd = afterEnd.length > 0 ? afterEnd : null;
+
+        // Trigger clipboard read; fall back to buffered data if it fails
+        resolvePaste();
+      } else {
+        // Still in paste — buffer this chunk
+        pasteBuffer.push(data);
       }
-      // Swallow all stdin paste data - we read from clipboard instead
       return;
     }
 

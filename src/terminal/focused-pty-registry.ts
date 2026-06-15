@@ -1,5 +1,5 @@
 /**
- * Focused PTY Registry (Clipboard Passthrough)
+ * Focused PTY Registry (Clipboard Passthrough with Fallback)
  *
  * A simple singleton registry that tracks the currently focused PTY and
  * provides a way to trigger clipboard paste to it. This is used by the
@@ -10,9 +10,9 @@
  * 2. The PTY information lives in the SolidJS context (inside React)
  * 3. We need a bridge between these two worlds
  *
- * Key insight: We DON'T pass stdin paste data through this registry.
- * Instead, the handler reads from the system clipboard directly, which
- * is always complete (no chunking issues).
+ * The handler returns true if clipboard read succeeded (stdin data can be
+ * discarded) or false if it failed (stdin data should be used as fallback).
+ * This fallback enables paste over SSH where the server clipboard is empty.
  */
 
 import { createSignal } from 'solid-js';
@@ -21,12 +21,11 @@ import { createSignal } from 'solid-js';
  * Clipboard paste handler function type.
  * Called when paste is triggered (paste start marker detected in stdin).
  * Implementation should:
- * 1. Read from system clipboard (always complete)
- * 2. Check if child app has mode 2004 enabled
- * 3. Wrap with bracketed paste markers if needed
- * 4. Write atomically to PTY
+ * 1. Read from system clipboard
+ * 2. If clipboard has content, write it to PTY and return true
+ * 3. If clipboard is empty/unavailable, return false to trigger stdin fallback
  */
-type ClipboardPasteHandler = (ptyId: string) => void;
+type ClipboardPasteHandler = (ptyId: string) => Promise<boolean> | boolean;
 
 /** Callback invoked before clipboard paste to exit copy mode if active */
 type CopyModeExitCallback = () => void;
@@ -95,14 +94,15 @@ export function setCopyModeExitCallback(callback: CopyModeExitCallback | null): 
 /**
  * Trigger clipboard paste to the currently focused PTY.
  * Called when paste start marker is detected in stdin.
- * Returns true if paste was triggered, false if no focused PTY or handler.
+ * Returns true if clipboard paste was triggered and succeeded,
+ * false if no focused PTY/handler or if clipboard read failed
+ * (caller should fall back to stdin paste data).
  */
-export function triggerClipboardPaste(): boolean {
+export function triggerClipboardPaste(): Promise<boolean> | boolean {
   if (focusedPtyId && clipboardPasteHandler) {
     // Exit copy mode if active so the pasted content is visible to the user
     copyModeExitCallback?.();
-    clipboardPasteHandler(focusedPtyId);
-    return true;
+    return clipboardPasteHandler(focusedPtyId);
   }
   return false;
 }

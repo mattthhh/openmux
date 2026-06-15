@@ -18,7 +18,7 @@ describe('focused-pty-registry', () => {
   // Reset all state between tests
   beforeEach(() => {
     setFocusedPty(null);
-    setClipboardPasteHandler(() => {});
+    setClipboardPasteHandler(() => true);
     setCopyModeExitCallback(null);
   });
 
@@ -61,7 +61,7 @@ describe('focused-pty-registry', () => {
 
   describe('triggerClipboardPaste', () => {
     it('returns false when no focused PTY', () => {
-      const handler = mock(() => {});
+      const handler = mock(() => true as boolean);
       setClipboardPasteHandler(handler);
       expect(triggerClipboardPaste()).toBe(false);
       expect(handler).not.toHaveBeenCalled();
@@ -75,7 +75,7 @@ describe('focused-pty-registry', () => {
 
     it('calls clipboard handler with focused PTY ID', () => {
       setFocusedPty('pty-1');
-      const handler = mock((_ptyId: string) => {});
+      const handler = mock((_ptyId: string) => true as boolean);
       setClipboardPasteHandler(handler);
       expect(triggerClipboardPaste()).toBe(true);
       expect(handler).toHaveBeenCalledWith('pty-1');
@@ -86,7 +86,7 @@ describe('focused-pty-registry', () => {
     it('does not call exit callback when not set', () => {
       setFocusedPty('pty-1');
       const exitCb = mock(() => {});
-      const handler = mock(() => {});
+      const handler = mock(() => true as boolean);
       setClipboardPasteHandler(handler);
       // Don't set copyModeExitCallback
       triggerClipboardPaste();
@@ -101,6 +101,7 @@ describe('focused-pty-registry', () => {
       });
       const handler = mock(() => {
         callOrder.push('paste');
+        return true as boolean;
       });
       setClipboardPasteHandler(handler);
       setCopyModeExitCallback(exitCb);
@@ -118,7 +119,7 @@ describe('focused-pty-registry', () => {
       setCopyModeExitCallback(exitCb);
       setCopyModeExitCallback(null);
 
-      const handler = mock(() => {});
+      const handler = mock(() => true as boolean);
       setClipboardPasteHandler(handler);
 
       triggerClipboardPaste();

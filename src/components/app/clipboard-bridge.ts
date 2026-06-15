@@ -1,7 +1,7 @@
 import { onCleanup, onMount } from 'solid-js';
 
 export function setupClipboardAndShimBridge(params: {
-  setClipboardPasteHandler: (handler: (ptyId: string) => void) => void;
+  setClipboardPasteHandler: (handler: (ptyId: string) => Promise<boolean> | boolean) => void;
   readFromClipboard: () => Promise<string | null>;
   writeToPTY: (ptyId: string, data: string) => void | Promise<void>;
   onShimDetached: (handler: () => void) => () => void;
@@ -21,20 +21,22 @@ export function setupClipboardAndShimBridge(params: {
     const PASTE_END = '\x1b[201~';
 
     // Register clipboard paste handler
-    // This is called when paste start marker is detected in stdin
-    // We read from clipboard (always complete, no chunking issues) instead of stdin data
+    // Returns true if clipboard read succeeded, false to fall back to stdin data
+    // (important for SSH sessions where the server clipboard is empty)
     setClipboardPasteHandler(async (ptyId) => {
       try {
-        // Read directly from system clipboard - always complete, no chunking issues
+        // Read directly from system clipboard
         const clipboardText = await readFromClipboard();
-        if (!clipboardText) return;
+        if (!clipboardText) return false;
 
         // Send complete paste atomically with brackets
         // Apps with bracketed paste mode expect the entire paste between markers
         const fullPaste = PASTE_START + clipboardText + PASTE_END;
         await Promise.resolve(writeToPTY(ptyId, fullPaste));
+        return true;
       } catch (err) {
         console.error('Clipboard paste error:', err);
+        return false;
       }
     });
 

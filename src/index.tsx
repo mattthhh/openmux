@@ -101,7 +101,7 @@ async function initializeAndRender(): Promise<StartupError | void> {
 
   const interceptingStdin = createPasteInterceptingStdin(process.stdin, {
     onPasteTriggered: () => {
-      triggerClipboardPaste();
+      return triggerClipboardPaste();
     },
   });
 
