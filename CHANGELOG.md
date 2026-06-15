@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.166](https://github.com/monotykamary/openmux/compare/v0.3.165...v0.3.166) (2026-06-15)
+
+
+### Bug Fixes
+
+* use prepare instead of postinstall for simple-git-hooks ([902a254](https://github.com/monotykamary/openmux/commit/902a25475b8a6f3a999f61b3aa59c61ed770aa1b)), closes [#23](https://github.com/monotykamary/openmux/issues/23)
+
 ### [0.3.165](https://github.com/monotykamary/openmux/compare/v0.3.164...v0.3.165) (2026-06-12)
 
 
