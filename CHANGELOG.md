@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.168](https://github.com/monotykamary/openmux/compare/v0.3.167...v0.3.168) (2026-06-16)
+
+
+### Bug Fixes
+
+* **clipboard:** fall back to osc 52 when system clipboard is unavailable ([c6b04e2](https://github.com/monotykamary/openmux/commit/c6b04e2bff84e8549e25207d839c04d5025ee459))
+* **paste:** avoid empty-string crash on remote paste fallback ([d54a43c](https://github.com/monotykamary/openmux/commit/d54a43cd1021de52cc5d4ba7651d5cee392d74f7))
+
+
+### Tests
+
+* **clipboard:** add unit tests for osc 52 fallback ([2b77fba](https://github.com/monotykamary/openmux/commit/2b77fba972450940adf63a75dcd191b98f8a67f0))
+* **e2e:** add docker-based clipboard-over-ssh e2e harness ([b4cf0cd](https://github.com/monotykamary/openmux/commit/b4cf0cd54bf134dac13088eb3065a1a05f629685))
+
 ### [0.3.167](https://github.com/monotykamary/openmux/compare/v0.3.166...v0.3.167) (2026-06-15)
 
 
