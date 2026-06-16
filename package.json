@@ -28,6 +28,7 @@
     "test:ghostty-wrapper": "bun run test:zig-ghostty-wrapper",
     "test:ghostty-vt": "bun run test:zig-ghostty-wrapper",
     "test:watch": "bun test --watch",
+    "test:e2e:clipboard-over-ssh": "bash e2e/run.sh",
     "check:circular": "bunx madge --circular --extensions ts,tsx src/",
     "lint": "eslint src",
     "lint:dead": "knip --no-gitignore",

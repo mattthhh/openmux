@@ -1,0 +1,19 @@
+# Dependencies and build artifacts
+node_modules
+dist
+*.log
+zig-out
+.zig-cache
+native/*/zig-out
+native/*/.zig-cache
+
+# Git metadata (not needed in the container; --ignore-scripts skips hooks)
+.git
+.gitignore
+
+# OS files
+.DS_Store
+
+# Editor files
+.vscode
+.idea
