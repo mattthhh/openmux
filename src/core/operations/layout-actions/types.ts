@@ -43,5 +43,6 @@ export type LayoutAction =
   | { type: 'SET_PANE_TITLE'; paneId: NodeId; title: string }
   | { type: 'SWAP_MAIN' }
   | { type: 'TOGGLE_ZOOM' }
+  | { type: 'TOGGLE_SYNCHRONIZED_PANES' }
   | { type: 'LOAD_SESSION'; workspaces: Workspaces; activeWorkspaceId: WorkspaceId }
   | { type: 'CLEAR_ALL' };

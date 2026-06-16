@@ -86,6 +86,9 @@ export function StatusBar(props: StatusBarProps) {
         <Show when={props.updateLabel}>
           <text fg={theme.statusBar.successColor}>{props.updateLabel}</text>
         </Show>
+        <Show when={(layout.activeWorkspace.synchronizedPanes ?? false)}>
+          <text fg={theme.pane.focusedBorderColor}>[SYNC PANES]</text>
+        </Show>
         <Show when={layout.activeWorkspace.zoomed}>
           <text fg={theme.ui.mutedText}>[ZOOMED]</text>
         </Show>

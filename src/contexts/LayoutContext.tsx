@@ -65,6 +65,7 @@ export interface LayoutContextValue {
   swapMain: () => void;
   movePane: (direction: Direction) => void;
   toggleZoom: () => void;
+  toggleSynchronizedPanes: () => void;
   loadSession: (params: { workspaces: Workspaces; activeWorkspaceId: WorkspaceId }) => void;
   clearAll: () => void;
   /** Get estimated dimensions for a new pane (for PTY creation before pane exists) */
@@ -334,6 +335,7 @@ export function LayoutProvider(props: LayoutProviderProps) {
   const swapMain = () => dispatch({ type: 'SWAP_MAIN' });
   const movePane = (direction: Direction) => dispatch({ type: 'MOVE_PANE', direction });
   const toggleZoom = () => dispatch({ type: 'TOGGLE_ZOOM' });
+  const toggleSynchronizedPanes = () => dispatch({ type: 'TOGGLE_SYNCHRONIZED_PANES' });
   const loadSession = (params: { workspaces: Workspaces; activeWorkspaceId: WorkspaceId }) =>
     dispatch({
       type: 'LOAD_SESSION',
@@ -416,6 +418,7 @@ export function LayoutProvider(props: LayoutProviderProps) {
     swapMain,
     movePane,
     toggleZoom,
+    toggleSynchronizedPanes,
     loadSession,
     clearAll,
     getNewPaneDimensions,

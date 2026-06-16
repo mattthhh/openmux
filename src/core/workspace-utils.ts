@@ -3,7 +3,7 @@
  * Centralizes common operations on workspaces to avoid duplication
  */
 
-import type { Workspace, PaneData } from './types';
+import type { Workspace, PaneData, LayoutNode } from './types';
 import { containsPane, findPane } from './layout-tree';
 
 /**
@@ -41,4 +41,36 @@ export function getFocusedPtyId(workspace: Workspace): string | undefined {
 export function isMainPaneFocused(workspace: Workspace): boolean {
   if (!workspace.mainPane || !workspace.focusedPaneId) return false;
   return containsPane(workspace.mainPane, workspace.focusedPaneId);
+}
+
+/**
+ * Get every PTY ID attached to panes in a workspace.
+ */
+export function getWorkspacePtyIds(workspace: Workspace): string[] {
+  const ptyIds: string[] = [];
+  const appendPty = (pane: PaneData) => {
+    if (pane.ptyId) {
+      ptyIds.push(pane.ptyId);
+    }
+  };
+
+  if (workspace.mainPane) {
+    collectPanePtys(workspace.mainPane, appendPty);
+  }
+
+  for (const pane of workspace.stackPanes) {
+    collectPanePtys(pane, appendPty);
+  }
+
+  return [...new Set(ptyIds)];
+}
+
+function collectPanePtys(node: LayoutNode, appendPty: (pane: PaneData) => void) {
+  if (node.type === 'split') {
+    collectPanePtys(node.first, appendPty);
+    collectPanePtys(node.second, appendPty);
+    return;
+  }
+
+  appendPty(node);
 }

@@ -23,6 +23,7 @@ import {
   handleSwapMain,
   handleMovePane,
   handleToggleZoom,
+  handleToggleSynchronizedPanes,
 } from './pane-ops';
 
 /**
@@ -74,6 +75,9 @@ export function layoutReducer(state: LayoutState, action: LayoutAction): LayoutS
 
     case 'TOGGLE_ZOOM':
       return handleToggleZoom(state);
+
+    case 'TOGGLE_SYNCHRONIZED_PANES':
+      return handleToggleSynchronizedPanes(state);
 
     case 'LOAD_SESSION':
       return handleLoadSession(state, action.workspaces, action.activeWorkspaceId);

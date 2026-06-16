@@ -19,7 +19,7 @@ import { useAggregateView } from './contexts/AggregateViewContext';
 import { useTitle } from './contexts/TitleContext';
 import { useAppActions } from './components/app/app-actions';
 import { PaneContainer } from './components';
-import { getFocusedPtyId } from './core/workspace-utils';
+import { getFocusedPtyId, getWorkspacePtyIds } from './core/workspace-utils';
 import { resolveAggregatePreviewPtyId } from './components/aggregate/utils';
 import { onShimDetached } from './effect/bridge';
 import { createPaneResizeHandlers, createPasteHandler } from './components/app';
@@ -178,6 +178,16 @@ function AppContent() {
   const { exitSearchMode, setSearchQuery, nextMatch, prevMatch } = search;
   const { clearAllSelections } = selection;
   const { writeToFocused, getFocusedEmulator, requestSnapToBottom } = terminal;
+  const writeToKeyboardTargets = (data: string) => {
+    if (!(layout.activeWorkspace.synchronizedPanes ?? false)) {
+      writeToFocused(data);
+      return;
+    }
+
+    for (const ptyId of getWorkspacePtyIds(layout.activeWorkspace)) {
+      terminal.writeToPTY(ptyId, data);
+    }
+  };
 
   setupAppEffects({
     getWidth: width,
@@ -254,10 +264,12 @@ function AppContent() {
     getSearchVimHandler: appActions.getSearchVimHandler,
     clearAllSelections,
     getFocusedEmulator,
-    writeToFocused,
+    writeToFocused: writeToKeyboardTargets,
     requestSnapToBottom: () => {
-      const id = getFocusedPtyId(layout.activeWorkspace);
-      if (id) requestSnapToBottom(id);
+      const ids = (layout.activeWorkspace.synchronizedPanes ?? false)
+        ? getWorkspacePtyIds(layout.activeWorkspace)
+        : [getFocusedPtyId(layout.activeWorkspace)].filter((id): id is string => Boolean(id));
+      for (const id of ids) requestSnapToBottom(id);
     },
     isOverlayActive: () => sessionState.showSessionPicker || session.showTemplateOverlay,
     handleCopyModeKey: appActions.handleCopyModeKey,
