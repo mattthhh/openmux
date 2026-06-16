@@ -174,6 +174,9 @@ export function setUpdateEnabledSync(ptyId: string, enabled: boolean): void {
 
 let _lastSyncWriteTime = 0;
 export function writeToPtySync(ptyId: string, data: string): void {
+  // Some native PTY implementations reject empty writes with a TypeError
+  // about ArrayBufferView length. Skip empty writes in all paths.
+  if (data.length === 0) return;
   _lastSyncWriteTime = performance.now();
   const writer = ptyWriteRegistry.get(ptyId);
   if (writer) {
@@ -192,6 +195,7 @@ export function writeToPtySync(ptyId: string, data: string): void {
 }
 
 export async function writeToPty(ptyId: string, data: string): Promise<void> {
+  if (data.length === 0) return;
   const pty = getPtyService();
   const result = await pty.write(asPtyId(ptyId), data);
   if (result instanceof Error) {

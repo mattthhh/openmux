@@ -21,6 +21,11 @@ export function createPasteHandler(deps: PasteHandlerDeps) {
    * Handle bracketed paste from host terminal (Cmd+V sends this)
    */
   const handleBracketedPaste = (event: PasteEvent) => {
+    // Ignore empty paste events that can reach us if the terminal emitted a
+    // bracketed paste sequence with no content. Writing an empty string to
+    // the native PTY layer can trigger an ArrayBufferView length error.
+    if (!event.bytes || event.bytes.length === 0) return;
+
     // Exit copy mode if active so the pasted content is visible to the user
     exitCopyMode?.();
     // Write the pasted text directly to the focused pane's PTY

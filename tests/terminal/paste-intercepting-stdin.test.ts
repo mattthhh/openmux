@@ -150,5 +150,25 @@ describe('createPasteInterceptingStdin', () => {
       const combined = Buffer.concat(chunks);
       expect(combined.toString()).toContain('async paste');
     });
+
+    it('should not emit empty markers when clipboard fails on an empty paste', async () => {
+      const realStdin = new PassThrough() as NodeJS.ReadStream & TtyProperties;
+      realStdin.setRawMode = () => true;
+      const chunks: Buffer[] = [];
+
+      const passthrough = createPasteInterceptingStdin(realStdin, {
+        onPasteTriggered: () => Promise.resolve(false),
+      });
+
+      passthrough.on('data', (chunk: Buffer) => chunks.push(chunk));
+
+      // Paste markers with no content between them
+      realStdin.write(Buffer.from('\x1b[200~\x1b[201~'));
+
+      // Wait for the async handler to resolve
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      expect(Buffer.concat(chunks).length).toBe(0);
+    });
   });
 });

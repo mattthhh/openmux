@@ -76,4 +76,19 @@ describe('createPasteHandler', () => {
 
     expect(writeToPTY).toHaveBeenCalledTimes(1);
   });
+
+  it('does not write empty paste events to PTY', () => {
+    const writeToPTY = mock(() => {});
+    const handler = createPasteHandler({
+      getFocusedPtyId: () => 'pty-1',
+      writeToPTY,
+    });
+
+    handler.handleBracketedPaste({
+      bytes: new Uint8Array(),
+      type: 'paste',
+    } as any);
+
+    expect(writeToPTY).not.toHaveBeenCalled();
+  });
 });

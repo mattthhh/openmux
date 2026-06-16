@@ -156,11 +156,16 @@ export function createPasteInterceptingStdin(
   /**
    * Called when clipboard read fails — push buffered stdin paste data
    * through to the passthrough stream so remote/SSH paste still works.
+   * If there is no actual paste content, avoid emitting empty markers
+   * to prevent downstream handlers from writing an empty string to the PTY.
    */
   function fallbackToStdinData(): void {
-    const content = Buffer.concat([PASTE_START, ...pasteBuffer, PASTE_END]);
+    const buffered = Buffer.concat(pasteBuffer);
     pasteBuffer = [];
-    passthrough.push(content);
+    if (buffered.length > 0) {
+      const content = Buffer.concat([PASTE_START, buffered, PASTE_END]);
+      passthrough.push(content);
+    }
     releasePendingAfterEnd();
   }
 
