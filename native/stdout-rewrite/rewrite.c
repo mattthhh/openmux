@@ -21,6 +21,8 @@
  * On Linux, LD_PRELOAD replaces the write symbol directly.
  */
 
+/* Required for RTLD_NEXT on glibc (Linux/Red Hat) */
+#define _GNU_SOURCE
 #include <string.h>
 #include <unistd.h>
 #include <stdlib.h>
