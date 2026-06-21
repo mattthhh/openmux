@@ -1,15 +1,30 @@
 #!/usr/bin/env python3
-from __future__ import annotations
-
+import os
 import shutil
 import sys
 from pathlib import Path
+from typing import Sequence
 
 
 def copy_tree(src: Path, dst: Path) -> None:
     if not src.exists():
         raise SystemExit(f"missing source: {src}")
-    shutil.copytree(src, dst, dirs_exist_ok=True)
+
+    if not dst.exists():
+        shutil.copytree(src, dst)
+        return
+
+    for root, dirnames, filenames in os.walk(src):
+        root_path = Path(root)
+        rel_path = root_path.relative_to(src)
+        target_root = dst / rel_path
+        target_root.mkdir(parents=True, exist_ok=True)
+
+        for dirname in dirnames:
+            (target_root / dirname).mkdir(parents=True, exist_ok=True)
+
+        for filename in filenames:
+            shutil.copy2(root_path / filename, target_root / filename)
 
 
 def copy_file(src: Path, dst: Path) -> None:
@@ -19,7 +34,7 @@ def copy_file(src: Path, dst: Path) -> None:
     shutil.copy2(src, dst)
 
 
-def main(argv: list[str]) -> int:
+def main(argv: Sequence[str]) -> int:
     if len(argv) != 4:
         print(
             "usage: prepare_ghostty_overlay.py <vendor-src-dir> <overlay-dir> <out-dir>",
