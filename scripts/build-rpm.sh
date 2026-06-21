@@ -45,7 +45,7 @@ rpmbuild \
     --define "_openmux_version $version" \
     -bb "$RPMBUILD_DIR/SPECS/openmux.spec"
 
-rpm_path="$(find "$RPMBUILD_DIR/RPMS" -type f -name 'openmux-*.rpm' | head -1)"
+rpm_path="$(find "$RPMBUILD_DIR/RPMS" -type f -name "openmux-${version}-*.rpm" ! -name '*debuginfo*' ! -name '*debugsource*' | head -1)"
 if [[ -z "$rpm_path" ]]; then
     echo "Error: RPM build completed but no RPM was produced." >&2
     exit 1
