@@ -100,6 +100,7 @@ jobs:
             gzip \
             make \
             openssl \
+            python3 \
             rpm-build \
             sed \
             tar \
