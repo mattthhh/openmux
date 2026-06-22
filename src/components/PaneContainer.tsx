@@ -35,6 +35,7 @@ export function PaneContainer() {
   const focusedPaneId = createMemo(() => workspace().focusedPaneId);
   const layoutMode = createMemo(() => workspace().layoutMode);
   const isZoomed = createMemo(() => workspace().zoomed);
+  const synchronizedPanes = createMemo(() => workspace().synchronizedPanes ?? false);
   const activeStackIndex = createMemo(() => workspace().activeStackIndex);
 
   const mainPanes = createMemo(() => {
@@ -154,6 +155,7 @@ export function PaneContainer() {
                     <PaneRenderer
                       pane={pane()}
                       isFocused={focusedPaneId() === pane().id}
+                      isSynchronized={synchronizedPanes()}
                       isMain={true}
                       onFocus={handlePaneClick}
                       onMouseInput={handleMouseInput}
@@ -173,6 +175,7 @@ export function PaneContainer() {
                         <PaneRenderer
                           pane={pane()}
                           isFocused={focusedPaneId() === pane().id}
+                          isSynchronized={synchronizedPanes()}
                           isMain={false}
                           onFocus={handlePaneClick}
                           onMouseInput={handleMouseInput}
@@ -186,6 +189,7 @@ export function PaneContainer() {
                     stackPanes={stackPanes()}
                     activeStackIndex={activeStackIndex()}
                     focusedPaneId={focusedPaneId()}
+                    synchronizedPanes={synchronizedPanes()}
                     onFocus={handlePaneClick}
                     onMouseInput={handleMouseInput}
                   />
@@ -196,6 +200,7 @@ export function PaneContainer() {
             {/* When zoomed, only render the focused pane */}
             <ZoomedPaneRenderer
               workspace={workspace()}
+              synchronizedPanes={synchronizedPanes()}
               onFocus={handlePaneClick}
               onMouseInput={handleMouseInput}
             />
@@ -209,6 +214,7 @@ export function PaneContainer() {
 // Zoomed pane helper component
 interface ZoomedPaneRendererProps {
   workspace: ReturnType<typeof useLayout>['activeWorkspace'];
+  synchronizedPanes?: boolean;
   onFocus: (paneId: string) => void;
   onMouseInput: (ptyId: string, data: string) => void;
 }
@@ -222,6 +228,7 @@ function ZoomedPaneRenderer(props: ZoomedPaneRendererProps) {
         <PaneRenderer
           pane={focusedPane()!}
           isFocused={true}
+          isSynchronized={props.synchronizedPanes}
           isMain={isMainPaneFocused(props.workspace)}
           onFocus={props.onFocus}
           onMouseInput={props.onMouseInput}
@@ -234,6 +241,7 @@ function ZoomedPaneRenderer(props: ZoomedPaneRendererProps) {
 interface PaneRendererProps {
   pane: PaneData;
   isFocused: boolean;
+  isSynchronized?: boolean;
   isMain: boolean;
   hideTitle?: boolean;
   onFocus: (paneId: string) => void;
@@ -258,6 +266,7 @@ function PaneRenderer(props: PaneRendererProps) {
       id={props.pane.id}
       title={props.pane.title}
       isFocused={props.isFocused}
+      isSynchronized={props.isSynchronized}
       x={rect().x}
       y={rect().y}
       width={rect().width}
@@ -274,6 +283,7 @@ interface StackedPanesRendererProps {
   stackPanes: LayoutNode[];
   activeStackIndex: number;
   focusedPaneId: string | null;
+  synchronizedPanes?: boolean;
   onFocus: (paneId: string) => void;
   onMouseInput: (ptyId: string, data: string) => void;
 }
@@ -386,6 +396,7 @@ function StackedPanesRenderer(props: StackedPanesRendererProps) {
   };
   // Active tab background color based on focus state
   const activeTabBg = () => {
+    if (props.synchronizedPanes) return theme.pane.focusedBorderColor;
     if (!isPaneFocused()) return theme.pane.borderColor;
     const entry = activeEntry();
     const focusedPane = entry && props.focusedPaneId ? findPane(entry, props.focusedPaneId) : null;
@@ -432,6 +443,7 @@ function StackedPanesRenderer(props: StackedPanesRendererProps) {
           <PaneRenderer
             pane={pane()}
             isFocused={props.focusedPaneId === pane().id}
+            isSynchronized={props.synchronizedPanes}
             isMain={false}
             hideTitle={true}
             onFocus={props.onFocus}

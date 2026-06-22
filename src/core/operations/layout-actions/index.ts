@@ -36,4 +36,5 @@ export {
   handleSwapMain,
   handleMovePane,
   handleToggleZoom,
+  handleToggleSynchronizedPanes,
 } from './pane-ops';

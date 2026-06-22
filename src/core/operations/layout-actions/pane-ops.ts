@@ -272,3 +272,22 @@ export function handleToggleZoom(state: LayoutState): LayoutState {
     layoutGeometryVersion: state.layoutGeometryVersion + 1,
   };
 }
+
+
+/**
+ * Handle TOGGLE_SYNCHRONIZED_PANES action.
+ * Toggles broadcasting keyboard input to all panes in the active workspace.
+ */
+export function handleToggleSynchronizedPanes(state: LayoutState): LayoutState {
+  const workspace = getActiveWorkspace(state);
+  const updated: Workspace = {
+    ...workspace,
+    synchronizedPanes: !(workspace.synchronizedPanes ?? false),
+  };
+
+  return {
+    ...state,
+    workspaces: updateWorkspace(state, updated),
+    layoutVersion: state.layoutVersion + 1,
+  };
+}

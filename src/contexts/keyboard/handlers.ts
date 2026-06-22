@@ -83,6 +83,9 @@ export function handleNormalModeAction(
     case 'pane.zoom':
       layout.toggleZoom();
       return true;
+    case 'pane.synchronize.toggle':
+      layout.toggleSynchronizedPanes();
+      return true;
     case 'layout.cycle.prev':
       cycleLayout(layout, currentLayoutMode, 'prev');
       return true;
@@ -221,6 +224,10 @@ export function handlePrefixModeAction(
       return true;
     case 'pane.zoom':
       layout.toggleZoom();
+      exitPrefix();
+      return true;
+    case 'pane.synchronize.toggle':
+      layout.toggleSynchronizedPanes();
       exitPrefix();
       return true;
     case 'layout.cycle.prev':

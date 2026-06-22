@@ -149,10 +149,11 @@ export function handleLoadSession(
   for (const [idStr, workspace] of Object.entries(workspaces)) {
     if (!workspace) continue;
     const id = Number(idStr) as WorkspaceId;
-    if (workspace.mainPane) {
-      newWorkspaces[id] = recalculateLayout(workspace, state.viewport, state.config);
+    const normalized = { synchronizedPanes: false, ...workspace };
+    if (normalized.mainPane) {
+      newWorkspaces[id] = recalculateLayout(normalized, state.viewport, state.config);
     } else {
-      newWorkspaces[id] = workspace;
+      newWorkspaces[id] = normalized;
     }
   }
   // Sync pane ID counter to avoid conflicts with existing pane IDs

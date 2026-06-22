@@ -47,6 +47,8 @@ export interface Workspace {
   /** For stacked mode: last focused pane in each stack entry for focus restoration */
   lastFocusedPaneIds: (NodeId | null)[];
   layoutMode: LayoutMode;
+  /** Whether keyboard input is broadcast to every pane in this workspace */
+  synchronizedPanes?: boolean;
   /** Whether the focused pane is zoomed (fullscreen) */
   zoomed: boolean;
 }

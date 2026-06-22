@@ -30,6 +30,7 @@ interface PaneProps {
   id: string;
   title?: string;
   isFocused: boolean;
+  isSynchronized?: boolean;
   x: number;
   y: number;
   width: number;
@@ -137,7 +138,9 @@ export function Pane(props: PaneProps) {
     if (copyActive) {
       return theme.pane.copyModeBorderColor;
     }
-    return props.isFocused ? theme.pane.focusedBorderColor : theme.pane.borderColor;
+    return props.isFocused || props.isSynchronized
+      ? theme.pane.focusedBorderColor
+      : theme.pane.borderColor;
   };
 
   // Title with focus indicator
@@ -150,7 +153,8 @@ export function Pane(props: PaneProps) {
     // Get title from TitleContext, fall back to prop for backwards compatibility
     const title = titleCtx.getTitle(props.id) ?? props.title;
     if (!title) return undefined;
-    return ` ${title} `;
+    const syncPrefix = props.isSynchronized ? '⇄ ' : '';
+    return ` ${syncPrefix}${title} `;
   });
 
   // Calculate relative coordinates
